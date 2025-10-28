@@ -1,26 +1,14 @@
 name: 🚀 Build and Deploy Nuxt.js 4 Client to OVH VPS
-
 on:
   push:
-    branches:
-      - main
-    paths:
-      - 'client/**'
-      - '.github/workflows/deploy-client.yml'
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
-    paths:
-      - 'client/**'
+    branches: [ main ]
   workflow_dispatch:
-
-concurrency:
-  group: nuxt-client-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   build-and-deploy:
-    name: 🏗️ Build & Deploy Client
+    name: 🏗️ Build & Deploy
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout repository
@@ -42,21 +30,17 @@ jobs:
       - name: 📝 Setup environment file
         run: |
           cd client
-          if [ -f .env.example ]; then
-            cp .env.example .env
-          else
-            touch .env
-          fi
-          # Set production environment
+          cp .env.example .env || touch .env
           sed -i "s/^NODE_ENV=.*/NODE_ENV=production/" .env || echo "NODE_ENV=production" >> .env
-          # Add any needed environment variables here
-          # Example: sed -i "s/^NUXT_PUBLIC_API_URL=.*/NUXT_PUBLIC_API_URL=${{ secrets.NUXT_PUBLIC_API_URL }}/" .env || echo "NUXT_PUBLIC_API_URL=${{ secrets.NUXT_PUBLIC_API_URL }}" >> .env
+          # Ajoute tes secrets ici :
+          # sed -i "s/^NUXT_PUBLIC_API_URL=.*/NUXT_PUBLIC_API_URL=${{ secrets.NUXT_PUBLIC_API_URL }}/" .env || echo "NUXT_PUBLIC_API_URL=${{ secrets.NUXT_PUBLIC_API_URL }}" >> .env
 
       - name: 🛠️ Build Nitro (SSR)
         run: npm run build
         working-directory: ./client
         env:
           NITRO_PRESET: node-server
+          NODE_ENV: production
 
       - name: 📤 Deploy client assets
         uses: appleboy/scp-action@master
@@ -65,18 +49,18 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: 'client/.output/public/*'
+          source: 'client/.output/public/'
           target: '/var/www/devleadhunter.dibodev.fr/html'
-          strip_components: 3
+          strip_components: 3  # client/.output/public/ → 3 dossiers
 
-      - name: 📤 Deploy Nitro server to VPS
+      - name: 📤 Deploy Nitro server
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.SSH_HOST }}
           port: ${{ secrets.SSH_PORT }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: 'client/.output/server/*'
+          source: 'client/.output/server/'
           target: '/var/www/devleadhunter.dibodev.fr/server'
           strip_components: 3
 
@@ -88,8 +72,7 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: 'client/.env'
-          target: '/var/www/devleadhunter.dibodev.fr/server'
-          strip_components: 1
+          target: '/var/www/devleadhunter.dibodev.fr/server/.env'
 
       - name: 🛠️ Start Nitro server
         uses: appleboy/ssh-action@master
@@ -99,22 +82,27 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # Install Node.js if not already installed
-            if ! command -v node &> /dev/null; then
+            cd /var/www/devleadhunter.dibodev.fr/server
+            
+            # Node.js
+            command -v node || {
               curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
               sudo apt-get install -y nodejs
-            fi
-            # Install PM2 if not already installed
-            if ! command -v pm2 &> /dev/null; then
-              npm install -g pm2
-            fi
-            # Start Nitro server with PM2
-            cd /var/www/devleadhunter.dibodev.fr/server
-            pm2 describe devleadhunter.dibodev.fr > /dev/null 2>&1 && pm2 stop devleadhunter.dibodev.fr || true
-            PORT=5615 pm2 start index.mjs --name devleadhunter.dibodev.fr
+            }
+            
+            # PM2
+            command -v pm2 || npm install -g pm2
+
+            # Nettoyage propre
+            pm2 describe devleadhunter.dibodev.fr > /dev/null 2>&1 && pm2 delete devleadhunter.dibodev.fr || true
+
+            # Démarrage
+            PORT=5615 pm2 start index.mjs \
+              --name devleadhunter.dibodev.fr \
+              --env production
+            
             pm2 save
             pm2 list
-            # Restart Nginx
-            sudo nginx -t
-            sudo systemctl restart nginx
 
+            # Nginx
+            sudo nginx -t && sudo systemctl reload nginx
