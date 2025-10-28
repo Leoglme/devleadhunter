@@ -55,6 +55,8 @@ dist/
 .env
 .env.local
 .env.*.local
+client/.env
+server/.env
 
 # Logs
 *.log

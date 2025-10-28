@@ -1,0 +1,119 @@
+name: 🚀 Build and Deploy Nuxt.js 4 Client to OVH VPS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'client/**'
+      - '.github/workflows/deploy-client.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'client/**'
+  workflow_dispatch:
+
+concurrency:
+  group: nuxt-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    name: 🏗️ Build & Deploy Client
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            client
+          sparse-checkout-cone: true
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: 📦 Install dependencies
+        run: npm ci
+        working-directory: ./client
+
+      - name: 📝 Setup environment file
+        run: |
+          cd client
+          if [ -f .env.example ]; then
+            cp .env.example .env
+          else
+            touch .env
+          fi
+          # Set production environment
+          sed -i "s/^NODE_ENV=.*/NODE_ENV=production/" .env || echo "NODE_ENV=production" >> .env
+          # Add any needed environment variables here
+          # Example: sed -i "s/^NUXT_PUBLIC_API_URL=.*/NUXT_PUBLIC_API_URL=${{ secrets.NUXT_PUBLIC_API_URL }}/" .env || echo "NUXT_PUBLIC_API_URL=${{ secrets.NUXT_PUBLIC_API_URL }}" >> .env
+
+      - name: 🛠️ Build Nitro (SSR)
+        run: npm run build
+        working-directory: ./client
+        env:
+          NITRO_PRESET: node-server
+
+      - name: 📤 Deploy client assets
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: 'client/.output/public/*'
+          target: '/var/www/devleadhunter.dibodev.fr/html'
+          strip_components: 3
+
+      - name: 📤 Deploy Nitro server to VPS
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: 'client/.output/server/*'
+          target: '/var/www/devleadhunter.dibodev.fr/server'
+          strip_components: 3
+
+      - name: 📤 Deploy .env to server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: 'client/.env'
+          target: '/var/www/devleadhunter.dibodev.fr/server'
+
+      - name: 🛠️ Start Nitro server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Install Node.js if not already installed
+            if ! command -v node &> /dev/null; then
+              curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+            fi
+            # Install PM2 if not already installed
+            if ! command -v pm2 &> /dev/null; then
+              npm install -g pm2
+            fi
+            # Start Nitro server with PM2
+            cd /var/www/devleadhunter.dibodev.fr/server
+            pm2 describe devleadhunter-nuxt-client > /dev/null 2>&1 && pm2 stop devleadhunter-nuxt-client || true
+            PORT=3000 pm2 start index.mjs --name devleadhunter-nuxt-client
+            pm2 save
+            pm2 list
+            # Restart Nginx
+            sudo nginx -t
+            sudo systemctl restart nginx
+
