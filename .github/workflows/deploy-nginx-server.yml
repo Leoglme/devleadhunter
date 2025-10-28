@@ -27,6 +27,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: 'nginx/nginx-server.conf'
           target: '/tmp'
+          strip_components: 1
 
       - name: 🔧 Move nginx config to sites-enabled and reload
         uses: appleboy/ssh-action@master
