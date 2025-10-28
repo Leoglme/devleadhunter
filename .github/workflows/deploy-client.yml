@@ -2,8 +2,12 @@ name: 🚀 Build and Deploy Nuxt.js 4 Client to OVH VPS
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'client/**'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'client/**'
   workflow_dispatch:
 
 jobs:
