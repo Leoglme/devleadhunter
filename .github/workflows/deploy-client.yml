@@ -110,8 +110,8 @@ jobs:
             fi
             # Start Nitro server with PM2
             cd /var/www/devleadhunter.dibodev.fr/server
-            pm2 describe devleadhunter-nuxt-client > /dev/null 2>&1 && pm2 stop devleadhunter-nuxt-client || true
-            PORT=3000 pm2 start index.mjs --name devleadhunter-nuxt-client
+            pm2 describe devleadhunter.dibodev.fr > /dev/null 2>&1 && pm2 stop devleadhunter.dibodev.fr || true
+            PORT=5615 pm2 start index.mjs --name devleadhunter.dibodev.fr
             pm2 save
             pm2 list
             # Restart Nginx
