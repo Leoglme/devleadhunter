@@ -58,6 +58,13 @@ jobs:
         env:
           NITRO_PRESET: node-server
 
+      - name: 📤 Prepare deployment files
+        run: |
+          mkdir -p deploy/public deploy/server
+          cp -r client/.output/public/* deploy/public/ || true
+          cp -r client/.output/server/* deploy/server/ || true
+          cp client/.env deploy/.env || true
+
       - name: 📤 Deploy client assets
         uses: appleboy/scp-action@master
         with:
@@ -65,9 +72,9 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: 'client/.output/public/*'
+          source: 'deploy/public/*'
           target: '/var/www/devleadhunter.dibodev.fr/html'
-          strip_components: 3
+          strip_components: 2
 
       - name: 📤 Deploy Nitro server to VPS
         uses: appleboy/scp-action@master
@@ -76,9 +83,9 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: 'client/.output/server/*'
+          source: 'deploy/server/*'
           target: '/var/www/devleadhunter.dibodev.fr/server'
-          strip_components: 3
+          strip_components: 2
 
       - name: 📤 Deploy .env to server
         uses: appleboy/scp-action@master
@@ -87,8 +94,9 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: 'client/.env'
+          source: 'deploy/.env'
           target: '/var/www/devleadhunter.dibodev.fr/server'
+          strip_components: 1
 
       - name: 🛠️ Start Nitro server
         uses: appleboy/ssh-action@master
