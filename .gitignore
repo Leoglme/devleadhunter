@@ -84,7 +84,6 @@ tmp/
 temp/
 *.tmp
 *~
-deploy/
 
 # Database
 *.db
