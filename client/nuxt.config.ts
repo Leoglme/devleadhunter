@@ -48,7 +48,9 @@ export default defineNuxtConfig({
   
   runtimeConfig: {
     public: {
-      apiBase: process.env.API_BASE_URL || 'http://localhost:8000'
+      apiBase: process.env.API_BASE_URL || (process.env.NODE_ENV === 'production' 
+        ? 'https://api.devleadhunter.dibodev.fr' 
+        : 'http://localhost:8000')
     }
   }
 })

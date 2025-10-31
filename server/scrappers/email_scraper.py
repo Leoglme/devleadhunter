@@ -184,11 +184,10 @@ class EmailScraper:
             emails = self.extract_emails_from_text(page_text)
             
             if emails:
-                # Filter out common spam/irrelevant emails
+                # Filter out common spam/irrelevant emails (domains de test et services, mais pas les fournisseurs d'email)
                 spam_domains = [
                     'example.com', 'test.com', 'domain.com', 'yoursite.com',
-                    'google.com', 'gstatic.com', 'gmail.com', 'email.com',
-                    'yahoo.com', 'hotmail.com', 'outlook.com', 'facebook.com'
+                    'google.com', 'gstatic.com', 'facebook.com'
                 ]
                 filtered_emails = [
                     email for email in emails 
