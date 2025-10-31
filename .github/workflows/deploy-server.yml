@@ -30,7 +30,6 @@ jobs:
           fetch-depth: 1
           sparse-checkout: |
             server
-          sparse-checkout-cone: true
           lfs: false
 
       - name: 🧭 Debug workspace

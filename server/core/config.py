@@ -1,8 +1,9 @@
 """
 Configuration settings for the Prospect Tool API.
 """
-from typing import List
-from pydantic import field_validator
+import json
+from typing import List, Any
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,17 +40,27 @@ class Settings(BaseSettings):
         "http://localhost:5173"
     ]
     
-    @field_validator("cors_origins", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def parse_cors_origins(cls, v):
+    def parse_cors_origins_from_env(cls, data: Any) -> Any:
         """
         Parse CORS origins from environment variable if it's a string.
         Allows setting CORS_ORIGINS as a comma-separated string in .env file.
         """
-        if isinstance(v, str):
-            # Split by comma and strip whitespace
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+        if isinstance(data, dict) and "cors_origins" in data:
+            cors_val = data["cors_origins"]
+            if isinstance(cors_val, str):
+                # Try to parse as JSON first (if it's a JSON array string)
+                try:
+                    parsed = json.loads(cors_val)
+                    if isinstance(parsed, list):
+                        data["cors_origins"] = parsed
+                        return data
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                # Split by comma and strip whitespace
+                data["cors_origins"] = [origin.strip() for origin in cors_val.split(",") if origin.strip()]
+        return data
     
     @property
     def allowed_cors_origins(self) -> List[str]:
