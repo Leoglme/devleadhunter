@@ -142,10 +142,13 @@ jobs:
             User=${DEPLOY_USER}
             WorkingDirectory=${TARGET_DIR}/server
             Environment=PYTHONPATH=${TARGET_DIR}/server
-            ExecStart=${TARGET_DIR}/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8005 --workers 2 --proxy-headers
+            ExecStart=${TARGET_DIR}/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8005 --workers 1 --proxy-headers
             Restart=always
             RestartSec=5
             KillSignal=SIGINT
+            # Memory limits to prevent OOM kills
+            MemoryMax=2G
+            MemoryHigh=1.5G
             [Install]
             WantedBy=multi-user.target
             EOF
