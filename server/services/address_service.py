@@ -45,8 +45,16 @@ class AddressService:
             return address
         
         # Remove the city name (case insensitive)
-        pattern = rf'\b{re.escape(city)}\b\s*'
+        # Use word boundaries but allow multi-word city names
+        # Escape special characters but allow spaces in city name
+        escaped_city = re.escape(city)
+        # Remove word boundaries within the city name pattern to allow multi-word cities
+        pattern = rf'\s+{escaped_city}\s*$'
         cleaned_address = re.sub(pattern, '', address, flags=re.IGNORECASE)
+        # Also try without the leading space requirement
+        if cleaned_address == address:
+            pattern = rf'\b{escaped_city}\b\s*'
+            cleaned_address = re.sub(pattern, '', address, flags=re.IGNORECASE)
         return cleaned_address.strip()
     
     def remove_city_and_postal_code(self, address: Optional[str], city: Optional[str]) -> Optional[str]:

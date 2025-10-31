@@ -56,7 +56,7 @@ class PagesJaunesScraper(BaseScraper):
         if not self.playwright:
             self.playwright = await async_playwright().start()
             self.browser = await self.playwright.chromium.launch(
-                headless=True,
+                headless=False,
                 args=[
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
@@ -127,6 +127,9 @@ class PagesJaunesScraper(BaseScraper):
         """
         Extract city from full address.
         
+        Pages Jaunes format: "50 La Lande de la Motte 35590 Saint Gilles"
+        Format: [adresse] [code postal 5 chiffres] [ville]
+        
         Args:
             address: Full address string
             
@@ -136,8 +139,18 @@ class PagesJaunesScraper(BaseScraper):
         if not address:
             return "Inconnue"
         
-        # Pages Jaunes format: "18 rue Petit Jardin 35137 Pleumeleuc"
-        # City is usually at the end
+        # Chercher un code postal français (5 chiffres consécutifs)
+        # Le format est: [adresse] [code postal] [ville]
+        postal_code_pattern = r'\b(\d{5})\s+(.+)$'
+        match = re.search(postal_code_pattern, address)
+        
+        if match:
+            # Tout ce qui suit le code postal est la ville
+            city = match.group(2).strip()
+            return city
+        
+        # Fallback: si pas de code postal trouvé, prendre le dernier mot
+        # (pour les anciens formats ou formats différents)
         parts = address.split()
         if len(parts) >= 2:
             return parts[-1]
@@ -397,13 +410,6 @@ class PagesJaunesScraper(BaseScraper):
                 logger.info(f"Prospect {name} has a website, skipping")
                 return None
             
-            # Calculate confidence using validation service
-            confidence = validation_service.calculate_confidence_score(
-                phone=phone,
-                address=address,
-                website=website
-            )
-            
             # Try to find email if not already available
             email = None
             try:
@@ -412,6 +418,15 @@ class PagesJaunesScraper(BaseScraper):
                     logger.info(f"Found email for {name}: {email}")
             except Exception as e:
                 logger.debug(f"Could not find email: {e}")
+
+
+            # Calculate confidence using validation service
+            confidence = validation_service.calculate_confidence_score(
+                phone=phone,
+                address=address,
+                email=email,
+                website=website
+            )    
             
             prospect = ProspectCreate(
                 name=name.strip(),
@@ -501,8 +516,9 @@ class PagesJaunesScraper(BaseScraper):
                 prospects = []
                 processed = 0
                 
-                # Process up to 2 * max_results to find enough without websites
-                max_to_check = min(max_results * 2, card_count)
+                # Process up to max(max_results * 3, 10) to find enough without websites
+                # This gives more margin since many prospects might have websites
+                max_to_check = min(max(max_results * 3, 10), card_count)
                 
                 for i in range(max_to_check):
                     if len(prospects) >= max_results:

@@ -41,7 +41,7 @@ class EmailScraper:
         if not self.playwright:
             self.playwright = await async_playwright().start()
             self.browser = await self.playwright.chromium.launch(
-                headless=True,
+                headless=False,
                 args=[
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
@@ -148,13 +148,14 @@ class EmailScraper:
         except Exception as e:
             logger.debug(f"Could not handle Google cookie consent: {e}")
     
-    async def search_google(self, page, query: str) -> Optional[str]:
+    async def search_google_page(self, page, query: str, page_number: int = 0) -> Optional[str]:
         """
-        Search Google and extract the first valid email from results.
+        Search Google on a specific page and extract the first valid email from results.
         
         Args:
             page: Playwright page object
             query: Search query
+            page_number: Page number (0 = first page, 1 = second page, etc.)
             
         Returns:
             First email found or None
@@ -162,12 +163,19 @@ class EmailScraper:
         try:
             # Navigate to Google search
             from urllib.parse import quote_plus
-            search_url = f"https://www.google.com/search?q={quote_plus(query)}"
+            if page_number == 0:
+                search_url = f"https://www.google.com/search?q={quote_plus(query)}"
+            else:
+                # For subsequent pages, use start parameter
+                start_param = page_number * 10
+                search_url = f"https://www.google.com/search?q={quote_plus(query)}&start={start_param}"
+            
             await page.goto(search_url, wait_until="domcontentloaded", timeout=10000)
             
-            # Accept cookies if present
-            await self.accept_google_cookies(page)
-            await asyncio.sleep(0.5)
+            # Accept cookies if present (only on first page)
+            if page_number == 0:
+                await self.accept_google_cookies(page)
+                await asyncio.sleep(0.5)
             
             # Get page content
             page_text = await page.content()
@@ -187,20 +195,45 @@ class EmailScraper:
                     if not any(spam in email.lower() for spam in spam_domains)
                 ]
                 if filtered_emails:
-                    logger.info(f"Found email(s) for query '{query}': {filtered_emails}")
+                    logger.info(f"Found email(s) for query '{query}' on page {page_number + 1}: {filtered_emails}")
                     return filtered_emails[0]
             
             return None
             
         except Exception as e:
-            logger.debug(f"Error searching Google for '{query}': {e}")
+            logger.debug(f"Error searching Google page {page_number + 1} for '{query}': {e}")
             return None
+    
+    async def search_google_multiple_pages(self, page, query: str, max_pages: int = 3) -> Optional[str]:
+        """
+        Search Google on multiple pages and return the first valid email found.
+        Stops as soon as an email is found.
+        
+        Args:
+            page: Playwright page object
+            query: Search query
+            max_pages: Maximum number of pages to search
+            
+        Returns:
+            First email found or None
+        """
+        for page_num in range(max_pages):
+            email = await self.search_google_page(page, query, page_num)
+            if email:
+                return email
+            # Small delay between page searches
+            if page_num < max_pages - 1:
+                await asyncio.sleep(0.5)
+        return None
     
     async def find_email(self, name: str, city: str) -> Optional[str]:
         """
         Find email address for a business by searching Google.
         
-        First tries searching with "email", then with "contact".
+        Strategy:
+        1. Search "nom + ville + email" on 3 pages of Google results
+        2. If no email found, search "nom + ville + contact" on 3 pages
+        3. Stop as soon as an email is found
         
         Args:
             name: Business name
@@ -228,24 +261,27 @@ class EmailScraper:
             page.set_default_timeout(10000)
             
             try:
-                # First search with "email"
+                # First search: "nom + ville + email" on 3 pages
                 query1 = f"{name} {city} email"
-                logger.info(f"Searching for email with query: {query1}")
-                email = await self.search_google(page, query1)
+                logger.info(f"Searching for email with query: {query1} (3 pages)")
+                email = await self.search_google_multiple_pages(page, query1, max_pages=3)
                 
                 if email:
+                    logger.info(f"Email found with 'email' query: {email}")
                     return email
                 
-                # If no email found, try with "contact"
+                # If no email found, try with "contact" on 3 pages
                 query2 = f"{name} {city} contact"
-                logger.info(f"Searching for email with query: {query2}")
-                email = await self.search_google(page, query2)
+                logger.info(f"No email found with 'email' query, trying with: {query2} (3 pages)")
+                email = await self.search_google_multiple_pages(page, query2, max_pages=3)
+                
+                if email:
+                    logger.info(f"Email found with 'contact' query: {email}")
                 
                 return email
                 
             finally:
                 await context.close()
-                pass
                 
         except Exception as e:
             logger.error(f"Error in email scraper: {e}")

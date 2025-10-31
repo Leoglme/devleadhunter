@@ -139,7 +139,8 @@ class ValidationService:
         - Base score: 1 (for name, category, source)
         - +1 if phone is present
         - +1 if address is present with street number
-        - +1 if website is present and valid
+        - -1 if website is present and valid
+        - +1 if email is present and valid
         - Maximum score: 4
         
         Args:
@@ -160,9 +161,12 @@ class ValidationService:
             score += 1
         
         if website and ValidationService.is_valid_website(website):
+            score -= 1
+        
+        if email and ValidationService.is_valid_email(email):
             score += 1
         
-        return min(score, 4)
+        return min(max(score, 1), 4)
 
 
 # Global service instance
