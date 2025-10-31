@@ -56,7 +56,7 @@ class PagesJaunesScraper(BaseScraper):
         if not self.playwright:
             self.playwright = await async_playwright().start()
             self.browser = await self.playwright.chromium.launch(
-                headless=False,
+                headless=True,
                 args=[
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
