@@ -2,6 +2,7 @@
 Configuration settings for the Prospect Tool API.
 """
 from typing import List
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,6 +38,41 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://localhost:5173"
     ]
+    
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        """
+        Parse CORS origins from environment variable if it's a string.
+        Allows setting CORS_ORIGINS as a comma-separated string in .env file.
+        """
+        if isinstance(v, str):
+            # Split by comma and strip whitespace
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+    
+    @property
+    def allowed_cors_origins(self) -> List[str]:
+        """
+        Get allowed CORS origins based on environment.
+        
+        Returns:
+            List of allowed origins for CORS
+        """
+        origins = self.cors_origins.copy()
+        
+        # Add production frontend origins if in production
+        if self.env.lower() == "production":
+            production_origins = [
+                "https://devleadhunter.dibodev.fr",
+                "https://www.devleadhunter.dibodev.fr"
+            ]
+            # Only add if not already present
+            for origin in production_origins:
+                if origin not in origins:
+                    origins.append(origin)
+        
+        return origins
 
 
 # Global settings instance
