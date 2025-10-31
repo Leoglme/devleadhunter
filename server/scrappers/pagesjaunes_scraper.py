@@ -56,12 +56,32 @@ class PagesJaunesScraper(BaseScraper):
         if not self.playwright:
             self.playwright = await async_playwright().start()
             self.browser = await self.playwright.chromium.launch(
-                headless=True,  # For debugging
+                headless=True,
                 args=[
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",  # Utilise /tmp au lieu de /dev/shm pour éviter les crashes sur VPS
+                    "--disable-gpu",  # Obligatoire en mode headless
+                    "--disable-software-rasterizer",
                     "--disable-blink-features=AutomationControlled",
-                    "--disable-infobars"
+                    "--disable-infobars",
+                    "--disable-extensions",
+                    "--disable-background-networking",
+                    "--disable-background-timer-throttling",
+                    "--disable-backgrounding-occluded-windows",
+                    "--disable-breakpad",
+                    "--disable-component-extensions-with-background-pages",
+                    "--disable-features=TranslateUI",
+                    "--disable-ipc-flooding-protection",
+                    "--disable-renderer-backgrounding",
+                    "--force-color-profile=srgb",
+                    "--metrics-recording-only",
+                    "--mute-audio",
+                    "--no-first-run",
+                    "--enable-automation",
+                    "--password-store=basic",
+                    "--use-mock-keychain",
+                    "--js-flags=--max-old-space-size=512"  # Limite la mémoire JavaScript
                 ]
             )
     
@@ -446,7 +466,9 @@ class PagesJaunesScraper(BaseScraper):
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
                 viewport={"width": 1920, "height": 1080},
                 locale="fr-FR",
-                java_script_enabled=True
+                java_script_enabled=True,
+                ignore_https_errors=False,
+                bypass_csp=False
             )
             
             page = await context.new_page()
