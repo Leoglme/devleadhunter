@@ -1,71 +1,73 @@
 <template>
-  <form @submit.prevent="handleSubmit" class="space-y-3">
-    <!-- Category Select -->
-    <div>
-      <label for="category" class="block text-xs font-medium text-muted mb-1.5">
-        Category
-      </label>
-      <select
-        id="category"
-        v-model="localFilters.category"
-        class="input-field"
-      >
-        <option value="all">All Categories</option>
-        <option value="restaurant">Restaurant</option>
-        <option value="plombier">Plombier</option>
-        <option value="electricien">Electricien</option>
-        <option value="coiffeur">Coiffeur</option>
-        <option value="garage">Garage</option>
-      </select>
-    </div>
+  <form @submit.prevent="handleSubmit">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- Category Select -->
+      <div>
+        <label for="category" class="block text-xs font-medium text-muted mb-1.5">
+          Category
+        </label>
+        <select
+          id="category"
+          v-model="localFilters.category"
+          class="input-field"
+        >
+          <option value="all">All Categories</option>
+          <option value="restaurant">Restaurant</option>
+          <option value="plombier">Plombier</option>
+          <option value="electricien">Electricien</option>
+          <option value="coiffeur">Coiffeur</option>
+          <option value="garage">Garage</option>
+        </select>
+      </div>
 
-    <!-- City Input -->
-    <div>
-      <label for="city" class="block text-xs font-medium text-muted mb-1.5">
-        City
-      </label>
-      <input
-        id="city"
-        v-model="localFilters.city"
-        type="text"
-        placeholder="e.g., Paris, Lyon, Marseille"
-        class="input-field"
-      />
-    </div>
+      <!-- City Input -->
+      <div>
+        <label for="city" class="block text-xs font-medium text-muted mb-1.5">
+          City
+        </label>
+        <input
+          id="city"
+          v-model="localFilters.city"
+          type="text"
+          placeholder="e.g., Paris, Lyon, Marseille"
+          class="input-field"
+        />
+      </div>
 
-    <!-- Source Select -->
-    <div>
-      <label for="source" class="block text-xs font-medium text-muted mb-1.5">
-        Source
-      </label>
-      <select
-        id="source"
-        v-model="localFilters.source"
-        class="input-field"
-      >
-        <option value="all">All Sources</option>
-        <option value="google">Google</option>
-        <option value="pagesjaunes">Pages Jaunes</option>
-        <option value="yelp">Yelp</option>
-        <option value="osm">OSM</option>
-        <option value="mappy">Mappy</option>
-      </select>
-    </div>
+      <!-- Source Select -->
+      <div>
+        <label for="source" class="block text-xs font-medium text-muted mb-1.5">
+          Source
+        </label>
+        <select
+          id="source"
+          v-model="localFilters.source"
+          class="input-field"
+        >
+          <option value="all">All Sources</option>
+          <option value="google">Google</option>
+          <option value="pagesjaunes">Pages Jaunes</option>
+          <option value="yelp">Yelp</option>
+          <option value="osm">OSM</option>
+          <option value="mappy">Mappy</option>
+        </select>
+      </div>
 
-    <!-- Max Results Input -->
-    <div>
-      <label for="maxResults" class="block text-xs font-medium text-muted mb-1.5">
-        Max Results
-      </label>
-      <input
-        id="maxResults"
-        v-model.number="localFilters.maxResults"
-        type="number"
-        min="1"
-        max="1000"
-        placeholder="50"
-        class="input-field"
-      />
+      <!-- Max Results Input -->
+      <div>
+        <label for="maxResults" class="block text-xs font-medium text-muted mb-1.5">
+          Max Results
+        </label>
+        <input
+          id="maxResults"
+          v-model.number="localFilters.maxResults"
+          type="number"
+          min="1"
+          max="1000"
+          placeholder="50"
+          class="input-field"
+        />
+      </div>
     </div>
 
     <!-- Submit Button -->
