@@ -37,7 +37,7 @@ def seed_admin_user() -> None:
                 name="Léo Guillaume",
                 email=settings.admin_email,
                 hashed_password=get_password_hash(settings.admin_password),
-                role=UserRole.ADMIN,
+                role=UserRole.ADMIN.value,
                 is_active=True
             )
             
@@ -63,7 +63,7 @@ def seed_admin_user() -> None:
                 name=random_name,
                 email=random_email,
                 hashed_password=get_password_hash("password123"),  # Default password for random users
-                role=UserRole.USER,
+                role=UserRole.USER.value,
                 is_active=True
             )
             

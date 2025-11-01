@@ -113,17 +113,26 @@ const emit = defineEmits<{
 }>();
 
 /**
- * Navigation links configuration
- */
-const links = [
-  { to: '/dashboard', label: 'Prospect Search', icon: 'fa-solid fa-magnifying-glass' },
-  { to: '/dashboard/campaigns', label: 'Campaigns', icon: 'fa-solid fa-envelope' }
-];
-
-/**
  * User store instance
  */
 const userStore = useUserStore();
+
+/**
+ * Navigation links configuration
+ */
+const links = computed(() => {
+  const baseLinks = [
+    { to: '/dashboard', label: 'Prospect Search', icon: 'fa-solid fa-magnifying-glass' },
+    { to: '/dashboard/campaigns', label: 'Campaigns', icon: 'fa-solid fa-envelope' }
+  ];
+  
+  // Add Users link for admin users
+  if (userStore.user?.role === 'ADMIN') {
+    baseLinks.push({ to: '/dashboard/users', label: 'Users', icon: 'fa-solid fa-users' });
+  }
+  
+  return baseLinks;
+});
 
 /**
  * Auth composable

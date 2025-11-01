@@ -55,7 +55,7 @@ async def signup(
         name=user_data.name,
         email=user_data.email,
         hashed_password=hashed_password,
-        role=user_data.role
+        role=user_data.role.value if hasattr(user_data.role, 'value') else user_data.role
     )
     
     db.add(db_user)

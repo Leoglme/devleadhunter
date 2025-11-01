@@ -3,7 +3,7 @@ User Pydantic schemas for request/response validation.
 """
 from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 from enums.user_role import UserRole
 
@@ -59,9 +59,7 @@ class UserResponse(UserBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     
-    class Config:
-        """Pydantic configuration."""
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserLogin(BaseModel):

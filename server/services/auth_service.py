@@ -197,7 +197,7 @@ def require_admin(
     Raises:
         HTTPException: If user is not an admin
     """
-    if current_user.role != UserRole.ADMIN:
+    if current_user.role != UserRole.ADMIN.value:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
