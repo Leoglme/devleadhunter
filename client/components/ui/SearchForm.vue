@@ -74,7 +74,7 @@
     <button
       type="submit"
       :disabled="isLoading"
-      class="btn-primary w-full mt-4"
+      class="btn-primary w-full sm:w-auto mt-4"
     >
       <span v-if="isLoading" class="flex items-center justify-center gap-2">
         <i class="fa-solid fa-spinner fa-spin"></i>
