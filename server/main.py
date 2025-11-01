@@ -49,10 +49,6 @@ async def startup_event() -> None:
     This function runs when the FastAPI application starts.
     It sets up scrapers and other services.
     """
-    # Initialize database and seed admin user
-    from seeders.user_seeder import seed_admin_user
-    seed_admin_user()
-    
     # Register scrapers
     mock_scraper = MockScraper()
     await scraper_service.add_scraper(mock_scraper)

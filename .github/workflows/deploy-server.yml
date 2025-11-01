@@ -118,9 +118,29 @@ jobs:
             HOST=127.0.0.1
             PORT=8005
             CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            SECRET_KEY=${{ secrets.SECRET_KEY }}
+            ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}
+            ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+            ACCESS_TOKEN_EXPIRE_MINUTES=30
             EOF
             echo ".env file created/updated successfully"
             cat .env
+
+      - name: 🗄️ Run database initialization (SSH)
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            TARGET_DIR="/var/www/api.devleadhunter.dibodev.fr/html"
+            cd "$TARGET_DIR"
+            . .venv/bin/activate
+            python server/init_db.py
+            deactivate
 
       - name: ⚙️ Configure/restart systemd service (SSH)
         uses: appleboy/ssh-action@v0.1.6
