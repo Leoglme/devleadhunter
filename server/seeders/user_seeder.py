@@ -31,7 +31,7 @@ def seed_admin_user() -> None:
         
         # Create admin user
         admin_user = User(
-            name="Admin User",
+            name="Léo Guillaume",
             email=settings.admin_email,
             hashed_password=get_password_hash(settings.admin_password),
             role=UserRole.ADMIN,
