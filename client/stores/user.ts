@@ -181,11 +181,6 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  // Initialize on store creation
-  if (process.client) {
-    initializeAuth();
-  }
-
   return {
     // State
     user,

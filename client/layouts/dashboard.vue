@@ -1,5 +1,8 @@
 <template>
-  <div class="flex h-screen bg-[#050505]">
+  <div v-if="isInitializing" class="fixed inset-0 bg-[#050505] flex items-center justify-center z-50">
+    <div class="loader-smooth"></div>
+  </div>
+  <div v-else class="flex h-screen bg-[#050505]">
     <!-- Sidebar -->
     <UiSidebar
       :is-open="isSidebarOpen"
@@ -36,6 +39,11 @@ import type { Ref } from 'vue';
 import { ref, onMounted, onUnmounted } from 'vue';
 
 /**
+ * Auth initialization state
+ */
+const isInitializing: Ref<boolean> = ref(true);
+
+/**
  * Sidebar state
  */
 const isSidebarOpen: Ref<boolean> = ref(false);
@@ -44,6 +52,23 @@ const isSidebarOpen: Ref<boolean> = ref(false);
  * Mobile state
  */
 const isMobile: Ref<boolean> = ref(false);
+
+/**
+ * User store
+ */
+const userStore = useUserStore();
+
+/**
+ * Initialize authentication
+ * @returns {Promise<void>}
+ */
+async function initializeAuth(): Promise<void> {
+  if (process.client) {
+    // Small delay to ensure store is hydrated from localStorage
+    await new Promise(resolve => setTimeout(resolve, 100));
+    isInitializing.value = false;
+  }
+}
 
 /**
  * Check if viewport is mobile size
@@ -75,7 +100,8 @@ const handleResize = (): void => {
 };
 
 // Lifecycle hooks
-onMounted(() => {
+onMounted(async () => {
+  await initializeAuth();
   checkMobile();
   if (process.client) {
     window.addEventListener('resize', handleResize);
@@ -88,4 +114,21 @@ onUnmounted(() => {
   }
 });
 </script>
+
+<style scoped>
+.loader-smooth {
+  width: 60px;
+  height: 60px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-left-color: #f9f9f9;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+</style>
 
