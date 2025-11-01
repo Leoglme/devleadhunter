@@ -164,7 +164,7 @@ async def delete_user(
     user_id: int,
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
-) -> Any:
+) -> None:
     """
     Delete a user (admin only).
     
@@ -195,6 +195,4 @@ async def delete_user(
     
     db.delete(user)
     db.commit()
-    
-    return None
 
