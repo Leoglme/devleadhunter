@@ -52,6 +52,10 @@ export default defineNuxtConfig({
         ? 'https://api.devleadhunter.dibodev.fr' 
         : 'http://localhost:8000')
     }
+  },
+  
+  experimental: {
+    viewTransition: true
   }
 })
 

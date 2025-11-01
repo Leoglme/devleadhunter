@@ -3,7 +3,7 @@
     <div v-if="isInitializing" class="fixed inset-0 bg-[#050505] flex items-center justify-center z-50">
       <div class="loader-smooth"></div>
     </div>
-    <div v-else class="flex h-screen bg-[#050505]">
+    <div v-else class="flex h-screen bg-[#050505] w-full">
       <!-- Sidebar -->
       <UiSidebar
         :is-open="isSidebarOpen"
