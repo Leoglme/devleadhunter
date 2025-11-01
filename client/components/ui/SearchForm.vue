@@ -71,7 +71,7 @@
     </div>
 
     <!-- Submit Button -->
-    <div class="flex justify-end sm:justify-start mt-4">
+    <div class="flex justify-center sm:justify-end mt-4">
       <button
         type="submit"
         :disabled="isLoading"
