@@ -2,81 +2,81 @@
   <div>
     <UiLoader v-if="isLoading" />
     <div v-else class="flex items-center justify-center min-h-screen px-4 bg-[#050505]">
-      <div class="w-full max-w-sm">
+    <div class="w-full max-w-sm">
         <h1 class="text-2xl font-semibold text-[#f9f9f9] mb-6 text-center">Sign Up</h1>
-        
-        <form @submit.prevent="handleSubmit" class="space-y-4">
+      
+      <form @submit.prevent="handleSubmit" class="space-y-4">
           <!-- General Error -->
           <div v-if="generalError" class="text-sm text-[#f85149]">
             {{ generalError }}
           </div>
 
-          <!-- Name -->
-          <div>
+        <!-- Name -->
+        <div>
             <label for="name" class="block text-xs font-medium text-muted mb-1.5">
-              Nom
+              Name
             </label>
-            <input
-              id="name"
-              v-model="name"
-              type="text"
-              required
-              placeholder="John Doe"
+          <input
+            id="name"
+            v-model="name"
+            type="text"
+            required
+            placeholder="John Doe"
               :class="['input-field', nameError && 'border-[#f85149]']"
-            />
+          />
             <p v-if="nameError" class="mt-1 text-xs text-[#f85149]">{{ nameError }}</p>
-          </div>
+        </div>
 
-          <!-- Email -->
-          <div>
-            <label for="email" class="block text-xs font-medium text-muted mb-1.5">
-              Email
-            </label>
-            <input
-              id="email"
-              v-model="email"
-              type="email"
-              required
-              placeholder="Saisissez votre adresse e-mail"
+        <!-- Email -->
+        <div>
+          <label for="email" class="block text-xs font-medium text-muted mb-1.5">
+            Email
+          </label>
+          <input
+            id="email"
+            v-model="email"
+            type="email"
+            required
+              placeholder="Enter your email address"
               :class="['input-field', emailError && 'border-[#f85149]']"
-            />
+          />
             <p v-if="emailError" class="mt-1 text-xs text-[#f85149]">{{ emailError }}</p>
-          </div>
+        </div>
 
-          <!-- Password -->
-          <div>
-            <label for="password" class="block text-xs font-medium text-muted mb-1.5">
-              Mot de passe
-            </label>
-            <input
-              id="password"
-              v-model="password"
-              type="password"
-              required
-              placeholder="Entrez votre mot de passe"
+        <!-- Password -->
+        <div>
+          <label for="password" class="block text-xs font-medium text-muted mb-1.5">
+            Password
+          </label>
+          <input
+            id="password"
+            v-model="password"
+            type="password"
+            required
+              placeholder="Enter your password"
               :class="['input-field', passwordError && 'border-[#f85149]']"
-            />
+          />
             <p v-if="passwordError" class="mt-1 text-xs text-[#f85149]">{{ passwordError }}</p>
-          </div>
+        </div>
 
-          <!-- Submit Button -->
-          <button
-            type="submit"
-            :disabled="isLoading"
+        <!-- Submit Button -->
+        <button
+          type="submit"
+          :disabled="isLoading"
             class="btn-primary w-full"
-          >
-            <span v-if="isLoading">Creating account...</span>
-            <span v-else>S'inscrire</span>
-          </button>
+        >
+          <span v-if="isLoading">Creating account...</span>
+            <span v-else>Sign Up</span>
+        </button>
 
-          <!-- Login Link -->
-          <p class="text-center text-sm text-muted">
-            Already have an account?
+        <!-- Login Link -->
+        <p class="text-center text-sm text-muted">
+          Already have an account?
             <NuxtLink to="/login" class="text-[#f9f9f9] hover:underline transition-colors">
-              Login
-            </NuxtLink>
-          </p>
-        </form>
+            Login
+          </NuxtLink>
+        </p>
+      </form>
       </div>
     </div>
   </div>
@@ -137,29 +137,29 @@ const handleSubmit = async (): Promise<void> => {
 
   // Validate name
   if (!name.value) {
-    nameError.value = 'Saisissez votre nom.';
+    nameError.value = 'Please enter your name.';
     return;
   }
 
   // Validate email
   if (!email.value) {
-    emailError.value = 'Saisissez votre adresse e-mail.';
+    emailError.value = 'Please enter your email address.';
     return;
   }
   
   if (!validateEmail(email.value)) {
-    emailError.value = 'Format d\'e-mail invalide.';
+    emailError.value = 'Invalid email format.';
     return;
   }
 
   // Validate password
   if (!password.value) {
-    passwordError.value = 'Saisissez votre mot de passe.';
+    passwordError.value = 'Please enter your password.';
     return;
   }
 
   if (password.value.length < 6) {
-    passwordError.value = 'Le mot de passe doit contenir au moins 6 caractères.';
+    passwordError.value = 'Password must be at least 6 characters long.';
     return;
   }
 
@@ -172,7 +172,7 @@ const handleSubmit = async (): Promise<void> => {
     });
   } catch (error) {
     // Set general error message
-    const errorMessage = error instanceof Error ? error.message : 'Erreur lors de l\'inscription.';
+    const errorMessage = error instanceof Error ? error.message : 'Signup failed. Please try again.';
     generalError.value = errorMessage;
   }
 };

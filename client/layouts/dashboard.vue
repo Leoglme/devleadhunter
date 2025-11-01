@@ -1,35 +1,37 @@
 <template>
-  <div v-if="isInitializing" class="fixed inset-0 bg-[#050505] flex items-center justify-center z-50">
-    <div class="loader-smooth"></div>
-  </div>
-  <div v-else class="flex h-screen bg-[#050505]">
-    <!-- Sidebar -->
-    <UiSidebar
-      :is-open="isSidebarOpen"
-      :is-mobile="isMobile"
-      @toggle="toggleSidebar"
-    />
+  <div>
+    <div v-if="isInitializing" class="fixed inset-0 bg-[#050505] flex items-center justify-center z-50">
+      <div class="loader-smooth"></div>
+    </div>
+    <div v-else class="flex h-screen bg-[#050505]">
+      <!-- Sidebar -->
+      <UiSidebar
+        :is-open="isSidebarOpen"
+        :is-mobile="isMobile"
+        @toggle="toggleSidebar"
+      />
 
-    <!-- Main Content -->
-    <div class="flex-1 flex flex-col overflow-hidden ml-0 md:ml-64">
-      <!-- Mobile Header -->
-      <header class="md:hidden bg-[#1a1a1a] border-b border-[#30363d] px-4 py-3 sticky top-0 z-10">
-        <div class="flex items-center justify-between">
-          <button
-            @click="toggleSidebar"
-            class="text-[#8b949e] hover:text-[#f9f9f9] transition-colors"
-          >
-            <i class="fa-solid fa-bars w-5 h-5"></i>
-          </button>
-          <h1 class="text-sm font-semibold text-[#f9f9f9]">devleadhunter</h1>
-          <div class="w-5" />
-        </div>
-      </header>
+      <!-- Main Content -->
+      <div class="flex-1 flex flex-col overflow-hidden ml-0 md:ml-64">
+        <!-- Mobile Header -->
+        <header class="md:hidden bg-[#1a1a1a] border-b border-[#30363d] px-4 py-3 sticky top-0 z-10">
+          <div class="flex items-center justify-between">
+            <button
+              @click="toggleSidebar"
+              class="text-[#8b949e] hover:text-[#f9f9f9] transition-colors"
+            >
+              <i class="fa-solid fa-bars w-5 h-5"></i>
+            </button>
+            <h1 class="text-sm font-semibold text-[#f9f9f9]">devleadhunter</h1>
+            <div class="w-5" />
+          </div>
+        </header>
 
-      <!-- Page Content -->
-      <main class="flex-1 overflow-y-auto px-4 py-6 md:px-8">
-        <slot />
-      </main>
+        <!-- Page Content -->
+        <main class="flex-1 overflow-y-auto px-4 py-6 md:px-8">
+          <slot />
+        </main>
+      </div>
     </div>
   </div>
 </template>
@@ -52,11 +54,6 @@ const isSidebarOpen: Ref<boolean> = ref(false);
  * Mobile state
  */
 const isMobile: Ref<boolean> = ref(false);
-
-/**
- * User store
- */
-const userStore = useUserStore();
 
 /**
  * Initialize authentication

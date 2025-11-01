@@ -2,65 +2,65 @@
   <div>
     <UiLoader v-if="isLoading" />
     <div v-else class="flex items-center justify-center min-h-screen px-4 bg-[#050505]">
-      <div class="w-full max-w-sm">
+    <div class="w-full max-w-sm">
         <h1 class="text-2xl font-semibold text-[#f9f9f9] mb-6 text-center">Login</h1>
-        
-        <form @submit.prevent="handleSubmit" class="space-y-4">
+      
+      <form @submit.prevent="handleSubmit" class="space-y-4">
           <!-- General Error -->
           <div v-if="generalError" class="text-sm text-[#f85149]">
             {{ generalError }}
           </div>
 
-          <!-- Email -->
-          <div>
-            <label for="email" class="block text-xs font-medium text-muted mb-1.5">
-              Email
-            </label>
-            <input
-              id="email"
-              v-model="email"
-              type="email"
-              required
-              placeholder="Saisissez votre adresse e-mail"
+        <!-- Email -->
+        <div>
+          <label for="email" class="block text-xs font-medium text-muted mb-1.5">
+            Email
+          </label>
+          <input
+            id="email"
+            v-model="email"
+            type="email"
+            required
+              placeholder="Enter your email address"
               :class="['input-field', emailError && 'border-[#f85149]']"
-            />
+          />
             <p v-if="emailError" class="mt-1 text-xs text-[#f85149]">{{ emailError }}</p>
-          </div>
+        </div>
 
-          <!-- Password -->
-          <div>
-            <label for="password" class="block text-xs font-medium text-muted mb-1.5">
-              Mot de passe
-            </label>
-            <input
-              id="password"
-              v-model="password"
-              type="password"
-              required
-              placeholder="Entrez votre mot de passe"
+        <!-- Password -->
+        <div>
+          <label for="password" class="block text-xs font-medium text-muted mb-1.5">
+            Password
+          </label>
+          <input
+            id="password"
+            v-model="password"
+            type="password"
+            required
+              placeholder="Enter your password"
               :class="['input-field', passwordError && 'border-[#f85149]']"
-            />
+          />
             <p v-if="passwordError" class="mt-1 text-xs text-[#f85149]">{{ passwordError }}</p>
-          </div>
+        </div>
 
-          <!-- Submit Button -->
-          <button
-            type="submit"
-            :disabled="isLoading"
+        <!-- Submit Button -->
+        <button
+          type="submit"
+          :disabled="isLoading"
             class="btn-primary w-full"
-          >
-            <span v-if="isLoading">Logging in...</span>
-            <span v-else>Se connecter</span>
-          </button>
+        >
+          <span v-if="isLoading">Logging in...</span>
+            <span v-else>Login</span>
+        </button>
 
-          <!-- Sign Up Link -->
-          <p class="text-center text-sm text-muted">
-            Don't have an account?
+        <!-- Sign Up Link -->
+        <p class="text-center text-sm text-muted">
+          Don't have an account?
             <NuxtLink to="/signup" class="text-[#f9f9f9] hover:underline transition-colors">
-              Sign up
-            </NuxtLink>
-          </p>
-        </form>
+            Sign up
+          </NuxtLink>
+        </p>
+      </form>
       </div>
     </div>
   </div>
@@ -118,18 +118,18 @@ const handleSubmit = async (): Promise<void> => {
 
   // Validate email
   if (!email.value) {
-    emailError.value = 'Pour accéder à votre compte, saisissez votre adresse e-mail.';
+    emailError.value = 'Please enter your email address to access your account.';
     return;
   }
   
   if (!validateEmail(email.value)) {
-    emailError.value = 'Format d\'e-mail invalide.';
+    emailError.value = 'Invalid email format.';
     return;
   }
 
   // Validate password
   if (!password.value) {
-    passwordError.value = 'Saisissez votre mot de passe.';
+    passwordError.value = 'Please enter your password.';
     return;
   }
 
@@ -141,7 +141,7 @@ const handleSubmit = async (): Promise<void> => {
     });
   } catch (error) {
     // Set general error message
-    generalError.value = 'Vos identifiants de connexion sont incorrects. Réessayez.';
+    generalError.value = 'Incorrect login credentials. Please try again.';
   }
 };
 </script>
