@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import type { User, LoginCredentials, SignupData } from '~/types';
 import type { Ref } from 'vue';
 import { ref, computed } from 'vue';
+import * as authService from '~/services/authService';
 
 /**
  * Pinia store for user authentication and profile management
@@ -53,21 +54,15 @@ export const useUserStore = defineStore('user', () => {
       isLoading.value = true;
       error.value = null;
       
-      // Mock API call - simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Call auth service
+      const tokenResponse = await authService.login(credentials);
+      token.value = tokenResponse.access_token;
       
-      // Mock user data
-      const mockUser = {
-        id: '1',
-        name: 'John Doe',
-        email: credentials.email,
-        createdAt: new Date().toISOString()
-      };
+      // Get user information
+      const userData = await authService.getCurrentUser(token.value);
+      user.value = userData;
       
-      user.value = mockUser;
-      token.value = 'mock-jwt-token-' + Date.now();
-      
-      // Store token in localStorage
+      // Store token and user in localStorage
       if (process.client) {
         localStorage.setItem('token', token.value);
         localStorage.setItem('user', JSON.stringify(user.value));
@@ -78,12 +73,6 @@ export const useUserStore = defineStore('user', () => {
     } finally {
       isLoading.value = false;
     }
-    
-    // TODO: Replace with actual API call
-    // const response = await $fetch('/api/auth/login', {
-    //   method: 'POST',
-    //   body: credentials
-    // });
   }
 
   /**
@@ -106,21 +95,18 @@ export const useUserStore = defineStore('user', () => {
       isLoading.value = true;
       error.value = null;
       
-      // Mock API call - simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Call auth service to create user
+      const userData = await authService.signup(data);
+      user.value = userData;
       
-      // Mock user data
-      const mockUser = {
-        id: '1',
-        name: data.name,
+      // Login the new user
+      const tokenResponse = await authService.login({
         email: data.email,
-        createdAt: new Date().toISOString()
-      };
+        password: data.password
+      });
+      token.value = tokenResponse.access_token;
       
-      user.value = mockUser;
-      token.value = 'mock-jwt-token-' + Date.now();
-      
-      // Store token in localStorage
+      // Store token and user in localStorage
       if (process.client) {
         localStorage.setItem('token', token.value);
         localStorage.setItem('user', JSON.stringify(user.value));
@@ -131,12 +117,6 @@ export const useUserStore = defineStore('user', () => {
     } finally {
       isLoading.value = false;
     }
-    
-    // TODO: Replace with actual API call
-    // const response = await $fetch('/api/auth/signup', {
-    //   method: 'POST',
-    //   body: data
-    // });
   }
 
   /**

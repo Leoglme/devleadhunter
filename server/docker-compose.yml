@@ -1,0 +1,38 @@
+services:
+  db_mariadb:
+    container_name: devleadhunter_db_mariadb
+    image: mariadb:latest
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: devleadhunter
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root
+    ports:
+      - '3310:3306'
+    volumes:
+      - database_data:/var/lib/mysql
+    networks:
+      - app-network
+
+  phpmyadmin:
+    container_name: devleadhunter_phpmyadmin
+    image: phpmyadmin/phpmyadmin
+    restart: always
+    environment:
+      PMA_HOST: db_mariadb
+      PMA_USER: root
+      PMA_PASSWORD: root
+    ports:
+      - '7500:80'
+    networks:
+      - app-network
+
+networks:
+  app-network:
+
+volumes:
+  database_data:
+  app:
+  node_modules:
+

@@ -41,6 +41,41 @@ class Settings(BaseSettings):
         description="Comma-separated list of allowed CORS origins"
     )
     
+    # Database settings
+    database_url: str = Field(
+        default="mysql+pymysql://root:root@localhost:3310/devleadhunter",
+        alias="DATABASE_URL",
+        description="Database connection URL"
+    )
+    
+    # JWT settings
+    secret_key: str = Field(
+        default="dev-secret-key-change-in-production",
+        alias="SECRET_KEY",
+        description="Secret key for JWT token signing"
+    )
+    algorithm: str = Field(
+        default="HS256",
+        description="Algorithm for JWT token signing"
+    )
+    access_token_expire_minutes: int = Field(
+        default=30,
+        alias="ACCESS_TOKEN_EXPIRE_MINUTES",
+        description="Access token expiration time in minutes"
+    )
+    
+    # Admin user settings
+    admin_email: str = Field(
+        default="contact@dibodev.fr",
+        alias="ADMIN_EMAIL",
+        description="Admin user email address"
+    )
+    admin_password: str = Field(
+        default="admin123",
+        alias="ADMIN_PASSWORD",
+        description="Admin user password"
+    )
+    
     @property
     def cors_origins(self) -> List[str]:
         """

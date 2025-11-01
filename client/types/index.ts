@@ -89,17 +89,28 @@ export interface Campaign {
 }
 
 /**
+ * User role enumeration
+ */
+export type UserRole = 'USER' | 'ADMIN';
+
+/**
  * User interface
  */
 export interface User {
   /** Unique identifier for the user */
-  id: string;
+  id: number;
   /** User name */
   name: string;
   /** User email */
   email: string;
+  /** User role */
+  role: UserRole;
+  /** Whether user is active */
+  is_active: boolean;
   /** Timestamp of account creation */
-  createdAt: string;
+  created_at: string;
+  /** Timestamp of last update */
+  updated_at: string | null;
 }
 
 /**
@@ -134,6 +145,16 @@ export interface ApiResponse<T> {
   success: boolean;
   /** Error message (if any) */
   message?: string;
+}
+
+/**
+ * Auth token response
+ */
+export interface TokenResponse {
+  /** JWT access token */
+  access_token: string;
+  /** Token type */
+  token_type: string;
 }
 
 /**

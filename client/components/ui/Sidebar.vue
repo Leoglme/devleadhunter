@@ -9,8 +9,13 @@
     <!-- Logo / Header -->
     <div class="px-4 py-3.5 border-b border-[#30363d] bg-[#1a1a1a]">
       <div class="flex items-center gap-2">
-        <div class="w-6 h-6 rounded-full bg-[#9333ea] flex items-center justify-center">
-          <i class="fa-solid fa-gem text-white text-xs"></i>
+        <div class="w-6 h-6 rounded flex items-center justify-center">
+          <svg viewBox="0 0 24 24" class="w-full h-full fill-current text-white">
+            <path d="M2 3l18-1v4l-9 1-9-1V3zm0 6l9 1 9-1v8l-9 1-9-1V9z" opacity="0.3"/>
+            <path d="M2 3l18-1v4l-9 1-9-1V3zm0 6l9 1 9-1v8l-9 1-9-1V9zm0 8l9 1 9-1v4l-9 1-9-1v-4z"/>
+            <circle cx="17" cy="11" r="3" fill="white" opacity="0.9"/>
+            <circle cx="17" cy="11" r="1.5" fill="#050505"/>
+          </svg>
         </div>
         <h1 class="text-sm font-semibold text-[#f9f9f9]">devleadhunter</h1>
       </div>
