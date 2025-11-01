@@ -123,8 +123,8 @@ class StripePaymentService:
                         'price_data': {
                             'currency': 'eur',
                             'product_data': {
-                                'name': f'Recharge de {credits} crédits Devleadhunter',
-                                'description': f'Crédits pour vos recherches de prospects',
+                                'name': f'{credits} Crédits Devleadhunter',
+                                'description': 'Crédits pour vos recherches de prospects',
                             },
                             'unit_amount': price_per_credit_cents,
                         },

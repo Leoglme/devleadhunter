@@ -164,9 +164,23 @@ Une fois configuré, vous pouvez :
 2. Que l'événement `checkout.session.completed` est bien envoyé
 3. Les logs du serveur pour voir les erreurs
 
-## 9. Ressources
+## 9. Personnalisation de l'apparence
+
+Pour améliorer l'affichage du panneau gauche (gris/noir) de la page de paiement Stripe :
+
+1. Connectez-vous au [Dashboard Stripe](https://dashboard.stripe.com)
+2. Allez dans **Paramètres > Mise à l'épreuve > Personnalisation**
+3. Personnalisez :
+   - **Logo** : Ajoutez votre logo pour améliorer l'apparence
+   - **Couleurs** : Ajustez les couleurs de votre marque
+   - **Texte** : Personnalisez les messages d'aide
+
+⚠️ **Note** : Le style du panneau gauche est généré par Stripe et ne peut pas être personnalisé via l'API. Seule la personnalisation via le Dashboard Stripe permet d'améliorer l'apparence.
+
+## 10. Ressources
 
 - [Documentation Stripe Checkout](https://stripe.com/docs/payments/checkout)
 - [Guide des webhooks Stripe](https://stripe.com/docs/webhooks)
 - [Stripe Testing](https://stripe.com/docs/testing)
+- [Personnaliser Stripe Checkout](https://dashboard.stripe.com/settings/branding)
 
