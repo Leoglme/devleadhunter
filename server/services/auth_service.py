@@ -182,6 +182,21 @@ def get_current_active_user(
     return current_user
 
 
+def require_auth(
+    current_user: User = Depends(get_current_active_user)
+) -> User:
+    """
+    Require authentication for accessing a resource.
+    
+    Args:
+        current_user: Current authenticated user
+        
+    Returns:
+        Current active user
+    """
+    return current_user
+
+
 def require_admin(
     current_user: User = Depends(get_current_active_user)
 ) -> User:

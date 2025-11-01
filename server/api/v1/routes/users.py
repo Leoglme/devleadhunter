@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from schemas.user import UserCreate, UserResponse, UserUpdate
 from services.auth_service import require_admin, get_password_hash
+from services.credit_service import credit_service, TransactionType
 from models.user import User
+from models.credit_settings import CreditSettings
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -30,10 +32,32 @@ async def get_users(
         db: Database session
         
     Returns:
-        List of users
+        List of users with credit balances
     """
     users = db.query(User).offset(skip).limit(limit).all()
-    return users
+    
+    # Add credit balance, available, and consumed to each user
+    result = []
+    for user in users:
+        balance = credit_service.get_user_balance(db, user.id)
+        credits_available = balance
+        credits_consumed = credit_service.get_user_credits_consumed(db, user.id)
+        
+        user_dict = {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "role": user.role,
+            "is_active": user.is_active,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at,
+            "credit_balance": balance,
+            "credits_available": credits_available,
+            "credits_consumed": credits_consumed
+        }
+        result.append(UserResponse(**user_dict))
+    
+    return result
 
 
 @router.get("/{user_id}", response_model=UserResponse)
@@ -51,7 +75,7 @@ async def get_user(
         db: Database session
         
     Returns:
-        User information
+        User information with credit balance
         
     Raises:
         HTTPException: If user not found
@@ -62,7 +86,25 @@ async def get_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
-    return user
+    
+    # Add credit balance, available, and consumed
+    balance = credit_service.get_user_balance(db, user.id)
+    credits_available = balance
+    credits_consumed = credit_service.get_user_credits_consumed(db, user.id)
+    
+    user_dict = {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "role": user.role,
+        "is_active": user.is_active,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+        "credit_balance": balance,
+        "credits_available": credits_available,
+        "credits_consumed": credits_consumed
+    }
+    return UserResponse(**user_dict)
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -106,7 +148,36 @@ async def create_user(
     db.commit()
     db.refresh(db_user)
     
-    return db_user
+    # Give free credits on signup (only for regular users, not admins)
+    if db_user.role != "ADMIN":
+        credit_settings = db.query(CreditSettings).filter(CreditSettings.id == 1).first()
+        if credit_settings and credit_settings.free_credits_on_signup > 0:
+            credit_service.add_credits(
+                db=db,
+                user_id=db_user.id,
+                amount=credit_settings.free_credits_on_signup,
+                description=f"Free credits on signup ({credit_settings.free_credits_on_signup} credits)",
+                transaction_type=TransactionType.FREE_GIFT
+            )
+    
+    # Return user with credit balance, available, and consumed
+    balance = credit_service.get_user_balance(db, db_user.id)
+    credits_available = balance
+    credits_consumed = credit_service.get_user_credits_consumed(db, db_user.id)
+    
+    user_dict = {
+        "id": db_user.id,
+        "name": db_user.name,
+        "email": db_user.email,
+        "role": db_user.role,
+        "is_active": db_user.is_active,
+        "created_at": db_user.created_at,
+        "updated_at": db_user.updated_at,
+        "credit_balance": balance,
+        "credits_available": credits_available,
+        "credits_consumed": credits_consumed
+    }
+    return UserResponse(**user_dict)
 
 
 @router.put("/{user_id}", response_model=UserResponse)
@@ -156,7 +227,24 @@ async def update_user(
     db.commit()
     db.refresh(user)
     
-    return user
+    # Return user with credit balance, available, and consumed
+    balance = credit_service.get_user_balance(db, user.id)
+    credits_available = balance
+    credits_consumed = credit_service.get_user_credits_consumed(db, user.id)
+    
+    user_dict = {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "role": user.role,
+        "is_active": user.is_active,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+        "credit_balance": balance,
+        "credits_available": credits_available,
+        "credits_consumed": credits_consumed
+    }
+    return UserResponse(**user_dict)
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

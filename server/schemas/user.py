@@ -53,11 +53,26 @@ class UserResponse(UserBase):
         is_active: Whether the user is active
         created_at: Timestamp when user was created
         updated_at: Timestamp when user was last updated
+        credit_balance: Current credit balance (-1 for unlimited/admin)
+        credits_available: Current credits available (-1 for unlimited/admin)
+        credits_consumed: Total credits consumed
     """
     id: int
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
+    credit_balance: Optional[int] = Field(
+        None,
+        description="Current credit balance. -1 indicates unlimited credits (admin)"
+    )
+    credits_available: Optional[int] = Field(
+        None,
+        description="Current credits available. -1 indicates unlimited credits (admin)"
+    )
+    credits_consumed: Optional[int] = Field(
+        None,
+        description="Total credits consumed"
+    )
     
     model_config = ConfigDict(from_attributes=True)
 

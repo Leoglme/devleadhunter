@@ -46,6 +46,8 @@ def init_db():
     This function creates all tables defined in the models.
     """
     from models.user import User  # noqa: F401
+    from models.credit_settings import CreditSettings  # noqa: F401
+    from models.credit_transaction import CreditTransaction  # noqa: F401
     
     Base.metadata.create_all(bind=engine)
 
