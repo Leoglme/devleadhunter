@@ -17,11 +17,6 @@ export default defineNuxtConfig({
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         { name: 'description', content: 'devleadhunter - Personal prospect research tool for freelance web developers' }
       ],
-      style: [
-        {
-          children: 'body { visibility: hidden; } html.loaded body { visibility: visible; }'
-        }
-      ],
       link: [
         {
           rel: 'preconnect',
@@ -41,10 +36,6 @@ export default defineNuxtConfig({
         {
           src: 'https://kit.fontawesome.com/dcc05147de.js',
           crossorigin: 'anonymous'
-        },
-        {
-          innerHTML: 'document.documentElement.classList.add("loaded");',
-          type: 'text/javascript'
         }
       ]
     }
@@ -63,8 +54,5 @@ export default defineNuxtConfig({
     }
   },
   
-  experimental: {
-    viewTransition: true
-  }
 })
 
