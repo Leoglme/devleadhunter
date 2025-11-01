@@ -61,6 +61,11 @@ class CreditSettings(Base):
         default=15,
         comment="Number of free credits given on user registration"
     )
+    minimum_credits_purchase: Mapped[int] = mapped_column(
+        nullable=False,
+        default=10,
+        comment="Minimum number of credits that can be purchased"
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now(), nullable=True)
     
@@ -72,6 +77,7 @@ class CreditSettings(Base):
             f"credits_per_search={self.credits_per_search} "
             f"credits_per_result={self.credits_per_result} "
             f"credits_per_email={self.credits_per_email} "
-            f"free_credits_on_signup={self.free_credits_on_signup}>"
+            f"free_credits_on_signup={self.free_credits_on_signup} "
+            f"minimum_credits_purchase={self.minimum_credits_purchase}>"
         )
 

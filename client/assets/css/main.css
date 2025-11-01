@@ -15,12 +15,12 @@
 
 @layer components {
   .btn-primary {
-    @apply flex items-center justify-center px-4 h-10 bg-[#f9f9f9] hover:bg-[#e4e4e4] text-[#050505] text-sm rounded font-normal shadow-sm hover:shadow;
+    @apply flex items-center justify-center px-4 h-10 min-h-10 bg-[#f9f9f9] hover:bg-[#e4e4e4] text-[#050505] text-sm rounded font-normal shadow-sm hover:shadow;
     transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
   }
   
   .btn-secondary {
-    @apply flex items-center justify-center px-4 h-10 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#f9f9f9] rounded border border-[#30363d] font-normal text-sm;
+    @apply flex items-center justify-center px-4 h-10 min-h-10 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#f9f9f9] rounded border border-[#30363d] font-normal text-sm;
     transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
   }
   
@@ -29,7 +29,7 @@
   }
   
   .input-field {
-    @apply w-full h-10 px-3 bg-[#050505] border border-[#30363d] rounded text-[#f9f9f9] text-sm placeholder-[#8b949e] focus:outline-none focus:border-[#f9f9f9] transition-all;
+    @apply w-full h-10 min-h-10 px-3 bg-[#050505] border border-[#30363d] rounded text-[#f9f9f9] text-sm placeholder-[#8b949e] focus:outline-none focus:border-[#f9f9f9] transition-all;
   }
   
   .input-field option {

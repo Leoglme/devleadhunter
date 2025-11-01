@@ -111,6 +111,12 @@ export interface User {
   created_at: string;
   /** Timestamp of last update */
   updated_at: string | null;
+  /** Credit balance (-1 for unlimited/admin) */
+  credit_balance?: number | null;
+  /** Credits available (-1 for unlimited/admin) */
+  credits_available?: number | null;
+  /** Credits consumed */
+  credits_consumed?: number | null;
 }
 
 /**
@@ -199,4 +205,52 @@ export interface BulkEmailData {
   body: string;
 }
 
+/**
+ * Credit settings interface for credit system configuration
+ */
+export interface CreditSettings {
+  /** Unique identifier for the settings (always 1) */
+  id: number;
+  /** Price of one credit in EUR */
+  price_per_credit: number;
+  /** Number of credits required for a search operation */
+  credits_per_search: number;
+  /** Number of credits required per prospect found */
+  credits_per_result: number;
+  /** Number of credits required per email sent */
+  credits_per_email: number;
+  /** Number of free credits given on user registration */
+  free_credits_on_signup: number;
+  /** Minimum number of credits that can be purchased */
+  minimum_credits_purchase: number;
+  /** Timestamp when settings were created */
+  created_at: string;
+  /** Timestamp when settings were last updated */
+  updated_at: string | null;
+}
 
+/**
+ * Checkout session creation request
+ */
+export interface CheckoutSessionCreate {
+  /** Number of credits to purchase */
+  credits: number;
+  /** URL to redirect after successful payment (optional) */
+  success_url?: string;
+  /** URL to redirect if payment is cancelled (optional) */
+  cancel_url?: string;
+}
+
+/**
+ * Checkout session response
+ */
+export interface CheckoutSessionResponse {
+  /** Stripe checkout session ID */
+  session_id: string;
+  /** Stripe checkout session URL */
+  url: string;
+  /** Payment amount in cents */
+  amount: number;
+  /** Number of credits being purchased */
+  credits: number;
+}

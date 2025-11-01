@@ -15,14 +15,12 @@ router = APIRouter(prefix="/credit-settings", tags=["credit-settings"])
 
 @router.get("", response_model=CreditSettingsResponse)
 async def get_credit_settings(
-    current_user: Any = Depends(require_admin),
     db: Session = Depends(get_db)
 ) -> CreditSettingsResponse:
     """
-    Get current credit settings (admin only).
+    Get current credit settings (public read access).
     
     Args:
-        current_user: Current authenticated admin user
         db: Database session
         
     Returns:
@@ -79,6 +77,8 @@ async def update_credit_settings(
         settings.credits_per_email = settings_data.credits_per_email
     if settings_data.free_credits_on_signup is not None:
         settings.free_credits_on_signup = settings_data.free_credits_on_signup
+    if settings_data.minimum_credits_purchase is not None:
+        settings.minimum_credits_purchase = settings_data.minimum_credits_purchase
     
     db.commit()
     db.refresh(settings)

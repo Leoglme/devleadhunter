@@ -123,12 +123,14 @@ const userStore = useUserStore();
 const links = computed(() => {
   const baseLinks = [
     { to: '/dashboard', label: 'Prospect Search', icon: 'fa-solid fa-magnifying-glass' },
-    { to: '/dashboard/campaigns', label: 'Campaigns', icon: 'fa-solid fa-envelope' }
+    { to: '/dashboard/campaigns', label: 'Campaigns', icon: 'fa-solid fa-envelope' },
+    { to: '/dashboard/buy-credits', label: 'Buy Credits', icon: 'fa-solid fa-credit-card' }
   ];
   
-  // Add Users link for admin users
+  // Add admin links for admin users
   if (userStore.user?.role === 'ADMIN') {
     baseLinks.push({ to: '/dashboard/users', label: 'Users', icon: 'fa-solid fa-users' });
+    baseLinks.push({ to: '/dashboard/credit-settings', label: 'Credit Settings', icon: 'fa-solid fa-coins' });
   }
   
   return baseLinks;

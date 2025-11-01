@@ -76,6 +76,28 @@ class Settings(BaseSettings):
         description="Admin user password"
     )
     
+    # Stripe settings
+    stripe_secret_key: str = Field(
+        default="",
+        alias="STRIPE_SECRET_KEY",
+        description="Stripe secret key for API calls"
+    )
+    stripe_public_key: str = Field(
+        default="",
+        alias="STRIPE_PUBLIC_KEY",
+        description="Stripe public key for frontend"
+    )
+    stripe_webhook_secret: str = Field(
+        default="",
+        alias="STRIPE_WEBHOOK_SECRET",
+        description="Stripe webhook secret for verifying webhook signatures"
+    )
+    frontend_url: str = Field(
+        default="http://localhost:3000",
+        alias="FRONTEND_URL",
+        description="Frontend URL for redirects after payment"
+    )
+    
     @property
     def cors_origins(self) -> List[str]:
         """

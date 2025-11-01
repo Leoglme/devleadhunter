@@ -40,6 +40,12 @@
               <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
                 Role
               </th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
+                Credits Available
+              </th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
+                Credits Consumed
+              </th>
               <th class="px-4 py-3 text-right text-xs font-medium text-[#8b949e] uppercase tracking-wider">
                 Actions
               </th>
@@ -72,6 +78,19 @@
                   ]"
                 >
                   {{ user.role }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-sm text-[#f9f9f9]">
+                <span v-if="user.credits_available === -1 || user.credits_available === null" class="text-[#8b949e]">
+                  Unlimited
+                </span>
+                <span v-else class="font-medium">
+                  {{ user.credits_available }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-sm text-[#f9f9f9]">
+                <span class="font-medium">
+                  {{ user.credits_consumed ?? 0 }}
                 </span>
               </td>
               <td class="px-4 py-3 text-right">

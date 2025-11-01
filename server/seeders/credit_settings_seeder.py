@@ -18,6 +18,7 @@ def seed_credit_settings() -> None:
     - Credits per result: 1
     - Credits per email: 3
     - Free credits on signup: 15
+    - Minimum credits purchase: 10
     """
     # Initialize database tables
     init_db()
@@ -38,7 +39,8 @@ def seed_credit_settings() -> None:
                 credits_per_search=5,
                 credits_per_result=1,
                 credits_per_email=3,
-                free_credits_on_signup=15
+                free_credits_on_signup=15,
+                minimum_credits_purchase=10
             )
             
             db.add(credit_settings)
@@ -51,6 +53,7 @@ def seed_credit_settings() -> None:
             print(f"  - Credits per result: {credit_settings.credits_per_result}")
             print(f"  - Credits per email: {credit_settings.credits_per_email}")
             print(f"  - Free credits on signup: {credit_settings.free_credits_on_signup}")
+            print(f"  - Minimum credits purchase: {credit_settings.minimum_credits_purchase}")
     
     except Exception as e:
         print(f"[ERROR] Failed to seed credit settings: {e}")

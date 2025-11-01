@@ -4,7 +4,7 @@ Credit settings Pydantic schemas for request/response validation.
 from typing import Optional, Any
 from datetime import datetime
 from decimal import Decimal
-from pydantic import BaseModel, Field, model_validator, ConfigDict
+from pydantic import BaseModel, Field, model_validator, ConfigDict, field_serializer
 
 
 class CreditSettingsBase(BaseModel):
@@ -42,6 +42,11 @@ class CreditSettingsBase(BaseModel):
         ...,
         ge=0,
         description="Number of free credits given on user registration"
+    )
+    minimum_credits_purchase: int = Field(
+        ...,
+        ge=1,
+        description="Minimum number of credits that can be purchased"
     )
 
 
@@ -81,6 +86,11 @@ class CreditSettingsUpdate(BaseModel):
         ge=0,
         description="Number of free credits given on user registration"
     )
+    minimum_credits_purchase: Optional[int] = Field(
+        None,
+        ge=1,
+        description="Minimum number of credits that can be purchased"
+    )
     
     @model_validator(mode='after')
     def check_at_least_one_field(self) -> 'CreditSettingsUpdate':
@@ -99,7 +109,8 @@ class CreditSettingsUpdate(BaseModel):
                 self.credits_per_search,
                 self.credits_per_result,
                 self.credits_per_email,
-                self.free_credits_on_signup
+                self.free_credits_on_signup,
+                self.minimum_credits_purchase
             ]
         ):
             raise ValueError("At least one field must be provided for update")
@@ -120,4 +131,17 @@ class CreditSettingsResponse(CreditSettingsBase):
     updated_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
+    
+    @field_serializer('price_per_credit')
+    def serialize_price_per_credit(self, value: Decimal) -> float:
+        """
+        Serialize Decimal to float for JSON response.
+        
+        Args:
+            value: Decimal value to serialize
+            
+        Returns:
+            float representation of the Decimal value
+        """
+        return float(value)
 
