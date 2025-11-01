@@ -24,6 +24,10 @@ export const useUserStore = defineStore('user', () => {
   const token: Ref<string | null> = ref(null);
   const isLoading: Ref<boolean> = ref(false);
   const error: Ref<string | null> = ref(null);
+  const lastValidationTime: Ref<number | null> = ref(null);
+  
+  // Cache validation for 30 seconds to avoid excessive API calls
+  const VALIDATION_CACHE_TIME = 30000;
 
   // Getters
   const isAuthenticated = computed(() => {
@@ -126,6 +130,7 @@ export const useUserStore = defineStore('user', () => {
   function logout(): void {
     user.value = null;
     token.value = null;
+    lastValidationTime.value = null;
     localStorage.removeItem('token');
     localStorage.removeItem('user');
   }
@@ -171,13 +176,79 @@ export const useUserStore = defineStore('user', () => {
    */
   function initializeAuth(): void {
     if (process.client) {
-      const storedToken = localStorage.getItem('token');
-      const storedUser = localStorage.getItem('user');
-      
-      if (storedToken && storedUser) {
-        token.value = storedToken;
-        user.value = JSON.parse(storedUser);
+      try {
+        const storedToken = localStorage.getItem('token');
+        const storedUser = localStorage.getItem('user');
+        
+        if (storedToken && storedUser) {
+          token.value = storedToken;
+          user.value = JSON.parse(storedUser);
+        }
+      } catch (error) {
+        // If there's an error parsing user data, clear invalid data
+        console.error('Error initializing auth from localStorage:', error);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        token.value = null;
+        user.value = null;
       }
+    }
+  }
+
+  /**
+   * Validate authentication by calling /me endpoint
+   * Updates user data if token is valid, otherwise clears auth
+   * Uses cache to avoid excessive API calls
+   * @returns {Promise<boolean>} True if authenticated, false otherwise
+   */
+  async function validateAuth(): Promise<boolean> {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    const storedToken = localStorage.getItem('token');
+    
+    if (!storedToken) {
+      token.value = null;
+      user.value = null;
+      lastValidationTime.value = null;
+      return false;
+    }
+
+    // Check if we have a recent validation (within cache time)
+    const now = Date.now();
+    if (lastValidationTime.value && (now - lastValidationTime.value) < VALIDATION_CACHE_TIME) {
+      // Return cached authentication status
+      return token.value !== null && user.value !== null;
+    }
+
+    try {
+      // Set token first so API call can use it
+      token.value = storedToken;
+      
+      // Call /me to validate token and get current user data
+      const userData = await authService.getCurrentUser(storedToken);
+      
+      // Update user with fresh data from server
+      user.value = userData;
+      
+      // Update localStorage with fresh user data
+      localStorage.setItem('user', JSON.stringify(userData));
+      localStorage.setItem('token', storedToken);
+      
+      // Update validation cache time
+      lastValidationTime.value = now;
+      
+      return true;
+    } catch (error) {
+      // Token is invalid or expired, clear auth
+      console.error('Auth validation failed:', error);
+      token.value = null;
+      user.value = null;
+      lastValidationTime.value = null;
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      return false;
     }
   }
 
@@ -196,7 +267,8 @@ export const useUserStore = defineStore('user', () => {
     signup,
     logout,
     updateProfile,
-    initializeAuth
+    initializeAuth,
+    validateAuth
   };
 });
 

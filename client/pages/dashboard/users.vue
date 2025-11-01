@@ -47,7 +47,7 @@
           </thead>
           <tbody>
             <tr
-              v-for="user in filteredUsers"
+              v-for="(user, index) in filteredUsers"
               :key="user.id"
               class="hover:bg-[#2a2a2a] border-b border-[#30363d] last:border-b-0 transition-colors"
             >
@@ -65,19 +65,19 @@
               <td class="px-4 py-3 text-sm">
                 <span
                   :class="[
-                    'px-2 py-1 rounded text-xs font-medium',
+                    'px-2.5 py-0.5 rounded text-xs font-medium inline-flex items-center',
                     user.role === 'ADMIN' 
-                      ? 'bg-[#8b949e] text-[#050505]' 
-                      : 'bg-[#2a2a2a] text-[#8b949e]'
+                      ? 'bg-[#da3633]/20 text-[#f85149] border border-[#da3633]/30' 
+                      : 'bg-[#238636]/20 text-[#3fb950] border border-[#238636]/30'
                   ]"
                 >
                   {{ user.role }}
                 </span>
               </td>
               <td class="px-4 py-3 text-right">
-                <div class="relative inline-block">
+                <div class="relative inline-block user-menu-container">
                   <button
-                    @click="toggleUserMenu(user.id)"
+                    @click="toggleUserMenu(user.id, $event)"
                     class="text-[#8b949e] hover:text-[#f9f9f9] transition-colors"
                   >
                     <i class="fa-solid fa-ellipsis-vertical w-5 h-5"></i>
@@ -85,7 +85,12 @@
                   <!-- Dropdown Menu -->
                   <div
                     v-if="openMenuId === user.id"
-                    class="absolute right-0 mt-1 w-48 bg-[#1a1a1a] border border-[#30363d] rounded shadow-lg z-10"
+                    :class="[
+                      'absolute right-0 w-48 bg-[#1a1a1a] border border-[#30363d] rounded shadow-lg z-10',
+                      index >= filteredUsers.length - 2
+                        ? 'bottom-full mb-1'
+                        : 'top-full mt-1'
+                    ]"
                   >
                     <button
                       @click="handleEdit(user)"
@@ -322,7 +327,7 @@
 <script setup lang="ts">
 import type { User } from '~/types';
 import type { Ref } from 'vue';
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import * as usersService from '~/services/usersService';
 import { useToast } from '~/composables/useToast';
 
@@ -406,10 +411,28 @@ const getUserInitials = (name: string): string => {
 /**
  * Toggle user menu
  * @param {number} userId - User ID
+ * @param {Event} event - Click event
  * @returns {void}
  */
-const toggleUserMenu = (userId: number): void => {
+const toggleUserMenu = (userId: number, event?: Event): void => {
+  if (event) {
+    event.stopPropagation();
+  }
   openMenuId.value = openMenuId.value === userId ? null : userId;
+};
+
+/**
+ * Close menu on outside click
+ * @param {Event} event - Click event
+ * @returns {void}
+ */
+const handleClickOutside = (event: Event): void => {
+  const target = event.target as HTMLElement;
+  // Check if click is outside all menu buttons and dropdowns
+  const isClickInsideMenu = target.closest('.user-menu-container');
+  if (!isClickInsideMenu && openMenuId.value !== null) {
+    openMenuId.value = null;
+  }
 };
 
 /**
@@ -519,6 +542,19 @@ const confirmDelete = async (): Promise<void> => {
  */
 onMounted(() => {
   loadUsers();
+  // Add event listener for outside clicks
+  if (process.client) {
+    document.addEventListener('click', handleClickOutside);
+  }
+});
+
+/**
+ * Cleanup on component unmount
+ */
+onUnmounted(() => {
+  if (process.client) {
+    document.removeEventListener('click', handleClickOutside);
+  }
 });
 </script>
 

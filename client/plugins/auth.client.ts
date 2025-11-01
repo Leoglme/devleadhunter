@@ -5,9 +5,7 @@
 export default defineNuxtPlugin(() => {
   const userStore = useUserStore();
   
-  // Initialize auth from localStorage
-  if (process.client) {
-    userStore.initializeAuth();
-  }
+  // Initialize auth from localStorage (always client-side in .client.ts plugin)
+  userStore.initializeAuth();
 });
 

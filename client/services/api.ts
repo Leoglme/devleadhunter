@@ -39,10 +39,53 @@ async function request<T>(
   });
 
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.statusText}`);
+    const errorText = await response.text().catch(() => '');
+    let errorMessage = `API request failed: ${response.statusText}`;
+    
+    // Try to parse error message from response
+    if (errorText) {
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.detail || errorJson.message || errorMessage;
+      } catch {
+        errorMessage = errorText || errorMessage;
+      }
+    }
+    
+    throw new Error(errorMessage);
   }
 
-  return response.json();
+  // Check if response has content
+  const contentType = response.headers.get('content-type');
+  const contentLength = response.headers.get('content-length');
+  
+  // For DELETE requests or responses with no content, return undefined
+  if (contentLength === '0' || (options.method === 'DELETE' && !contentType?.includes('application/json'))) {
+    // Try to get text to verify it's actually empty
+    const text = await response.text().catch(() => '');
+    if (!text || text.trim() === '') {
+      return undefined as T;
+    }
+    // If there's unexpected content, try to parse it
+    try {
+      return JSON.parse(text);
+    } catch {
+      return undefined as T;
+    }
+  }
+
+  // For normal responses, check if body exists before parsing
+  const text = await response.text();
+  if (!text || text.trim() === '') {
+    return undefined as T;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    // If it's not JSON, return the text
+    return text as T;
+  }
 }
 
 /**
