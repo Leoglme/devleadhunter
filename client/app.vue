@@ -1,5 +1,5 @@
 <template>
-  <div id="__nuxt">
+  <div>
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>
@@ -24,16 +24,5 @@ onMounted(() => {
   userStore.initializeAuth();
 });
 </script>
-
-<style>
-/* Prevent flash of unstyled content */
-#__nuxt {
-  visibility: hidden;
-}
-
-#__nuxt.html-ready {
-  visibility: visible;
-}
-</style>
 
 
