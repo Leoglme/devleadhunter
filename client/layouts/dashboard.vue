@@ -62,7 +62,7 @@ const isMobile: Ref<boolean> = ref(false);
 async function initializeAuth(): Promise<void> {
   if (process.client) {
     // Small delay to ensure store is hydrated from localStorage
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 300));
     isInitializing.value = false;
   }
 }

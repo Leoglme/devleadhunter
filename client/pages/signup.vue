@@ -48,15 +48,24 @@
           <label for="password" class="block text-xs font-medium text-muted mb-1.5">
             Password
           </label>
-          <input
-            id="password"
-            v-model="password"
-            type="password"
-            required
+          <div class="relative">
+            <input
+              id="password"
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              required
               placeholder="Enter your password"
-              :class="['input-field', passwordError && 'border-[#f85149]']"
-          />
-            <p v-if="passwordError" class="mt-1 text-xs text-[#f85149]">{{ passwordError }}</p>
+              :class="['input-field pr-10', passwordError && 'border-[#f85149]']"
+            />
+            <button
+              type="button"
+              @click="showPassword = !showPassword"
+              class="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b949e] hover:text-[#f9f9f9] transition-colors"
+            >
+              <i :class="showPassword ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'" class="w-4 h-4"></i>
+            </button>
+          </div>
+          <p v-if="passwordError" class="mt-1 text-xs text-[#f85149]">{{ passwordError }}</p>
         </div>
 
         <!-- Submit Button -->
@@ -105,6 +114,7 @@ const { signup, isLoading } = useAuth();
 const name: Ref<string> = ref('');
 const email: Ref<string> = ref('');
 const password: Ref<string> = ref('');
+const showPassword: Ref<boolean> = ref(false);
 
 /**
  * Error state
