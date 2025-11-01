@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-screen bg-[#0d1117]">
+  <div class="flex h-screen bg-[#050505]">
     <!-- Sidebar -->
     <UiSidebar
       :is-open="isSidebarOpen"
@@ -10,15 +10,15 @@
     <!-- Main Content -->
     <div class="flex-1 flex flex-col overflow-hidden ml-0 md:ml-64">
       <!-- Mobile Header -->
-      <header class="md:hidden bg-[#161b22] border-b border-[#30363d] px-4 py-3 sticky top-0 z-10">
+      <header class="md:hidden bg-[#1a1a1a] border-b border-[#30363d] px-4 py-3 sticky top-0 z-10">
         <div class="flex items-center justify-between">
           <button
             @click="toggleSidebar"
-            class="text-[#7d8590] hover:text-white transition-colors"
+            class="text-[#8b949e] hover:text-[#f9f9f9] transition-colors"
           >
             <i class="fa-solid fa-bars w-5 h-5"></i>
           </button>
-          <h1 class="text-sm font-semibold text-white">devleadhunter</h1>
+          <h1 class="text-sm font-semibold text-[#f9f9f9]">devleadhunter</h1>
           <div class="w-5" />
         </div>
       </header>

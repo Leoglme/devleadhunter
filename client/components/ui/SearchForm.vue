@@ -72,7 +72,7 @@
     <button
       type="submit"
       :disabled="isLoading"
-      class="w-full px-3 py-1.5 text-white hover:bg-[#2d333b] rounded-lg transition-all border border-[#30363d] bg-[#21262d] mt-4"
+      class="btn-primary w-full mt-4"
     >
       <span v-if="isLoading" class="flex items-center justify-center gap-2">
         <i class="fa-solid fa-spinner fa-spin"></i>
@@ -124,8 +124,8 @@ const toast = useToast();
 const localFilters: Ref<ProspectSearchFilters> = ref({
   category: props.filters?.category || 'all',
   city: props.filters?.city || '',
-  source: props.filters?.source || 'all',
-  maxResults: props.filters?.maxResults || 50
+  source: props.filters?.source || 'pagesjaunes',
+  maxResults: props.filters?.maxResults || 5
 });
 
 /**

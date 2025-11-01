@@ -1,12 +1,12 @@
 <template>
   <div>
     <div class="flex justify-between items-center mb-4">
-      <h1 class="text-2xl font-semibold text-white">Campaigns</h1>
+      <h1 class="text-[32px] font-semibold text-[#f9f9f9]">Campaigns</h1>
       <button
         @click="showCreateModal = true"
-        class="px-3 py-1.5 text-white hover:bg-[#2d333b] rounded-lg transition-all border border-[#30363d] bg-[#21262d] text-sm flex items-center gap-1.5"
+        class="btn-primary"
       >
-        <i class="fa-solid fa-plus"></i>
+        <i class="fa-solid fa-plus mr-1.5"></i>
         <span>New Campaign</span>
       </button>
     </div>
@@ -14,8 +14,8 @@
     <!-- Campaigns List -->
     <div v-if="campaignsStore.isLoading" class="card">
       <div class="animate-pulse space-y-3">
-        <div class="h-4 bg-[#1c2128] rounded w-3/4"></div>
-        <div class="h-4 bg-[#1c2128] rounded w-full"></div>
+        <div class="h-4 bg-[#2a2a2a] rounded w-3/4"></div>
+        <div class="h-4 bg-[#2a2a2a] rounded w-full"></div>
       </div>
     </div>
 
@@ -23,11 +23,11 @@
       <div
         v-for="campaign in campaignsStore.campaigns"
         :key="campaign.id"
-        class="card hover:border-[#1f6feb] transition-colors"
+        class="card hover:border-[#f9f9f9] transition-colors cursor-pointer"
       >
         <div class="flex justify-between items-start">
           <div class="flex-1">
-            <h3 class="text-base font-semibold text-white mb-1">{{ campaign.name }}</h3>
+            <h3 class="text-base font-semibold text-[#f9f9f9] mb-1">{{ campaign.name }}</h3>
             <p class="text-sm text-muted mb-2">{{ campaign.description }}</p>
             <div class="flex gap-4 text-xs">
               <span class="text-muted">
@@ -48,7 +48,7 @@
           </div>
           <button
             @click="handleSendCampaignEmail(campaign.id)"
-            class="px-3 py-1.5 text-xs text-white hover:bg-[#2d333b] rounded-lg transition-all border border-[#30363d] bg-[#21262d] hover:border-[#484f58] ml-4"
+            class="btn-secondary ml-4"
           >
             Send Emails
           </button>
@@ -61,7 +61,7 @@
       <p class="text-muted text-sm mb-4">No campaigns yet</p>
       <button
         @click="showCreateModal = true"
-        class="px-3 py-1.5 text-white hover:bg-[#2d333b] rounded-lg transition-all border border-[#30363d] bg-[#21262d] text-sm"
+        class="btn-secondary"
       >
         Create Your First Campaign
       </button>
@@ -73,8 +73,8 @@
       class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 backdrop-blur-sm"
       @click.self="showCreateModal = false"
     >
-      <div class="bg-[#161b22] border border-muted rounded-xl p-6 w-full max-w-md shadow-lg">
-        <h2 class="text-base font-semibold text-white mb-4">Create Campaign</h2>
+      <div class="bg-[#1a1a1a] border border-muted rounded-lg p-6 w-full max-w-md shadow-lg">
+        <h2 class="text-base font-semibold text-[#f9f9f9] mb-4">Create Campaign</h2>
         
         <form @submit.prevent="handleCreateCampaign" class="space-y-3">
           <div>
@@ -106,17 +106,17 @@
           
           <div class="flex gap-3 pt-2">
             <button
-              type="submit"
-              class="flex-1 px-3 py-1.5 text-white hover:bg-[#2d333b] rounded-lg transition-all border border-[#30363d] bg-[#21262d] text-sm"
-            >
-              Create
-            </button>
-            <button
               type="button"
               @click="showCreateModal = false"
-              class="flex-1 px-3 py-1.5 text-white hover:bg-[#2d333b] rounded-lg transition-all border border-[#30363d] bg-[#21262d] text-sm font-medium"
+              class="btn-secondary flex-1"
             >
               Cancel
+            </button>
+            <button
+              type="submit"
+              class="btn-primary flex-1"
+            >
+              Create
             </button>
           </div>
         </form>

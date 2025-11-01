@@ -1,7 +1,7 @@
 <template>
-  <div class="flex items-center justify-center min-h-screen px-4 bg-[#0d1117]">
+  <div class="flex items-center justify-center min-h-screen px-4 bg-[#050505]">
     <div class="w-full max-w-sm">
-      <h1 class="text-2xl font-semibold text-white mb-6 text-center">Sign Up</h1>
+      <h1 class="text-2xl font-semibold text-[#f9f9f9] mb-6 text-center">Sign Up</h1>
       
       <form @submit.prevent="handleSubmit" class="space-y-4">
         <!-- Name -->
@@ -53,7 +53,7 @@
         <button
           type="submit"
           :disabled="isLoading"
-          class="w-full px-3 py-1.5 text-white hover:bg-[#2d333b] rounded-lg transition-all border border-[#30363d] bg-[#21262d]"
+          class="btn-primary w-full"
         >
           <span v-if="isLoading">Creating account...</span>
           <span v-else>Sign Up</span>
@@ -62,7 +62,7 @@
         <!-- Login Link -->
         <p class="text-center text-sm text-muted">
           Already have an account?
-          <NuxtLink to="/login" class="text-[#58a6ff] hover:text-[#79c0ff] transition-colors">
+          <NuxtLink to="/login" class="text-[#f9f9f9] hover:underline transition-colors">
             Login
           </NuxtLink>
         </p>

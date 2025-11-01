@@ -1,6 +1,6 @@
 <template>
   <div class="max-w-2xl">
-    <h1 class="text-2xl font-semibold text-white mb-4">Profile</h1>
+    <h1 class="text-[32px] font-semibold text-[#f9f9f9] mb-4">Profile</h1>
 
     <div class="card">
       <form @submit.prevent="handleSubmit" class="space-y-4">
@@ -33,21 +33,23 @@
         </div>
 
         <!-- Save Button -->
-        <div class="flex gap-3 pt-2">
+        <div class="flex gap-3 pt-2 justify-end">
+          <NuxtLink
+            to="/dashboard"
+            class="btn-secondary"
+          >
+            <span>
+              Cancel
+            </span>
+          </NuxtLink>
           <button
             type="submit"
             :disabled="isLoading"
-            class="px-3 py-1.5 text-white hover:bg-[#2d333b] rounded-lg transition-all border border-[#30363d] bg-[#21262d]"
+            class="btn-primary"
           >
             <span v-if="isLoading">Saving...</span>
             <span v-else>Save Changes</span>
           </button>
-          <NuxtLink
-            to="/dashboard"
-            class="px-3 py-1.5 text-white hover:bg-[#2d333b] rounded-lg transition-all border border-[#30363d] bg-[#21262d] text-center"
-          >
-            Cancel
-          </NuxtLink>
         </div>
       </form>
     </div>

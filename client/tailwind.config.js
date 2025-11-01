@@ -24,6 +24,10 @@ export default {
           600: '#21262d',
           700: '#161b22',
           800: '#0d1117'
+        },
+        qonto: {
+          active: '#3d3d3d',
+          hover: 'rgba(5, 5, 5, 0.08)'
         }
       }
     }

@@ -1,8 +1,8 @@
 <template>
-  <div class="overflow-hidden border border-muted rounded-xl bg-[#161b22]">
+  <div class="overflow-hidden border border-muted rounded-lg bg-[#1a1a1a]">
     <table class="w-full border-collapse">
       <thead>
-        <tr class="bg-[#21262d]">
+        <tr class="bg-[#050505]">
           <th class="px-3 py-2.5 text-left text-xs font-semibold text-muted border-b border-muted">
             Name
           </th>
@@ -33,15 +33,15 @@
         <tr
           v-for="prospect in prospects"
           :key="prospect.id"
-          class="hover:bg-[#1c2128] border-b border-muted last:border-b-0 transition-colors"
+          class="hover:bg-[#2a2a2a] border-b border-muted last:border-b-0 transition-colors"
         >
-          <td class="px-3 py-2.5 text-sm text-white">
+          <td class="px-3 py-2.5 text-sm text-[#f9f9f9]">
             {{ prospect.name }}
           </td>
           <td class="px-3 py-2.5 text-sm text-muted">
             {{ prospect.address }}
           </td>
-          <td class="px-3 py-2.5 text-sm text-white">
+          <td class="px-3 py-2.5 text-sm text-[#f9f9f9]">
             {{ prospect.city }}
           </td>
           <td class="px-3 py-2.5 text-sm text-muted">
@@ -71,14 +71,14 @@
             <div class="flex gap-1.5">
               <button
                 @click="handleAddToCampaign(prospect.id)"
-                class="px-2 py-1.5 text-xs text-white hover:bg-[#2d333b] rounded-lg transition-all border border-[#30363d] bg-[#21262d] hover:border-[#484f58]"
+                class="btn-secondary"
               >
                 <i class="fa-solid fa-plus mr-1"></i> Add to Campaign
               </button>
               <button
                 v-if="prospect.email"
                 @click="handleSendEmail(prospect)"
-                class="px-2 py-1.5 text-xs text-white hover:bg-[#2d333b] rounded-lg transition-all border border-[#30363d] bg-[#21262d] hover:border-[#484f58]"
+                class="btn-secondary"
               >
                 <i class="fa-solid fa-envelope mr-1"></i> Send Email
               </button>

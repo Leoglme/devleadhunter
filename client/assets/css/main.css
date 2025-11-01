@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-[#0d1117] text-white font-sans;
+    @apply bg-[#050505] text-[#f9f9f9] font-sans;
     font-family: 'Inter', sans-serif;
   }
   
@@ -15,23 +15,33 @@
 
 @layer components {
   .btn-primary {
-    @apply px-3 py-1.5 bg-[#238636] hover:bg-[#2ea043] text-white text-sm rounded-lg transition-all font-medium shadow-sm hover:shadow;
+    @apply flex items-center justify-center px-4 h-10 bg-[#f9f9f9] hover:bg-[#e4e4e4] text-[#050505] text-sm rounded font-normal shadow-sm hover:shadow;
+    transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
   }
   
   .btn-secondary {
-    @apply px-3 py-1.5 bg-[#21262d] hover:bg-[#2d333b] text-white text-sm rounded-lg transition-all border border-[#30363d] font-medium;
+    @apply flex items-center justify-center px-4 h-10 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#f9f9f9] rounded border border-[#30363d] font-normal text-sm;
+    transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
   }
   
   .btn-danger {
-    @apply px-3 py-1.5 bg-[#da3633] hover:bg-[#f85149] text-white text-sm rounded-lg transition-all font-medium;
+    @apply flex items-center justify-center px-3 py-1.5 bg-[#da3633] hover:bg-[#f85149] text-[#f9f9f9] rounded transition-all font-medium;
   }
   
   .input-field {
-    @apply w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-lg text-white text-sm placeholder-[#8b949e] focus:outline-none focus:ring-2 focus:ring-[#1f6feb] focus:border-[#1f6feb] transition-all;
+    @apply w-full h-10 px-3 bg-[#050505] border border-[#30363d] rounded text-[#f9f9f9] text-sm placeholder-[#8b949e] focus:outline-none focus:border-[#f9f9f9] transition-all;
+  }
+  
+  .input-field option {
+    @apply bg-[#1a1a1a] text-[#f9f9f9];
+  }
+  
+  textarea.input-field {
+    @apply h-auto py-2;
   }
   
   .card {
-    @apply bg-[#161b22] rounded-xl border border-[#30363d] p-4 shadow-sm;
+    @apply bg-[#1a1a1a] rounded-lg border border-[#30363d] p-4 shadow-sm;
   }
   
   .text-muted {
@@ -40,5 +50,17 @@
   
   .border-muted {
     @apply border-[#30363d];
+  }
+  
+  h1 {
+    @apply text-[32px] font-semibold text-[#f9f9f9];
+  }
+  
+  .btn-sidebar-hover {
+    background-color: rgba(255, 255, 255, 0.08);
+  }
+  
+  .btn-sidebar-active {
+    background-color: rgba(255, 255, 255, 0.12);
   }
 }

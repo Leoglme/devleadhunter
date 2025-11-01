@@ -13,6 +13,7 @@ interface ProspectsState {
   currentProspect: Prospect | null;
   isLoading: boolean;
   selectedProspects: string[];
+  hasSearched: boolean;
 }
 
 /**
@@ -26,6 +27,7 @@ export const useProspectsStore = defineStore('prospects', () => {
   const error: Ref<string | null> = ref(null);
   const selectedProspects: Ref<string[]> = ref([]);
   const searchFilters: Ref<ProspectSearchFilters> = ref({});
+  const hasSearched: Ref<boolean> = ref(false);
 
   // Getters
   const prospectsCount = computed(() => prospects.value.length);
@@ -94,9 +96,11 @@ export const useProspectsStore = defineStore('prospects', () => {
       );
       
       prospects.value = response.prospects;
+      hasSearched.value = true;
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Search failed';
       prospects.value = [];
+      hasSearched.value = true;
     } finally {
       isLoading.value = false;
     }
@@ -149,6 +153,7 @@ export const useProspectsStore = defineStore('prospects', () => {
     error,
     selectedProspects,
     searchFilters,
+    hasSearched,
     // Getters
     prospectsCount,
     prospectsWithWebsite,

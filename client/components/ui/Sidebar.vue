@@ -1,27 +1,32 @@
 <template>
   <aside
     :class="[
-      'fixed left-0 top-0 h-full bg-[#161b22] border-r border-[#30363d] z-40 transition-transform duration-300',
+      'fixed left-0 top-0 h-full bg-[#1a1a1a] border-r border-[#30363d] z-40 transition-transform duration-300',
       isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
       isMobile ? 'w-64' : 'w-64'
     ]"
   >
     <!-- Logo / Header -->
-    <div class="px-4 py-3.5 border-b border-[#30363d] bg-[#21262d]">
-      <h1 class="text-sm font-semibold text-white">devleadhunter</h1>
+    <div class="px-4 py-3.5 border-b border-[#30363d] bg-[#1a1a1a]">
+      <div class="flex items-center gap-2">
+        <div class="w-6 h-6 rounded-full bg-[#9333ea] flex items-center justify-center">
+          <i class="fa-solid fa-gem text-white text-xs"></i>
+        </div>
+        <h1 class="text-sm font-semibold text-[#f9f9f9]">devleadhunter</h1>
+      </div>
     </div>
 
     <!-- Navigation Links -->
-    <nav class="px-2 py-2">
+    <nav class="px-2 py-4 flex flex-col gap-2">
       <NuxtLink
         v-for="link in links"
         :key="link.to"
         :to="link.to"
         :class="[
-          'flex items-center gap-2 px-2 py-1.5 mb-1 rounded-lg text-sm transition-all',
+          'flex items-center gap-2 px-3 py-2 rounded text-sm transition-all font-medium',
           isActive(link.to) 
-            ? 'bg-[#21262d] text-white shadow-sm border border-[#30363d]' 
-            : 'text-[#8b949e] hover:bg-[#1c2128] hover:text-white'
+            ? 'btn-sidebar-active text-[#f9f9f9]' 
+            : 'text-[#8b949e] hover:btn-sidebar-hover hover:text-[#f9f9f9]'
         ]"
         @click="handleClick"
       >
@@ -31,19 +36,19 @@
     </nav>
 
     <!-- User Info -->
-    <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-[#30363d] bg-[#161b22]">
+    <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-[#30363d] bg-[#1a1a1a]">
       <!-- User Profile - Clickable -->
       <button
         @click="handleProfile"
-        class="w-full mb-2 px-2 py-2 flex items-center gap-2 text-sm rounded-lg hover:bg-[#1c2128] transition-all group"
+        class="w-full mb-2 px-2 py-2 flex items-center gap-2 text-sm rounded-lg hover:bg-[#2a2a2a] transition-all group"
       >
-        <div class="w-8 h-8 rounded-full bg-[#21262d] border border-[#30363d] flex items-center justify-center flex-shrink-0">
-          <span class="text-white text-xs font-semibold">
+        <div class="w-8 h-8 rounded-full bg-[#050505] border border-[#30363d] flex items-center justify-center flex-shrink-0">
+          <span class="text-[#f9f9f9] text-xs font-semibold">
             {{ userInitials }}
           </span>
         </div>
         <div class="flex-1 min-w-0 text-left">
-          <p class="font-semibold text-white truncate group-hover:text-[#58a6ff] transition-colors">
+          <p class="font-semibold text-[#f9f9f9] truncate transition-colors">
             {{ userName }}
           </p>
           <p class="text-xs text-[#8b949e] truncate">
@@ -54,7 +59,7 @@
       
       <button
         @click="handleLogout"
-        class="w-full px-3 py-1.5 text-sm text-[#f85149] hover:bg-[#da3633]/20 rounded-lg transition-all"
+        class="w-full px-3 py-1.5 text-sm text-[#f85149] hover:bg-[#da3633]/20 rounded transition-all"
       >
         Logout
       </button>
