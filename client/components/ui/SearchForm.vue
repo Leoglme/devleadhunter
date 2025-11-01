@@ -71,20 +71,22 @@
     </div>
 
     <!-- Submit Button -->
-    <button
-      type="submit"
-      :disabled="isLoading"
-      class="btn-primary w-full sm:w-auto mt-4"
-    >
-      <span v-if="isLoading" class="flex items-center justify-center gap-2">
-        <i class="fa-solid fa-spinner fa-spin"></i>
-        Searching...
-      </span>
-      <span v-else class="flex items-center justify-center gap-1.5">
-        <i class="fa-solid fa-magnifying-glass"></i>
-        Search Prospects
-      </span>
-    </button>
+    <div class="flex justify-end sm:justify-start mt-4">
+      <button
+        type="submit"
+        :disabled="isLoading"
+        class="btn-primary w-full sm:w-auto"
+      >
+        <span v-if="isLoading" class="flex items-center justify-center gap-2">
+          <i class="fa-solid fa-spinner fa-spin"></i>
+          Searching...
+        </span>
+        <span v-else class="flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          Search Prospects
+        </span>
+      </button>
+    </div>
   </form>
 </template>
 
