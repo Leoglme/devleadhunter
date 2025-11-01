@@ -27,7 +27,6 @@ export function useAuth() {
   const login = async (credentials: LoginCredentials): Promise<void> => {
     try {
       await userStore.login(credentials);
-      toast.success('Login successful');
       router.push('/dashboard');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Login failed');
@@ -43,7 +42,6 @@ export function useAuth() {
   const signup = async (data: SignupData): Promise<void> => {
     try {
       await userStore.signup(data);
-      toast.success('Signup successful');
       router.push('/dashboard');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Signup failed');
