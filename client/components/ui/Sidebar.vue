@@ -21,41 +21,41 @@
     <!-- Navigation Links -->
     <nav class="px-2 py-4 flex flex-col gap-2">
       <!-- Desktop Credits Section -->
-      <div v-if="!isMobile" 
-           class="px-2 py-2 relative cursor-pointer"
-           @mouseenter="handleMouseEnter"
-           @mouseleave="handleMouseLeave">
-        <div v-if="showCreditsPopover" 
-             class="fixed inset-0 z-30" 
-             @click="handleClickOutside"></div>
-        <button 
-          @click.stop="toggleCreditsPopover"
-          class="w-full flex items-center justify-start gap-2 rounded text-sm transition-all font-medium text-[#8b949e] hover:btn-sidebar-hover hover:text-[#f9f9f9] cursor-pointer">
-          <div :class="['w-8 h-8 rounded-full bg-[#050505] border-2 flex items-center justify-center text-[#f9f9f9] font-semibold text-xs flex-shrink-0', creditBorderColor]">
-            {{ creditIconValue }}
-          </div>
-          <span>Remaining Credits</span>
-        </button>
-        <!-- Desktop Popover -->
-        <div v-if="showCreditsPopover && !isMobile" 
-             class="absolute left-full ml-4 top-0 w-80 bg-[#1a1a1a] rounded-lg shadow-xl p-4 z-50 border border-[#30363d]"
-             @click.stop>
-          <div class="flex items-start gap-4 mb-3">
-            <div :class="['w-16 h-16 rounded-full bg-[#1a1a1a] border-2 flex items-center justify-center text-[#f9f9f9] font-semibold text-xl flex-shrink-0', creditBorderColor]">
+      <div v-if="!isMobile" class="px-2 py-2">
+        <div class="relative"
+             @mouseenter="handleMouseEnter"
+             @mouseleave="handleMouseLeave">
+          <button 
+            @click.stop="toggleCreditsPopover"
+            class="w-full flex items-center justify-start gap-2 rounded text-sm transition-all font-medium text-[#8b949e] hover:btn-sidebar-hover hover:text-[#f9f9f9] cursor-pointer">
+            <div :class="['w-8 h-8 rounded-full bg-[#050505] border-2 flex items-center justify-center text-[#f9f9f9] font-semibold flex-shrink-0', creditBorderColor, creditTextSize]">
               {{ creditIconValue }}
             </div>
-            <div class="flex-1 min-w-0">
-              <p class="font-bold text-[#f9f9f9] uppercase text-sm mb-1">Remaining Credits</p>
-              <p class="text-xs text-[#8b949e] leading-relaxed">Used to search and find prospects for your campaigns and send emails</p>
+            <span>Remaining Credits</span>
+          </button>
+          <!-- Desktop Popover -->
+          <div v-if="showCreditsPopover && !isMobile" 
+               class="absolute left-full ml-4 top-0 w-80 bg-[#1a1a1a] rounded-lg shadow-xl p-4 z-50 border border-[#30363d]"
+               @mouseenter="handleMouseEnter"
+               @mouseleave="handleMouseLeave"
+               @click.stop>
+            <div class="flex items-start gap-4 mb-3">
+              <div :class="['w-16 h-16 rounded-full bg-[#1a1a1a] border-2 flex items-center justify-center text-[#f9f9f9] font-semibold flex-shrink-0', creditBorderColor, creditTextSizeLarge]">
+                {{ creditIconValue }}
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="font-bold text-[#f9f9f9] uppercase text-sm mb-1">Remaining Credits</p>
+                <p class="text-xs text-[#8b949e] leading-relaxed">Used to search and find prospects for your campaigns and send emails</p>
+              </div>
             </div>
+            <NuxtLink 
+              to="/dashboard/buy-credits"
+              class="w-full text-center btn-secondary flex items-center justify-center text-xs px-3 py-2"
+              @click="showCreditsPopover = false"
+            >
+              Refill now
+            </NuxtLink>
           </div>
-          <NuxtLink 
-            to="/dashboard/buy-credits"
-            class="block w-full text-center btn-secondary flex items-center justify-center text-xs px-3 py-2"
-            @click="showCreditsPopover = false"
-          >
-            Refill now
-          </NuxtLink>
         </div>
       </div>
       
@@ -92,7 +92,7 @@
       </button>
 
       <button @click="handleLogout"
-        class="w-full px-3 py-1.5 text-sm text-[#f85149] hover:bg-[#da3633]/20 rounded transition-all">
+        class="w-full px-3 py-1.5 text-sm text-[#DC4747] hover:bg-[#da3633]/20 rounded transition-all">
         Logout
       </button>
     </div>
@@ -213,9 +213,7 @@ const creditIconValue = computed(() => {
   if (credits === -1) {
     return '∞';
   }
-  if (credits > 999) {
-    return '999+';
-  }
+  // Always show the real number of credits
   return credits.toString();
 });
 
@@ -225,15 +223,45 @@ const creditIconValue = computed(() => {
 const creditBorderColor = computed(() => {
   const credits = userStore.user?.credits_available ?? userStore.user?.credit_balance;
   if (credits === null || credits === undefined || credits === 0) {
-    return 'border-[#f85149]'; // Red for no credits
+    return 'border-[#DC4747]'; // Red for no credits
   }
   if (credits === -1) {
     return 'border-[#30363d]'; // Default gray for unlimited
   }
   if (credits <= 10) {
-    return 'border-[#f85149]'; // Red for low credits
+    return 'border-[#DC4747]'; // Red for low credits
   }
-  return 'border-[#238636]'; // Green for sufficient credits
+  return 'border-[#2BAD5F]'; // Green for sufficient credits
+});
+
+/**
+ * Credit text size based on remaining credits
+ * Smaller font if 1000 or more
+ */
+const creditTextSize = computed(() => {
+  const credits = userStore.user?.credits_available ?? userStore.user?.credit_balance;
+  if (credits === null || credits === undefined || credits === -1) {
+    return 'text-xs';
+  }
+  if (credits >= 1000) {
+    return 'text-[10px]';
+  }
+  return 'text-xs';
+});
+
+/**
+ * Credit text size for large popover icon
+ * Smaller font if 1000 or more
+ */
+const creditTextSizeLarge = computed(() => {
+  const credits = userStore.user?.credits_available ?? userStore.user?.credit_balance;
+  if (credits === null || credits === undefined || credits === -1) {
+    return 'text-xl';
+  }
+  if (credits >= 1000) {
+    return 'text-sm';
+  }
+  return 'text-xl';
 });
 
 /**
@@ -272,15 +300,8 @@ const handleMouseLeave = (): void => {
       if (!isHoveringPopover.value) {
         showCreditsPopover.value = false;
       }
-    }, 200);
+    }, 100);
   }
-};
-
-/**
- * Handle click outside to close popover
- */
-const handleClickOutside = (): void => {
-  showCreditsPopover.value = false;
 };
 
 /**

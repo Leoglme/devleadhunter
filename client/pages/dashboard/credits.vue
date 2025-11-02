@@ -41,16 +41,16 @@
         </p>
 
         <!-- Progress Bar Container -->
-        <div class="relative">
+        <div class="relative" ref="progressBarRef">
           <div 
             class="relative h-8 bg-[#050505] rounded-lg border border-[#30363d] overflow-hidden cursor-pointer"
-            @mouseenter="showProgressTooltip = true"
-            @mouseleave="showProgressTooltip = false"
+            @mouseenter="handleTooltipEnter"
+            @mouseleave="handleTooltipLeave"
           >
             <!-- Credits Used -->
             <div 
               :style="{ width: `${usedPercentage}%` }"
-              class="absolute left-0 top-0 h-full bg-[#1f6feb] transition-all duration-300"
+              class="absolute left-0 top-0 h-full bg-[#71A3DB] transition-all duration-300"
             ></div>
             
             <!-- Credits Remaining -->
@@ -61,31 +61,114 @@
 
             <!-- Labels on Progress Bar -->
             <div class="relative h-full flex items-center px-3 text-xs font-medium">
-              <span class="text-[#f9f9f9]">0</span>
+              <span class="text-[#f9f9f9]">{{ creditsUsed }}</span>
               <span class="ml-auto text-[#f9f9f9]">
-                {{ totalCredits === -1 || totalCredits === Infinity ? '∞' : totalCredits }}
+                {{ creditsRemaining === Infinity || creditsRemaining === -1 ? '∞' : creditsRemaining }}
               </span>
             </div>
-
-            <!-- Tooltip -->
+          </div>
+          
+          <!-- Tooltip Qonto Style - Using Teleport to render in body -->
+          <Teleport to="body">
             <div 
-              v-if="showProgressTooltip"
-              class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-64 bg-[#1a1a1a] border border-[#30363d] rounded-lg shadow-xl p-4 z-50"
+              v-if="showProgressTooltip && usedPercentage > 0 && tooltipPosition"
+              :style="{
+                position: 'fixed',
+                left: `${tooltipPosition.x}px`,
+                top: `${tooltipPosition.y}px`,
+                transform: 'translateX(-50%)'
+              }"
+              class="w-72 bg-[#1a1a1a] border border-[#30363d] rounded-lg shadow-lg p-4 z-[100] pointer-events-none"
+              style="box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);"
             >
-              <div class="flex items-center gap-2 mb-2">
-                <div class="w-3 h-3 rounded bg-[#1f6feb] flex-shrink-0"></div>
-                <span class="text-sm font-medium text-[#f9f9f9]">
-                  {{ creditsUsed }} ({{ usedPercentage.toFixed(0) }}%) Credits Used
-                </span>
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-3 pb-2 border-b border-[#30363d]">
+              <span class="text-sm font-medium text-[#f9f9f9]">Credit Usage</span>
+              <span class="text-xs text-[#8b949e]">Current Status</span>
+            </div>
+            
+            <!-- Data Rows -->
+            <div class="space-y-2.5 mb-2.5">
+              <!-- Credits Used -->
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="w-3 h-3 rounded bg-[#71A3DB] flex-shrink-0"></div>
+                  <span class="text-sm text-[#f9f9f9]">Credits Used</span>
+                </div>
+                <span class="text-sm font-medium text-[#f9f9f9]">{{ creditsUsed }}</span>
               </div>
-              <div class="flex items-center gap-2">
-                <div class="w-3 h-3 rounded bg-[#30363d] flex-shrink-0"></div>
-                <span class="text-sm font-medium text-[#8b949e]">
-                  {{ creditsRemaining }} ({{ remainingPercentage.toFixed(0) }}%) Credits Remaining
-                </span>
+              
+              <!-- Credits Remaining -->
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="w-3 h-3 rounded bg-[#30363d] flex-shrink-0"></div>
+                  <span class="text-sm text-[#8b949e]">Credits Remaining</span>
+                </div>
+                <span class="text-sm font-medium text-[#8b949e]">{{ creditsRemaining }}</span>
               </div>
             </div>
-          </div>
+            
+            <!-- Separator -->
+            <div class="border-t border-[#30363d] my-2.5"></div>
+            
+            <!-- Total Variation -->
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-[#8b949e]">Total Credits</span>
+              <span class="text-sm font-medium text-[#2BAD5F]">{{ totalCredits }}</span>
+            </div>
+            </div>
+          </Teleport>
+          
+          <!-- Alternative tooltip when no credits used - Using Teleport -->
+          <Teleport to="body">
+            <div 
+              v-if="showProgressTooltip && usedPercentage === 0 && tooltipPosition"
+              :style="{
+                position: 'fixed',
+                left: `${tooltipPosition.x}px`,
+                top: `${tooltipPosition.y}px`,
+                transform: 'translateX(-50%)'
+              }"
+              class="w-72 bg-[#1a1a1a] border border-[#30363d] rounded-lg shadow-lg p-4 z-[100] pointer-events-none"
+              style="box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);"
+            >
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-3 pb-2 border-b border-[#30363d]">
+              <span class="text-sm font-medium text-[#f9f9f9]">Credit Usage</span>
+              <span class="text-xs text-[#8b949e]">Current Status</span>
+            </div>
+            
+            <!-- Data Rows -->
+            <div class="space-y-2.5 mb-2.5">
+              <!-- Credits Remaining -->
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="w-3 h-3 rounded bg-[#30363d] flex-shrink-0"></div>
+                  <span class="text-sm text-[#8b949e]">Credits Remaining</span>
+                </div>
+                <span class="text-sm font-medium text-[#8b949e]">{{ creditsRemaining }}</span>
+              </div>
+              
+              <!-- Credits Used -->
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="w-3 h-3 rounded bg-[#71A3DB] flex-shrink-0 opacity-50"></div>
+                  <span class="text-sm text-[#8b949e]">Credits Used</span>
+                </div>
+                <span class="text-sm font-medium text-[#8b949e]">0</span>
+              </div>
+            </div>
+            
+            <!-- Separator -->
+            <div class="border-t border-[#30363d] my-2.5"></div>
+            
+            <!-- Total Variation -->
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-[#8b949e]">Total Credits</span>
+              <span class="text-sm font-medium text-[#2BAD5F]">{{ totalCredits }}</span>
+            </div>
+            </div>
+          </Teleport>
         </div>
       </div>
 
@@ -121,7 +204,7 @@
               <p 
                 :class="[
                   'text-sm font-medium',
-                  transaction.amount < 0 ? 'text-[#f85149]' : 'text-[#238636]'
+                  transaction.amount < 0 ? 'text-[#DC4747]' : 'text-[#2BAD5F]'
                 ]"
               >
                 {{ transaction.amount < 0 ? '-' : '+' }}{{ Math.abs(transaction.amount) }} credits
@@ -181,22 +264,20 @@ definePageMeta({
 });
 
 /**
- * Register Chart.js components
- */
-Chart.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
-);
-
-/**
  * Chart instance reference
  */
 let chartInstance: Chart | null = null;
 const chartCanvasRef: Ref<HTMLCanvasElement | null> = ref(null);
+
+/**
+ * Progress bar container reference
+ */
+const progressBarRef: Ref<HTMLElement | null> = ref(null);
+
+/**
+ * Tooltip position state
+ */
+const tooltipPosition = ref<{ x: number; y: number } | null>(null);
 
 /**
  * User store instance
@@ -217,6 +298,77 @@ const transactions: Ref<CreditTransaction[]> = ref([]);
  * Progress tooltip visibility
  */
 const showProgressTooltip: Ref<boolean> = ref(false);
+
+/**
+ * Update tooltip position based on progress bar position
+ */
+const updateTooltipPosition = (): void => {
+  if (!progressBarRef.value || typeof window === 'undefined') {
+    tooltipPosition.value = null;
+    return;
+  }
+  
+  const progressBar = progressBarRef.value.querySelector('.cursor-pointer');
+  if (!progressBar) return;
+  
+  const progressRect = progressBar.getBoundingClientRect();
+  const tooltipWidth = 288; // w-72 = 18rem = 288px
+  const margin = 8; // mt-2 = 8px
+  
+  // Calculate position based on used percentage
+  // usedPercentage is 0-100, so divide by 100 to get fraction
+  let tooltipX: number;
+  
+  if (usedPercentage.value > 0) {
+    // Position at the center of the blue bar (used portion)
+    // Convert percentage to fraction (0-1) and calculate center of used portion
+    const usedFraction = usedPercentage.value / 100;
+    tooltipX = progressRect.left + (progressRect.width * usedFraction / 2);
+  } else {
+    // Position at the center of the entire progress bar
+    tooltipX = progressRect.left + (progressRect.width / 2);
+  }
+  
+  // Ensure tooltip doesn't go off-screen
+  // Check left boundary
+  if (tooltipX - tooltipWidth / 2 < 0) {
+    tooltipX = tooltipWidth / 2 + 16; // 16px padding from edge
+  }
+  
+  // Check right boundary
+  if (tooltipX + tooltipWidth / 2 > window.innerWidth) {
+    tooltipX = window.innerWidth - tooltipWidth / 2 - 16; // 16px padding from edge
+  }
+  
+  const tooltipY = progressRect.bottom + margin;
+  
+  tooltipPosition.value = { x: tooltipX, y: tooltipY };
+};
+
+/**
+ * Handle tooltip enter
+ */
+const handleTooltipEnter = (): void => {
+  showProgressTooltip.value = true;
+  nextTick(() => {
+    // Use requestAnimationFrame to ensure DOM is fully updated
+    requestAnimationFrame(() => {
+      updateTooltipPosition();
+      window.addEventListener('scroll', updateTooltipPosition, true);
+      window.addEventListener('resize', updateTooltipPosition);
+    });
+  });
+};
+
+/**
+ * Handle tooltip leave
+ */
+const handleTooltipLeave = (): void => {
+  showProgressTooltip.value = false;
+  tooltipPosition.value = null;
+  window.removeEventListener('scroll', updateTooltipPosition, true);
+  window.removeEventListener('resize', updateTooltipPosition);
+};
 
 /**
  * Total credits (current balance + used)
@@ -313,30 +465,30 @@ const chartData = computed(() => {
   if (transactions.value.length === 0) return null;
 
   // Group by date and sum negative amounts (usage)
-  const dailyUsage: Record<string, number> = {};
+  const dailyUsage: Record<string, { count: number; date: Date }> = {};
   
   transactions.value
     .filter(t => t.amount < 0) // Only usage transactions
     .forEach(transaction => {
       const dateObj = new Date(transaction.created_at);
-      const date = dateObj.toLocaleDateString('en-US', {
+      const dateKey = dateObj.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric'
       });
-      dailyUsage[date] = (dailyUsage[date] || 0) + Math.abs(transaction.amount);
+      
+      if (!dailyUsage[dateKey]) {
+        dailyUsage[dateKey] = { count: 0, date: dateObj };
+      }
+      dailyUsage[dateKey].count += Math.abs(transaction.amount);
     });
 
-  // Get unique dates and sort them
-  const allDates = Object.keys(dailyUsage);
-  const sortedDates = allDates.sort((a, b) => {
-    const dateA = new Date(a);
-    const dateB = new Date(b);
-    return dateA.getTime() - dateB.getTime();
-  }).slice(-30); // Last 30 days
+  // Sort by date (chronological order)
+  const sortedEntries = Object.entries(dailyUsage)
+    .sort(([, a], [, b]) => a.date.getTime() - b.date.getTime())
+    .slice(-30); // Last 30 days
 
-  const labels = sortedDates;
-
-  const data = labels.map(label => dailyUsage[label] || 0);
+  const labels = sortedEntries.map(([dateKey]) => dateKey);
+  const data = sortedEntries.map(([, { count }]) => count);
 
   return {
     labels,
@@ -344,7 +496,7 @@ const chartData = computed(() => {
       {
         label: 'Credits Used',
         data,
-        backgroundColor: '#1f6feb',
+        backgroundColor: '#A585DB',
         borderRadius: 4,
         maxBarThickness: 50
       }
@@ -363,18 +515,42 @@ const chartOptions = {
       display: false
     },
     tooltip: {
-      backgroundColor: '#1a1a1a',
+      backgroundColor: 'rgba(26, 26, 26, 0.95)',
       titleColor: '#f9f9f9',
+      titleFont: {
+        size: 13,
+        weight: '500'
+      },
       bodyColor: '#8b949e',
+      bodyFont: {
+        size: 12,
+        weight: '400'
+      },
       borderColor: '#30363d',
       borderWidth: 1,
-      padding: 12,
-      displayColors: false,
+      borderRadius: 8,
+      padding: 16,
+      displayColors: true,
+      boxPadding: 6,
+      boxWidth: 12,
+      boxHeight: 12,
+      usePointStyle: true,
+      shadowOffsetX: 0,
+      shadowOffsetY: 4,
+      shadowBlur: 12,
+      shadowColor: 'rgba(0, 0, 0, 0.3)',
       callbacks: {
+        title: function(context: any) {
+          return context[0].label;
+        },
         label: function(context: any) {
-          return `${context.parsed.y} credits`;
+          return `${context.parsed.y} credits used`;
         }
       }
+    },
+    interaction: {
+      intersect: false,
+      mode: 'index'
     }
   },
   scales: {
@@ -479,11 +655,16 @@ const loadTransactions = async (): Promise<void> => {
  * Initialize chart
  */
 const initChart = (): void => {
-  if (!chartCanvasRef.value || !chartData.value) return;
+  if (typeof window === 'undefined' || !chartCanvasRef.value || !chartData.value) return;
   
-  // Destroy existing chart
+  // Destroy existing chart if it exists
   if (chartInstance) {
-    chartInstance.destroy();
+    try {
+      chartInstance.destroy();
+    } catch (error) {
+      console.warn('Error destroying chart:', error);
+    }
+    chartInstance = null;
   }
 
   const config: ChartConfiguration<'bar'> = {
@@ -492,7 +673,11 @@ const initChart = (): void => {
     options: chartOptions
   };
 
-  chartInstance = new Chart(chartCanvasRef.value, config);
+  try {
+    chartInstance = new Chart(chartCanvasRef.value, config);
+  } catch (error) {
+    console.error('Error creating chart:', error);
+  }
 };
 
 /**
@@ -522,6 +707,9 @@ onBeforeUnmount(() => {
     chartInstance.destroy();
     chartInstance = null;
   }
+  // Cleanup tooltip event listeners
+  window.removeEventListener('scroll', updateTooltipPosition, true);
+  window.removeEventListener('resize', updateTooltipPosition);
 });
 </script>
 

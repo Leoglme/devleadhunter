@@ -252,6 +252,48 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  /**
+   * Refresh user data from API, bypassing cache
+   * Useful after operations that modify user data (e.g., credit purchase)
+   * @returns {Promise<void>} Promise that resolves when refresh is complete
+   * @throws {Error} If refresh fails
+   */
+  async function refreshUser(): Promise<void> {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const storedToken = localStorage.getItem('token');
+    
+    if (!storedToken) {
+      return;
+    }
+
+    try {
+      // Force refresh by resetting cache
+      lastValidationTime.value = null;
+      token.value = storedToken;
+      
+      // Call /me to get fresh user data from server
+      const userData = await authService.getCurrentUser(storedToken);
+      
+      // Update user with fresh data from server
+      user.value = userData;
+      
+      // Update localStorage with fresh user data
+      if (process.client) {
+        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('token', storedToken);
+      }
+      
+      // Update validation cache time
+      lastValidationTime.value = Date.now();
+    } catch (error) {
+      console.error('Failed to refresh user data:', error);
+      // Don't clear auth on refresh failure, just log error
+    }
+  }
+
   return {
     // State
     user,
@@ -268,7 +310,8 @@ export const useUserStore = defineStore('user', () => {
     logout,
     updateProfile,
     initializeAuth,
-    validateAuth
+    validateAuth,
+    refreshUser
   };
 });
 

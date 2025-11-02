@@ -23,7 +23,7 @@
       
       <form @submit.prevent="handleSubmit" class="space-y-4">
           <!-- General Error -->
-          <div v-if="generalError" class="text-sm text-[#f85149]">
+          <div v-if="generalError" class="text-sm text-[#DC4747]">
             {{ generalError }}
           </div>
 
@@ -38,9 +38,9 @@
             type="email"
             required
               placeholder="Enter your email address"
-              :class="['input-field', emailError && 'border-[#f85149]']"
+              :class="['input-field', emailError && 'border-[#DC4747]']"
           />
-            <p v-if="emailError" class="mt-1 text-xs text-[#f85149]">{{ emailError }}</p>
+            <p v-if="emailError" class="mt-1 text-xs text-[#DC4747]">{{ emailError }}</p>
         </div>
 
         <!-- Password -->
@@ -55,7 +55,7 @@
               :type="showPassword ? 'text' : 'password'"
               required
               placeholder="Enter your password"
-              :class="['input-field pr-10', passwordError && 'border-[#f85149]']"
+              :class="['input-field pr-10', passwordError && 'border-[#DC4747]']"
             />
             <button
               type="button"
@@ -65,7 +65,7 @@
               <i :class="showPassword ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'" class="w-4 h-4"></i>
             </button>
           </div>
-          <p v-if="passwordError" class="mt-1 text-xs text-[#f85149]">{{ passwordError }}</p>
+          <p v-if="passwordError" class="mt-1 text-xs text-[#DC4747]">{{ passwordError }}</p>
         </div>
 
         <!-- Submit Button -->

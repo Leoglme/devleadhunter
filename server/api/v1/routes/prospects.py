@@ -2,11 +2,17 @@
 Prospect management routes.
 """
 from typing import List
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 from models.prospect import Prospect, ProspectCreate, ProspectUpdate
 from models.search import ProspectSearchRequest, ProspectSearchResponse
+from models.credit_settings import CreditSettings
+from models.user import User
 from services.prospect_service import prospect_service
 from services.scraper_service import scraper_service
+from services.auth_service import require_auth
+from services.credit_service import credit_service
+from core.database import get_db
 
 
 router = APIRouter(
@@ -23,19 +29,23 @@ router = APIRouter(
     description="Search for prospects based on category, city, and other criteria"
 )
 async def search_prospects(
-    request: ProspectSearchRequest
+    request: ProspectSearchRequest,
+    current_user: User = Depends(require_auth),
+    db: Session = Depends(get_db)
 ) -> ProspectSearchResponse:
     """
     Search for prospects matching the given criteria.
     
     Args:
         request: Search criteria including category, city, and max results
+        current_user: Current authenticated user
+        db: Database session
         
     Returns:
         ProspectSearchResponse with matching prospects and statistics
         
     Raises:
-        HTTPException: If search fails
+        HTTPException: If search fails or insufficient credits
         
     Example:
         >>> POST /prospects/search
@@ -47,6 +57,39 @@ async def search_prospects(
         }
     """
     try:
+        # Get credit settings
+        credit_settings: CreditSettings | None = db.query(CreditSettings).filter(
+            CreditSettings.id == 1
+        ).first()
+        
+        if not credit_settings:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Credit settings not configured"
+            )
+        
+        # Calculate total credits needed
+        # Base cost per search
+        credits_per_search = credit_settings.credits_per_search
+        
+        # Calculate maximum cost: base search + max results * cost per result
+        # We'll deduct base cost first, then adjust after getting actual results
+        max_credits_needed = credits_per_search + (request.max_results * credit_settings.credits_per_result)
+        
+        # Check user balance
+        user_balance = credit_service.get_user_balance(db, current_user.id)
+        
+        # For admin users, balance is -1 (unlimited)
+        if user_balance == -1:
+            # Admin has unlimited credits, skip deduction
+            pass
+        else:
+            if user_balance < credits_per_search:
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail=f"Insufficient credits. You need at least {credits_per_search} credits to perform a search. Current balance: {user_balance}"
+                )
+        
         print('Ok')
         # Run scrapers to get fresh data
         # request.source is already a Source enum
@@ -71,6 +114,33 @@ async def search_prospects(
 
         print(f"[DEBUG] Prospects: {prospects}")
         
+        # Calculate actual credits needed based on results
+        actual_credits_needed = credits_per_search + (len(prospects) * credit_settings.credits_per_result)
+        
+        # Deduct credits from user account (if not admin)
+        if user_balance != -1:
+            # Check again if user has enough credits for actual results
+            if user_balance < actual_credits_needed:
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail=f"Insufficient credits. This search requires {actual_credits_needed} credits (search: {credits_per_search}, results: {len(prospects)} × {credit_settings.credits_per_result}). Current balance: {user_balance}"
+                )
+            
+            # Deduct credits
+            success = credit_service.use_credits(
+                db=db,
+                user_id=current_user.id,
+                amount=actual_credits_needed,
+                description=f"Prospect search: {request.category or 'all'} in {request.city or 'all locations'} ({len(prospects)} results)",
+                metadata=f"search_category:{request.category or 'all'},search_city:{request.city or 'all'},results_count:{len(prospects)}"
+            )
+            
+            if not success:
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail="Failed to deduct credits. Please try again."
+                )
+        
         # Calculate statistics
         has_website = sum(1 for p in prospects if p.website)
         without_website = len(prospects) - has_website
@@ -82,6 +152,9 @@ async def search_prospects(
             without_website=without_website
         )
     
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

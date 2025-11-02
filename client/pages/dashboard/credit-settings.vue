@@ -163,7 +163,7 @@
 
     <!-- Error State -->
     <div v-if="error && !isLoading" class="card border border-[#da3633]/30 bg-[#da3633]/10 mt-6">
-      <div class="flex items-center gap-2 text-[#f85149]">
+      <div class="flex items-center gap-2 text-[#DC4747]">
         <i class="fa-solid fa-circle-exclamation"></i>
         <p>{{ error }}</p>
       </div>

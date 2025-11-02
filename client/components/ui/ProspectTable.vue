@@ -53,13 +53,13 @@
           <td class="px-3 py-2.5">
             <span
               v-if="prospect.website && prospect.website !== ''"
-              class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-[#238636]/20 text-[#3fb950]"
+              class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-[#2BAD5F]/20 text-[#3fb950]"
             >
               Has Website
             </span>
             <span
               v-else
-              class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-[#da3633]/20 text-[#f85149]"
+              class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-[#da3633]/20 text-[#DC4747]"
             >
               No Website
             </span>

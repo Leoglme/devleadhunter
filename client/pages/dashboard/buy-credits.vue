@@ -6,7 +6,7 @@
     </div>
 
     <!-- Success Message -->
-    <div v-if="showSuccess" class="card border border-[#238636]/30 bg-[#238636]/10 mb-6">
+    <div v-if="showSuccess" class="card border border-[#2BAD5F]/30 bg-[#2BAD5F]/10 mb-6">
       <div class="flex items-center gap-2 text-[#3fb950]">
         <i class="fa-solid fa-circle-check"></i>
         <p>Payment successful! Your credits have been added to your account.</p>
@@ -15,7 +15,7 @@
 
     <!-- Cancel Message -->
     <div v-if="showCancel" class="card border border-[#da3633]/30 bg-[#da3633]/10 mb-6">
-      <div class="flex items-center gap-2 text-[#f85149]">
+      <div class="flex items-center gap-2 text-[#DC4747]">
         <i class="fa-solid fa-circle-xmark"></i>
         <p>Payment was cancelled. No charges were made.</p>
       </div>
@@ -98,7 +98,7 @@
 
     <!-- Error State -->
     <div v-if="error && !isLoading" class="card border border-[#da3633]/30 bg-[#da3633]/10 mt-6">
-      <div class="flex items-center gap-2 text-[#f85149]">
+      <div class="flex items-center gap-2 text-[#DC4747]">
         <i class="fa-solid fa-circle-exclamation"></i>
         <p>{{ error }}</p>
       </div>
@@ -232,6 +232,11 @@ const handlePurchase = async (): Promise<void> => {
       credits: credits.value
     });
     
+    // Store session ID in sessionStorage for verification after redirect
+    if (session.session_id && process.client) {
+      sessionStorage.setItem('stripe_session_id', session.session_id);
+    }
+    
     // Redirect to Stripe Checkout
     if (session.url) {
       window.location.href = session.url;
@@ -248,11 +253,40 @@ const handlePurchase = async (): Promise<void> => {
 
 /**
  * Check URL params for success/cancel
- * @returns {void}
+ * @returns {Promise<void>}
  */
-const checkUrlParams = (): void => {
+const checkUrlParams = async (): Promise<void> => {
   if (route.query.success === 'true') {
     showSuccess.value = true;
+    
+    // Get stored session ID from sessionStorage
+    let sessionId: string | null = null;
+    if (process.client) {
+      sessionId = sessionStorage.getItem('stripe_session_id');
+      if (sessionId) {
+        sessionStorage.removeItem('stripe_session_id');
+      }
+    }
+    
+    // If we have a session ID, verify the payment and ensure credits are added
+    if (sessionId) {
+      try {
+        const verification = await paymentService.verifyCheckoutSession(sessionId);
+        if (verification.paid && verification.status === 'success') {
+          toast.success(`Paiement confirmé ! ${verification.credits_added || credits.value} crédit${(verification.credits_added || credits.value) !== 1 ? 's' : ''} ajouté${(verification.credits_added || credits.value) !== 1 ? 's' : ''}.`);
+        }
+      } catch (err) {
+        console.error('Failed to verify checkout session:', err);
+        // Continue anyway - webhook might have processed it
+      }
+    }
+    
+    // Refresh user data from API to get updated credits
+    try {
+      await userStore.refreshUser();
+    } catch (err) {
+      console.error('Failed to refresh user data after payment:', err);
+    }
     // Reload user balance after successful payment
     loadUserBalance();
     // Clear query params
@@ -260,6 +294,10 @@ const checkUrlParams = (): void => {
   }
   if (route.query.canceled === 'true') {
     showCancel.value = true;
+    // Clear stored session ID if payment was cancelled
+    if (process.client) {
+      sessionStorage.removeItem('stripe_session_id');
+    }
     // Clear query params
     router.replace({ query: {} });
   }
@@ -271,7 +309,7 @@ const checkUrlParams = (): void => {
 onMounted(async () => {
   await loadCreditSettings();
   await loadUserBalance();
-  checkUrlParams();
+  await checkUrlParams();
 });
 </script>
 

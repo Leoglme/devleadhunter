@@ -73,8 +73,8 @@
                   :class="[
                     'px-2.5 py-0.5 rounded text-xs font-medium inline-flex items-center',
                     user.role === 'ADMIN' 
-                      ? 'bg-[#da3633]/20 text-[#f85149] border border-[#da3633]/30' 
-                      : 'bg-[#238636]/20 text-[#3fb950] border border-[#238636]/30'
+                      ? 'bg-[#da3633]/20 text-[#DC4747] border border-[#da3633]/30' 
+                      : 'bg-[#2BAD5F]/20 text-[#3fb950] border border-[#2BAD5F]/30'
                   ]"
                 >
                   {{ user.role }}
@@ -120,7 +120,7 @@
                     </button>
                     <button
                       @click="handleDelete(user)"
-                      class="w-full px-4 py-2 text-left text-sm text-[#f85149] hover:bg-[#da3633]/20 transition-colors"
+                      class="w-full px-4 py-2 text-left text-sm text-[#DC4747] hover:bg-[#da3633]/20 transition-colors"
                     >
                       <i class="fa-solid fa-trash mr-2 w-4"></i>
                       Delete User

@@ -29,3 +29,17 @@ export async function getStripePublicKey(): Promise<{ public_key: string }> {
   return api.get<{ public_key: string }>(`${PAYMENTS_BASE_URL}/public-key`);
 }
 
+/**
+ * Verify a Stripe checkout session and ensure credits are added
+ * @param {string} sessionId - Stripe checkout session ID
+ * @returns {Promise<{ status: string; message: string; paid: boolean; credits_added?: number }>} Verification result
+ * @throws {Error} If request fails
+ */
+export async function verifyCheckoutSession(
+  sessionId: string
+): Promise<{ status: string; message: string; paid: boolean; credits_added?: number }> {
+  return api.post<{ status: string; message: string; paid: boolean; credits_added?: number }>(
+    `${PAYMENTS_BASE_URL}/verify-session/${sessionId}`
+  );
+}
+

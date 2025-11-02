@@ -23,9 +23,9 @@
           Results ({{ prospectsStore.prospectsCount }})
         </h2>
         <div class="flex gap-3 text-xs text-muted">
-          <span class="text-[#f85149]">No Website: {{ prospectsStore.prospectsWithoutWebsite.length }}</span>
+          <span class="text-[#DC4747]">No Website: {{ prospectsStore.prospectsWithoutWebsite.length }}</span>
           <span class="text-muted">•</span>
-          <span class="text-[#238636]">Has Website: {{ prospectsStore.prospectsWithWebsite.length }}</span>
+          <span class="text-[#2BAD5F]">Has Website: {{ prospectsStore.prospectsWithWebsite.length }}</span>
         </div>
       </div>
       <UiProspectTable :prospects="prospectsStore.prospects" />

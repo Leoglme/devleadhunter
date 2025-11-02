@@ -37,8 +37,8 @@
               <span
                 :class="[
                   'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
-                  campaign.status === 'active' ? 'bg-[#238636]/20 text-[#3fb950]' :
-                  campaign.status === 'completed' ? 'bg-[#1f6feb]/20 text-[#58a6ff]' :
+                  campaign.status === 'active' ? 'bg-[#2BAD5F]/20 text-[#3fb950]' :
+                  campaign.status === 'completed' ? 'bg-[#71A3DB]/20 text-[#58a6ff]' :
                   'bg-[#8b949e]/20 text-muted'
                 ]"
               >

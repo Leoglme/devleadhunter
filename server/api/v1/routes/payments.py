@@ -11,6 +11,7 @@ from core.config import settings
 from schemas.payment import CheckoutSessionCreate, CheckoutSessionResponse, PaymentStatusResponse
 from services.auth_service import require_auth
 from services.stripe_payment_service import StripePaymentService
+from services.credit_service import credit_service, TransactionType
 from models.user import User
 
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -155,6 +156,127 @@ async def stripe_webhook(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Webhook processing failed: {str(e)}"
+        )
+
+
+@router.post("/verify-session/{session_id}")
+async def verify_checkout_session(
+    session_id: str,
+    current_user: User = Depends(require_auth),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Verify a Stripe checkout session and add credits if payment is successful.
+    
+    This endpoint is called after the user returns from Stripe Checkout.
+    It verifies the payment status and ensures credits are added if the payment
+    was successful but the webhook hasn't processed yet.
+    
+    Args:
+        session_id: Stripe checkout session ID
+        current_user: Current authenticated user
+        db: Database session
+        
+    Returns:
+        Payment status and message
+        
+    Raises:
+        HTTPException: If session verification fails
+    """
+    if not settings.stripe_secret_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe payment service is not configured"
+        )
+    
+    try:
+        from services.stripe_payment_service import get_stripe_service
+        payment_service = get_stripe_service()
+        if not payment_service:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Stripe payment service is not available"
+            )
+        
+        # Retrieve the session from Stripe
+        stripe.api_key = settings.stripe_secret_key
+        session = stripe.checkout.Session.retrieve(session_id)
+        
+        # Check if payment was successful
+        if session.payment_status != 'paid':
+            return {
+                "status": "pending",
+                "message": f"Payment status: {session.payment_status}",
+                "paid": False
+            }
+        
+        # Get metadata
+        metadata = session.metadata or {}
+        user_id = int(metadata.get('user_id', 0))
+        credits = int(metadata.get('credits', 0))
+        
+        # Verify the session belongs to the current user
+        if user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This session does not belong to the current user"
+            )
+        
+        if credits == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid session metadata: credits not found"
+            )
+        
+        # Check if credits were already added (idempotency)
+        existing_transactions = credit_service.get_user_transactions(db, user_id, limit=100)
+        for transaction in existing_transactions:
+            if transaction.transaction_metadata and f"stripe_session_id:{session_id}" in transaction.transaction_metadata:
+                # Already processed
+                return {
+                    "status": "success",
+                    "message": "Credits already added",
+                    "paid": True,
+                    "credits_added": credits
+                }
+        
+        # Add credits to user account
+        try:
+            credit_service.add_credits(
+                db=db,
+                user_id=user_id,
+                amount=credits,
+                description=f"Credit purchase via Stripe ({credits} credits)",
+                transaction_type=TransactionType.PURCHASE,
+                metadata=f"stripe_session_id:{session_id}"
+            )
+            return {
+                "status": "success",
+                "message": "Credits added successfully",
+                "paid": True,
+                "credits_added": credits
+            }
+        except Exception as e:
+            print(f"Error adding credits after payment verification: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to add credits: {str(e)}"
+            )
+    
+    except stripe.error.StripeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Stripe error: {str(e)}"
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to verify session: {str(e)}"
         )
 
 

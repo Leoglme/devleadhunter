@@ -25,7 +25,7 @@
   }
   
   .btn-danger {
-    @apply flex items-center justify-center px-3 py-1.5 bg-[#da3633] hover:bg-[#f85149] text-[#f9f9f9] rounded transition-all font-medium;
+    @apply flex items-center justify-center px-3 py-1.5 bg-[#da3633] hover:bg-[#DC4747] text-[#f9f9f9] rounded transition-all font-medium;
   }
   
   .input-field {

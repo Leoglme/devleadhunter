@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import type { Prospect, ProspectSearchFilters } from '~/types';
 import type { Ref } from 'vue';
 import { ref, computed } from 'vue';
+import { useUserStore } from './user';
 
 /**
  * Pinia store for prospect management
@@ -82,6 +83,8 @@ export const useProspectsStore = defineStore('prospects', () => {
       
       // Call the real API
       const config = useRuntimeConfig();
+      const userStore = useUserStore();
+      
       const response = await $fetch<{ 
         total: number;
         prospects: Prospect[];
@@ -91,12 +94,23 @@ export const useProspectsStore = defineStore('prospects', () => {
         `${config.public.apiBase}/api/v1/prospects/search`,
         {
           method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(userStore.token && { Authorization: `Bearer ${userStore.token}` })
+          },
           body: requestBody
         }
       );
       
       prospects.value = response.prospects;
       hasSearched.value = true;
+      
+      // Refresh user credits after successful search
+      try {
+        await userStore.refreshUser();
+      } catch (refreshErr) {
+        console.error('Failed to refresh user credits after search:', refreshErr);
+      }
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Search failed';
       prospects.value = [];
