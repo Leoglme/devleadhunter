@@ -13,8 +13,12 @@
 
       <!-- Main Content -->
       <div class="flex-1 flex flex-col overflow-hidden ml-0 md:ml-64">
+
         <!-- Mobile Header -->
         <header class="md:hidden bg-[#1a1a1a] border-b border-[#30363d] px-4 py-3 sticky top-0 z-10">
+          <div v-if="showCreditsPopover && isMobile" 
+               class="fixed inset-0 z-40" 
+               @click="handleClickOutside"></div>
           <div class="flex items-center justify-between">
             <button
               @click="toggleSidebar"
@@ -22,8 +26,38 @@
             >
               <i class="fa-solid fa-bars w-5 h-5"></i>
             </button>
-            <h1 class="text-sm font-semibold text-[#f9f9f9]">devleadhunter</h1>
-            <div class="w-5" />
+            <div class="flex items-center gap-3 flex-1 justify-center">
+              <h1 class="text-sm font-semibold text-[#f9f9f9]">devleadhunter</h1>
+            </div>
+            <!-- Mobile Credits Icon -->
+            <div class="relative z-50">
+              <button 
+                @click.stop="toggleCreditsPopover"
+                :class="['w-8 h-8 rounded-full bg-[#1a1a1a] border-2 flex items-center justify-center text-[#f9f9f9] font-semibold text-xs', creditBorderColor]">
+                {{ creditIconValue }}
+              </button>
+              <!-- Mobile Popover -->
+              <div v-if="showCreditsPopover && isMobile" 
+                   class="absolute right-0 top-10 w-72 bg-[#1a1a1a] rounded-lg shadow-xl p-4 z-50 border border-[#30363d]"
+                   @click.stop>
+                <div class="flex items-start gap-4 mb-3">
+                  <div :class="['w-14 h-14 rounded-full bg-[#1a1a1a] border-2 flex items-center justify-center text-[#f9f9f9] font-semibold text-lg flex-shrink-0', creditBorderColor]">
+                    {{ creditIconValue }}
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <p class="font-bold text-[#f9f9f9] uppercase text-sm mb-1">Remaining Credits</p>
+                    <p class="text-xs text-[#8b949e] leading-relaxed">Used to search and find prospects for your campaigns and send emails</p>
+                  </div>
+                </div>
+                <NuxtLink 
+                  to="/dashboard/buy-credits"
+                  class="block w-full text-center btn-secondary text-xs px-3 py-2"
+                  @click="showCreditsPopover = false"
+                >
+                  Refill now
+                </NuxtLink>
+              </div>
+            </div>
           </div>
         </header>
 
@@ -38,7 +72,8 @@
 
 <script setup lang="ts">
 import type { Ref } from 'vue';
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useUserStore } from '~/stores/user';
 
 /**
  * Auth initialization state
@@ -54,6 +89,65 @@ const isSidebarOpen: Ref<boolean> = ref(false);
  * Mobile state
  */
 const isMobile: Ref<boolean> = ref(false);
+
+/**
+ * Credits popover visibility state
+ */
+const showCreditsPopover: Ref<boolean> = ref(false);
+
+/**
+ * User store instance
+ */
+const userStore = useUserStore();
+
+/**
+ * Credit icon value for circular icon
+ */
+const creditIconValue = computed(() => {
+  const credits = userStore.user?.credits_available ?? userStore.user?.credit_balance;
+  if (credits === null || credits === undefined) {
+    return '0';
+  }
+  if (credits === -1) {
+    return '∞';
+  }
+  // Format large numbers: if > 999, show 999+; otherwise show the number
+  if (credits > 999) {
+    return '999+';
+  }
+  return credits.toString();
+});
+
+/**
+ * Credit border color based on remaining credits
+ */
+const creditBorderColor = computed(() => {
+  const credits = userStore.user?.credits_available ?? userStore.user?.credit_balance;
+  if (credits === null || credits === undefined || credits === 0) {
+    return 'border-[#f85149]'; // Red for no credits
+  }
+  if (credits === -1) {
+    return 'border-[#30363d]'; // Default gray for unlimited
+  }
+  if (credits <= 10) {
+    return 'border-[#f85149]'; // Red for low credits
+  }
+  return 'border-[#238636]'; // Green for sufficient credits
+});
+
+/**
+ * Toggle credits popover (for mobile click)
+ */
+const toggleCreditsPopover = (): void => {
+  showCreditsPopover.value = !showCreditsPopover.value;
+};
+
+/**
+ * Handle click outside to close popover
+ */
+const handleClickOutside = (): void => {
+  showCreditsPopover.value = false;
+};
 
 /**
  * Initialize authentication

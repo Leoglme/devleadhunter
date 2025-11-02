@@ -18,6 +18,7 @@ from services.auth_service import (
     get_user_by_email,
     get_user_by_id
 )
+from services.credit_service import credit_service
 from models.user import User
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -62,7 +63,24 @@ async def signup(
     db.commit()
     db.refresh(db_user)
     
-    return db_user
+    # Add credit balance, available, and consumed
+    balance = credit_service.get_user_balance(db, db_user.id)
+    credits_available = balance
+    credits_consumed = credit_service.get_user_credits_consumed(db, db_user.id)
+    
+    user_dict = {
+        "id": db_user.id,
+        "name": db_user.name,
+        "email": db_user.email,
+        "role": db_user.role,
+        "is_active": db_user.is_active,
+        "created_at": db_user.created_at,
+        "updated_at": db_user.updated_at,
+        "credit_balance": balance,
+        "credits_available": credits_available,
+        "credits_consumed": credits_consumed
+    }
+    return UserResponse(**user_dict)
 
 
 @router.post("/login", response_model=Token)
@@ -102,16 +120,35 @@ async def login(
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ) -> Any:
     """
     Get current user information.
     
     Args:
         current_user: Current authenticated user
+        db: Database session
         
     Returns:
-        Current user information
+        Current user information with credit balance
     """
-    return current_user
+    # Add credit balance, available, and consumed
+    balance = credit_service.get_user_balance(db, current_user.id)
+    credits_available = balance
+    credits_consumed = credit_service.get_user_credits_consumed(db, current_user.id)
+    
+    user_dict = {
+        "id": current_user.id,
+        "name": current_user.name,
+        "email": current_user.email,
+        "role": current_user.role,
+        "is_active": current_user.is_active,
+        "created_at": current_user.created_at,
+        "updated_at": current_user.updated_at,
+        "credit_balance": balance,
+        "credits_available": credits_available,
+        "credits_consumed": credits_consumed
+    }
+    return UserResponse(**user_dict)
 

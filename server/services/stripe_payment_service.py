@@ -112,9 +112,6 @@ class StripePaymentService:
         amount_cents = self.calculate_amount(credits, credit_settings.price_per_credit)
         
         try:
-            # Calculate price per credit in cents
-            price_per_credit_cents = int((credit_settings.price_per_credit * 100).quantize(Decimal('1')))
-            
             # Create Stripe Checkout Session
             checkout_session = self.stripe_client.checkout.Session.create(
                 payment_method_types=['card'],  # Base payment method
@@ -124,11 +121,10 @@ class StripePaymentService:
                             'currency': 'eur',
                             'product_data': {
                                 'name': f'{credits} Crédits Devleadhunter',
-                                'description': 'Crédits pour vos recherches de prospects',
                             },
-                            'unit_amount': price_per_credit_cents,
+                            'unit_amount': amount_cents,
                         },
-                        'quantity': credits,
+                        'quantity': 1,
                     }
                 ],
                 mode='payment',

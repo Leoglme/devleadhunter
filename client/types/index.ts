@@ -254,3 +254,40 @@ export interface CheckoutSessionResponse {
   /** Number of credits being purchased */
   credits: number;
 }
+
+/**
+ * Credit transaction type
+ */
+export type CreditTransactionType = 'PURCHASE' | 'USAGE' | 'REFUND' | 'FREE_GIFT';
+
+/**
+ * Credit transaction interface
+ */
+export interface CreditTransaction {
+  /** Transaction unique identifier */
+  id: number;
+  /** User ID who owns this transaction */
+  user_id: number;
+  /** Transaction type */
+  transaction_type: CreditTransactionType;
+  /** Number of credits (positive for additions, negative for usage) */
+  amount: number;
+  /** Description of the transaction */
+  description: string;
+  /** Optional JSON metadata */
+  transaction_metadata?: string | null;
+  /** Timestamp when transaction was created */
+  created_at: string;
+}
+
+/**
+ * Credit balance response
+ */
+export interface CreditBalanceResponse {
+  /** User ID */
+  user_id: number;
+  /** Current credit balance */
+  balance: number;
+  /** Whether user has unlimited credits (admin) */
+  is_unlimited: boolean;
+}
