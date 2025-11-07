@@ -291,3 +291,60 @@ export interface CreditBalanceResponse {
   /** Whether user has unlimited credits (admin) */
   is_unlimited: boolean;
 }
+
+/**
+ * Stripe payment information
+ */
+export interface StripePaymentInfo {
+  payment_intent_id?: string | null;
+  session_id?: string | null;
+  amount: number;
+  currency: string;
+  status: string;
+  payment_method_type?: string | null;
+  payment_date: string;
+  amount_received?: number | null;
+  application_fee_amount?: number | null;
+  net_amount?: number | null;
+  refund_amount?: number | null;
+  refund_date?: string | null;
+  customer_country?: string | null;
+  customer_email?: string | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
+}
+
+/**
+ * Credit purchase transaction with payment details
+ */
+export interface CreditPurchaseTransaction {
+  transaction_id: number;
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  credits_amount: number;
+  credits_available_date: string;
+  payment_info?: StripePaymentInfo | null;
+  euros_amount?: number | null;
+  description: string;
+}
+
+/**
+ * Accounting summary
+ */
+export interface AccountingSummary {
+  total_paid: number;
+  total_refunded: number;
+  total_stripe_fees: number;
+  net_total: number;
+  total_transactions: number;
+  available_balance?: number | null;
+}
+
+/**
+ * Accounting data response
+ */
+export interface AccountingResponse {
+  summary: AccountingSummary;
+  transactions: CreditPurchaseTransaction[];
+}

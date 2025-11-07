@@ -41,7 +41,6 @@ class PagesJaunesScraper(BaseScraper):
         self.playwright = None
         self.browser = None
         self.base_url = "https://www.pagesjaunes.fr"
-        print(f"Pages Jaunes scraper initialized for source: {Source.PAGESJAUNES}")
     
     async def ensure_browser(self) -> None:
         """

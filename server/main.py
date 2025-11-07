@@ -1,7 +1,39 @@
 """
 Main FastAPI application entry point.
 """
+# Configure logging FIRST, before any other imports that might use logging
 import logging
+
+# Set default level to WARNING to reduce noise
+logging.basicConfig(
+    level=logging.WARNING,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    force=True  # Force reconfiguration if already configured
+)
+
+# Configure specific loggers to reduce verbosity BEFORE importing modules that use them
+# SQLAlchemy logs all SQL queries at INFO level - reduce to ERROR
+sqlalchemy_engine_logger = logging.getLogger('sqlalchemy.engine')
+sqlalchemy_engine_logger.setLevel(logging.ERROR)
+sqlalchemy_engine_logger.propagate = False
+
+sqlalchemy_pool_logger = logging.getLogger('sqlalchemy.pool')
+sqlalchemy_pool_logger.setLevel(logging.ERROR)
+sqlalchemy_pool_logger.propagate = False
+
+sqlalchemy_dialects_logger = logging.getLogger('sqlalchemy.dialects')
+sqlalchemy_dialects_logger.setLevel(logging.ERROR)
+sqlalchemy_dialects_logger.propagate = False
+
+# Stripe SDK logs all API requests at INFO level - reduce to WARNING
+logging.getLogger('stripe').setLevel(logging.WARNING)
+
+# Uvicorn access logs are handled separately via uvicorn config
+# But we can reduce internal uvicorn logs
+logging.getLogger('uvicorn.access').setLevel(logging.WARNING)
+logging.getLogger('uvicorn.error').setLevel(logging.WARNING)
+
+# NOW import other modules after logging is configured
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.v1.router import router as api_router
@@ -10,12 +42,6 @@ from services.scraper_service import scraper_service
 from scrappers.mock_scraper import MockScraper
 from scrappers.google_scraper import GoogleScraper
 from scrappers.pagesjaunes_scraper import PagesJaunesScraper
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 
 
 # Initialize FastAPI app
@@ -52,15 +78,12 @@ async def startup_event() -> None:
     # Register scrapers
     mock_scraper = MockScraper()
     await scraper_service.add_scraper(mock_scraper)
-    print("[OK] Mock scraper registered")
     
     google_scraper = GoogleScraper()
     await scraper_service.add_scraper(google_scraper)
-    print("[OK] Google scraper registered")
     
     pagesjaunes_scraper = PagesJaunesScraper()
     await scraper_service.add_scraper(pagesjaunes_scraper)
-    print("[OK] Pages Jaunes scraper registered")
 
 
 @app.on_event("shutdown")
@@ -71,7 +94,7 @@ async def shutdown_event() -> None:
     This function runs when the FastAPI application shuts down.
     It performs cleanup tasks.
     """
-    print("Some services stopped")
+    pass
 
 
 @app.get("/", tags=["root"])
@@ -96,6 +119,8 @@ if __name__ == "__main__":
         "main:app",
         host=settings.host,
         port=settings.port,
-        reload=settings.debug
+        reload=settings.debug,
+        log_level="warning",  # Reduce uvicorn logs to warnings only
+        access_log=False  # Disable HTTP access logs
     )
 
