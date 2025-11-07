@@ -107,7 +107,7 @@
 
       <!-- Transactions Table - Qonto Style -->
       <div class="card overflow-hidden p-0">
-        <div class="px-6 py-4 border-b border-[#30363d] bg-[#050505] space-y-4">
+        <div class="px-2 sm:px-6 py-4 border-b border-[#30363d] bg-[#050505] space-y-4">
           <div>
             <h2 class="text-base font-semibold text-[#f9f9f9]">Credit transactions</h2>
             <p class="text-xs text-[#8b949e] mt-1">Payments pulled directly from Stripe</p>
@@ -119,12 +119,12 @@
               <input
                 v-model="searchQuery"
                 type="search"
-                class="w-full bg-[#1a1a1a] border border-[#30363d] rounded px-10 py-2 text-sm text-[#f9f9f9] placeholder:text-[#8b949e] focus:outline-none focus:border-[#58a6ff] focus:ring-1 focus:ring-[#58a6ff]"
+                class="w-full bg-[#1a1a1a] border border-[#30363d] rounded px-10 py-2 text-sm text-[#f9f9f9] placeholder:text-[#8b949e] focus:outline-none focus:border-[#f9f9f9] focus:ring-1 focus:ring-[#f9f9f9]"
                 placeholder="Search (name, email, Stripe ID, description...)"
               />
             </div>
 
-            <div class="flex flex-col sm:flex-row gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
               <select
                 v-model="statusFilter"
                 class="bg-[#1a1a1a] border border-[#30363d] text-[#f9f9f9] text-sm rounded px-3 py-2 min-w-[160px]"
@@ -149,11 +149,14 @@
                   <option value="net">Net</option>
                   <option value="fees">Fees</option>
                   <option value="credits">Credits</option>
+                  <option value="country">Country</option>
+                  <option value="payment_method">Payment Method</option>
+                  <option value="availability">Funds availability</option>
                 </select>
                 <button
                   @click="toggleSortDirection"
                   type="button"
-                  class="bg-[#1a1a1a] border border-[#30363d] text-[#f9f9f9] text-sm rounded px-3 py-2 flex items-center gap-2 hover:border-[#58a6ff] transition"
+                  class="bg-[#1a1a1a] border border-[#30363d] text-[#f9f9f9] text-sm rounded px-3 py-2 flex items-center gap-2 hover:border-[#f9f9f9] hover:text-[#f9f9f9] transition"
                 >
                   <i
                     class="fa-solid"
@@ -171,10 +174,13 @@
             <thead>
               <tr class="bg-[#050505] border-b border-[#30363d]">
                 <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
-                  Date
+                  Status
                 </th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
                   Customer
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
+                  Date
                 </th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
                   Credits
@@ -183,13 +189,25 @@
                   Amount
                 </th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
-                  Status
-                </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
                   Stripe fees
                 </th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
                   Net
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
+                  Funds availability
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
+                  Payment method
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
+                  Country
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
+                  IP
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
+                  Device
                 </th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-[#8b949e] uppercase tracking-wider">
                   Details
@@ -202,32 +220,6 @@
                 :key="getTransactionKey(transaction)"
                 class="hover:bg-[#2a2a2a] border-b border-[#30363d] last:border-b-0 transition-colors"
               >
-                <!-- Date -->
-                <td class="px-4 py-3 text-sm text-[#f9f9f9]">
-                  {{ formatDate(transaction.credits_available_date) }}
-                </td>
-                
-                <!-- User -->
-                <td class="px-4 py-3">
-                  <div class="flex flex-col">
-                    <span class="text-sm font-medium text-[#f9f9f9]">{{ transaction.user_name }}</span>
-                    <span class="text-xs text-[#8b949e]">{{ transaction.user_email }}</span>
-                  </div>
-                </td>
-                
-                <!-- Credits -->
-                <td class="px-4 py-3 text-sm text-[#f9f9f9] font-medium">
-                  {{ transaction.credits_amount }}
-                </td>
-                
-                <!-- Amount -->
-                <td class="px-4 py-3 text-sm text-[#f9f9f9] font-medium">
-                  <span v-if="transaction.payment_info">
-                    €{{ formatCurrency(transaction.payment_info.amount) }}
-                  </span>
-                  <span v-else class="text-[#8b949e]">N/A</span>
-                </td>
-                
                 <!-- Status -->
                 <td class="px-4 py-3">
                   <span
@@ -239,15 +231,41 @@
                     {{ getStatusLabel(transaction.payment_info?.status || 'unknown') }}
                   </span>
                 </td>
-                
+
+                <!-- Customer -->
+                <td class="px-4 py-3">
+                  <div class="flex flex-col">
+                    <span class="text-sm font-medium text-[#f9f9f9]">{{ transaction.user_name }}</span>
+                    <span class="text-xs text-[#8b949e]">{{ transaction.user_email }}</span>
+                  </div>
+                </td>
+
+                <!-- Date -->
+                <td class="px-4 py-3 text-sm text-[#f9f9f9]">
+                  {{ formatDate(transaction.credits_available_date) }}
+                </td>
+
+                <!-- Credits -->
+                <td class="px-4 py-3 text-sm text-[#f9f9f9] font-medium">
+                  {{ transaction.credits_amount }}
+                </td>
+
+                <!-- Amount -->
+                <td class="px-4 py-3 text-sm text-[#f9f9f9] font-medium">
+                  <span v-if="transaction.payment_info">
+                    €{{ formatCurrency(transaction.payment_info.amount) }}
+                  </span>
+                  <span v-else class="text-[#8b949e]">N/A</span>
+                </td>
+
                 <!-- Stripe Fees -->
                 <td class="px-4 py-3 text-sm text-[#DC4747]">
                   <span v-if="transaction.payment_info?.application_fee_amount">
                     -€{{ formatCurrency(transaction.payment_info.application_fee_amount) }}
                   </span>
-                  <span v-else class="text-[#8b949e]">-</span>
+                  <span v-else class="text-[#8b949e]">N/A</span>
                 </td>
-                
+
                 <!-- Net -->
                 <td class="px-4 py-3 text-sm text-[#f9f9f9] font-medium">
                   <span v-if="transaction.payment_info?.net_amount">
@@ -255,7 +273,46 @@
                   </span>
                   <span v-else class="text-[#8b949e]">N/A</span>
                 </td>
-                
+
+                <!-- Funds availability -->
+                <td class="px-4 py-3 text-sm text-[#f9f9f9]">
+                  {{ formatAvailability(transaction.payment_info) }}
+                </td>
+
+                <!-- Payment Method -->
+                <td class="px-4 py-3 text-sm text-[#f9f9f9]">
+                  <div class="flex flex-col">
+                    <span class="font-medium text-[#f9f9f9]">
+                      {{ transaction.payment_info?.payment_method_type?.toUpperCase() || 'N/A' }}
+                    </span>
+                    <span class="text-xs text-[#8b949e]">
+                      {{ formatPaymentDetails(transaction.payment_info) }}
+                    </span>
+                  </div>
+                </td>
+
+                <!-- Country -->
+                <td class="px-4 py-3 text-sm text-[#f9f9f9]">
+                  <span
+                    v-if="transaction.payment_info?.customer_country"
+                    :title="getCountryName(transaction.payment_info.customer_country)"
+                    class="text-lg cursor-default"
+                  >
+                    {{ getCountryFlag(transaction.payment_info.customer_country) }}
+                  </span>
+                  <span v-else>N/A</span>
+                </td>
+
+                <!-- IP -->
+                <td class="px-4 py-3 text-sm text-[#8b949e] font-mono">
+                  {{ transaction.payment_info?.ip_address || 'N/A' }}
+                </td>
+
+                <!-- Device -->
+                <td class="px-4 py-3 text-sm text-[#8b949e]">
+                  {{ parseUserAgent(transaction.payment_info?.user_agent) }}
+                </td>
+ 
                 <!-- Details Button -->
                 <td class="px-4 py-3">
                   <button
@@ -508,7 +565,7 @@ const rawTransactions = computed<CreditPurchaseTransaction[]>(() => {
  */
 const searchQuery: Ref<string> = ref('');
 const statusFilter: Ref<string> = ref('');
-const sortKey: Ref<'date' | 'amount' | 'net' | 'fees' | 'credits'> = ref('date');
+const sortKey: Ref<'date' | 'amount' | 'net' | 'fees' | 'credits' | 'country' | 'payment_method' | 'availability'> = ref('date');
 const sortDirection: Ref<'asc' | 'desc'> = ref('desc');
 
 /**
@@ -537,7 +594,6 @@ const filteredTransactions = computed<CreditPurchaseTransaction[]>(() => {
     const transactionStatus = paymentInfo?.status?.toLowerCase() || 'unknown';
 
     const matchesStatus = !status || transactionStatus === status;
-
     if (!matchesStatus) {
       return false;
     }
@@ -552,7 +608,15 @@ const filteredTransactions = computed<CreditPurchaseTransaction[]>(() => {
       transaction.description,
       paymentInfo?.payment_intent_id,
       paymentInfo?.session_id,
-      transactionStatus
+      transactionStatus,
+      paymentInfo?.amount?.toString(),
+      paymentInfo?.net_amount?.toString(),
+      paymentInfo?.application_fee_amount?.toString(),
+      paymentInfo?.customer_country,
+      getCountryName(paymentInfo?.customer_country || ''),
+      getCountryFlag(paymentInfo?.customer_country),
+      formatPaymentDetails(paymentInfo),
+      formatAvailability(paymentInfo)
     ]
       .filter(Boolean)
       .join(' ')
@@ -568,58 +632,60 @@ const filteredTransactions = computed<CreditPurchaseTransaction[]>(() => {
 const displayedTransactions = computed<CreditPurchaseTransaction[]>(() => {
   const direction = sortDirection.value === 'asc' ? 1 : -1;
 
-  const toNumber = (value: number | string | null | undefined): number => {
-    if (value === null || value === undefined) return 0;
-    if (typeof value === 'number') return value;
-    const parsed = parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
-
   const getAmount = (transaction: CreditPurchaseTransaction, key: 'amount' | 'net' | 'fees'): number => {
     const info = transaction.payment_info;
     if (!info) return 0;
     switch (key) {
       case 'amount':
-        return toNumber(info.amount);
+        return toNumeric(info.amount);
       case 'net':
-        return toNumber(info.net_amount);
+        return toNumeric(info.net_amount);
       case 'fees':
-        return toNumber(info.application_fee_amount);
+        return toNumeric(info.application_fee_amount);
     }
   };
 
   const items = [...filteredTransactions.value];
   items.sort((a, b) => {
-    let aValue = 0;
-    let bValue = 0;
+    let compare = 0;
 
     switch (sortKey.value) {
       case 'date':
-        aValue = new Date(a.credits_available_date).getTime();
-        bValue = new Date(b.credits_available_date).getTime();
+        compare = new Date(a.credits_available_date).getTime() - new Date(b.credits_available_date).getTime();
         break;
       case 'amount':
-        aValue = getAmount(a, 'amount');
-        bValue = getAmount(b, 'amount');
+        compare = getAmount(a, 'amount') - getAmount(b, 'amount');
         break;
       case 'net':
-        aValue = getAmount(a, 'net');
-        bValue = getAmount(b, 'net');
+        compare = getAmount(a, 'net') - getAmount(b, 'net');
         break;
       case 'fees':
-        aValue = getAmount(a, 'fees');
-        bValue = getAmount(b, 'fees');
+        compare = getAmount(a, 'fees') - getAmount(b, 'fees');
         break;
       case 'credits':
-        aValue = toNumber(a.credits_amount);
-        bValue = toNumber(b.credits_amount);
+        compare = toNumeric(a.credits_amount) - toNumeric(b.credits_amount);
+        break;
+      case 'country':
+        compare = getCountryName(a.payment_info?.customer_country || '').localeCompare(
+          getCountryName(b.payment_info?.customer_country || '')
+        );
+        break;
+      case 'payment_method':
+        compare = formatPaymentDetails(a.payment_info).localeCompare(formatPaymentDetails(b.payment_info));
+        break;
+      case 'availability':
+        {
+          const aTime = a.payment_info?.available_at ? new Date(a.payment_info.available_at).getTime() : Number.MAX_SAFE_INTEGER;
+          const bTime = b.payment_info?.available_at ? new Date(b.payment_info.available_at).getTime() : Number.MAX_SAFE_INTEGER;
+          compare = aTime - bTime;
+        }
         break;
       default:
-        break;
+        compare = 0;
     }
 
-    if (aValue < bValue) return -1 * direction;
-    if (aValue > bValue) return 1 * direction;
+    if (compare < 0) return -1 * direction;
+    if (compare > 0) return 1 * direction;
     return 0;
   });
 
@@ -642,13 +708,52 @@ const pageStart = computed(() => (totalTransactions.value === 0 ? 0 : (page.valu
 const pageEnd = computed(() => Math.min(page.value * pageSize.value, totalTransactions.value));
 
 /**
+ * Utility: coerce value to number
+ */
+const toNumeric = (value: number | string | null | undefined): number => {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number') return value;
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+/**
  * Format currency
  */
-const formatCurrency = (amount: number): string => {
-  return new Intl.NumberFormat('fr-FR', {
+const formatCurrency = (amount: number | string | null | undefined): string => {
+  const numericAmount = toNumeric(amount);
+  return new Intl.NumberFormat('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
-  }).format(amount);
+  }).format(numericAmount);
+};
+
+const regionDisplayNames = new Intl.DisplayNames(['en'], { type: 'region' });
+
+const getCountryName = (code?: string | null): string => {
+  if (!code) return 'Unknown country';
+  try {
+    return regionDisplayNames.of(code.toUpperCase()) || code.toUpperCase();
+  } catch {
+    return code.toUpperCase();
+  }
+};
+
+const getCountryFlag = (code?: string | null): string => {
+  if (!code) return '🏳️';
+  const upper = code.toUpperCase();
+  if (upper.length !== 2) return upper;
+  const OFFSET = 127397;
+  return String.fromCodePoint(...upper.split('').map(char => char.charCodeAt(0) + OFFSET));
+};
+
+const formatPaymentDetails = (info?: CreditPurchaseTransaction['payment_info']): string => {
+  if (!info) return 'N/A';
+  const type = info.payment_method_type ? info.payment_method_type.toUpperCase() : '';
+  const brand = info.payment_method_brand ? info.payment_method_brand.toUpperCase() : '';
+  const last4 = info.payment_method_last4 ? `•••• ${info.payment_method_last4}` : '';
+  const parts = [type, brand, last4].filter(Boolean);
+  return parts.length ? parts.join(' ') : 'N/A';
 };
 
 /**
@@ -656,11 +761,10 @@ const formatCurrency = (amount: number): string => {
  */
 const formatDate = (dateString: string): string => {
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  });
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
 };
 
 /**
@@ -668,13 +772,12 @@ const formatDate = (dateString: string): string => {
  */
 const formatDateTime = (dateString: string): string => {
   const date = new Date(dateString);
-  return date.toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
 };
 
 /**
@@ -722,6 +825,24 @@ const getStatusLabel = (status: string): string => {
   return labelMap[status.toLowerCase()] || status;
 };
 
+const formatAvailability = (info?: CreditPurchaseTransaction['payment_info']): string => {
+  if (!info) return 'N/A';
+  if (info.available_at) {
+    return formatDateTime(info.available_at);
+  }
+  const status = info.status?.toLowerCase() || 'unknown';
+  if (['succeeded', 'paid', 'complete', 'processing', 'requires_capture', 'pending'].includes(status)) {
+    return 'Pending';
+  }
+  if (['requires_confirmation', 'requires_action'].includes(status)) {
+    return 'Waiting for customer';
+  }
+  if (['requires_payment_method', 'unpaid', 'failed', 'canceled', 'expired'].includes(status)) {
+    return 'N/A';
+  }
+  return 'N/A';
+};
+
 /**
  * Parse user agent to get device/browser info
  */
@@ -733,7 +854,7 @@ const parseUserAgent = (userAgent: string | null | undefined): string => {
     return 'Mobile';
   }
   if (userAgent.includes('Tablet')) {
-    return 'Tablette';
+    return 'Tablet';
   }
   if (userAgent.includes('Chrome')) {
     return 'Chrome';
@@ -748,7 +869,7 @@ const parseUserAgent = (userAgent: string | null | undefined): string => {
     return 'Edge';
   }
   
-  return 'Navigateur';
+  return 'Browser';
 };
 
 /**

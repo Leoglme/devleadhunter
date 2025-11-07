@@ -328,6 +328,8 @@ class AccountingService:
                         currency=session.get('currency', 'eur'),
                         status=session.get('payment_status', 'unknown'),
                         payment_method_type=payment_method_type,
+                        payment_method_brand=None,
+                        payment_method_last4=None,
                         payment_date=datetime.fromtimestamp(session.get('created', created_at.timestamp())),
                         amount_received=Decimal(amount_received) / 100 if amount_received else None,
                         application_fee_amount=Decimal(application_fee_amount) / 100 if application_fee_amount else None,
@@ -425,6 +427,8 @@ class AccountingService:
                         currency=payment_intent.get('currency', 'eur'),
                         status=payment_intent.get('status', 'unknown'),
                         payment_method_type=payment_method_type,
+                        payment_method_brand=None,
+                        payment_method_last4=None,
                         payment_date=datetime.fromtimestamp(payment_intent.get('created', created_at.timestamp())),
                         amount_received=Decimal(amount_received) / 100 if amount_received else None,
                         application_fee_amount=Decimal(application_fee_amount) / 100 if application_fee_amount else None,
@@ -496,6 +500,8 @@ class AccountingService:
                         currency=session.get('currency', 'eur'),
                         status=session.get('payment_status', 'unknown'),
                         payment_method_type=payment_method_type,
+                        payment_method_brand=None,
+                        payment_method_last4=None,
                         payment_date=datetime.fromtimestamp(session.get('created', created_at.timestamp())),
                         amount_received=Decimal(amount_received) / 100 if amount_received else None,
                         application_fee_amount=Decimal(application_fee_amount) / 100 if application_fee_amount else None,
@@ -558,6 +564,8 @@ class AccountingService:
                     currency=charge.get('currency', 'eur'),
                     status=charge.get('status', 'unknown'),
                     payment_method_type=charge.get('payment_method_details', {}).get('type') if charge.get('payment_method_details') else None,
+                    payment_method_brand=charge.get('payment_method_details', {}).get('card', {}).get('brand') if charge.get('payment_method_details') and charge.get('payment_method_details', {}).get('card') else None,
+                    payment_method_last4=charge.get('payment_method_details', {}).get('card', {}).get('last4') if charge.get('payment_method_details') and charge.get('payment_method_details', {}).get('card') else None,
                     payment_date=datetime.fromtimestamp(charge.get('created', 0)),
                     amount_received=Decimal(amount_received) / 100 if amount_received else None,
                     application_fee_amount=Decimal(application_fee_amount) / 100 if application_fee_amount else None,
@@ -640,10 +648,13 @@ class AccountingService:
                 )
 
                 payment_method_type = None
+                payment_method_brand = None
+                payment_method_last4 = None
                 customer_email = intent.get('receipt_email')
                 customer_country = None
                 customer_name = None
                 application_fee_decimal: Optional[Decimal] = Decimal('0')
+                available_on_timestamp: Optional[int] = None
                 refund_amount_decimal: Optional[Decimal] = None
                 refund_date: Optional[datetime] = None
 
@@ -685,6 +696,9 @@ class AccountingService:
                     payment_method_details = charge.get('payment_method_details') or {}
                     if payment_method_details:
                         payment_method_type = payment_method_details.get('type')
+                        card_details = payment_method_details.get('card') or {}
+                        payment_method_brand = card_details.get('brand')
+                        payment_method_last4 = card_details.get('last4')
 
                     amount_received_charge = charge.get('amount_received')
                     if amount_received_charge is not None:
@@ -694,10 +708,12 @@ class AccountingService:
                     fee_value = 0
                     if isinstance(balance_transaction, dict):
                         fee_value = balance_transaction.get('fee') or 0
+                        available_on_timestamp = balance_transaction.get('available_on')
                     elif balance_transaction:
                         try:
                             bt_obj = self.stripe_client.BalanceTransaction.retrieve(balance_transaction)
                             fee_value = bt_obj.get('fee') or 0
+                            available_on_timestamp = bt_obj.get('available_on')
                         except Exception:
                             fee_value = 0
 
@@ -740,6 +756,11 @@ class AccountingService:
                         payment_method_type = payment_method_types[0]
 
                 metadata = intent.get('metadata') or {}
+                available_on_datetime = (
+                    datetime.fromtimestamp(available_on_timestamp)
+                    if available_on_timestamp
+                    else None
+                )
 
                 net_amount_decimal: Optional[Decimal] = None
                 if amount_received_decimal is not None:
@@ -758,10 +779,13 @@ class AccountingService:
                     currency=currency,
                     status=status,
                     payment_method_type=payment_method_type,
+                    payment_method_brand=payment_method_brand,
+                    payment_method_last4=payment_method_last4,
                     payment_date=payment_date,
                     amount_received=amount_received_decimal,
                     application_fee_amount=application_fee_decimal,
                     net_amount=net_amount_decimal,
+                    available_at=available_on_datetime,
                     customer_country=customer_country,
                     customer_name=customer_name,
                     customer_email=customer_email,
@@ -916,10 +940,13 @@ class AccountingService:
                 currency=session.get('currency', 'eur'),
                 status=session_status,
                 payment_method_type=None,
+                payment_method_brand=None,
+                payment_method_last4=None,
                 payment_date=payment_date,
                 amount_received=None,
                 application_fee_amount=None,
                 net_amount=None,
+                available_at=None,
                 customer_country=customer_country,
                 customer_name=customer_name,
                 customer_email=customer_email,

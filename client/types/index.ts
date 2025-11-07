@@ -302,10 +302,13 @@ export interface StripePaymentInfo {
   currency: string;
   status: string;
   payment_method_type?: string | null;
+  payment_method_brand?: string | null;
+  payment_method_last4?: string | null;
   payment_date: string;
   amount_received?: number | null;
   application_fee_amount?: number | null;
   net_amount?: number | null;
+  available_at?: string | null;
   refund_amount?: number | null;
   refund_date?: string | null;
   customer_country?: string | null;

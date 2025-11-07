@@ -155,6 +155,7 @@ const links = computed(() => {
   if (userStore.user?.role === 'ADMIN') {
     baseLinks.push({ to: '/dashboard/users', label: 'Users', icon: 'fa-solid fa-users' });
     baseLinks.push({ to: '/dashboard/credit-settings', label: 'Credit Settings', icon: 'fa-solid fa-coins' });
+    baseLinks.push({ to: '/dashboard/accounting', label: 'Comptabilité', icon: 'fa-solid fa-chart-line' });
   }
 
   return baseLinks;
@@ -240,7 +241,12 @@ const creditBorderColor = computed(() => {
  */
 const creditTextSize = computed(() => {
   const credits = userStore.user?.credits_available ?? userStore.user?.credit_balance;
-  if (credits === null || credits === undefined || credits === -1) {
+
+  if(credits === -1) {
+    return 'text-2xl';
+  }
+
+  if (credits === null || credits === undefined) {
     return 'text-xs';
   }
   if (credits >= 1000) {
@@ -255,7 +261,12 @@ const creditTextSize = computed(() => {
  */
 const creditTextSizeLarge = computed(() => {
   const credits = userStore.user?.credits_available ?? userStore.user?.credit_balance;
-  if (credits === null || credits === undefined || credits === -1) {
+
+  if(credits === -1) {
+    return 'text-4xl';
+  }
+
+  if (credits === null || credits === undefined) {
     return 'text-xl';
   }
   if (credits >= 1000) {
