@@ -122,6 +122,7 @@ jobs:
             SECRET_KEY=${{ secrets.SECRET_KEY }}
             ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}
             ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+            FRONTEND_URL=${{ secrets.FRONTEND_URL }}
             ACCESS_TOKEN_EXPIRE_MINUTES=30
             EOF
             echo ".env file created/updated successfully"
