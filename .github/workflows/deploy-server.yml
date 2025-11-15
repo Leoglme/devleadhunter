@@ -137,10 +137,8 @@ jobs:
           script: |
             set -e
             TARGET_DIR="/var/www/api.devleadhunter.dibodev.fr/html"
-            cd "$TARGET_DIR"
-            . .venv/bin/activate
-            python server/init_db.py
-            deactivate
+            cd "$TARGET_DIR/server"
+            ../.venv/bin/python init_db.py
 
       - name: ⚙️ Configure/restart systemd service (SSH)
         uses: appleboy/ssh-action@v0.1.6
