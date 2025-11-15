@@ -148,6 +148,7 @@ const links = computed(() => {
     { to: '/dashboard', label: 'Prospect Search', icon: 'fa-solid fa-magnifying-glass' },
     { to: '/dashboard/campaigns', label: 'Campaigns', icon: 'fa-solid fa-envelope' },
     { to: '/dashboard/credits', label: 'My Credits', icon: 'fa-solid fa-coins' },
+    { to: '/dashboard/support', label: 'Support', icon: 'fa-solid fa-headset' },
     { to: '/dashboard/buy-credits', label: 'Buy Credits', icon: 'fa-solid fa-credit-card' }
   ];
 
@@ -322,7 +323,11 @@ const handleMouseLeave = (): void => {
  */
 const isActive = (path: string): boolean => {
   const route = useRoute();
-  return route.path === path;
+  // Exact match
+  if (route.path === path) return true;
+  // For sub-routes, but exclude /dashboard to avoid matching all dashboard routes
+  if (path !== '/dashboard' && route.path.startsWith(path + '/')) return true;
+  return false;
 };
 
 /**

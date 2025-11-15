@@ -351,3 +351,86 @@ export interface AccountingResponse {
   summary: AccountingSummary;
   transactions: CreditPurchaseTransaction[];
 }
+
+/**
+ * Support ticket status values
+ */
+export type SupportTicketStatus =
+  | 'open'
+  | 'waiting_user'
+  | 'waiting_support'
+  | 'resolved'
+  | 'closed';
+
+/**
+ * Support ticket topics
+ */
+export type SupportTicketTopic =
+  | 'credits_billing'
+  | 'missing_results'
+  | 'bug_report'
+  | 'refund_credits'
+  | 'refund_payment'
+  | 'feature_request'
+  | 'other';
+
+/**
+ * Support topic metadata for UI
+ */
+export interface SupportTopicOption {
+  value: SupportTicketTopic;
+  label: string;
+  description: string;
+}
+
+/**
+ * Support attachment metadata
+ */
+export interface SupportAttachment {
+  id: number;
+  url: string;
+  original_filename: string;
+  content_type: string;
+  created_at: string;
+}
+
+/**
+ * Support message
+ */
+export interface SupportMessage {
+  id: number;
+  ticket_id: number;
+  sender_id: number;
+  sender_name: string;
+  sender_role: UserRole;
+  content: string;
+  attachments: SupportAttachment[];
+  created_at: string;
+}
+
+/**
+ * Support ticket summary
+ */
+export interface SupportTicketSummary {
+  id: number;
+  user_id: number;
+  user_name: string;
+  topic: SupportTicketTopic;
+  subject: string;
+  description: string;
+  status: SupportTicketStatus;
+  created_at: string;
+  updated_at?: string | null;
+  last_message_at?: string | null;
+  closed_at?: string | null;
+  messages_count: number;
+  attachments_count: number;
+}
+
+/**
+ * Detailed support ticket with conversation
+ */
+export interface SupportTicketDetail extends Omit<SupportTicketSummary, 'messages_count'> {
+  attachments: SupportAttachment[];
+  messages: SupportMessage[];
+}

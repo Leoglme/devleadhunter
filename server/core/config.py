@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     debug: bool = True
     api_version: str = "v1"
     api_prefix: str = "/api/v1"
+    api_base_url: str = Field(
+        default="http://localhost:8000",
+        alias="API_BASE_URL",
+        description="Base URL for the API server"
+    )
     
     host: str = "0.0.0.0"
     port: int = 8000
@@ -97,6 +102,58 @@ class Settings(BaseSettings):
         alias="FRONTEND_URL",
         description="Frontend URL for redirects after payment"
     )
+
+    # Support / ticketing settings
+    support_local_upload_dir: str = Field(
+        default="uploads/support",
+        alias="SUPPORT_LOCAL_UPLOAD_DIR",
+        description="Local directory for storing support attachments in non-production environments"
+    )
+    support_max_attachment_mb: int = Field(
+        default=8,
+        alias="SUPPORT_MAX_ATTACHMENT_MB",
+        description="Maximum support attachment size (in megabytes)"
+    )
+    support_ftp_host: Optional[str] = Field(
+        default=None,
+        alias="SUPPORT_FTP_HOST",
+        description="FTP host for storing support attachments in production"
+    )
+    support_ftp_port: int = Field(
+        default=21,
+        alias="SUPPORT_FTP_PORT",
+        description="FTP port for storing support attachments in production"
+    )
+    support_ftp_user: Optional[str] = Field(
+        default=None,
+        alias="SUPPORT_FTP_USER",
+        description="FTP username for storing support attachments in production"
+    )
+    support_ftp_password: Optional[str] = Field(
+        default=None,
+        alias="SUPPORT_FTP_PASSWORD",
+        description="FTP password for storing support attachments in production"
+    )
+    support_ftp_base_dir: str = Field(
+        default="/support/uploads",
+        alias="SUPPORT_FTP_BASE_DIR",
+        description="Base directory on the FTP server for support attachments"
+    )
+    support_ftp_public_base_url: Optional[str] = Field(
+        default=None,
+        alias="SUPPORT_FTP_PUBLIC_BASE_URL",
+        description="Public base URL where uploaded FTP files are accessible"
+    )
+    support_ftp_use_tls: bool = Field(
+        default=True,
+        alias="SUPPORT_FTP_USE_TLS",
+        description="Whether to use explicit TLS when connecting to the FTP server"
+    )
+    support_attachment_allowed_mime: str = Field(
+        default="image/jpeg,image/png,image/webp",
+        alias="SUPPORT_ATTACHMENT_ALLOWED_MIME",
+        description="Comma-separated list of allowed MIME types for support attachments"
+    )
     
     @property
     def cors_origins(self) -> List[str]:
@@ -132,6 +189,16 @@ class Settings(BaseSettings):
                     origins.append(origin)
         
         return origins
+
+    @property
+    def is_production(self) -> bool:
+        """
+        Determine if the application is running in production.
+
+        Returns:
+            True if production environment
+        """
+        return self.env.lower() == "production"
 
 
 # Global settings instance

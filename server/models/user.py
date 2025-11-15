@@ -12,6 +12,8 @@ from enums.user_role import UserRole
 
 if TYPE_CHECKING:
     from models.credit_transaction import CreditTransaction
+    from models.support_ticket import SupportTicket
+    from models.support_message import SupportMessage
 
 
 class User(Base):
@@ -45,6 +47,23 @@ class User(Base):
         "CreditTransaction",
         back_populates="user",
         cascade="all, delete-orphan"
+    )
+    support_tickets: Mapped[list["SupportTicket"]] = relationship(
+        "SupportTicket",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="SupportTicket.user_id"
+    )
+    assigned_support_tickets: Mapped[list["SupportTicket"]] = relationship(
+        "SupportTicket",
+        back_populates="assigned_admin",
+        foreign_keys="SupportTicket.assigned_admin_id"
+    )
+    support_messages: Mapped[list["SupportMessage"]] = relationship(
+        "SupportMessage",
+        back_populates="sender",
+        cascade="all, delete-orphan",
+        foreign_keys="SupportMessage.sender_id"
     )
     
     def __repr__(self) -> str:

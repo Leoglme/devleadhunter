@@ -66,6 +66,9 @@ def init_db():
     from models.user import User  # noqa: F401
     from models.credit_settings import CreditSettings  # noqa: F401
     from models.credit_transaction import CreditTransaction  # noqa: F401
+    from models.support_ticket import SupportTicket  # noqa: F401
+    from models.support_message import SupportMessage  # noqa: F401
+    from models.support_attachment import SupportAttachment  # noqa: F401
     
     Base.metadata.create_all(bind=engine)
 
