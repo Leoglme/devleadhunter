@@ -8,6 +8,7 @@ from models.user import User
 from schemas.order import (
     OrderCreateRequest,
     OrderListResponse,
+    OrderPaymentCheckResponse,
     OrderPaymentEmailPreview,
     OrderResponse,
     OrderStatsResponse,
@@ -171,6 +172,24 @@ async def mark_order_paid(
     order = order_service.mark_paid(db, order)
     await order_service.capture_sale_event(db, order.id)
     return OrderResponse.model_validate(order)
+
+
+@router.post("/{order_id}/check-payment", response_model=OrderPaymentCheckResponse)
+async def check_order_payment(
+    order_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> OrderPaymentCheckResponse:
+    """Reconcile the order against its provider (Qonto has no paid webhook)."""
+    order = _get_order_or_404(db, current_user.id, order_id)
+    try:
+        newly_paid = await order_service.check_and_mark_paid(db, current_user, order)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    if newly_paid:
+        await order_service.capture_sale_event(db, order.id)
+    db.refresh(order)
+    return OrderPaymentCheckResponse(newly_paid=newly_paid, order=OrderResponse.model_validate(order))
 
 
 @router.post("/{order_id}/deploy", response_model=OrderResponse)

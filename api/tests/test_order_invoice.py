@@ -120,3 +120,42 @@ def test_build_payment_email_omits_attachment_note_without_invoice() -> None:
     order = _order(payment_url="https://buy.stripe.com/x")
     body = OrderService().build_payment_email(order, sender_name="Léo")["body_html"]
     assert "pièce jointe" not in body
+
+
+def test_check_and_mark_paid_marks_when_provider_reports_paid(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A provider-confirmed payment transitions the order to paid."""
+    service = OrderService()
+    order = _order(invoice_id="inv_1", payment_provider="qonto", paid_at=None)
+
+    async def _fake_resolve(_db: object, _user: object) -> SimpleNamespace:
+        async def _check_paid(_invoice_id: str) -> SimpleNamespace:
+            return SimpleNamespace(is_paid=True, raw_status="paid")
+
+        return SimpleNamespace(check_paid=_check_paid)
+
+    marked: dict[str, bool] = {"done": False}
+
+    def _fake_mark_paid(_db: object, target: SimpleNamespace) -> SimpleNamespace:
+        marked["done"] = True
+        target.paid_at = "now"
+        return target
+
+    monkeypatch.setattr(service, "_resolve_provider", _fake_resolve)
+    monkeypatch.setattr(service, "mark_paid", _fake_mark_paid)
+    assert asyncio.run(service.check_and_mark_paid(_FakeDB(), SimpleNamespace(id=1), order)) is True
+    assert marked["done"] is True
+
+
+def test_check_and_mark_paid_noop_when_unpaid(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An unpaid invoice leaves the order untouched."""
+    service = OrderService()
+    order = _order(invoice_id="inv_1", payment_provider="qonto", paid_at=None)
+
+    async def _fake_resolve(_db: object, _user: object) -> SimpleNamespace:
+        async def _check_paid(_invoice_id: str) -> SimpleNamespace:
+            return SimpleNamespace(is_paid=False, raw_status="unpaid")
+
+        return SimpleNamespace(check_paid=_check_paid)
+
+    monkeypatch.setattr(service, "_resolve_provider", _fake_resolve)
+    assert asyncio.run(service.check_and_mark_paid(_FakeDB(), SimpleNamespace(id=1), order)) is False

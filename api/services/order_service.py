@@ -272,6 +272,32 @@ class OrderService:
             logger.warning("Invoice PDF unavailable for order %s: %s", order.id, exc)
             return None
 
+    async def check_and_mark_paid(self, db: Session, user: User, order: Order) -> bool:
+        """
+        Reconcile an order against its provider, marking it paid when the invoice is.
+
+        The provider-agnostic complement to the Stripe webhook: Qonto has no "invoice
+        paid" webhook, so payment is confirmed by reading the invoice status.
+
+        Args:
+            db: Active database session.
+            user: Owner of the order (holds the connected provider).
+            order: The order to reconcile.
+
+        Returns:
+            ``True`` when this call transitioned the order to paid.
+        """
+        if order.paid_at or not order.invoice_id or not order.payment_provider:
+            return False
+        provider = await self._resolve_provider(db, user)
+        if provider is None:
+            return False
+        state = await provider.check_paid(order.invoice_id)
+        if state.is_paid:
+            self.mark_paid(db, order)
+            return True
+        return False
+
     # ------------------------------------------------------------------ #
     # Payment-link email (with preview)
     # ------------------------------------------------------------------ #

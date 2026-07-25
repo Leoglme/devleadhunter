@@ -48,6 +48,9 @@ class OrderResponse(BaseModel):
     customer_name: str | None = None
     customer_email: str | None = None
     stripe_payment_url: str | None = None
+    payment_provider: str | None = None
+    payment_url: str | None = None
+    invoice_number: str | None = None
     domain: str | None = None
     notes: str | None = None
     payment_link_sent_at: datetime | None = None
@@ -71,6 +74,13 @@ class OrderPaymentEmailPreview(BaseModel):
 
     subject: str
     body_html: str
+
+
+class OrderPaymentCheckResponse(BaseModel):
+    """Result of reconciling an order against its provider."""
+
+    newly_paid: bool
+    order: OrderResponse
 
 
 class OrderStatsResponse(BaseModel):
