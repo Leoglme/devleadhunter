@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from enums.order_status import OrderStatus
-from services.order_service import OrderService
+from services.order_service import OrderService, _split_postal_address
 from services.payment_providers.base import IssuedInvoice
 
 
@@ -63,6 +63,12 @@ def _order(**overrides: object) -> SimpleNamespace:
         "payment_url": None,
         "stripe_payment_url": None,
         "prospect_id": None,
+        "billing_address": "12 rue de la Paix",
+        "billing_city": "Paris",
+        "billing_zip_code": "75002",
+        "billing_country_code": "FR",
+        "billing_tax_id": None,
+        "billing_vat_number": None,
     }
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -88,6 +94,80 @@ def test_ensure_invoice_fills_columns_from_provider(monkeypatch: pytest.MonkeyPa
     # The line item carries the business name and the order amount.
     assert provider.create_invoice_called_with.amount_cents == 50000
     assert "Plomberie Durand" in provider.create_invoice_called_with.label
+
+
+def test_ensure_invoice_bills_the_reviewed_address(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The address stored on the order reaches the provider (Qonto rejects invoices without one)."""
+    service = OrderService()
+    provider = _FakeProvider()
+
+    async def _fake_resolve(_db: object, _user: object) -> _FakeProvider:
+        return provider
+
+    monkeypatch.setattr(service, "_resolve_provider", _fake_resolve)
+    asyncio.run(service.ensure_invoice(_FakeDB(), SimpleNamespace(id=1), _order()))
+
+    counterpart = provider.ensure_client_called_with
+    assert counterpart.address == "12 rue de la Paix"
+    assert counterpart.zip_code == "75002"
+    assert counterpart.city == "Paris"
+    assert counterpart.country_code == "FR"
+
+
+def test_finalize_sale_refuses_incomplete_billing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An incomplete address stops the sale before an invoice number is burned."""
+    service = OrderService()
+
+    async def _must_not_run(_db: object, _user: object) -> None:
+        raise AssertionError("the provider must not be called with incomplete billing")
+
+    monkeypatch.setattr(service, "_resolve_provider", _must_not_run)
+    monkeypatch.setattr(service, "connected_provider", lambda _db, _user: "qonto")
+    billing = {"name": "Plomberie Durand", "email": "durand@example.fr", "address": "", "zip_code": "", "city": ""}
+
+    with pytest.raises(ValueError, match="Facturation incomplète"):
+        asyncio.run(service.finalize_sale(_FakeDB(), SimpleNamespace(id=1), _order(), billing, 50000))
+
+
+def test_split_postal_address_extracts_zip_and_city() -> None:
+    """A one-line scraped address is split into the parts the providers expect."""
+    assert _split_postal_address("12 rue de la Paix, 75002 Paris", None) == ("12 rue de la Paix", "75002", "Paris")
+    # A street number is not mistaken for a zip code, and the prospect's city wins.
+    assert _split_postal_address("8 avenue des Ternes", "Paris") == ("8 avenue des Ternes", None, "Paris")
+
+
+def test_missing_billing_fields_lists_every_gap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every provider-required field missing is reported at once, not one by one."""
+    service = OrderService()
+    monkeypatch.setattr(service, "connected_provider", lambda _db, _user: "stripe")
+    billing = {"name": "Durand", "email": "durand@example.fr"}
+    assert service.missing_billing_fields(_FakeDB(), SimpleNamespace(id=1), billing) == [
+        "l'adresse",
+        "le code postal",
+        "la ville",
+    ]
+
+
+def test_missing_billing_fields_requires_tax_id_on_qonto(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Qonto rejects an invoice whose client has no TIN, so the SIREN is required."""
+    service = OrderService()
+    monkeypatch.setattr(service, "connected_provider", lambda _db, _user: "qonto")
+    billing = {
+        "name": "Durand",
+        "email": "durand@example.fr",
+        "address": "12 rue de la Paix",
+        "zip_code": "75002",
+        "city": "Paris",
+    }
+    assert service.missing_billing_fields(_FakeDB(), SimpleNamespace(id=1), billing) == ["le SIREN / SIRET"]
+
+
+def test_missing_billing_fields_skips_address_without_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A fully manual sale (cash, transfer) is not blocked on a postal address."""
+    service = OrderService()
+    monkeypatch.setattr(service, "connected_provider", lambda _db, _user: None)
+    billing = {"name": "Durand", "email": "durand@example.fr"}
+    assert service.missing_billing_fields(_FakeDB(), SimpleNamespace(id=1), billing) == []
 
 
 def test_ensure_invoice_reuses_existing(monkeypatch: pytest.MonkeyPatch) -> None:

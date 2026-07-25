@@ -9,6 +9,7 @@ via the Stripe webhook), then fulfil it (deploy to prod + hand over CMS access).
 from __future__ import annotations
 
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -38,6 +39,36 @@ _TERMINAL_STATUSES: tuple[str, ...] = (
     OrderStatus.REFUNDED.value,
     OrderStatus.CANCELLED.value,
 )
+_FRENCH_ZIP_PATTERN: re.Pattern[str] = re.compile(r"\b(\d{5})\b")
+
+
+def _split_postal_address(address: str | None, city: str | None) -> tuple[str | None, str | None, str | None]:
+    """
+    Split a free-form scraped address into (street, zip code, city).
+
+    Scrapers return a single line ("12 rue de la Paix, 75002 Paris"), whereas the
+    payment providers want the parts separately. The last 5-digit group is the
+    zip code — a leading one would be a street number.
+
+    Args:
+        address: The scraped street address, if any.
+        city: The prospect's city, used when the address carries none.
+
+    Returns:
+        Tuple of (street, zip code, city), each None when undeterminable.
+    """
+    if not address:
+        return None, None, (city or None)
+
+    single_line = " ".join(address.split())
+    zip_matches = list(_FRENCH_ZIP_PATTERN.finditer(single_line))
+    if not zip_matches:
+        return single_line or None, None, (city or None)
+
+    zip_match = zip_matches[-1]
+    street = single_line[: zip_match.start()].strip(" ,")
+    trailing_city = single_line[zip_match.end() :].strip(" ,")
+    return (street or None), zip_match.group(1), (city or trailing_city or None)
 
 
 def format_amount(amount_cents: int, currency: str = "eur") -> str:
@@ -198,6 +229,167 @@ class OrderService:
         return order
 
     # ------------------------------------------------------------------ #
+    # Billing details (reviewed before the invoice is issued)
+    # ------------------------------------------------------------------ #
+
+    def billing_details_for_order(self, db: Session, order: Order) -> dict[str, str | None]:
+        """
+        Return the invoice's billing counterpart, pre-filled from the prospect.
+
+        Stored details win once the operator has reviewed them; otherwise the
+        prospect's scraped address is split into street / zip / city so the
+        drawer opens on something editable rather than empty.
+
+        Args:
+            db: Active database session.
+            order: The order being finalized.
+
+        Returns:
+            The billing fields expected by the « Finaliser la vente » drawer.
+        """
+        address, zip_code, city = order.billing_address, order.billing_zip_code, order.billing_city
+        if not any((address, zip_code, city)) and order.prospect_id:
+            prospect = db.query(ProspectDB).filter(ProspectDB.id == order.prospect_id).first()
+            if prospect:
+                address, zip_code, city = _split_postal_address(prospect.address, prospect.city)
+
+        return {
+            "name": order.business_name or order.customer_name,
+            "email": order.customer_email,
+            "address": address,
+            "city": city,
+            "zip_code": zip_code,
+            "country_code": order.billing_country_code or "FR",
+            "tax_id": order.billing_tax_id,
+            "vat_number": order.billing_vat_number,
+        }
+
+    def connected_provider(self, db: Session, user: User) -> str | None:
+        """
+        The encashment provider that will issue the invoice, if any.
+
+        Args:
+            db: Active database session.
+            user: Owner of the order.
+
+        Returns:
+            The provider value, or ``None`` for a fully manual sale.
+        """
+        from services.payment_account_service import payment_account_service
+
+        account = payment_account_service.get_for_user(db, user.id)
+        return account.provider if account is not None and account.is_connected else None
+
+    def missing_billing_fields(self, db: Session, user: User, billing: dict[str, str | None]) -> list[str]:
+        """
+        List the human labels of the billing fields still required.
+
+        Requirements follow the provider that will invoice: both reject a client
+        without a postal address, and Qonto additionally rejects one without a TIN
+        (``tin_number`` — the SIREN/SIRET). A fully manual sale (cash, transfer)
+        just needs someone to bill and an address to email. The email is checked
+        here so a missing one blocks *before* an invoice number is burned.
+
+        Args:
+            db: Active database session.
+            user: Owner of the order.
+            billing: The billing fields to validate.
+
+        Returns:
+            The labels of the missing fields (empty when complete).
+        """
+        from enums.payment_provider import PaymentProvider
+
+        required: dict[str, str] = {"name": "la raison sociale", "email": "l'email du client"}
+        provider = self.connected_provider(db, user)
+        if provider is not None:
+            required |= {"address": "l'adresse", "zip_code": "le code postal", "city": "la ville"}
+        if provider == PaymentProvider.QONTO.value:
+            required["tax_id"] = "le SIREN / SIRET"
+        return [label for key, label in required.items() if not (billing.get(key) or "").strip()]
+
+    def save_billing_details(self, db: Session, order: Order, billing: dict[str, str | None]) -> Order:
+        """
+        Persist the reviewed billing details on the order.
+
+        Args:
+            db: Active database session.
+            order: The order being finalized.
+            billing: The reviewed billing fields.
+
+        Returns:
+            The refreshed order.
+        """
+        order.business_name = billing.get("name") or order.business_name
+        order.customer_email = billing.get("email") or order.customer_email
+        order.billing_address = billing.get("address")
+        order.billing_city = billing.get("city")
+        order.billing_zip_code = billing.get("zip_code")
+        order.billing_country_code = (billing.get("country_code") or "FR").upper()
+        order.billing_tax_id = billing.get("tax_id")
+        order.billing_vat_number = billing.get("vat_number")
+        db.commit()
+        db.refresh(order)
+        return order
+
+    def build_billing_client(self, db: Session, order: Order):
+        """
+        Build the provider-side billing counterpart from the order.
+
+        Args:
+            db: Active database session.
+            order: The order being invoiced.
+
+        Returns:
+            The :class:`BillingClient` handed to the provider.
+        """
+        from services.payment_providers import BillingClient
+
+        details = self.billing_details_for_order(db, order)
+        return BillingClient(
+            name=details["name"] or "Client",
+            email=details["email"],
+            address=details["address"],
+            city=details["city"],
+            zip_code=details["zip_code"],
+            country_code=details["country_code"] or "FR",
+            vat_number=details["vat_number"],
+            tax_id=details["tax_id"],
+        )
+
+    async def finalize_sale(
+        self, db: Session, user: User, order: Order, billing: dict[str, str | None], amount_cents: int
+    ) -> Order:
+        """
+        Save the reviewed billing + amount, then issue the invoice at the provider.
+
+        Args:
+            db: Active database session.
+            user: Owner of the order (holds the connected provider).
+            order: The order being finalized.
+            billing: The reviewed billing fields.
+            amount_cents: The negotiated amount, in cents.
+
+        Returns:
+            The order carrying its issued invoice.
+
+        Raises:
+            ValueError: When a provider-required billing field is missing.
+        """
+        missing = self.missing_billing_fields(db, user, billing)
+        if missing:
+            raise ValueError(f"Facturation incomplète : renseignez {', '.join(missing)}.")
+        if amount_cents <= 0:
+            raise ValueError("Le montant de la vente doit être supérieur à 0.")
+
+        self.save_billing_details(db, order, billing)
+        if order.amount_cents != amount_cents and not order.invoice_id:
+            order.amount_cents = amount_cents
+            db.commit()
+            db.refresh(order)
+        return await self.ensure_invoice(db, user, order)
+
+    # ------------------------------------------------------------------ #
     # Invoice generation (through the user's connected provider)
     # ------------------------------------------------------------------ #
 
@@ -215,7 +407,7 @@ class OrderService:
             return get_payment_provider(account, qonto_access_token=token)
         return get_payment_provider(account)
 
-    async def ensure_invoice(self, db: Session, user: User, order: Order, billing=None) -> Order:
+    async def ensure_invoice(self, db: Session, user: User, order: Order) -> Order:
         """
         Ensure the order carries an issued invoice + payment link, reusing any existing one.
 
@@ -236,12 +428,9 @@ class OrderService:
                 db.refresh(order)
             return order
 
-        from services.payment_providers import BillingClient, InvoiceRequest
+        from services.payment_providers import InvoiceRequest
 
-        counterpart = billing or BillingClient(
-            name=order.business_name or order.customer_name or "Client",
-            email=order.customer_email,
-        )
+        counterpart = self.build_billing_client(db, order)
         client_id = await provider.ensure_client(counterpart)
         product = PRODUCT_LABELS.get(order.product_type, "Site web")
         label = product if not order.business_name else f"{product} — {order.business_name}"

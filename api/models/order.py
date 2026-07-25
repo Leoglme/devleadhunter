@@ -32,6 +32,16 @@ class Order(Base):
     customer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     customer_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # Billing address of the invoiced client, reviewed by the operator before the
+    # invoice is issued: Qonto rejects a client without a valid postal address,
+    # and enrichment only yields a free-form street line.
+    billing_address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    billing_city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    billing_zip_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    billing_country_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    billing_tax_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    billing_vat_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     # Stripe payment artifacts (legacy path — still written by the credits webhook
     # and pre-existing orders; superseded by the provider-agnostic columns below)
     stripe_payment_link_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)

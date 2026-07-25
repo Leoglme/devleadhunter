@@ -34,6 +34,49 @@ class OrderUpdateRequest(BaseModel):
     prospect_id: int | None = None
 
 
+class OrderBillingDetails(BaseModel):
+    """Billing counterpart of an invoice, reviewed before it is issued.
+
+    Pre-filled from the prospect, then edited by the operator: the address is
+    mandatory provider-side, so a partial enrichment must be completable by hand.
+    """
+
+    name: str | None = Field(default=None, max_length=255)
+    email: EmailStr | None = None
+    address: str | None = Field(default=None, max_length=255)
+    city: str | None = Field(default=None, max_length=120)
+    zip_code: str | None = Field(default=None, max_length=20)
+    country_code: str = Field(default="FR", min_length=2, max_length=2)
+    tax_id: str | None = Field(default=None, max_length=64)
+    vat_number: str | None = Field(default=None, max_length=64)
+
+
+class OrderBillingResponse(BaseModel):
+    """Billing details pre-filled for the drawer (scraped values stay as-is).
+
+    ``invoicing_provider`` drives which fields the drawer marks as required —
+    ``None`` means a manual sale, where only a name and an email are needed.
+    """
+
+    name: str | None = None
+    email: str | None = None
+    address: str | None = None
+    city: str | None = None
+    zip_code: str | None = None
+    country_code: str = "FR"
+    tax_id: str | None = None
+    vat_number: str | None = None
+    invoicing_provider: str | None = None
+    missing_fields: list[str] = Field(default_factory=list)
+
+
+class OrderFinalizeRequest(BaseModel):
+    """Payload of the « Finaliser la vente » drawer: reviewed billing + amount."""
+
+    billing: OrderBillingDetails
+    amount_cents: int = Field(ge=0)
+
+
 class OrderResponse(BaseModel):
     """Order returned to the dashboard."""
 
@@ -47,9 +90,16 @@ class OrderResponse(BaseModel):
     business_name: str | None = None
     customer_name: str | None = None
     customer_email: str | None = None
+    billing_address: str | None = None
+    billing_city: str | None = None
+    billing_zip_code: str | None = None
+    billing_country_code: str | None = None
+    billing_tax_id: str | None = None
+    billing_vat_number: str | None = None
     stripe_payment_url: str | None = None
     payment_provider: str | None = None
     payment_url: str | None = None
+    invoice_id: str | None = None
     invoice_number: str | None = None
     domain: str | None = None
     notes: str | None = None
