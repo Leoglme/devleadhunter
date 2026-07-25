@@ -33,6 +33,7 @@ class BillingClient:
     zip_code: str | None = None
     country_code: str = "FR"
     vat_number: str | None = None
+    tax_id: str | None = None  # SIREN/SIRET — Qonto may require it to issue a FR invoice
 
 
 @dataclass
