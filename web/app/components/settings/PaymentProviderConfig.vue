@@ -95,13 +95,18 @@
           v-for="card in availableCards"
           :key="card.provider"
           type="button"
-          class="group flex cursor-pointer flex-col rounded-xl p-4 text-left text-white ring-1 ring-white/10 transition duration-200 focus-visible:ring-2 focus-visible:ring-[var(--app-ink)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--app-bg)] focus-visible:outline-none enabled:hover:shadow-lg enabled:hover:ring-white/35 disabled:cursor-not-allowed disabled:opacity-60 sm:p-5"
-          :class="PROVIDER_BG_CLASS[card.provider]"
-          :style="{ backgroundImage: PROVIDER_GLOW[card.provider] }"
+          class="group relative flex cursor-pointer flex-col overflow-hidden rounded-xl p-4 text-left text-white ring-1 ring-white/10 transition duration-300 ease-out focus-visible:ring-2 focus-visible:ring-[var(--app-ink)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--app-bg)] focus-visible:outline-none enabled:hover:ring-white/35 disabled:cursor-not-allowed disabled:opacity-60 motion-safe:enabled:hover:-translate-y-0.5 motion-safe:enabled:active:translate-y-0 sm:p-5"
+          :class="[PROVIDER_BG_CLASS[card.provider], PROVIDER_HOVER_SHADOW_CLASS[card.provider]]"
           :disabled="isBusy"
           @click="connectProvider(card.provider)"
         >
-          <span class="flex h-8 items-center">
+          <span
+            aria-hidden="true"
+            class="pointer-events-none absolute inset-x-0 top-0 h-[68px] origin-top opacity-85 transition duration-500 ease-out group-hover:opacity-100 motion-safe:group-hover:scale-y-125"
+            :style="{ backgroundImage: PROVIDER_GLOW[card.provider] }"
+          />
+
+          <span class="relative flex h-8 items-center">
             <UiQontoLogo
               v-if="card.provider === 'qonto'"
               :class="PROVIDER_LOGO_CLASS[card.provider]"
@@ -111,7 +116,7 @@
             <UiStripeLogo v-else :class="PROVIDER_LOGO_CLASS[card.provider]" role="img" aria-label="Stripe" />
           </span>
 
-          <span class="flex flex-1 flex-col">
+          <span class="relative flex flex-1 flex-col">
             <span
               class="mt-5 font-[family-name:var(--app-font-mono)] text-[0.66rem] font-medium tracking-[0.12em] text-white uppercase"
             >
@@ -132,7 +137,7 @@
           </span>
 
           <span
-            class="mt-5 flex items-center justify-between gap-2 border-t border-white/20 pt-4 text-sm font-semibold text-white"
+            class="relative mt-5 flex items-center justify-between gap-2 border-t border-white/20 pt-4 text-sm font-semibold text-white transition-colors duration-300 group-hover:border-white/40"
           >
             {{ pendingProvider === card.provider ? 'Redirection…' : `Connecter ${PROVIDER_NAME[card.provider]}` }}
             <UIcon
@@ -216,6 +221,12 @@ const PROVIDER_NAME: Record<PaymentProviderKind, string> = { qonto: 'Qonto', str
 const PROVIDER_BG_CLASS: Record<PaymentProviderKind, string> = {
   qonto: 'bg-[#050505]',
   stripe: 'bg-[#635BFF]',
+}
+
+/** Hover shadow tinted with the brand colour, so the card lifts in its own light. */
+const PROVIDER_HOVER_SHADOW_CLASS: Record<PaymentProviderKind, string> = {
+  qonto: 'enabled:hover:shadow-[0_18px_38px_-16px_rgba(5,5,5,0.75)]',
+  stripe: 'enabled:hover:shadow-[0_18px_38px_-16px_rgba(99,91,255,0.75)]',
 }
 
 /**
