@@ -3,33 +3,39 @@
     <UiLoader v-if="isLoading" />
 
     <section v-else-if="connectedProvider" class="app-card overflow-hidden">
-      <header class="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--app-line)] px-5 py-4">
-        <div class="flex min-w-0 items-center gap-3.5">
-          <span :class="['flex h-11 shrink-0 items-center rounded-xl px-4', providerPlateClass]">
-            <UiQontoLogo v-if="isQonto" class="h-4 w-auto text-white" />
-            <UiStripeLogo v-else class="h-4 w-auto text-white" />
-          </span>
-          <div class="min-w-0">
-            <p class="app-label">Compte connecté</p>
-            <p class="mt-0.5 truncate text-sm font-semibold text-[var(--app-ink)]">
+      <header
+        class="flex flex-wrap items-center justify-between gap-3 px-4 py-4 text-white sm:px-5"
+        :class="providerBgClass"
+        :style="{ backgroundImage: providerGlow }"
+      >
+        <div class="flex min-w-0 items-center gap-4">
+          <UiQontoLogo v-if="isQonto" class="h-5 w-auto shrink-0" role="img" aria-label="Qonto" />
+          <UiStripeLogo v-else class="h-6 w-auto shrink-0" role="img" aria-label="Stripe" />
+          <div class="min-w-0 border-l border-white/20 pl-4">
+            <p
+              class="font-[family-name:var(--app-font-mono)] text-[0.66rem] font-medium tracking-[0.12em] text-white/70 uppercase"
+            >
+              Compte connecté
+            </p>
+            <p class="mt-0.5 truncate text-sm font-semibold text-white">
               {{ status?.display_name || providerName }}
             </p>
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <span v-if="isSandbox" class="app-badge app-badge--progress font-medium">Mode test</span>
-          <span v-if="isStripeIncomplete" class="app-badge app-badge--progress font-medium">
+          <span v-if="isSandbox" :class="BRAND_CHIP_CLASS">Mode test</span>
+          <span v-if="isStripeIncomplete" :class="BRAND_CHIP_CLASS">
             <UIcon name="i-lucide-triangle-alert" class="h-3.5 w-3.5" />
             À terminer
           </span>
-          <span v-else class="app-badge app-badge--success font-medium">
+          <span v-else :class="BRAND_CHIP_CLASS">
             <UIcon name="i-lucide-check" class="h-3.5 w-3.5" />
             Actif
           </span>
         </div>
       </header>
 
-      <div class="space-y-5 px-5 py-5">
+      <div v-if="hasProviderSettings" class="space-y-5 px-4 py-5 sm:px-5">
         <div v-if="isStripeIncomplete" class="space-y-3">
           <UiCallout variant="warning">
             Votre compte Stripe n'accepte pas encore les paiements — la configuration hébergée par Stripe n'est pas
@@ -69,7 +75,7 @@
       </div>
 
       <footer
-        class="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--app-line)] bg-[var(--app-bg)] px-5 py-3.5"
+        class="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--app-line)] bg-[var(--app-bg)] px-4 py-3.5 sm:px-5"
       >
         <p class="text-muted text-xs">Toute la facturation passe par {{ providerName }}.</p>
         <button
@@ -89,32 +95,44 @@
           v-for="card in availableCards"
           :key="card.provider"
           type="button"
-          class="group flex cursor-pointer flex-col rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-5 text-left transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-[var(--app-ink-soft)] focus-visible:outline-none enabled:hover:border-[var(--app-ink-soft)] enabled:hover:shadow-[var(--app-shadow-soft)] disabled:cursor-not-allowed disabled:opacity-60"
+          class="group flex cursor-pointer flex-col rounded-xl p-4 text-left text-white ring-1 ring-white/10 transition duration-200 focus-visible:ring-2 focus-visible:ring-[var(--app-ink)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--app-bg)] focus-visible:outline-none enabled:hover:shadow-lg enabled:hover:ring-white/35 disabled:cursor-not-allowed disabled:opacity-60 sm:p-5"
+          :class="PROVIDER_BG_CLASS[card.provider]"
+          :style="{ backgroundImage: PROVIDER_GLOW[card.provider] }"
           :disabled="isBusy"
           @click="connectProvider(card.provider)"
         >
-          <span :class="['flex h-11 items-center self-start rounded-xl px-4', PROVIDER_PLATE_CLASS[card.provider]]">
-            <UiQontoLogo v-if="card.provider === 'qonto'" class="h-4 w-auto text-white" />
-            <UiStripeLogo v-else class="h-4 w-auto text-white" />
+          <span class="flex h-8 items-center">
+            <UiQontoLogo
+              v-if="card.provider === 'qonto'"
+              :class="PROVIDER_LOGO_CLASS[card.provider]"
+              role="img"
+              aria-label="Qonto"
+            />
+            <UiStripeLogo v-else :class="PROVIDER_LOGO_CLASS[card.provider]" role="img" aria-label="Stripe" />
           </span>
 
           <span class="flex flex-1 flex-col">
-            <span class="app-label mt-4">
+            <span
+              class="mt-5 font-[family-name:var(--app-font-mono)] text-[0.66rem] font-medium tracking-[0.12em] text-white uppercase"
+            >
               {{ card.role }}
-              <span v-if="card.caveat" class="text-[var(--app-accent-ink)]">*</span>
             </span>
-            <span class="text-muted mt-2 text-sm leading-relaxed">{{ card.pitch }}</span>
+            <span class="mt-2 text-sm leading-relaxed text-white/90">{{ card.pitch }}</span>
 
             <span class="mt-4 flex flex-col gap-1.5">
               <span v-for="benefit in card.benefits" :key="benefit" class="flex items-start gap-2">
-                <UIcon name="i-lucide-check" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--app-green)]" />
-                <span class="text-xs leading-relaxed text-[var(--app-ink)]">{{ benefit }}</span>
+                <UIcon
+                  name="i-lucide-check"
+                  class="mt-0.5 h-3.5 w-3.5 shrink-0"
+                  :class="PROVIDER_CHECK_CLASS[card.provider]"
+                />
+                <span class="text-xs leading-relaxed text-white">{{ benefit }}</span>
               </span>
             </span>
           </span>
 
           <span
-            class="mt-5 flex items-center justify-between gap-2 border-t border-[var(--app-line)] pt-4 text-sm font-semibold text-[var(--app-ink)]"
+            class="mt-5 flex items-center justify-between gap-2 border-t border-white/20 pt-4 text-sm font-semibold text-white"
           >
             {{ pendingProvider === card.provider ? 'Redirection…' : `Connecter ${PROVIDER_NAME[card.provider]}` }}
             <UIcon
@@ -194,10 +212,37 @@ const emit: EmitFn<PaymentProviderConfigEmits> = defineEmits<PaymentProviderConf
 
 const PROVIDER_NAME: Record<PaymentProviderKind, string> = { qonto: 'Qonto', stripe: 'Stripe' }
 
-/** Brand plate behind each wordmark — the providers' own logo colours, white mark on top. */
-const PROVIDER_PLATE_CLASS: Record<PaymentProviderKind, string> = {
-  qonto: 'bg-[#050505] ring-1 ring-[var(--app-line)]',
+/** Brand surface of each provider: Qonto's ink black, Stripe's blurple. */
+const PROVIDER_BG_CLASS: Record<PaymentProviderKind, string> = {
+  qonto: 'bg-[#050505]',
   stripe: 'bg-[#635BFF]',
+}
+
+/**
+ * Brand light sweeping the top edge of each card: Qonto's purple, Stripe's
+ * magenta-to-amber gradient. Kept in a flat ellipse above the copy so the text
+ * always sits on the flat brand colour and keeps its contrast ratio.
+ */
+const PROVIDER_GLOW: Record<PaymentProviderKind, string> = {
+  qonto: 'radial-gradient(130% 68px at 88% 0%, rgba(123, 97, 255, 0.65) 0%, rgba(123, 97, 255, 0) 100%)',
+  stripe:
+    'radial-gradient(130% 68px at 88% 0%, rgba(255, 178, 94, 0.75) 0%, rgba(226, 80, 190, 0.6) 42%, rgba(99, 91, 255, 0) 100%)',
+}
+
+/** Wordmark height per brand, balanced optically (Qonto's mark is wider than Stripe's). */
+const PROVIDER_LOGO_CLASS: Record<PaymentProviderKind, string> = {
+  qonto: 'h-5 w-auto',
+  stripe: 'h-6 w-auto',
+}
+
+/** Status pill sitting on a brand surface: dark glass so it holds its contrast over the gradient. */
+const BRAND_CHIP_CLASS: string =
+  'inline-flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-0.5 text-xs font-medium text-white ring-1 ring-white/20'
+
+/** Bullet check colour: Qonto's purple reads on black, white is the only safe accent on blurple. */
+const PROVIDER_CHECK_CLASS: Record<PaymentProviderKind, string> = {
+  qonto: 'text-[#7B61FF]',
+  stripe: 'text-white',
 }
 
 /** What each provider brings, in the order the cards are shown. */
@@ -253,10 +298,14 @@ const isStripeIncomplete: ComputedRef<boolean> = computed(
   (): boolean => isStripe.value && !status.value?.stripe_charges_enabled,
 )
 
+/** Whether the connected card has anything to show between its brand header and its footer. */
+const hasProviderSettings: ComputedRef<boolean> = computed((): boolean => isQonto.value || isStripeIncomplete.value)
+
 const providerName: ComputedRef<string> = computed((): string => PROVIDER_NAME[connectedProvider.value ?? 'qonto'])
-const providerPlateClass: ComputedRef<string> = computed(
-  (): string => PROVIDER_PLATE_CLASS[connectedProvider.value ?? 'qonto'],
+const providerBgClass: ComputedRef<string> = computed(
+  (): string => PROVIDER_BG_CLASS[connectedProvider.value ?? 'qonto'],
 )
+const providerGlow: ComputedRef<string> = computed((): string => PROVIDER_GLOW[connectedProvider.value ?? 'qonto'])
 
 /** Choice cards the user may actually connect (Qonto is gated server-side). */
 const availableCards: ComputedRef<PaymentProviderCard[]> = computed((): PaymentProviderCard[] =>
