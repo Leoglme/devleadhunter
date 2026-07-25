@@ -180,6 +180,14 @@
                 <UIcon name="i-lucide-eye" class="h-4 w-4" />Aperçu de l'email
               </button>
             </div>
+            <button
+              v-if="order.payment_provider && !order.paid_at"
+              class="btn-secondary w-full"
+              :disabled="isBusy"
+              @click="handleCheckPayment"
+            >
+              <UIcon name="i-lucide-refresh-cw" class="h-4 w-4" />Vérifier le paiement
+            </button>
             <div class="flex gap-2">
               <button v-if="!order.paid_at" class="btn-secondary flex-1" :disabled="isBusy" @click="handleMarkPaid">
                 <UIcon name="i-lucide-circle-check" class="h-4 w-4" />Marquer payé
@@ -218,7 +226,7 @@ import type { UseToastReturn } from '~/types/Composables'
 import type { OrderEditForm, UiOrderDrawerEmits, UiOrderDrawerProps } from '~/types/UiOrderDrawer'
 import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
 import { ref, computed, watch } from 'vue'
-import type { Order, OrderPaymentEmailPreview } from '~/services/ordersService'
+import type { Order, OrderPaymentCheckResult, OrderPaymentEmailPreview } from '~/services/ordersService'
 import { OrdersService } from '~/services/ordersService'
 import { useToast } from '~/composables/useToast'
 
@@ -380,6 +388,25 @@ async function handleGenerateLink(): Promise<void> {
 async function handleMarkPaid(): Promise<void> {
   if (!props.order) return
   await runAction(() => OrdersService.markOrderPaid(props.order!.id), 'Vente marquée comme payée')
+}
+
+/** Ask the provider whether the invoice has been paid, and mark it paid if so. */
+async function handleCheckPayment(): Promise<void> {
+  if (!props.order) return
+  isBusy.value = true
+  try {
+    const result: OrderPaymentCheckResult = await OrdersService.checkOrderPayment(props.order.id)
+    emit('updated', result.order)
+    if (result.newly_paid) {
+      toast.success('Paiement confirmé — vente marquée payée')
+    } else {
+      toast.info('Facture encore impayée côté banque')
+    }
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Vérification impossible')
+  } finally {
+    isBusy.value = false
+  }
 }
 
 /** Put the sold site online (Vercel + domain) + hand over CMS access. */

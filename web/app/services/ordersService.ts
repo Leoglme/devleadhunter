@@ -13,6 +13,9 @@ export type Order = {
   customer_name: string | null
   customer_email: string | null
   stripe_payment_url: string | null
+  payment_provider: string | null
+  payment_url: string | null
+  invoice_number: string | null
   domain: string | null
   notes: string | null
   payment_link_sent_at: string | null
@@ -20,6 +23,12 @@ export type Order = {
   delivered_at: string | null
   created_at: string
   updated_at: string | null
+}
+
+/** Result of reconciling an order against its payment provider. */
+export type OrderPaymentCheckResult = {
+  newly_paid: boolean
+  order: Order
 }
 
 /** Paginated list of orders. */
@@ -136,6 +145,15 @@ export class OrdersService {
    */
   static async markOrderPaid(orderId: number): Promise<Order> {
     return ApiClient.post<Order>(`/api/v1/orders/${orderId}/mark-paid`, {})
+  }
+
+  /**
+   * Reconcile an order against its provider, marking it paid if the invoice is.
+   * @param orderId - Target order id.
+   * @returns Whether this call marked it paid, and the refreshed order.
+   */
+  static async checkOrderPayment(orderId: number): Promise<OrderPaymentCheckResult> {
+    return ApiClient.post<OrderPaymentCheckResult>(`/api/v1/orders/${orderId}/check-payment`, {})
   }
 
   /**
