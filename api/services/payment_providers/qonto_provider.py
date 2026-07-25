@@ -126,7 +126,12 @@ class QontoPaymentProvider(PaymentProviderClient):
 
     async def ensure_client(self, client: BillingClient) -> str:
         """
-        Find a Qonto client by email or create one, returning its id.
+        Find a Qonto client by email and refresh it, or create one, returning its id.
+
+        A match is patched with the reviewed details rather than reused as-is:
+        Qonto refuses to invoice a client whose TIN is missing, and the documented
+        fix is to update the client and retry — otherwise a counterpart created
+        before the operator filled the SIREN in would fail the sale forever.
 
         Args:
             client: The billing counterpart details.
@@ -134,12 +139,28 @@ class QontoPaymentProvider(PaymentProviderClient):
         Returns:
             The Qonto client id.
         """
+        body = self._client_body(client)
         if client.email:
             found = await self._request("GET", "/clients", params={"filter[email]": client.email})
             existing = found.get("clients") or []
             if existing:
-                return existing[0]["id"]
+                client_id = existing[0]["id"]
+                await self._request("PATCH", f"/clients/{client_id}", json=body)
+                return client_id
 
+        created = await self._request("POST", "/clients", json=body)
+        return created["client"]["id"]
+
+    def _client_body(self, client: BillingClient) -> dict:
+        """
+        Build the Qonto client payload, dropping the parts we don't have.
+
+        Args:
+            client: The billing counterpart details.
+
+        Returns:
+            The request body shared by client creation and update.
+        """
         body: dict = {"kind": "company", "name": client.name, "currency": "EUR", "locale": "FR"}
         if client.email:
             body["email"] = client.email
@@ -159,9 +180,7 @@ class QontoPaymentProvider(PaymentProviderClient):
             body["tax_identification_number"] = client.tax_id
         if client.vat_number:
             body["vat_number"] = client.vat_number
-
-        created = await self._request("POST", "/clients", json=body)
-        return created["client"]["id"]
+        return body
 
     async def create_invoice(self, client_id: str, request: InvoiceRequest) -> IssuedInvoice:
         """
@@ -203,7 +222,7 @@ class QontoPaymentProvider(PaymentProviderClient):
             ],
         }
         invoice = (await self._request("POST", "/client_invoices", json=body))["client_invoice"]
-        await self._enable_card_payment(invoice["id"])
+        await self._enable_card_payment(invoice, request)
         return IssuedInvoice(
             provider=self.provider.value,
             invoice_id=invoice["id"],
@@ -211,25 +230,32 @@ class QontoPaymentProvider(PaymentProviderClient):
             payment_url=invoice.get("invoice_url"),
         )
 
-    async def _enable_card_payment(self, invoice_id: str) -> None:
+    async def _enable_card_payment(self, invoice: dict, request: InvoiceRequest) -> None:
         """
         Best-effort: attach a card payment link to the invoice's pay page.
 
         The invoice is transfer-payable without this; a card button only appears
-        when the user's payment-links (Mollie) provider is connected, so a failure
-        here is logged and swallowed rather than failing the sale.
+        when the user's payment-links provider is connected, so a failure here is
+        logged and swallowed rather than failing the sale.
 
         Args:
-            invoice_id: The issued invoice's id.
+            invoice: The issued invoice as returned by Qonto.
+            request: The invoice details (amount and debtor of the link).
         """
+        currency = (request.currency or "EUR").upper()
+        body = {
+            "payment_link": {
+                "invoice_id": invoice["id"],
+                "invoice_number": invoice.get("number"),
+                "amount": {"value": f"{request.amount_cents / 100:.2f}", "currency": currency},
+                "debitor_name": request.client.name,
+                "potential_payment_methods": ["credit_card", "apple_pay"],
+            }
+        }
         try:
-            await self._request(
-                "POST",
-                "/payment_links",
-                json={"invoice_id": invoice_id, "potential_payment_methods": ["credit_card", "apple_pay"]},
-            )
+            await self._request("POST", "/payment_links", json=body)
         except Exception:
-            logger.info("Qonto card payment link not created for invoice %s — transfer only.", invoice_id)
+            logger.info("Qonto card payment link not created for invoice %s — transfer only.", invoice["id"])
 
     async def get_invoice_pdf(self, invoice_id: str) -> bytes:
         """

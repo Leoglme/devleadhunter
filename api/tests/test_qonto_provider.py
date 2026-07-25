@@ -107,11 +107,34 @@ def test_authorized_headers_carry_staging_token() -> None:
 
 def test_ensure_client_reuses_existing_by_email() -> None:
     """An existing client (matched by email) is reused, no client is created."""
-    _FakeAsyncClient.routes = {("GET", "/clients"): {"clients": [{"id": "cli_existing"}]}}
+    _FakeAsyncClient.routes = {
+        ("GET", "/clients"): {"clients": [{"id": "cli_existing"}]},
+        ("PATCH", "/clients/cli_existing"): {"client": {"id": "cli_existing"}},
+    }
     client = BillingClient(name="Plomberie Durand", email="durand@example.fr")
     result = asyncio.run(_provider().ensure_client(client))
     assert result == "cli_existing"
     assert not any(call["method"] == "POST" for call in _FakeAsyncClient.calls)
+
+
+def test_ensure_client_patches_existing_with_reviewed_details() -> None:
+    """A match is refreshed: Qonto refuses to invoice a client whose TIN is missing."""
+    _FakeAsyncClient.routes = {
+        ("GET", "/clients"): {"clients": [{"id": "cli_existing"}]},
+        ("PATCH", "/clients/cli_existing"): {"client": {"id": "cli_existing"}},
+    }
+    client = BillingClient(
+        name="Plomberie Durand",
+        email="durand@example.fr",
+        address="1 rue des Lilas",
+        city="Lyon",
+        zip_code="69001",
+        tax_id="123456789",
+    )
+    asyncio.run(_provider().ensure_client(client))
+    body = _last_call("PATCH", "/clients/cli_existing")["json"]
+    assert body["tax_identification_number"] == "123456789"
+    assert body["billing_address"]["city"] == "Lyon"
 
 
 def test_ensure_client_creates_when_absent() -> None:
@@ -169,6 +192,13 @@ def test_create_invoice_builds_finalized_body_and_parses_result() -> None:
     item = body["items"][0]
     assert item["unit_price"] == {"value": "500.00", "currency": "EUR"}
     assert item["vat_exemption_reason"] == "S293B"
+
+    # The card link uses the invoice variant: nested body, amount and debtor included.
+    link = _last_call("POST", "/payment_links")["json"]["payment_link"]
+    assert link["invoice_id"] == "inv_1"
+    assert link["invoice_number"] == "F-2026-006"
+    assert link["amount"] == {"value": "500.00", "currency": "EUR"}
+    assert link["potential_payment_methods"] == ["credit_card", "apple_pay"]
 
 
 def test_create_invoice_requires_iban() -> None:
