@@ -89,24 +89,18 @@
         </tbody>
       </table>
     </div>
-
-    <UiOrderDrawer
-      :open="drawerOpen"
-      :order="drawerOrder"
-      @close="drawerOpen = false"
-      @updated="handleOrderUpdated"
-      @deleted="handleOrderDeleted"
-    />
   </div>
 </template>
 
 <script lang="ts" setup>
 import { formatShortMonthDate } from '~/utils/date'
 import type { UseToastReturn } from '~/types/Composables'
-import { ref, onMounted } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import type { Ref } from 'vue'
+import type { OrderMutationNotice } from '~/types/DrawerStack'
 import type { Order, OrderListResponse, OrderStats } from '~/services/ordersService'
 import { OrdersService } from '~/services/ordersService'
+import { useDrawerStackStore } from '~/stores/drawerStack'
 import { useToast } from '~/composables/useToast'
 
 definePageMeta({
@@ -121,8 +115,7 @@ const stats: Ref<OrderStats | null> = ref(null)
 const isLoading: Ref<boolean> = ref(false)
 const isCreating: Ref<boolean> = ref(false)
 
-const drawerOpen: Ref<boolean> = ref(false)
-const drawerOrder: Ref<Order | null> = ref(null)
+const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Brouillon',
@@ -205,23 +198,24 @@ async function handleCreate(): Promise<void> {
   }
 }
 
-/** Open the drawer for a given order. */
+/**
+ * Open the order drawer on the persistent stack.
+ * @param order - The order to display.
+ */
 function openDrawer(order: Order): void {
-  drawerOrder.value = order
-  drawerOpen.value = true
+  drawerStack.push({ kind: 'order', order })
 }
 
-/** Patch the local list when an order is updated. */
-function handleOrderUpdated(updated: Order): void {
-  const index: number = orders.value.findIndex((o: Order) => o.id === updated.id)
-  if (index !== -1) orders.value.splice(index, 1, updated)
-  drawerOrder.value = updated
-  void refreshStats()
-}
-
-/** Remove a deleted order from the list. */
-function handleOrderDeleted(orderId: number): void {
-  orders.value = orders.value.filter((o: Order) => o.id !== orderId)
+/** Apply the latest order mutation broadcast by a drawer to the list. */
+function applyOrderMutation(): void {
+  const notice: OrderMutationNotice | null = drawerStack.lastOrderMutation
+  if (!notice) return
+  if (notice.type === 'deleted') {
+    orders.value = orders.value.filter((order: Order): boolean => order.id !== notice.orderId)
+  } else {
+    const index: number = orders.value.findIndex((order: Order): boolean => order.id === notice.order.id)
+    if (index !== -1) orders.value.splice(index, 1, notice.order)
+  }
   void refreshStats()
 }
 
@@ -233,6 +227,8 @@ async function refreshStats(): Promise<void> {
     // non-blocking
   }
 }
+
+watch((): number => drawerStack.orderMutationCounter, applyOrderMutation)
 
 onMounted((): void => {
   void loadAll()

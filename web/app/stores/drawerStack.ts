@@ -1,7 +1,8 @@
 import { defineStore, skipHydrate } from 'pinia'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, ref, watch } from 'vue'
-import type { DrawerStackEntry, ProspectMutationNotice } from '~/types/DrawerStack'
+import type { DrawerStackEntry, OrderMutationNotice, ProspectMutationNotice } from '~/types/DrawerStack'
+import type { Order } from '~/services/ordersService'
 import type { Prospect } from '~/types'
 
 /** sessionStorage key persisting the drawer stack across page reloads. */
@@ -23,6 +24,8 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
   }
   const lastProspectMutation: Ref<ProspectMutationNotice | null> = ref(null)
   const prospectMutationCounter: Ref<number> = ref(0)
+  const lastOrderMutation: Ref<OrderMutationNotice | null> = ref(null)
+  const orderMutationCounter: Ref<number> = ref(0)
   const emailLogsRefreshCounter: Ref<number> = ref(0)
   const emailTemplatesRefreshCounter: Ref<number> = ref(0)
 
@@ -90,6 +93,40 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     prospectMutationCounter.value++
   }
 
+  /**
+   * Broadcast an order update: refresh matching stacked entries and notify
+   * pages watching `orderMutationCounter`.
+   * @param order - The freshly updated order.
+   */
+  function notifyOrderUpdated(order: Order): void {
+    stack.value = stack.value.map((entry: DrawerStackEntry): DrawerStackEntry => {
+      if (entry.kind === 'order' && entry.order.id === order.id) {
+        return { ...entry, order }
+      }
+      if (entry.kind === 'finalize-sale' && entry.order.id === order.id) {
+        return { ...entry, order }
+      }
+      return entry
+    })
+    lastOrderMutation.value = { type: 'updated', order }
+    orderMutationCounter.value++
+  }
+
+  /**
+   * Broadcast an order deletion: drop matching stacked entries and notify
+   * pages watching `orderMutationCounter`.
+   * @param orderId - Identifier of the deleted order.
+   */
+  function notifyOrderDeleted(orderId: number): void {
+    stack.value = stack.value.filter((entry: DrawerStackEntry): boolean => {
+      const isSameOrder: boolean =
+        (entry.kind === 'order' || entry.kind === 'finalize-sale') && entry.order.id === orderId
+      return !isSameOrder
+    })
+    lastOrderMutation.value = { type: 'deleted', orderId }
+    orderMutationCounter.value++
+  }
+
   /** Signal that email logs changed (an email was sent from a drawer). */
   function bumpEmailLogsRefresh(): void {
     emailLogsRefreshCounter.value++
@@ -119,6 +156,8 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     stack: skipHydrate(stack),
     lastProspectMutation,
     prospectMutationCounter,
+    lastOrderMutation,
+    orderMutationCounter,
     emailLogsRefreshCounter,
     emailTemplatesRefreshCounter,
     topEntry,
@@ -128,6 +167,8 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     closeAll,
     notifyProspectUpdated,
     notifyProspectDeleted,
+    notifyOrderUpdated,
+    notifyOrderDeleted,
     bumpEmailLogsRefresh,
     bumpEmailTemplatesRefresh,
   }

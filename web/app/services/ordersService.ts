@@ -12,9 +12,16 @@ export type Order = {
   business_name: string | null
   customer_name: string | null
   customer_email: string | null
+  billing_address: string | null
+  billing_city: string | null
+  billing_zip_code: string | null
+  billing_country_code: string | null
+  billing_tax_id: string | null
+  billing_vat_number: string | null
   stripe_payment_url: string | null
   payment_provider: string | null
   payment_url: string | null
+  invoice_id: string | null
   invoice_number: string | null
   domain: string | null
   notes: string | null
@@ -23,6 +30,24 @@ export type Order = {
   delivered_at: string | null
   created_at: string
   updated_at: string | null
+}
+
+/** Billing counterpart of the invoice, reviewed before it is issued. */
+export type OrderBillingDetails = {
+  name: string | null
+  email: string | null
+  address: string | null
+  city: string | null
+  zip_code: string | null
+  country_code: string
+  tax_id: string | null
+  vat_number: string | null
+}
+
+/** Billing details pre-filled by the API, with the provider and fields still required. */
+export type OrderBillingPrefill = OrderBillingDetails & {
+  invoicing_provider: string | null
+  missing_fields: string[]
 }
 
 /** Result of reconciling an order against its payment provider. */
@@ -118,6 +143,26 @@ export class OrdersService {
    */
   static async createOrderPaymentLink(orderId: number): Promise<Order> {
     return ApiClient.post<Order>(`/api/v1/orders/${orderId}/payment-link`, {})
+  }
+
+  /**
+   * Fetch the invoice's billing details, pre-filled from the prospect when unset.
+   * @param orderId - Target order id.
+   * @returns The billing details and the fields still required.
+   */
+  static async getOrderBilling(orderId: number): Promise<OrderBillingPrefill> {
+    return ApiClient.get<OrderBillingPrefill>(`/api/v1/orders/${orderId}/billing`)
+  }
+
+  /**
+   * Issue the invoice at the user's provider from the reviewed billing details.
+   * @param orderId - Target order id.
+   * @param billing - The reviewed billing counterpart.
+   * @param amountCents - The negotiated amount, in cents.
+   * @returns The order carrying its issued invoice.
+   */
+  static async finalizeOrder(orderId: number, billing: OrderBillingDetails, amountCents: number): Promise<Order> {
+    return ApiClient.post<Order>(`/api/v1/orders/${orderId}/finalize`, { billing, amount_cents: amountCents })
   }
 
   /**

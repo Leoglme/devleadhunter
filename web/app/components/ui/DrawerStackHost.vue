@@ -110,6 +110,26 @@
       @close="drawerStack.closeAll()"
       @back="drawerStack.back()"
     />
+
+    <UiOrderDrawer
+      :open="orderEntry !== null"
+      :order="orderEntry?.order ?? null"
+      :show-back="hasPrevious"
+      @close="drawerStack.closeAll()"
+      @back="drawerStack.back()"
+      @updated="drawerStack.notifyOrderUpdated"
+      @deleted="handleOrderDeleted"
+      @finalize="handleFinalizeSale"
+    />
+
+    <UiFinalizeSaleDrawer
+      :open="finalizeSaleEntry !== null"
+      :order="finalizeSaleEntry?.order ?? null"
+      :show-back="hasPrevious"
+      @close="drawerStack.closeAll()"
+      @back="drawerStack.back()"
+      @updated="drawerStack.notifyOrderUpdated"
+    />
   </div>
 </template>
 
@@ -124,6 +144,8 @@ import type {
   EmailLogDrawerEntry,
   EmailSignaturesDrawerEntry,
   EmailTemplateDrawerEntry,
+  FinalizeSaleDrawerEntry,
+  OrderDrawerEntry,
   OrganizationDrawerEntry,
   ProfileDrawerEntry,
   ProspectDrawerEntry,
@@ -132,6 +154,7 @@ import type {
   SendPolicyDrawerEntry,
 } from '~/types/DrawerStack'
 import type { EmailTemplate, Prospect } from '~/types'
+import type { Order } from '~/services/ordersService'
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import { ProspectsService } from '~/services/prospectsService'
@@ -212,6 +235,31 @@ const coverageFiltersEntry: ComputedRef<CoverageFiltersDrawerEntry | null> = com
   },
 )
 
+/** Top entry narrowed to the order drawer. */
+const orderEntry: ComputedRef<OrderDrawerEntry | null> = computed((): OrderDrawerEntry | null => {
+  return drawerStack.topEntry?.kind === 'order' ? drawerStack.topEntry : null
+})
+
+/** Top entry narrowed to the sale finalization drawer. */
+const finalizeSaleEntry: ComputedRef<FinalizeSaleDrawerEntry | null> = computed((): FinalizeSaleDrawerEntry | null => {
+  return drawerStack.topEntry?.kind === 'finalize-sale' ? drawerStack.topEntry : null
+})
+
+/** Stack the sale finalization on top of the order drawer. */
+function handleFinalizeSale(): void {
+  const entry: OrderDrawerEntry | null = orderEntry.value
+  if (entry) drawerStack.push({ kind: 'finalize-sale', order: entry.order })
+}
+
+/**
+ * Order deleted from its drawer — drop it from the stack and close.
+ * @param orderId - Identifier of the deleted order.
+ */
+function handleOrderDeleted(orderId: number): void {
+  drawerStack.notifyOrderDeleted(orderId)
+  drawerStack.closeAll()
+}
+
 /** Coverage-map zone prospects entry when it is the top of the stack. */
 const coverageProspectsEntry: ComputedRef<CoverageProspectsDrawerEntry | null> = computed(
   (): CoverageProspectsDrawerEntry | null => {
@@ -267,14 +315,14 @@ function handleSendEmail(prospect: Prospect): void {
  */
 async function handleMarkAsSold(prospect: Prospect): Promise<void> {
   try {
-    await OrdersService.createOrder({
+    const order: Order = await OrdersService.createOrder({
       product_type: 'website',
       prospect_id: prospect.id,
       business_name: prospect.name,
       customer_email: prospect.email ?? null,
     })
     toast.success(`Vente créée pour « ${prospect.name} »`)
-    drawerStack.closeAll()
+    drawerStack.push({ kind: 'order', order })
     navigateTo('/dashboard/orders')
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : 'Erreur lors de la création de la vente')

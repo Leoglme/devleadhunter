@@ -3,6 +3,7 @@ import type { Order } from '~/services/ordersService'
 export type UiOrderDrawerProps = {
   open: boolean
   order: Order | null
+  showBack: boolean
 }
 
 export type OrderEditForm = {
@@ -16,6 +17,8 @@ export type OrderEditForm = {
 
 export type UiOrderDrawerEmits = {
   close: []
+  back: []
+  finalize: []
   updated: [order: Order]
   deleted: [orderId: number]
 }

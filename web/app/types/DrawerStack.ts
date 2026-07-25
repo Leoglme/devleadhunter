@@ -1,4 +1,5 @@
 import type { EmailLog, EmailTemplate, Prospect } from '~/types'
+import type { Order } from '~/services/ordersService'
 import type { SearchProspectsPrefill } from '~/types/SearchProspectsDrawer'
 
 /**
@@ -73,6 +74,17 @@ export type SendPolicyDrawerEntry = {
   kind: 'send-policy'
 }
 
+export type OrderDrawerEntry = {
+  kind: 'order'
+  order: Order
+}
+
+/** Sale finalization: reviewed billing details → invoice → sale email. */
+export type FinalizeSaleDrawerEntry = {
+  kind: 'finalize-sale'
+  order: Order
+}
+
 /** A zone of the coverage map (one city, or a region's covered cities). */
 export type CoverageZone = {
   kind: 'city' | 'region'
@@ -106,6 +118,11 @@ export type DrawerStackEntry =
   | SendPolicyDrawerEntry
   | CoverageFiltersDrawerEntry
   | CoverageProspectsDrawerEntry
+  | OrderDrawerEntry
+  | FinalizeSaleDrawerEntry
 
 /** Cross-page notice describing the latest prospect mutation done from a drawer. */
 export type ProspectMutationNotice = { type: 'updated'; prospect: Prospect } | { type: 'deleted'; prospectId: number }
+
+/** Cross-page notice describing the latest order mutation done from a drawer. */
+export type OrderMutationNotice = { type: 'updated'; order: Order } | { type: 'deleted'; orderId: number }

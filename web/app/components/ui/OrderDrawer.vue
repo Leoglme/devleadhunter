@@ -1,15 +1,19 @@
 <template>
   <Teleport to="body">
-    <Transition name="drawer-backdrop">
-      <div v-if="open" class="fixed inset-0 z-40 bg-[var(--app-overlay)] backdrop-blur-sm" @click="$emit('close')" />
-    </Transition>
-
     <Transition name="drawer-panel">
       <div
         v-if="open && order"
         class="fixed top-0 right-0 z-50 flex h-dvh w-full max-w-[480px] flex-col border-l border-[var(--app-line)] bg-[var(--app-surface)] shadow-2xl"
       >
         <div class="flex items-start gap-3 border-b border-[var(--app-line)] px-5 py-4">
+          <button
+            v-if="showBack"
+            class="flex h-10 w-7 shrink-0 items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
+            title="Revenir au volet précédent"
+            @click="$emit('back')"
+          >
+            <UIcon name="i-lucide-chevron-left" class="h-4 w-4" />
+          </button>
           <div
             class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)]"
           >
@@ -67,8 +71,11 @@
 
             <div class="space-y-2 px-5 py-4">
               <p class="text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">Paiement</p>
-              <div v-if="order.stripe_payment_url" class="flex items-center gap-2">
-                <input :value="order.stripe_payment_url" readonly class="input-field flex-1 truncate text-xs" />
+              <p v-if="order.invoice_number" class="text-sm font-medium text-[var(--app-ink)]">
+                Facture {{ order.invoice_number }}
+              </p>
+              <div v-if="paymentUrl" class="flex items-center gap-2">
+                <input :value="paymentUrl" readonly class="input-field flex-1 truncate text-xs" />
                 <button
                   class="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-[var(--app-line)] text-[var(--app-ink-soft)] hover:text-[var(--app-accent-ink)]"
                   title="Copier"
@@ -77,31 +84,13 @@
                   <UIcon name="i-lucide-copy" class="h-4 w-4" />
                 </button>
               </div>
-              <p v-else class="text-sm text-[var(--app-faint)]">Aucun lien de paiement généré.</p>
+              <p v-else class="text-sm text-[var(--app-faint)]">Aucune facture émise.</p>
               <p v-if="order.payment_link_sent_at" class="text-[10px] text-[var(--app-ink-soft)]">
                 Email envoyé le {{ formatShortMonthDateTime(order.payment_link_sent_at) }}
               </p>
               <p v-if="order.paid_at" class="text-[10px] text-[var(--app-green)]">
                 Payé le {{ formatShortMonthDateTime(order.paid_at) }}
               </p>
-            </div>
-
-            <div v-if="emailPreview" class="border-t border-[var(--app-surface-2)] px-5 py-4">
-              <p class="mb-2 text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">
-                Aperçu de l'email
-              </p>
-              <p class="mb-2 text-xs text-[var(--app-ink-soft)]">
-                <span class="font-medium text-[var(--app-ink)]">Objet :</span> {{ emailPreview.subject }}
-              </p>
-              <iframe
-                :srcdoc="emailPreview.body_html"
-                class="h-64 w-full rounded border border-[var(--app-line)] bg-white"
-                sandbox=""
-              ></iframe>
-              <button class="btn-primary mt-3 w-full" :disabled="isSending" @click="handleSendEmail">
-                <UIcon v-if="isSending" name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-                Envoyer l'email au client
-              </button>
             </div>
 
             <div v-if="order.notes" class="border-t border-[var(--app-surface-2)] px-5 py-4">
@@ -155,7 +144,9 @@
         <div class="border-t border-[var(--app-line)] px-5 py-4">
           <div v-if="showDeleteConfirm" class="rounded-lg border border-[var(--app-red)]/40 bg-[var(--app-red)]/10 p-4">
             <p class="mb-0.5 text-sm font-medium text-[var(--app-ink)]">Supprimer cette vente ?</p>
-            <p class="mb-3 text-xs text-[var(--app-ink-soft)]">Le lien de paiement Stripe sera désactivé.</p>
+            <p class="mb-3 text-xs text-[var(--app-ink-soft)]">
+              Une facture déjà émise reste chez votre banque : à annuler de son côté.
+            </p>
             <div class="flex gap-2">
               <button class="btn-secondary flex-1 text-xs" :disabled="isBusy" @click="showDeleteConfirm = false">
                 Annuler
@@ -165,21 +156,10 @@
           </div>
 
           <div v-else-if="!editMode" class="space-y-2">
-            <div class="flex gap-2">
-              <button
-                v-if="!order.stripe_payment_url"
-                class="btn-primary flex-1"
-                :disabled="isBusy"
-                @click="handleGenerateLink"
-              >
-                <UIcon v-if="isBusy" name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-                <UIcon v-else name="i-lucide-link" class="h-4 w-4" />
-                Générer le lien de paiement
-              </button>
-              <button v-else class="btn-secondary flex-1" :disabled="isBusy" @click="loadEmailPreview">
-                <UIcon name="i-lucide-eye" class="h-4 w-4" />Aperçu de l'email
-              </button>
-            </div>
+            <button v-if="!order.paid_at" class="btn-primary w-full" :disabled="isBusy" @click="$emit('finalize')">
+              <UIcon name="i-lucide-file-text" class="h-4 w-4" />
+              {{ order.invoice_id ? "Reprendre l'envoi au client" : 'Finaliser la vente' }}
+            </button>
             <button
               v-if="order.payment_provider && !order.paid_at"
               class="btn-secondary w-full"
@@ -226,7 +206,7 @@ import type { UseToastReturn } from '~/types/Composables'
 import type { OrderEditForm, UiOrderDrawerEmits, UiOrderDrawerProps } from '~/types/UiOrderDrawer'
 import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
 import { ref, computed, watch } from 'vue'
-import type { Order, OrderPaymentCheckResult, OrderPaymentEmailPreview } from '~/services/ordersService'
+import type { Order, OrderPaymentCheckResult } from '~/services/ordersService'
 import { OrdersService } from '~/services/ordersService'
 import { useToast } from '~/composables/useToast'
 
@@ -240,6 +220,10 @@ const props: UiOrderDrawerProps = defineProps({
     type: Object as PropType<Order | null>,
     default: null,
   },
+  showBack: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit: EmitFn<UiOrderDrawerEmits> = defineEmits<UiOrderDrawerEmits>()
@@ -248,9 +232,7 @@ const toast: UseToastReturn = useToast()
 
 const editMode: Ref<boolean> = ref(false)
 const isBusy: Ref<boolean> = ref(false)
-const isSending: Ref<boolean> = ref(false)
 const showDeleteConfirm: Ref<boolean> = ref(false)
-const emailPreview: Ref<OrderPaymentEmailPreview | null> = ref(null)
 
 const editForm: Ref<OrderEditForm> = ref({
   amount_euros: 0,
@@ -286,6 +268,11 @@ const productLabel: ComputedRef<string> = computed(
   (): string => PRODUCT_LABELS[props.order?.product_type ?? ''] ?? props.order?.product_type ?? '',
 )
 
+/** Payment page of the issued invoice, falling back to the legacy platform link. */
+const paymentUrl: ComputedRef<string> = computed(
+  (): string => props.order?.payment_url || props.order?.stripe_payment_url || '',
+)
+
 const amountLabel: ComputedRef<string> = computed((): string => {
   if (!props.order) return ''
   const euros: number = props.order.amount_cents / 100
@@ -311,22 +298,18 @@ const statusBadgeClass: ComputedRef<string> = computed((): string => {
 watch(
   () => [props.open, props.order?.id],
   ([open]: (boolean | number | undefined)[]): void => {
-    if (!open) {
-      setTimeout((): void => {
-        editMode.value = false
-        showDeleteConfirm.value = false
-        emailPreview.value = null
-      }, 250)
-    } else {
-      emailPreview.value = null
-    }
+    if (open) return
+    setTimeout((): void => {
+      editMode.value = false
+      showDeleteConfirm.value = false
+    }, 250)
   },
 )
 
-/** Copy the Stripe payment URL to the clipboard. */
+/** Copy the invoice payment page to the clipboard. */
 async function copyLink(): Promise<void> {
-  if (!props.order?.stripe_payment_url) return
-  await navigator.clipboard.writeText(props.order.stripe_payment_url)
+  if (!paymentUrl.value) return
+  await navigator.clipboard.writeText(paymentUrl.value)
   toast.success('Lien copié')
 }
 
@@ -378,12 +361,6 @@ async function handleSave(): Promise<void> {
   editMode.value = false
 }
 
-/** Generate the Stripe payment link. */
-async function handleGenerateLink(): Promise<void> {
-  if (!props.order) return
-  await runAction(() => OrdersService.createOrderPaymentLink(props.order!.id), 'Lien de paiement généré')
-}
-
 /** Mark the order as paid manually. */
 async function handleMarkPaid(): Promise<void> {
   if (!props.order) return
@@ -413,35 +390,6 @@ async function handleCheckPayment(): Promise<void> {
 async function handleDeploy(): Promise<void> {
   if (!props.order) return
   await runAction(() => OrdersService.deployOrder(props.order!.id), 'Mise en ligne lancée')
-}
-
-/** Load the payment-link email preview. */
-async function loadEmailPreview(): Promise<void> {
-  if (!props.order) return
-  isBusy.value = true
-  try {
-    emailPreview.value = await OrdersService.previewOrderPaymentEmail(props.order.id)
-  } catch (err: unknown) {
-    toast.error(err instanceof Error ? err.message : "Impossible de charger l'aperçu")
-  } finally {
-    isBusy.value = false
-  }
-}
-
-/** Send the payment-link email to the client. */
-async function handleSendEmail(): Promise<void> {
-  if (!props.order) return
-  isSending.value = true
-  try {
-    const updated: Order = await OrdersService.sendOrderPaymentEmail(props.order.id)
-    emit('updated', updated)
-    emailPreview.value = null
-    toast.success('Email envoyé au client')
-  } catch (err: unknown) {
-    toast.error(err instanceof Error ? err.message : "Échec de l'envoi")
-  } finally {
-    isSending.value = false
-  }
 }
 
 /** Delete (cancel) the order. */
