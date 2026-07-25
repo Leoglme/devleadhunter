@@ -11,6 +11,7 @@ refresh invalidates the old refresh token and returns a new one, so
 """
 
 import logging
+import secrets
 from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
@@ -142,13 +143,18 @@ class PaymentAccountService:
         """
         Build the Qonto authorization URL for a user.
 
+        A random suffix is appended to the ``user_<id>`` state: Qonto rejects a
+        too-short state, and it makes the value unguessable. The callback reads
+        the id back from the second segment.
+
         Args:
             user_id: Owner initiating the connection (echoed back as state).
 
         Returns:
             The authorization URL to redirect the browser to.
         """
-        return QontoOAuthService().get_authorization_url(state=f"user_{user_id}")
+        state = f"user_{user_id}_{secrets.token_urlsafe(24)}"
+        return QontoOAuthService().get_authorization_url(state=state)
 
     async def complete_qonto_oauth(self, db: Session, user_id: int, code: str) -> PaymentAccount:
         """

@@ -108,8 +108,9 @@ async def qonto_callback(
         logger.warning("[Qonto OAuth] Callback with unexpected state=%r", state)
         return _connection_result_page(provider="Qonto", ok=False)
     try:
-        user_id = int(state.removeprefix("user_"))
-    except ValueError:
+        # state is "user_<id>_<random>" — the id is the second segment.
+        user_id = int(state.split("_")[1])
+    except (IndexError, ValueError):
         return _connection_result_page(provider="Qonto", ok=False)
 
     try:
