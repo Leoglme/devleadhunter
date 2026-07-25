@@ -8,7 +8,7 @@ only manage the connection.
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -27,21 +27,41 @@ from services.payment_account_service import payment_account_service
 router = APIRouter(prefix="/payment-accounts", tags=["payment-accounts"])
 logger = logging.getLogger(__name__)
 
-_BILLING_SETTINGS_PATH = "/dashboard/settings/billing"
 
-
-def _billing_redirect(outcome_param: str) -> RedirectResponse:
+def _connection_result_page(*, provider: str, ok: bool) -> HTMLResponse:
     """
-    Redirect the browser back to the billing settings page with an outcome flag.
+    Render a self-contained page shown at the end of a provider connection.
+
+    The OAuth / onboarding flow runs in the system browser (especially in the
+    desktop app), so instead of redirecting to a front-end route that the
+    browser may not serve, we render a standalone "you can close this tab" page.
+    The app itself detects the connection by polling its status.
 
     Args:
-        outcome_param: Query string such as ``qonto=connected`` or ``qonto=error``.
+        provider: Human provider name (``Qonto`` / ``Stripe``).
+        ok: Whether the connection succeeded.
 
     Returns:
-        A 302 redirect to the billing settings page.
+        A minimal themed HTML page.
     """
-    base = (getattr(settings, "frontend_url", "") or "http://localhost:3000").rstrip("/")
-    return RedirectResponse(url=f"{base}{_BILLING_SETTINGS_PATH}?{outcome_param}")
+    icon = "✅" if ok else "⚠️"
+    title = f"{provider} connecté" if ok else f"Connexion {provider} échouée"
+    message = (
+        "Vous pouvez fermer cet onglet et revenir à DevLeadHunter."
+        if ok
+        else "Fermez cet onglet et réessayez depuis DevLeadHunter."
+    )
+    html = f"""<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/><title>{title}</title></head>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+background:#0d0d0f;color:#fff;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+<div style="text-align:center;max-width:420px;padding:2rem;">
+<div style="font-size:3rem;line-height:1;">{icon}</div>
+<h1 style="margin:1rem 0 .5rem;font-size:1.4rem;">{title}</h1>
+<p style="margin:0;color:#a1a1aa;font-size:.95rem;line-height:1.5;">{message}</p>
+</div></body></html>"""
+    return HTMLResponse(content=html, status_code=200)
 
 
 @router.get("/status", response_model=PaymentAccountStatus)
@@ -73,30 +93,31 @@ async def qonto_callback(
     state: str = Query(default=""),
     error: str = Query(default=""),
     db: Session = Depends(get_db),
-) -> RedirectResponse:
+) -> HTMLResponse:
     """
     Qonto OAuth redirect target: exchange the code and store the tokens.
 
-    Hit by the browser without a JWT, so the owner is carried in ``state``
+    Hit by the system browser without a JWT, so the owner is carried in ``state``
     (``user_<id>``, set at authorize time) — same pattern as the Gmail callback.
+    Renders a standalone result page; the app polls its status to reflect it.
     """
     if error or not code:
         logger.warning("[Qonto OAuth] Callback without code (error=%r)", error)
-        return _billing_redirect("qonto=error")
+        return _connection_result_page(provider="Qonto", ok=False)
     if not state.startswith("user_"):
         logger.warning("[Qonto OAuth] Callback with unexpected state=%r", state)
-        return _billing_redirect("qonto=error")
+        return _connection_result_page(provider="Qonto", ok=False)
     try:
         user_id = int(state.removeprefix("user_"))
     except ValueError:
-        return _billing_redirect("qonto=error")
+        return _connection_result_page(provider="Qonto", ok=False)
 
     try:
         await payment_account_service.complete_qonto_oauth(db, user_id, code)
-        return _billing_redirect("qonto=connected")
+        return _connection_result_page(provider="Qonto", ok=True)
     except Exception as exc:
         logger.error("[Qonto OAuth] Callback failed for user %s: %s", user_id, exc)
-        return _billing_redirect("qonto=error")
+        return _connection_result_page(provider="Qonto", ok=False)
 
 
 @router.post("/qonto/api-key", response_model=PaymentAccountStatus)
@@ -136,23 +157,31 @@ async def stripe_onboard(
     """
     Create/resume the user's Stripe Connect account and return its onboarding URL.
 
-    Stripe sends the browser back to the billing settings page (no JWT on that
-    redirect); the page then calls ``/stripe/refresh`` to pull the final status.
+    Stripe sends the browser to a standalone result page (no JWT, and the desktop
+    app doesn't serve a front-end route); the app polls ``/stripe/refresh`` to pull
+    the final status.
     """
-    base = (getattr(settings, "frontend_url", "") or "http://localhost:3000").rstrip("/")
+    api_base = (getattr(settings, "api_base_url", "") or "http://localhost:8000").rstrip("/")
+    return_url = f"{api_base}/api/v1/payment-accounts/stripe/return"
     if not settings.stripe_secret_key:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Stripe n'est pas configuré.")
     try:
         url = payment_account_service.start_stripe_onboarding(
             db,
             current_user.id,
-            return_url=f"{base}{_BILLING_SETTINGS_PATH}?stripe=return",
-            refresh_url=f"{base}{_BILLING_SETTINGS_PATH}?stripe=refresh",
+            return_url=return_url,
+            refresh_url=return_url,
         )
     except Exception as exc:
         logger.error("[Stripe Connect] Onboarding start failed for user %s: %s", current_user.id, exc)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return ConnectUrlResponse(url=url)
+
+
+@router.get("/stripe/return")
+async def stripe_return() -> HTMLResponse:
+    """Standalone page shown when Stripe onboarding returns; the app polls the status."""
+    return _connection_result_page(provider="Stripe", ok=True)
 
 
 @router.post("/stripe/refresh", response_model=PaymentAccountStatus)

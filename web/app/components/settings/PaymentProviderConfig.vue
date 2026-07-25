@@ -90,6 +90,23 @@
     </section>
 
     <section v-else class="space-y-4">
+      <div v-if="awaitingProvider" class="space-y-3">
+        <UiCallout variant="info">
+          Terminez l'autorisation {{ PROVIDER_NAME[awaitingProvider] }} dans l'onglet qui vient de s'ouvrir, puis
+          revenez ici — la connexion s'affichera automatiquement.
+        </UiCallout>
+        <div class="flex flex-wrap items-center gap-3">
+          <button type="button" class="app-btn-secondary" @click="checkConnectionNow">J'ai terminé</button>
+          <button
+            type="button"
+            class="text-muted cursor-pointer text-xs font-medium underline underline-offset-4 hover:text-[var(--app-ink)]"
+            @click="stopAwaitingConnection"
+          >
+            Annuler
+          </button>
+        </div>
+      </div>
+
       <div class="grid gap-3" :class="availableCards.length > 1 ? 'sm:grid-cols-2' : ''">
         <button
           v-for="card in availableCards"
@@ -203,12 +220,13 @@
 </template>
 
 <script lang="ts" setup>
-import type { UseToastReturn } from '~/types/Composables'
+import type { UseOpenExternalUrlReturn, UseToastReturn } from '~/types/Composables'
 import type { PaymentProviderCard, PaymentProviderConfigEmits } from '~/types/PaymentProviderConfig'
 import type { ComputedRef, EmitFn, Ref } from 'vue'
 import type { PaymentAccountStatus, PaymentProviderKind } from '~/services/paymentAccountService'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { PaymentAccountService } from '~/services/paymentAccountService'
+import { useOpenExternalUrl } from '~/composables/useOpenExternalUrl'
 import { useToast } from '~/composables/useToast'
 
 /** Connect, tune and disconnect the user's encashment provider (Qonto or Stripe). */
@@ -284,14 +302,17 @@ const PROVIDER_CARDS: PaymentProviderCard[] = [
 ]
 
 const toast: UseToastReturn = useToast()
-const route: ReturnType<typeof useRoute> = useRoute()
-const router: ReturnType<typeof useRouter> = useRouter()
+const { openExternalUrl }: UseOpenExternalUrlReturn = useOpenExternalUrl()
 
 const status: Ref<PaymentAccountStatus | null> = ref(null)
 const isLoading: Ref<boolean> = ref(true)
 const isBusy: Ref<boolean> = ref(false)
-/** Provider whose connection redirect is being prepared, for the per-card spinner. */
+/** Provider whose connection flow is being prepared, for the per-card spinner. */
 const pendingProvider: Ref<PaymentProviderKind | null> = ref(null)
+/** Provider whose external connection flow is running, while we poll for its completion. */
+const awaitingProvider: Ref<PaymentProviderKind | null> = ref(null)
+/** Handle of the status poller opened while the browser flow runs. */
+const connectionPollHandle: Ref<ReturnType<typeof setTimeout> | null> = ref(null)
 const ibanInput: Ref<string> = ref('')
 const apiLoginInput: Ref<string> = ref('')
 const apiSecretInput: Ref<string> = ref('')
@@ -348,42 +369,99 @@ async function loadStatus(): Promise<void> {
   }
 }
 
-/**
- * Handle the OAuth / Stripe redirect flags on the URL, then clean them off.
- */
-async function consumeRedirectFlags(): Promise<void> {
-  const qonto: string | undefined = typeof route.query.qonto === 'string' ? route.query.qonto : undefined
-  const stripe: string | undefined = typeof route.query.stripe === 'string' ? route.query.stripe : undefined
-  if (!qonto && !stripe) return
+/** How long between two connection checks while the browser flow runs, in ms. */
+const CONNECTION_POLL_INTERVAL_MS: number = 3000
+/** Give up polling after this many checks (~2 minutes), so it never spins forever. */
+const MAX_CONNECTION_POLLS: number = 40
 
-  if (qonto === 'connected') toast.success('Qonto connecté')
-  if (qonto === 'error') toast.error('La connexion Qonto a échoué')
-  if (stripe === 'return' || stripe === 'refresh') {
-    try {
-      status.value = await PaymentAccountService.refreshStripe()
-      emit('connected-change', status.value.is_connected)
-      toast.success('Compte Stripe mis à jour')
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : 'Mise à jour Stripe impossible')
-    }
+/**
+ * Refresh the status once during an awaited connection.
+ *
+ * Stripe needs its account re-read (charges become enabled only once onboarding is
+ * done); Qonto's callback already stored the connection, so a plain status read is enough.
+ * @param provider - Provider being connected.
+ * @returns Whether the provider is now connected and usable.
+ */
+async function refreshConnectionOnce(provider: PaymentProviderKind): Promise<boolean> {
+  try {
+    const next: PaymentAccountStatus =
+      provider === 'stripe' ? await PaymentAccountService.refreshStripe() : await PaymentAccountService.getStatus()
+    status.value = next
+    ibanInput.value = next.qonto_iban ?? ''
+    emit('connected-change', next.is_connected)
+    return next.is_connected
+  } catch {
+    return false
   }
-  await router.replace({ query: {} })
+}
+
+/** Stop waiting for an external connection flow and clear its poller. */
+function stopAwaitingConnection(): void {
+  awaitingProvider.value = null
+  if (connectionPollHandle.value !== null) {
+    clearTimeout(connectionPollHandle.value)
+    connectionPollHandle.value = null
+  }
 }
 
 /**
- * Redirect to the provider's own connection flow (Qonto OAuth or Stripe hosted onboarding).
+ * Poll the status until the provider connects (or we give up), while the OAuth /
+ * onboarding flow runs in the system browser.
+ * @param provider - Provider being connected.
+ */
+function startAwaitingConnection(provider: PaymentProviderKind): void {
+  stopAwaitingConnection()
+  awaitingProvider.value = provider
+  let attempts: number = 0
+  const tick: () => Promise<void> = async (): Promise<void> => {
+    if (awaitingProvider.value !== provider) return
+    attempts += 1
+    if (await refreshConnectionOnce(provider)) {
+      stopAwaitingConnection()
+      toast.success(`${PROVIDER_NAME[provider]} connecté`)
+      return
+    }
+    if (attempts >= MAX_CONNECTION_POLLS) {
+      stopAwaitingConnection()
+      return
+    }
+    connectionPollHandle.value = setTimeout((): void => void tick(), CONNECTION_POLL_INTERVAL_MS)
+  }
+  connectionPollHandle.value = setTimeout((): void => void tick(), CONNECTION_POLL_INTERVAL_MS)
+}
+
+/** Check the connection immediately (the "J'ai terminé" button). */
+async function checkConnectionNow(): Promise<void> {
+  const provider: PaymentProviderKind | null = awaitingProvider.value
+  if (!provider) return
+  if (await refreshConnectionOnce(provider)) {
+    stopAwaitingConnection()
+    toast.success(`${PROVIDER_NAME[provider]} connecté`)
+  } else {
+    toast.info('Pas encore connecté — terminez l’autorisation dans votre navigateur')
+  }
+}
+
+/**
+ * Start the provider's connection flow in the system browser, then poll for completion.
+ *
+ * Opening externally (not in the app WebView) keeps the desktop app from being trapped
+ * on the provider's site; the app reflects the outcome by polling its own status.
  * @param provider - Provider to connect.
  */
 async function connectProvider(provider: PaymentProviderKind): Promise<void> {
   isBusy.value = true
   pendingProvider.value = provider
   try {
-    window.location.href =
+    const url: string =
       provider === 'qonto'
         ? await PaymentAccountService.getQontoAuthorizeUrl()
         : await PaymentAccountService.startStripeOnboarding()
+    await openExternalUrl(url)
+    startAwaitingConnection(provider)
   } catch (error: unknown) {
     toast.error(error instanceof Error ? error.message : `Connexion ${PROVIDER_NAME[provider]} impossible`)
+  } finally {
     isBusy.value = false
     pendingProvider.value = null
   }
@@ -441,6 +519,9 @@ async function disconnect(): Promise<void> {
 
 onMounted(async (): Promise<void> => {
   await loadStatus()
-  await consumeRedirectFlags()
+})
+
+onBeforeUnmount((): void => {
+  stopAwaitingConnection()
 })
 </script>
