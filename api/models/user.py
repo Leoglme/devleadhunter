@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from models.email_log import EmailLog
     from models.email_signature import EmailSignature
     from models.email_template import EmailTemplate
+    from models.payment_account import PaymentAccount
     from models.support_message import SupportMessage
     from models.support_ticket import SupportTicket
 
@@ -86,6 +87,10 @@ class User(Base):
         "DemoSite",
         back_populates="user",
         cascade="all, delete-orphan",
+    )
+    # At most one connected encashment provider (Qonto or Stripe) per user.
+    payment_account: Mapped["PaymentAccount | None"] = relationship(
+        "PaymentAccount", back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:

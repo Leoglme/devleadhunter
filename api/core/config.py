@@ -329,6 +329,31 @@ class Settings(BaseSettings):
         description="Encryption key for sensitive data (OAuth tokens). Generate with Fernet.generate_key()",
     )
 
+    # Qonto payment provider (OAuth — sales invoicing for the admin's own account)
+    qonto_client_id: str = Field(default="", alias="QONTO_CLIENT_ID", description="Qonto OAuth client ID")
+    qonto_client_secret: str = Field(default="", alias="QONTO_CLIENT_SECRET", description="Qonto OAuth client secret")
+    qonto_redirect_uri: str = Field(
+        default="http://localhost:8000/api/v1/payment-accounts/qonto/callback",
+        alias="QONTO_REDIRECT_URI",
+        description="Qonto OAuth redirect URI (must match the Developer Portal registration)",
+    )
+    qonto_staging_token: str = Field(
+        default="",
+        alias="QONTO_STAGING_TOKEN",
+        description="Sandbox-only X-Qonto-Staging-Token header, appended to every sandbox API call",
+    )
+    qonto_environment: str = Field(
+        default="sandbox",
+        alias="QONTO_ENVIRONMENT",
+        description="Qonto environment ('sandbox' | 'production'). Never inferred — declared, so a "
+        "missing staging token in sandbox fails loudly instead of hitting the real organization.",
+    )
+    qonto_api_base_url: str = Field(
+        default="https://thirdparty.qonto.com",
+        alias="QONTO_API_BASE_URL",
+        description="Qonto Business API base host (sandbox uses the same host plus the staging-token header)",
+    )
+
     @property
     def cors_origins(self) -> list[str]:
         """
