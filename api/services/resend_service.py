@@ -12,12 +12,14 @@ Docs: https://resend.com/docs/api-reference/emails/send-email
 
 from __future__ import annotations
 
+import base64
 import logging
 from typing import Any
 
 import aiohttp
 
 from core.config import settings
+from services.email_attachment import EmailAttachment
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,8 @@ class ResendService:
         tags: list[dict[str, str]] | None = None,
         api_key_override: str | None = None,
         extra_headers: dict[str, str] | None = None,
+        bcc: list[str] | None = None,
+        attachments: list[EmailAttachment] | None = None,
     ) -> dict[str, Any]:
         """
         Send a single email via Resend.
@@ -88,6 +92,13 @@ class ResendService:
             payload["text"] = text_body
         if extra_headers:
             payload["headers"] = extra_headers
+        if bcc:
+            payload["bcc"] = bcc
+        if attachments:
+            payload["attachments"] = [
+                {"filename": attachment.filename, "content": base64.b64encode(attachment.content).decode()}
+                for attachment in attachments
+            ]
 
         # Build the tags list — always include email_log_id for webhook lookup.
         all_tags: list[dict[str, str]] = []

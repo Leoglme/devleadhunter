@@ -198,6 +198,81 @@ class OrderService:
         return order
 
     # ------------------------------------------------------------------ #
+    # Invoice generation (through the user's connected provider)
+    # ------------------------------------------------------------------ #
+
+    async def _resolve_provider(self, db: Session, user: User):
+        """Return the user's connected encashment provider client, or None (manual sale)."""
+        from enums.payment_provider import PaymentProvider
+        from services.payment_account_service import payment_account_service
+        from services.payment_providers import get_payment_provider
+
+        account = payment_account_service.get_for_user(db, user.id)
+        if account is None or not account.is_connected:
+            return None
+        if account.provider == PaymentProvider.QONTO.value:
+            token = await payment_account_service.get_valid_qonto_access_token(db, account)
+            return get_payment_provider(account, qonto_access_token=token)
+        return get_payment_provider(account)
+
+    async def ensure_invoice(self, db: Session, user: User, order: Order, billing=None) -> Order:
+        """
+        Ensure the order carries an issued invoice + payment link, reusing any existing one.
+
+        A finalized invoice consumes a number, so an order that already has one is
+        never re-issued. With no connected provider, falls back to the legacy platform
+        Stripe payment link (no invoice PDF), preserving the previous behaviour.
+        """
+        if order.invoice_id:
+            return order
+
+        provider = await self._resolve_provider(db, user)
+        if provider is None:
+            if not order.stripe_payment_url:
+                self.create_payment_link(db, order)
+            if not order.payment_url:
+                order.payment_url = order.stripe_payment_url
+                db.commit()
+                db.refresh(order)
+            return order
+
+        from services.payment_providers import BillingClient, InvoiceRequest
+
+        counterpart = billing or BillingClient(
+            name=order.business_name or order.customer_name or "Client",
+            email=order.customer_email,
+        )
+        client_id = await provider.ensure_client(counterpart)
+        product = PRODUCT_LABELS.get(order.product_type, "Site web")
+        label = product if not order.business_name else f"{product} — {order.business_name}"
+        issued = await provider.create_invoice(
+            client_id,
+            InvoiceRequest(client=counterpart, amount_cents=order.amount_cents, currency=order.currency, label=label),
+        )
+        order.payment_provider = issued.provider
+        order.invoice_id = issued.invoice_id
+        order.invoice_number = issued.invoice_number
+        order.payment_url = issued.payment_url
+        if order.status == OrderStatus.DRAFT.value:
+            order.status = OrderStatus.PAYMENT_PENDING.value
+        db.commit()
+        db.refresh(order)
+        return order
+
+    async def _fetch_invoice_pdf(self, db: Session, user: User, order: Order) -> bytes | None:
+        """Best-effort fetch of the invoice PDF for the sale email (None when unavailable)."""
+        if not order.invoice_id or not order.payment_provider:
+            return None
+        try:
+            provider = await self._resolve_provider(db, user)
+            if provider is None:
+                return None
+            return await provider.get_invoice_pdf(order.invoice_id)
+        except Exception as exc:
+            logger.warning("Invoice PDF unavailable for order %s: %s", order.id, exc)
+            return None
+
+    # ------------------------------------------------------------------ #
     # Payment-link email (with preview)
     # ------------------------------------------------------------------ #
 
@@ -206,7 +281,8 @@ class OrderService:
         business = order.business_name or "votre entreprise"
         amount = format_amount(order.amount_cents, order.currency)
         product = PRODUCT_LABELS.get(order.product_type, "site web")
-        url = order.stripe_payment_url or "#"
+        url = order.payment_url or order.stripe_payment_url or "#"
+        attachment_note = " Vous trouverez la facture en pièce jointe." if order.invoice_id else ""
 
         subject = f"Votre {product} est prêt — finalisons ensemble"
         body_html = f"""
@@ -215,16 +291,17 @@ class OrderService:
           <p>
             Comme convenu, le <strong>{product}</strong> de <strong>{business}</strong> est prêt.
             Pour le mettre en ligne sur votre nom de domaine et vous transmettre vos accès,
-            il vous suffit de finaliser le paiement unique de <strong>{amount}</strong> (pas d'abonnement, site à vie).
+            il vous suffit de finaliser le paiement unique de <strong>{amount}</strong> (pas d'abonnement, site à vie).{attachment_note}
           </p>
           <p style="text-align:center; margin:32px 0;">
-            <a href="{url}" style="background:#0284c7; color:#ffffff; text-decoration:none; padding:14px 28px; border-radius:8px; font-weight:600; display:inline-block;">
+            <a href="{url}" style="background:#111111; color:#ffffff; text-decoration:none; padding:14px 28px; border-radius:8px; font-weight:600; display:inline-block;">
               Régler {amount} en ligne
             </a>
           </p>
           <p style="font-size:13px; color:#555;">
-            Paiement sécurisé par Stripe. Dès réception, je mets votre site en ligne et je vous envoie vos identifiants
-            pour gérer vous-même votre contenu.
+            Paiement sécurisé par carte bancaire ou virement, avec validation par votre banque (3D Secure).
+            Dès réception, je mets votre site en ligne et je vous envoie vos identifiants pour gérer vous-même
+            votre contenu.
           </p>
           <p>Une question avant de valider ? Répondez simplement à cet email.</p>
           <p>Bien à vous,<br/>{sender_name}</p>
@@ -233,13 +310,25 @@ class OrderService:
         return {"subject": subject, "body_html": body_html}
 
     async def send_payment_email(self, db: Session, user: User, order: Order) -> dict[str, Any]:
-        """Send the payment-link email to the client via the user's active sending identity."""
+        """Send the payment-link email to the client via the user's active sending identity.
+
+        Issues (or reuses) the invoice through the user's provider, attaches its PDF,
+        and BCCs the user so the thread lands in their own mailbox (Resend/Gmail send
+        via API — nothing reaches their Sent folder otherwise).
+        """
         if not order.customer_email:
             raise ValueError("Aucune adresse email client sur la commande.")
-        if not order.stripe_payment_url:
-            self.create_payment_link(db, order)
 
+        await self.ensure_invoice(db, user, order)
+
+        from services.email_attachment import EmailAttachment
         from services.email_sending_service import EmailSendingService
+
+        attachments: list[EmailAttachment] | None = None
+        pdf = await self._fetch_invoice_pdf(db, user, order)
+        if pdf:
+            label = order.invoice_number or f"commande-{order.id}"
+            attachments = [EmailAttachment(filename=f"facture-{label}.pdf", content=pdf)]
 
         rendered = self.build_payment_email(order, sender_name=user.name)
         sending = EmailSendingService(db)
@@ -250,6 +339,8 @@ class OrderService:
             subject=rendered["subject"],
             body_html=rendered["body_html"],
             prospect_id=str(order.prospect_id) if order.prospect_id else None,
+            bcc=[user.email] if user.email else None,
+            attachments=attachments,
         )
         if result.get("success"):
             order.payment_link_sent_at = datetime.now(UTC)

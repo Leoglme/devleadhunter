@@ -13,6 +13,7 @@ from enums.sending_provider import SendingProvider
 from models.email_account import EmailAccount
 from models.email_log import EmailLog
 from services.demo_identity import posthog_distinct_id, resolve_demo_slug
+from services.email_attachment import EmailAttachment
 from services.encryption_service import encryption_service
 from services.gmail_oauth_service import GmailOAuthService
 from services.posthog_service import posthog_service
@@ -137,6 +138,8 @@ class EmailSendingService:
         recipient_name: str | None = None,
         body_text: str | None = None,
         unsubscribe_link: str | None = None,
+        bcc: list[str] | None = None,
+        attachments: list[EmailAttachment] | None = None,
     ) -> dict:
         """Send email via Gmail OAuth."""
         # Decrypt access token
@@ -167,6 +170,8 @@ class EmailSendingService:
             html_body=body_html,
             text_body=body_text,
             extra_headers=self._unsubscribe_headers(unsubscribe_link) if unsubscribe_link else None,
+            bcc=bcc,
+            attachments=attachments,
         )
 
     async def send_via_user_identity(
@@ -179,6 +184,8 @@ class EmailSendingService:
         prospect_id: str | None = None,
         campaign_id: str | None = None,
         ab_variant: str | None = None,
+        bcc: list[str] | None = None,
+        attachments: list[EmailAttachment] | None = None,
     ) -> dict:
         """
         Send an email via the user's active sending identity (Resend or Gmail).
@@ -253,6 +260,8 @@ class EmailSendingService:
                     subject=subject,
                     body_html=body_html,
                     unsubscribe_link=unsubscribe_link,
+                    bcc=bcc,
+                    attachments=attachments,
                 )
             else:
                 result = await self.resend_service.send_email(
@@ -267,6 +276,8 @@ class EmailSendingService:
                     # RFC 8058 one-click unsubscribe — required by Gmail/Yahoo for bulk
                     # senders; the POST route exists on /api/v1/unsubscribe.
                     extra_headers=self._unsubscribe_headers(unsubscribe_link),
+                    bcc=bcc,
+                    attachments=attachments,
                 )
             email_log.status = EmailStatus.SENT.value
             email_log.provider = result.get("provider", identity.provider)

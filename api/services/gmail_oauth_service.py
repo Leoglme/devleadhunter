@@ -5,12 +5,14 @@ Gmail OAuth service for sending emails via Gmail API.
 import base64
 import logging
 from datetime import datetime, timedelta
+from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import httpx
 
 from core.config import settings
+from services.email_attachment import EmailAttachment
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +159,8 @@ class GmailOAuthService:
         html_body: str,
         text_body: str | None = None,
         extra_headers: dict[str, str] | None = None,
+        bcc: list[str] | None = None,
+        attachments: list[EmailAttachment] | None = None,
     ) -> dict:
         """
         Send an email via Gmail API.
@@ -179,25 +183,30 @@ class GmailOAuthService:
             Exception: If email sending fails
         """
         try:
-            # Create message
+            # Body: text+html alternative when a text part is given, else html only.
             if text_body:
-                # Multipart message with both HTML and text
-                message = MIMEMultipart("alternative")
-                message["From"] = from_email
-                message["To"] = f"{to_name} <{to_email}>" if to_name else to_email
-                message["Subject"] = subject
-
-                # Attach both parts
-                part1 = MIMEText(text_body, "plain")
-                part2 = MIMEText(html_body, "html")
-                message.attach(part1)
-                message.attach(part2)
+                body: MIMEText | MIMEMultipart = MIMEMultipart("alternative")
+                body.attach(MIMEText(text_body, "plain"))
+                body.attach(MIMEText(html_body, "html"))
             else:
-                # HTML only message
-                message = MIMEText(html_body, "html")
-                message["From"] = from_email
-                message["To"] = f"{to_name} <{to_email}>" if to_name else to_email
-                message["Subject"] = subject
+                body = MIMEText(html_body, "html")
+
+            # Wrap the body in a "mixed" envelope only when files are attached.
+            if attachments:
+                message: MIMEText | MIMEMultipart = MIMEMultipart("mixed")
+                message.attach(body)
+                for attachment in attachments:
+                    part = MIMEApplication(attachment.content, _subtype=attachment.content_type.split("/")[-1])
+                    part.add_header("Content-Disposition", "attachment", filename=attachment.filename)
+                    message.attach(part)
+            else:
+                message = body
+
+            message["From"] = from_email
+            message["To"] = f"{to_name} <{to_email}>" if to_name else to_email
+            message["Subject"] = subject
+            if bcc:
+                message["Bcc"] = ", ".join(bcc)
 
             # Custom headers (e.g. one-click unsubscribe) — parity with Resend.
             for header_name, header_value in (extra_headers or {}).items():
