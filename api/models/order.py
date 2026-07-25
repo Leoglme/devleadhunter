@@ -32,12 +32,20 @@ class Order(Base):
     customer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     customer_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    # Stripe payment artifacts
+    # Stripe payment artifacts (legacy path — still written by the credits webhook
+    # and pre-existing orders; superseded by the provider-agnostic columns below)
     stripe_payment_link_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     stripe_payment_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     stripe_session_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     stripe_payment_intent_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     refunded_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+    # Provider-agnostic payment/invoice artifacts (Qonto or Stripe, per the user's
+    # connected PaymentAccount). The provider issues the invoice and owns numbering.
+    payment_provider: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    payment_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    invoice_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    invoice_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Deployment / delivery
     domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
