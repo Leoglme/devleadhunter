@@ -7,8 +7,9 @@ refresh the access token. Two Qonto specifics are baked in here:
   use** — every refresh invalidates the token used and returns a *new*
   ``refresh_token`` that must be persisted. ``refresh_access_token`` therefore
   always returns the rotated refresh token alongside the new access token.
-* The OAuth endpoints are the same for sandbox and production; the environment
-  only differs on the API calls (via the staging-token header), not here.
+* The OAuth host is environment-specific (sandbox has its own), and the sandbox
+  token call must carry the ``X-Qonto-Staging-Token`` header — both derived from
+  settings here.
 """
 
 import logging
@@ -27,9 +28,6 @@ QONTO_OAUTH_SCOPES: str = (
     "client_invoice.write client_invoices.read attachment.read "
     "payment_link.read payment_link.write"
 )
-
-_AUTHORIZE_URL = "https://oauth.qonto.com/oauth2/auth"
-_TOKEN_URL = "https://oauth.qonto.com/oauth2/token"
 
 
 class QontoOAuthService:
@@ -60,7 +58,7 @@ class QontoOAuthService:
                 "state": state,
             }
         )
-        return f"{_AUTHORIZE_URL}?{query}"
+        return f"{settings.qonto_oauth_base_url}/oauth2/auth?{query}"
 
     async def exchange_code_for_tokens(self, code: str) -> dict:
         """
@@ -122,9 +120,12 @@ class QontoOAuthService:
             Exception: If the request fails.
         """
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        if settings.qonto_is_sandbox and settings.qonto_staging_token:
+            headers["X-Qonto-Staging-Token"] = settings.qonto_staging_token
+        token_url = f"{settings.qonto_oauth_base_url}/oauth2/token"
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(_TOKEN_URL, data=payload, headers=headers, timeout=30.0)
+                response = await client.post(token_url, data=payload, headers=headers, timeout=30.0)
                 response.raise_for_status()
                 result = response.json()
 

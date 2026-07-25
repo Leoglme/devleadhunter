@@ -77,7 +77,6 @@ def _fake_httpx(monkeypatch: pytest.MonkeyPatch) -> None:
     # The guard needs a sandbox runtime with a staging token.
     monkeypatch.setattr(settings, "qonto_environment", "sandbox")
     monkeypatch.setattr(settings, "qonto_staging_token", "stg_test")
-    monkeypatch.setattr(settings, "qonto_api_base_url", "https://thirdparty.qonto.com")
 
 
 def _provider(qonto_iban: str | None = "FR7616958000019712437314435") -> QontoPaymentProvider:

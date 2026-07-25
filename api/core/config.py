@@ -348,11 +348,23 @@ class Settings(BaseSettings):
         description="Qonto environment ('sandbox' | 'production'). Never inferred — declared, so a "
         "missing staging token in sandbox fails loudly instead of hitting the real organization.",
     )
-    qonto_api_base_url: str = Field(
-        default="https://thirdparty.qonto.com",
-        alias="QONTO_API_BASE_URL",
-        description="Qonto Business API base host (sandbox uses the same host plus the staging-token header)",
-    )
+
+    @property
+    def qonto_is_sandbox(self) -> bool:
+        """Whether Qonto runs against its sandbox environment."""
+        return self.qonto_environment == "sandbox"
+
+    @property
+    def qonto_api_base_url(self) -> str:
+        """Qonto Business API host, derived from the environment (sandbox has its own host)."""
+        return (
+            "https://thirdparty-sandbox.staging.qonto.co" if self.qonto_is_sandbox else "https://thirdparty.qonto.com"
+        )
+
+    @property
+    def qonto_oauth_base_url(self) -> str:
+        """Qonto OAuth host, derived from the environment (sandbox has its own host)."""
+        return "https://oauth-sandbox.staging.qonto.co" if self.qonto_is_sandbox else "https://oauth.qonto.com"
 
     @property
     def cors_origins(self) -> list[str]:
