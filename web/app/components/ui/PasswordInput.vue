@@ -12,7 +12,7 @@
     <button
       type="button"
       :class="['absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer transition-colors', toggleClasses]"
-      :aria-label="showPassword ? 'Hide password' : 'Show password'"
+      :aria-label="showPassword ? 'Masquer' : 'Afficher'"
       @click="showPassword = !showPassword"
     >
       <svg
