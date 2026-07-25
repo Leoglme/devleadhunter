@@ -35,6 +35,17 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
     ],
   },
   {
+    heading: 'Ventes',
+    entries: [
+      {
+        kind: 'link',
+        to: '/dashboard/settings/billing',
+        label: 'Facturation & paiement',
+        icon: 'i-lucide-receipt',
+      },
+    ],
+  },
+  {
     heading: 'Aide',
     entries: [{ kind: 'link', to: '/dashboard/support', label: 'Support', icon: 'i-lucide-life-buoy' }],
   },

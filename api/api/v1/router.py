@@ -28,6 +28,7 @@ from .routes import (
     interactions,
     orders,
     organizations,
+    payment_accounts,
     payments,
     prospects,
     scraping_jobs,
@@ -68,6 +69,7 @@ router.include_router(interactions.router)
 router.include_router(demo_sites.router)
 router.include_router(enrichment.router)
 router.include_router(orders.router)
+router.include_router(payment_accounts.router)
 router.include_router(dashboard.router)
 router.include_router(behavior.router)
 router.include_router(sources.router)

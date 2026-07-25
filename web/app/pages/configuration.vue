@@ -6,7 +6,7 @@
         <p class="app-label mt-4">Bienvenue{{ firstName ? `, ${firstName}` : '' }}</p>
         <h1 class="mt-2 text-3xl font-bold text-[var(--app-ink)]">Configurons votre espace</h1>
         <p class="text-muted mx-auto mt-3 max-w-md text-sm leading-relaxed">
-          Trois réglages et vous pourrez lancer votre première prospection. Comptez deux minutes.
+          Quelques réglages rapides et vous pourrez lancer votre première prospection. Comptez deux minutes.
         </p>
       </div>
 
@@ -133,7 +133,19 @@
         </template>
       </div>
 
-      <div v-else key="step-4" class="wizard-step mx-auto mt-8 max-w-2xl space-y-8">
+      <div v-else-if="currentStep === 4" key="step-4" class="wizard-step mx-auto mt-8 max-w-2xl space-y-6">
+        <header>
+          <h1 class="text-2xl font-bold text-[var(--app-ink)]">Comment serez-vous payé ?</h1>
+          <p class="text-muted mt-2 text-sm leading-relaxed">
+            Connectez le compte qui émettra vos factures et encaissera vos ventes. Facultatif — vous pourrez le faire au
+            moment de votre première vente.
+          </p>
+        </header>
+
+        <PaymentProviderConfig @connected-change="hasPaymentProvider = $event" />
+      </div>
+
+      <div v-else key="step-5" class="wizard-step mx-auto mt-8 max-w-2xl space-y-8">
         <div class="text-center">
           <span
             class="inline-flex h-14 w-14 items-center justify-center rounded-full border border-[var(--app-green)] bg-[var(--app-green-soft)]"
@@ -260,7 +272,8 @@ const STEPS: UiWizardStep[] = [
   { id: 1, label: "Méthode d'envoi", hint: 'Domaine ou Gmail' },
   { id: 2, label: 'Cadence', hint: 'Rythme des envois' },
   { id: 3, label: 'Vidéo', hint: 'Facultatif' },
-  { id: 4, label: "C'est prêt", hint: 'Récapitulatif' },
+  { id: 4, label: 'Encaissement', hint: 'Facultatif' },
+  { id: 5, label: "C'est prêt", hint: 'Récapitulatif' },
 ]
 
 /** What the welcome screen promises, in the order it is configured. */
@@ -281,6 +294,12 @@ const INTRO_ITEMS: ConfigurationChecklistRow[] = [
     icon: 'i-lucide-video',
     title: 'Votre vidéo de prospection',
     detail: 'Un clip de trente secondes, personnalisé pour chaque prospect.',
+    required: false,
+  },
+  {
+    icon: 'i-lucide-receipt',
+    title: 'Votre encaissement',
+    detail: 'Le compte qui émettra vos factures et encaissera vos ventes — configurable plus tard.',
     required: false,
   },
 ]
@@ -308,6 +327,8 @@ const savedPolicy: Ref<string> = ref('')
 const wantsVideo: Ref<boolean> = ref(false)
 /** Whether a presenter clip is actually stored. */
 const hasPresenterVideo: Ref<boolean> = ref(false)
+/** Whether an encashment provider (Qonto/Stripe) is connected. */
+const hasPaymentProvider: Ref<boolean> = ref(false)
 /** Whether the step transition is waiting on a save. */
 const isSavingStep: Ref<boolean> = ref(false)
 /** Whether the wizard is being marked as completed. */
@@ -360,6 +381,11 @@ const recapItems: ComputedRef<ConfigurationRecapRow[]> = computed((): Configurat
       label: 'Vidéo de prospection',
       value: hasPresenterVideo.value ? 'Clip enregistré' : 'Pas de vidéo — à ajouter quand vous voulez',
       done: hasPresenterVideo.value,
+    },
+    {
+      label: 'Encaissement',
+      value: hasPaymentProvider.value ? 'Fournisseur connecté' : 'À configurer avant votre première vente',
+      done: hasPaymentProvider.value,
     },
   ]
 })
