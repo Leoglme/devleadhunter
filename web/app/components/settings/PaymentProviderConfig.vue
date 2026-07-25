@@ -3,7 +3,6 @@
     <UiLoader v-if="isLoading" />
 
     <template v-else>
-      <!-- Connected state -->
       <section
         v-if="status && status.is_connected && status.connected_provider"
         class="space-y-5 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-5"
@@ -30,7 +29,6 @@
           </div>
         </div>
 
-        <!-- Stripe: onboarding not finished yet -->
         <div v-if="isStripe && !status.stripe_charges_enabled" class="space-y-3">
           <UiCallout variant="warning">
             Votre compte Stripe n'accepte pas encore les paiements — la configuration hébergée par Stripe n'est pas
@@ -41,7 +39,6 @@
           </button>
         </div>
 
-        <!-- Qonto: IBAN printed on invoices (unreadable via API, captured here) -->
         <div v-if="isQonto" class="space-y-2">
           <label class="text-muted block text-xs font-medium" for="qonto-iban">IBAN (imprimé sur vos factures)</label>
           <div class="flex flex-wrap items-center gap-2">
@@ -69,25 +66,43 @@
         </div>
       </section>
 
-      <!-- Disconnected: choose a provider -->
       <section v-else class="space-y-4">
         <div class="grid gap-3 sm:grid-cols-2">
           <button
             v-if="status?.qonto_available"
             type="button"
-            class="provider-card"
+            class="flex cursor-pointer flex-col items-start gap-2 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-4 text-left transition-colors enabled:hover:border-[var(--app-ink-soft)] enabled:hover:bg-[var(--app-surface-2)] disabled:cursor-not-allowed disabled:opacity-60"
             :disabled="isBusy"
             @click="connectQonto"
           >
-            <span class="provider-card__logo" :style="{ background: QONTO_COLOR }">Q</span>
-            <span class="provider-card__title">Connecter Qonto</span>
-            <span class="provider-card__detail">Vos factures et liens de paiement, dans votre compte Qonto.</span>
+            <span
+              class="flex h-9 w-9 items-center justify-center rounded-lg font-bold text-white"
+              :style="{ background: QONTO_COLOR }"
+            >
+              Q
+            </span>
+            <span class="text-sm font-semibold text-[var(--app-ink)]">Connecter Qonto</span>
+            <span class="text-xs leading-relaxed text-[var(--app-ink-soft)]">
+              Vos factures et liens de paiement, dans votre compte Qonto.
+            </span>
           </button>
 
-          <button type="button" class="provider-card" :disabled="isBusy" @click="connectStripe">
-            <span class="provider-card__logo" :style="{ background: STRIPE_COLOR }">S</span>
-            <span class="provider-card__title">Connecter Stripe</span>
-            <span class="provider-card__detail">Encaissez vos ventes sur votre propre compte Stripe.</span>
+          <button
+            type="button"
+            class="flex cursor-pointer flex-col items-start gap-2 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-4 text-left transition-colors enabled:hover:border-[var(--app-ink-soft)] enabled:hover:bg-[var(--app-surface-2)] disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="isBusy"
+            @click="connectStripe"
+          >
+            <span
+              class="flex h-9 w-9 items-center justify-center rounded-lg font-bold text-white"
+              :style="{ background: STRIPE_COLOR }"
+            >
+              S
+            </span>
+            <span class="text-sm font-semibold text-[var(--app-ink)]">Connecter Stripe</span>
+            <span class="text-xs leading-relaxed text-[var(--app-ink-soft)]">
+              Encaissez vos ventes sur votre propre compte Stripe.
+            </span>
           </button>
         </div>
 
@@ -294,54 +309,3 @@ onMounted(async (): Promise<void> => {
   await consumeRedirectFlags()
 })
 </script>
-
-<style scoped>
-.provider-card {
-  display: flex;
-  cursor: pointer;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.5rem;
-  border-radius: 0.75rem;
-  border: 1px solid var(--app-line);
-  background: var(--app-surface);
-  padding: 1rem;
-  text-align: left;
-  transition:
-    border-color 0.15s,
-    background 0.15s;
-}
-
-.provider-card:hover:not(:disabled) {
-  border-color: var(--app-ink-soft);
-  background: var(--app-surface-2);
-}
-
-.provider-card:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.provider-card__logo {
-  display: flex;
-  height: 2.25rem;
-  width: 2.25rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.5rem;
-  font-weight: 700;
-  color: #ffffff;
-}
-
-.provider-card__title {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--app-ink);
-}
-
-.provider-card__detail {
-  font-size: 0.75rem;
-  line-height: 1.5;
-  color: var(--app-ink-soft);
-}
-</style>
