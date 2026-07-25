@@ -517,11 +517,33 @@ async function disconnect(): Promise<void> {
   }
 }
 
+/**
+ * When the app regains focus (the user comes back from the browser flow), reflect a
+ * connection that completed in the meantime — the reliable signal on desktop, where
+ * the OAuth runs in the system browser and the poll may have already timed out.
+ */
+async function refreshOnReturn(): Promise<void> {
+  const provider: PaymentProviderKind | null = awaitingProvider.value
+  if (provider) {
+    if (await refreshConnectionOnce(provider)) {
+      stopAwaitingConnection()
+      toast.success(`${PROVIDER_NAME[provider]} connecté`)
+    }
+    return
+  }
+  if (!status.value?.is_connected) await loadStatus()
+}
+
+/** Stable listener reference for add/removeEventListener. */
+const onWindowFocus: () => void = (): void => void refreshOnReturn()
+
 onMounted(async (): Promise<void> => {
   await loadStatus()
+  window.addEventListener('focus', onWindowFocus)
 })
 
 onBeforeUnmount((): void => {
   stopAwaitingConnection()
+  window.removeEventListener('focus', onWindowFocus)
 })
 </script>
