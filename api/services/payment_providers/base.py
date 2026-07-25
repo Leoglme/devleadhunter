@@ -45,6 +45,8 @@ class InvoiceRequest:
     currency: str
     label: str
     description: str | None = None
+    # Platform commission in cents (Stripe Connect only; Qonto ignores it).
+    application_fee_amount: int | None = None
 
 
 @dataclass
