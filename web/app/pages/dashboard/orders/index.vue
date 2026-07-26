@@ -15,7 +15,7 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-6 md:grid-cols-4">
+    <div class="grid grid-cols-1 gap-6 @3xl:grid-cols-4">
       <div class="card">
         <p class="text-muted text-sm font-medium">Chiffre d'affaires</p>
         <p class="mt-2 text-3xl font-bold text-[var(--app-green)]">{{ formatCents(stats?.revenue_cents ?? 0) }}</p>

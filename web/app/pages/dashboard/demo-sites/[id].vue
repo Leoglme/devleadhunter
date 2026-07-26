@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-8">
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div class="flex flex-col gap-4 @2xl:flex-row @2xl:items-center @2xl:justify-between">
       <NuxtLink to="/dashboard/demo-sites" class="btn-secondary inline-flex w-fit items-center gap-2">
         <UIcon name="i-lucide-arrow-left" class="h-4 w-4" />
         Retour aux sites
@@ -39,7 +39,7 @@
         <p class="text-sm text-[var(--app-ink-soft)]">{{ site.slug }} · {{ templateLabel }}</p>
       </header>
 
-      <div class="grid items-start gap-6 xl:grid-cols-[320px_1fr]">
+      <div class="grid items-start gap-6 @4xl:grid-cols-[320px_1fr]">
         <aside class="card sticky top-6 space-y-6 p-5">
           <div>
             <h2 class="text-sm font-semibold tracking-wide text-[var(--app-ink)] uppercase">Résumé</h2>
@@ -252,7 +252,7 @@
             URL locale : {{ site.local_demo_url }}
           </div>
 
-          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div class="grid gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
             <div v-for="stat in stats" :key="stat.label" class="card p-4">
               <p class="text-xs font-medium tracking-wide text-[var(--app-ink-soft)] uppercase">{{ stat.label }}</p>
               <p

@@ -1,6 +1,6 @@
 <template>
   <div class="flex min-h-full flex-col gap-5">
-    <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+    <div class="flex flex-col gap-3 @3xl:flex-row @3xl:items-end @3xl:justify-between">
       <div>
         <h1 class="text-xl font-semibold text-[var(--app-ink)]">Carte de prospection</h1>
         <p class="text-muted mt-1 max-w-2xl text-sm leading-relaxed">

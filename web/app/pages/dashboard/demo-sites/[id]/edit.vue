@@ -23,7 +23,7 @@
           <label class="mb-1 block text-sm text-[var(--app-ink-soft)]">Nom de l'entreprise *</label>
           <input v-model="form.business_name" type="text" class="input-field w-full" required />
         </div>
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="grid gap-4 @sm:grid-cols-2">
           <div>
             <label class="mb-1 block text-sm text-[var(--app-ink-soft)]">Téléphone</label>
             <input v-model="form.phone" type="text" class="input-field w-full" />

@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-5">
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div class="flex flex-col gap-4 @2xl:flex-row @2xl:items-end @2xl:justify-between">
       <div>
         <p class="app-label flex items-center gap-2">
           <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
@@ -34,7 +34,7 @@
       <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin text-[var(--app-accent)]" />
     </div>
 
-    <div v-else-if="store.automationsCount > 0" class="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+    <div v-else-if="store.automationsCount > 0" class="grid grid-cols-1 gap-4 @3xl:grid-cols-2 @6xl:grid-cols-3">
       <NuxtLink
         v-for="auto in store.automations"
         :key="auto.id"

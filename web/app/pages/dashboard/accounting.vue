@@ -14,7 +14,7 @@
     </div>
 
     <div v-else class="space-y-6">
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div class="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @4xl:grid-cols-4">
         <div class="card">
           <div class="flex items-start justify-between">
             <div class="flex-1">
@@ -80,7 +80,7 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div class="grid grid-cols-1 gap-4 @3xl:grid-cols-3">
         <div class="card">
           <p class="mb-1 text-xs text-[var(--app-ink-soft)]">Total refunded</p>
           <p class="text-base font-semibold text-[var(--app-ink)]">
@@ -108,7 +108,7 @@
             <p class="mt-1 text-xs text-[var(--app-ink-soft)]">Payments pulled directly from Stripe</p>
           </div>
 
-          <div class="flex flex-col gap-3 lg:flex-row">
+          <div class="flex flex-col gap-3 @3xl:flex-row">
             <div class="relative flex-1">
               <UIcon
                 name="i-lucide-search"
@@ -122,7 +122,7 @@
               />
             </div>
 
-            <div class="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+            <div class="grid flex-1 grid-cols-1 gap-3 @sm:grid-cols-2">
               <select
                 v-model="statusFilter"
                 class="min-w-[160px] rounded border border-[var(--app-line)] bg-[var(--app-surface)] px-3 py-2 text-sm text-[var(--app-ink)]"
@@ -313,7 +313,7 @@
             v-if="expandedTransactions.has(getTransactionKey(transaction))"
             class="border-t border-[var(--app-line)] bg-[var(--app-bg)] px-6 py-4"
           >
-            <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div class="grid grid-cols-1 gap-6 @2xl:grid-cols-2 @4xl:grid-cols-3">
               <div v-if="transaction.payment_info">
                 <h3 class="mb-3 text-xs font-semibold text-[var(--app-ink-soft)] uppercase">Payment information</h3>
                 <div class="space-y-2">
@@ -447,7 +447,7 @@
 
         <div
           v-if="showPagination"
-          class="flex flex-col gap-3 border-t border-[var(--app-line)] bg-[var(--app-bg)] px-6 py-4 md:flex-row md:items-center md:justify-between"
+          class="flex flex-col gap-3 border-t border-[var(--app-line)] bg-[var(--app-bg)] px-6 py-4 @2xl:flex-row @2xl:items-center @2xl:justify-between"
         >
           <div class="text-xs text-[var(--app-ink-soft)]">
             Showing

@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-6">
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div class="flex flex-col gap-4 @2xl:flex-row @2xl:items-end @2xl:justify-between">
       <div>
         <p class="app-label flex items-center gap-2">
           <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
@@ -110,7 +110,7 @@
         <p v-if="store.currentJob.status === 'cancelled'" class="text-sm text-[var(--app-ink-soft)]">
           Recherche annulée — les {{ store.currentJob.results.length }} prospect(s) déjà trouvé(s) ont été conservés.
         </p>
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div class="grid grid-cols-1 gap-4 @3xl:grid-cols-3">
           <div
             v-for="stat in completedStats"
             :key="stat.label"

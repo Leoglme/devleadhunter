@@ -45,7 +45,7 @@
       <UiCollapsibleCard icon="i-lucide-file-text" title="La demande initiale">
         <div class="space-y-4 px-4 py-4">
           <p class="text-sm leading-relaxed whitespace-pre-wrap text-[var(--app-ink)]">{{ ticket.description }}</p>
-          <div v-if="ticket.attachments.length" class="grid gap-3 sm:grid-cols-3">
+          <div v-if="ticket.attachments.length" class="grid gap-3 @xl:grid-cols-3">
             <a
               v-for="attachment in ticket.attachments"
               :key="attachment.id"
@@ -137,7 +137,7 @@
           </div>
         </div>
 
-        <div v-if="composerPreviews.length" class="grid gap-3 sm:grid-cols-4">
+        <div v-if="composerPreviews.length" class="grid gap-3 @xl:grid-cols-4">
           <figure
             v-for="(preview, index) in composerPreviews"
             :key="preview.url"

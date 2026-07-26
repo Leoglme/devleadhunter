@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div class="mb-8 flex flex-col gap-4 @2xl:flex-row @2xl:items-end @2xl:justify-between">
       <div>
         <p class="text-xs font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">Prospection</p>
         <h1 class="mt-1 text-2xl font-semibold text-[var(--app-ink)]">Sites démo</h1>
@@ -14,7 +14,7 @@
       </NuxtLink>
     </div>
 
-    <div v-if="pending" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div v-if="pending" class="grid gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
       <div v-for="i in 3" :key="i" class="card animate-pulse">
         <div class="h-36 bg-[var(--app-surface-2)]"></div>
         <div class="space-y-3 p-5">
@@ -38,7 +38,7 @@
       </NuxtLink>
     </div>
 
-    <div v-else class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+    <div v-else class="grid gap-5 @2xl:grid-cols-2 @5xl:grid-cols-3">
       <DemoSitesDemoSiteCard
         v-for="site in sites"
         :key="site.id"

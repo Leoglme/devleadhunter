@@ -6,7 +6,7 @@
 
     <div v-if="!isLoading && creditSettings" class="card">
       <form @submit.prevent="handleSubmit">
-        <div class="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div class="mb-6 grid grid-cols-1 gap-6 @2xl:grid-cols-2">
           <div>
             <label for="price-per-credit" class="mb-2 block text-sm font-medium text-[var(--app-ink)]">
               Prix par crédit (EUR)
@@ -110,7 +110,7 @@
           </div>
         </div>
 
-        <div class="flex flex-col gap-3 border-t border-[var(--app-line)] pt-4 sm:flex-row sm:justify-end">
+        <div class="flex flex-col gap-3 border-t border-[var(--app-line)] pt-4 @2xl:flex-row @2xl:justify-end">
           <button type="button" class="btn-secondary flex-1 sm:flex-none" :disabled="isSaving" @click="resetForm">
             Réinitialiser
           </button>
@@ -132,7 +132,7 @@
         Prélevée sur les ventes facturées via le compte Stripe Connect d'un utilisateur, au moment de l'émission de la
         facture. Sans effet sur vos propres ventes, encaissées par Qonto.
       </p>
-      <form class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end" @submit.prevent="handleCommissionSubmit">
+      <form class="mt-4 flex flex-col gap-3 @2xl:flex-row @2xl:items-end" @submit.prevent="handleCommissionSubmit">
         <div class="sm:w-40">
           <label for="platform-commission" class="mb-2 block text-sm font-medium text-[var(--app-ink)]">
             Pourcentage

@@ -40,7 +40,7 @@
 
         <template v-if="form.mode === 'semi_auto'">
           <div class="app-card p-4">
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @5xl:grid-cols-5">
               <div>
                 <label class="app-label mb-1.5 block">Rechercher</label>
                 <input v-model="searchQuery" type="text" placeholder="Nom, ville, email…" class="app-input" />
@@ -126,7 +126,7 @@
         </template>
 
         <div v-else class="app-card space-y-5 p-5 md:p-6">
-          <div class="grid gap-5 md:grid-cols-2">
+          <div class="grid gap-5 @2xl:grid-cols-2">
             <div>
               <label class="app-label mb-1.5 block">Métier(s) *</label>
               <input v-model="form.metiers" type="text" class="app-input w-full" placeholder="plombier, électricien" />
@@ -192,7 +192,7 @@
           </span>
         </label>
 
-        <div v-if="form.autoCampaign" class="grid gap-5 md:grid-cols-2">
+        <div v-if="form.autoCampaign" class="grid gap-5 @2xl:grid-cols-2">
           <div>
             <label class="app-label mb-1.5 block">Modèle A — envoi initial *</label>
             <UiTemplateSelect
@@ -239,7 +239,7 @@
           <h2 class="text-base font-semibold text-[var(--app-ink)]">Récapitulatif</h2>
           <p class="mt-1 text-sm text-[var(--app-ink-soft)]">Vérifie puis lance l'automatisation.</p>
         </div>
-        <dl class="grid gap-3 sm:grid-cols-2">
+        <dl class="grid gap-3 @sm:grid-cols-2">
           <div
             v-for="entry in recapItems"
             :key="entry.label"

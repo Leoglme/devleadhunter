@@ -189,7 +189,7 @@
       </div>
 
       <div class="card border-[var(--app-line)] bg-gradient-to-r from-[var(--app-surface)] to-[var(--app-bg)]">
-        <div class="flex flex-col items-center justify-between gap-4 md:flex-row">
+        <div class="flex flex-col items-center justify-between gap-4 @2xl:flex-row">
           <div>
             <h3 class="mb-2 text-lg font-semibold text-[var(--app-ink)]">Besoin de plus de crédits ?</h3>
             <p class="text-sm text-[var(--app-ink-soft)]">

@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-8">
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div class="flex flex-col gap-4 @2xl:flex-row @2xl:items-end @2xl:justify-between">
       <div>
         <p class="app-label flex items-center gap-2">
           <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
@@ -39,18 +39,18 @@
     </div>
 
     <div v-if="isLoading && !stats" class="space-y-8">
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
         <div v-for="n in 4" :key="n" class="app-card h-28 animate-pulse"></div>
       </div>
-      <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div class="app-card h-72 animate-pulse lg:col-span-2"></div>
+      <div class="grid grid-cols-1 gap-6 @4xl:grid-cols-3">
+        <div class="app-card h-72 animate-pulse @4xl:col-span-2"></div>
         <div class="app-card h-72 animate-pulse"></div>
       </div>
     </div>
 
     <template v-else-if="stats">
       <section>
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
           <NuxtLink
             v-for="stage in pipelineTiles"
             :key="stage.label"
@@ -72,8 +72,8 @@
         </div>
       </section>
 
-      <section class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div class="app-card p-5 md:p-6 lg:col-span-2">
+      <section class="grid grid-cols-1 gap-6 @4xl:grid-cols-3">
+        <div class="app-card p-5 md:p-6 @4xl:col-span-2">
           <div class="mb-4 flex items-center justify-between">
             <h2 class="flex items-center gap-2 text-sm font-semibold text-[var(--app-ink)]">
               <UIcon name="i-lucide-flame" class="h-4 w-4 text-[var(--app-red)]" />
@@ -187,7 +187,7 @@
         </div>
       </section>
 
-      <section class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <section class="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
         <div class="app-card p-5 md:p-6">
           <div class="mb-4 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-[var(--app-ink)]">Activité email — 30 jours</h2>

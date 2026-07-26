@@ -37,7 +37,7 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-4 md:grid-cols-6">
+    <div class="grid grid-cols-2 gap-4 @3xl:grid-cols-6">
       <div class="card text-center">
         <p class="text-muted text-xs font-medium">Envoyés</p>
         <p class="mt-1 text-2xl font-bold text-[var(--app-ink)]">{{ stats.total_sent }}</p>
@@ -65,7 +65,7 @@
     </div>
 
     <div class="card">
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div class="grid grid-cols-1 gap-4 @3xl:grid-cols-4">
         <div>
           <label class="text-muted mb-1.5 block text-xs font-medium">Rechercher</label>
           <input v-model="searchQuery" type="text" placeholder="Email, nom, sujet..." class="input-field" />

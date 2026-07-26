@@ -75,7 +75,7 @@
           />
         </label>
 
-        <div v-if="previews.length" class="mt-3 grid gap-3 sm:grid-cols-3">
+        <div v-if="previews.length" class="mt-3 grid gap-3 @xl:grid-cols-3">
           <figure
             v-for="(preview, index) in previews"
             :key="preview.url"

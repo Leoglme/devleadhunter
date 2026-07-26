@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-6">
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
       <div>
         <h1 class="text-xl font-semibold text-[var(--app-ink)]">Monitoring</h1>
         <p class="text-muted mt-1 text-sm">
@@ -20,7 +20,7 @@
       {{ error }}
     </div>
 
-    <div v-if="overview" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div v-if="overview" class="grid grid-cols-2 gap-3 @xl:grid-cols-4">
       <div class="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-3">
         <p class="text-muted text-[10px] tracking-wide uppercase">Base de données</p>
         <p class="mt-1 flex items-center gap-2 text-sm font-semibold">
@@ -60,7 +60,7 @@
       >
         Aucune exécution de scraping ces dernières 24 h.
       </div>
-      <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div v-else class="grid grid-cols-1 gap-3 @sm:grid-cols-2 @4xl:grid-cols-4">
         <div
           v-for="s in overview.sources"
           :key="s.source"

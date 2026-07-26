@@ -13,7 +13,7 @@
     </div>
 
     <template v-else>
-      <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div class="flex flex-col gap-4 @2xl:flex-row @2xl:items-start @2xl:justify-between">
         <div class="min-w-0">
           <p class="app-label flex items-center gap-2">
             <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
@@ -68,7 +68,7 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div class="grid grid-cols-2 gap-3 @xl:grid-cols-3 @5xl:grid-cols-6">
         <div v-for="kpi in kpis" :key="kpi.label" class="app-card p-3.5">
           <p class="app-label">{{ kpi.label }}</p>
           <p class="mt-1 text-2xl font-bold tabular-nums" :class="kpi.class">{{ kpi.value }}</p>

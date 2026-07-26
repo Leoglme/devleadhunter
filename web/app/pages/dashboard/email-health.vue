@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-8">
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div class="flex flex-col gap-4 @2xl:flex-row @2xl:items-end @2xl:justify-between">
       <div>
         <p class="app-label flex items-center gap-2">
           <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
@@ -65,7 +65,7 @@
           {{ formatInt(overview.totals.opened) }} ouverts sur {{ period }} jours
         </p>
       </div>
-      <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+      <div class="grid grid-cols-2 gap-3 sm:gap-4 @4xl:grid-cols-4">
         <EmailHealthSignalTile
           v-for="signal in overview.signals"
           :key="signal.key"
@@ -84,7 +84,7 @@
       </p>
     </section>
 
-    <section v-if="trendDays.length > 0" class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+    <section v-if="trendDays.length > 0" class="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
       <div class="app-card p-5">
         <h2 class="mb-4 text-sm font-semibold text-[var(--app-ink)]">Volume d'envoi</h2>
         <EmailHealthVolumeChart
@@ -115,9 +115,9 @@
         <div
           v-for="provider in providers"
           :key="provider.provider"
-          class="grid grid-cols-2 items-center gap-x-4 gap-y-2 py-3 first:pt-0 last:pb-0 md:grid-cols-[1.4fr_repeat(4,1fr)_auto]"
+          class="grid grid-cols-2 items-center gap-x-4 gap-y-2 py-3 first:pt-0 last:pb-0 @3xl:grid-cols-[1.4fr_repeat(4,1fr)_auto]"
         >
-          <div class="col-span-2 md:col-span-1">
+          <div class="col-span-2 @3xl:col-span-1">
             <p class="text-sm font-medium text-[var(--app-ink)]">{{ provider.label }}</p>
             <p v-if="provider.note" class="mt-0.5 text-[11px]" :style="{ color: statusColor(provider.status) }">
               {{ provider.note }}
@@ -136,7 +136,7 @@
             </div>
           </div>
           <span
-            class="justify-self-start rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase md:justify-self-end"
+            class="justify-self-start rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase @3xl:justify-self-end"
             :style="{ color: statusColor(provider.status), backgroundColor: statusSoft(provider.status) }"
           >
             {{ statusLabel(provider.status) }}
@@ -298,7 +298,7 @@
                   v-if="expandedTemplateId === score.id"
                   class="border-t border-[var(--app-line-soft)] bg-[var(--app-bg)] px-4 py-3"
                 >
-                  <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div class="grid grid-cols-1 gap-4 @3xl:grid-cols-2">
                     <div>
                       <p class="mb-1.5 text-[11px] font-semibold text-[var(--app-ink)]">Checklist cold email</p>
                       <ul class="space-y-1.5">
@@ -467,7 +467,7 @@
           Authentification du domaine <span class="font-mono text-[var(--app-accent-ink)]">{{ domain.domain }}</span>
         </h2>
       </div>
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div class="grid grid-cols-1 gap-3 @sm:grid-cols-2 @5xl:grid-cols-5">
         <div
           v-for="check in dnsChecks(domain)"
           :key="check.key"

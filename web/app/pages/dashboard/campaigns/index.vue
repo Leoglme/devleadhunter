@@ -19,7 +19,7 @@
     </div>
 
     <template v-else-if="campaignsStore.campaignsCount > 0">
-      <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div class="grid grid-cols-2 gap-3 @4xl:grid-cols-4">
         <div class="card p-3.5">
           <p class="app-label">Actives</p>
           <p class="mt-1 text-2xl font-bold text-[var(--app-green)] tabular-nums">{{ activeCampaignsCount }}</p>
@@ -40,7 +40,7 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+      <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @6xl:grid-cols-3">
         <button
           v-for="campaign in campaignsStore.campaigns"
           :key="campaign.id"

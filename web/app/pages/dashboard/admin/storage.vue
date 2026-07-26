@@ -1,6 +1,6 @@
 <template>
   <div class="mx-auto max-w-3xl space-y-8">
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-start @2xl:justify-between">
       <div>
         <h1 class="text-3xl font-bold text-[var(--app-ink)]">Stockage</h1>
         <p class="text-muted mt-2 text-sm leading-relaxed">
