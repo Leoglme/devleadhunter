@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="@container">
     <div class="rounded-2xl border border-[var(--app-line)] bg-[var(--app-surface)] p-4 md:hidden">
       <div class="flex items-center gap-1.5">
         <span
@@ -17,15 +17,26 @@
     </div>
 
     <ol
-      class="hidden rounded-2xl border border-[var(--app-line)] bg-[var(--app-surface)] p-2 md:flex md:items-stretch"
+      class="hidden rounded-2xl border border-[var(--app-line)] bg-[var(--app-surface)] p-2 md:flex md:items-center md:gap-2"
       aria-label="Progression"
     >
-      <li v-for="(step, index) in steps" :key="step.id" class="flex min-w-0 flex-1">
+      <li
+        v-for="(step, index) in steps"
+        :key="step.id"
+        class="flex min-w-0 items-center gap-2"
+        :class="index > 0 && 'flex-1'"
+      >
+        <span
+          v-if="index > 0"
+          aria-hidden="true"
+          class="h-px min-w-4 flex-1 rounded-full transition-colors"
+          :class="connectorClass(step.id - 1)"
+        />
         <button
           type="button"
           :disabled="step.id >= modelValue"
           :aria-current="step.id === modelValue ? 'step' : undefined"
-          class="flex w-full flex-col items-center rounded-xl pt-3 pb-3.5 transition-colors"
+          class="flex shrink-0 items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left transition-colors"
           :class="
             step.id === modelValue
               ? 'bg-[var(--app-surface-2)]'
@@ -35,32 +46,21 @@
           "
           @click="handleStepNavigate(step.id)"
         >
-          <span class="flex w-full items-center gap-2">
-            <span
-              class="h-px flex-1 rounded-full transition-colors"
-              :class="index === 0 || step.id === modelValue ? 'invisible' : connectorClass(step.id - 1)"
-            />
-            <span
-              class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition-colors"
-              :class="stepNodeClass(step.id)"
-            >
-              <UiStepCheck v-if="step.id < modelValue" class="h-4 w-4" />
-              <template v-else>{{ step.id }}</template>
-            </span>
-            <span
-              class="h-px flex-1 rounded-full transition-colors"
-              :class="index === steps.length - 1 || step.id === modelValue ? 'invisible' : connectorClass(step.id)"
-            />
+          <span
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition-colors"
+            :class="stepNodeClass(step.id)"
+          >
+            <UiStepCheck v-if="step.id < modelValue" class="h-4 w-4" />
+            <template v-else>{{ step.id }}</template>
           </span>
-
-          <span class="mt-2.5 block px-2 text-center text-balance">
+          <span class="min-w-0">
             <span
               class="block text-[13px] leading-snug font-semibold"
               :class="step.id === modelValue ? 'text-[var(--app-ink)]' : 'text-[var(--app-ink-soft)]'"
             >
               {{ step.label }}
             </span>
-            <span v-if="step.hint" class="mt-0.5 block text-[11px] leading-snug text-[var(--app-faint)]">
+            <span v-if="step.hint" class="mt-0.5 hidden text-[11px] leading-snug text-[var(--app-faint)] @3xl:block">
               {{ step.hint }}
             </span>
           </span>
@@ -108,9 +108,7 @@ function stepNodeClass(stepId: number): string {
 }
 
 /**
- * Classes for the line drawn after a given step. The segments sitting inside
- * the highlighted current tile are hidden in the template, so the line always
- * stops at the edge of the active card instead of running through it.
+ * Classes for the connector line drawn between a step and the next one.
  * @param stepId - The step the connector starts from (1-based).
  * @returns Background classes for the 1px line.
  */
