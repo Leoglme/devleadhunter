@@ -126,6 +126,46 @@
       </form>
     </div>
 
+    <div v-if="!isLoading" class="card mt-6">
+      <h2 class="text-base font-semibold text-[var(--app-ink)]">Commission plateforme</h2>
+      <p class="mt-1 text-xs text-[var(--app-ink-soft)]">
+        Prélevée sur les ventes facturées via le compte Stripe Connect d'un utilisateur, au moment de l'émission de la
+        facture. Sans effet sur vos propres ventes, encaissées par Qonto.
+      </p>
+      <form class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end" @submit.prevent="handleCommissionSubmit">
+        <div class="sm:w-56">
+          <label for="platform-commission" class="mb-2 block text-sm font-medium text-[var(--app-ink)]">
+            Taux de commission
+          </label>
+          <div class="relative">
+            <input
+              id="platform-commission"
+              v-model.number="commissionPercent"
+              type="number"
+              step="0.1"
+              min="0"
+              max="100"
+              class="input-field pr-8"
+            />
+            <span class="absolute top-1/2 right-3 -translate-y-1/2 text-[var(--app-ink-soft)]">%</span>
+          </div>
+        </div>
+        <div class="sm:pb-1">
+          <p class="text-xs text-[var(--app-ink-soft)]">
+            {{ commissionExample }}
+          </p>
+        </div>
+        <button
+          type="submit"
+          class="btn-primary cursor-pointer sm:ml-auto"
+          :disabled="isSavingCommission || commissionPercent === originalCommissionPercent"
+        >
+          <span v-if="isSavingCommission">Enregistrement…</span>
+          <span v-else>Enregistrer</span>
+        </button>
+      </form>
+    </div>
+
     <div v-if="isLoading" class="card">
       <div class="animate-pulse space-y-4">
         <div class="h-4 w-3/4 rounded bg-[var(--app-surface-2)]"></div>
@@ -147,8 +187,10 @@
 <script lang="ts" setup>
 import type { UseToastReturn } from '~/types/Composables'
 import type { CreditSettings } from '~/types'
+import type { CreditSettingsForm } from '~/types/CreditSettingsPage'
 import type { ComputedRef, Ref } from 'vue'
 import { ref, computed, onMounted } from 'vue'
+import type { PlatformCommission } from '~/services/creditSettingsService'
 import { CreditSettingsService } from '~/services/creditSettingsService'
 import { useToast } from '~/composables/useToast'
 
@@ -171,14 +213,7 @@ const error: Ref<string | null> = ref(null)
 /**
  * Form state
  */
-const form: Ref<{
-  price_per_credit: number
-  credits_per_search: number
-  credits_per_result: number
-  credits_per_email: number
-  free_credits_on_signup: number
-  minimum_credits_purchase: number
-}> = ref({
+const form: Ref<CreditSettingsForm> = ref({
   price_per_credit: 0.1,
   credits_per_search: 5,
   credits_per_result: 1,
@@ -190,14 +225,7 @@ const form: Ref<{
 /**
  * Original form values for comparison
  */
-const originalForm: Ref<{
-  price_per_credit: number
-  credits_per_search: number
-  credits_per_result: number
-  credits_per_email: number
-  free_credits_on_signup: number
-  minimum_credits_purchase: number
-}> = ref({
+const originalForm: Ref<CreditSettingsForm> = ref({
   price_per_credit: 0.1,
   credits_per_search: 5,
   credits_per_result: 1,
@@ -207,9 +235,24 @@ const originalForm: Ref<{
 })
 
 /**
+ * Platform commission on Stripe Connect sales (separate from credit pricing:
+ * it is admin-only, where the credit settings above are read publicly).
+ */
+const commissionPercent: Ref<number> = ref(0)
+const originalCommissionPercent: Ref<number> = ref(0)
+const isSavingCommission: Ref<boolean> = ref(false)
+
+/**
  * Toast composable
  */
 const toast: UseToastReturn = useToast()
+
+/** What the current rate takes on a standard 500 € sale. */
+const commissionExample: ComputedRef<string> = computed((): string => {
+  if (!commissionPercent.value) return 'Aucune commission prélevée.'
+  const cut: number = (500 * commissionPercent.value) / 100
+  return `Soit ${cut.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} € sur une vente de 500 €.`
+})
 
 /**
  * Check if form has changes
@@ -254,6 +297,37 @@ const loadCreditSettings: () => Promise<void> = async (): Promise<void> => {
     toast.error(errorMessage)
   } finally {
     isLoading.value = false
+  }
+}
+
+/**
+ * Load the platform commission rate.
+ * @returns {Promise<void>}
+ */
+const loadPlatformCommission: () => Promise<void> = async (): Promise<void> => {
+  try {
+    const commission: PlatformCommission = await CreditSettingsService.getPlatformCommission()
+    commissionPercent.value = commission.percent
+    originalCommissionPercent.value = commission.percent
+  } catch {
+    // Non-blocking: the credit settings above stay usable.
+  }
+}
+
+/**
+ * Save the platform commission rate.
+ * @returns {Promise<void>}
+ */
+const handleCommissionSubmit: () => Promise<void> = async (): Promise<void> => {
+  try {
+    isSavingCommission.value = true
+    await CreditSettingsService.updatePlatformCommission(commissionPercent.value)
+    originalCommissionPercent.value = commissionPercent.value
+    toast.success('Commission plateforme mise à jour')
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Erreur lors de la mise à jour de la commission')
+  } finally {
+    isSavingCommission.value = false
   }
 }
 
@@ -328,5 +402,6 @@ const handleSubmit: () => Promise<void> = async (): Promise<void> => {
  */
 onMounted(() => {
   loadCreditSettings()
+  loadPlatformCommission()
 })
 </script>

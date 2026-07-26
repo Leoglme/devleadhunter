@@ -62,6 +62,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_email_signatures", "migrations.add_email_signatures"),
     ("add_order_payment_provider_columns", "migrations.add_order_payment_provider_columns"),
     ("add_order_billing_details", "migrations.add_order_billing_details"),
+    ("add_platform_commission_percent", "migrations.add_platform_commission_percent"),
 ]
 
 

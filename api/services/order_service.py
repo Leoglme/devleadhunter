@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import UTC, datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
@@ -393,6 +394,26 @@ class OrderService:
     # Invoice generation (through the user's connected provider)
     # ------------------------------------------------------------------ #
 
+    def platform_commission_cents(self, db: Session, amount_cents: int) -> int | None:
+        """
+        The platform's cut on a sale, in cents, from the global admin rate.
+
+        Args:
+            db: Active database session.
+            amount_cents: The invoiced amount.
+
+        Returns:
+            The commission in cents, or ``None`` when no rate is configured —
+            Stripe then charges the connected account with no application fee.
+        """
+        from models.credit_settings import CreditSettings
+
+        settings = db.query(CreditSettings).filter(CreditSettings.id == 1).first()
+        percent = Decimal(settings.platform_commission_percent) if settings else Decimal(0)
+        if percent <= 0:
+            return None
+        return int((Decimal(amount_cents) * percent / Decimal(100)).to_integral_value(rounding=ROUND_HALF_UP))
+
     async def _resolve_provider(self, db: Session, user: User):
         """Return the user's connected encashment provider client, or None (manual sale)."""
         from enums.payment_provider import PaymentProvider
@@ -428,15 +449,28 @@ class OrderService:
                 db.refresh(order)
             return order
 
+        from enums.payment_provider import PaymentProvider
         from services.payment_providers import InvoiceRequest
 
         counterpart = self.build_billing_client(db, order)
         client_id = await provider.ensure_client(counterpart)
         product = PRODUCT_LABELS.get(order.product_type, "Site web")
         label = product if not order.business_name else f"{product} — {order.business_name}"
+        # The platform only takes a cut on sales it invoices for someone else.
+        commission = (
+            self.platform_commission_cents(db, order.amount_cents)
+            if provider.provider == PaymentProvider.STRIPE
+            else None
+        )
         issued = await provider.create_invoice(
             client_id,
-            InvoiceRequest(client=counterpart, amount_cents=order.amount_cents, currency=order.currency, label=label),
+            InvoiceRequest(
+                client=counterpart,
+                amount_cents=order.amount_cents,
+                currency=order.currency,
+                label=label,
+                application_fee_amount=commission,
+            ),
         )
         order.payment_provider = issued.provider
         order.invoice_id = issued.invoice_id

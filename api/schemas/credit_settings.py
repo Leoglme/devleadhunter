@@ -54,6 +54,9 @@ class CreditSettingsUpdate(BaseModel):
     minimum_credits_purchase: int | None = Field(
         None, ge=1, description="Minimum number of credits that can be purchased"
     )
+    platform_commission_percent: Decimal | None = Field(
+        None, ge=Decimal("0"), le=Decimal("100"), description="Platform commission on Stripe Connect sales, in percent"
+    )
 
     @model_validator(mode="after")
     def check_at_least_one_field(self) -> "CreditSettingsUpdate":
@@ -75,10 +78,22 @@ class CreditSettingsUpdate(BaseModel):
                 self.credits_per_email,
                 self.free_credits_on_signup,
                 self.minimum_credits_purchase,
+                self.platform_commission_percent,
             ]
         ):
             raise ValueError("At least one field must be provided for update")
         return self
+
+
+class PlatformCommissionResponse(BaseModel):
+    """The platform's cut on Stripe Connect sales.
+
+    Kept out of :class:`CreditSettingsResponse` on purpose: that one is read
+    without authentication (the landing page prices credits with it), and what
+    the platform takes on a user's sales has no business being public.
+    """
+
+    percent: float
 
 
 class CreditSettingsResponse(CreditSettingsBase):

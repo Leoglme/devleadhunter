@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from models.credit_settings import CreditSettings
-from schemas.credit_settings import CreditSettingsResponse, CreditSettingsUpdate
+from schemas.credit_settings import CreditSettingsResponse, CreditSettingsUpdate, PlatformCommissionResponse
 from services.auth_service import require_admin
 
 router = APIRouter(prefix="/credit-settings", tags=["credit-settings"])
@@ -36,6 +36,24 @@ async def get_credit_settings(db: Session = Depends(get_db)) -> CreditSettingsRe
             detail="Credit settings not found. Please run the seeder to initialize settings.",
         )
     return settings
+
+
+@router.get("/platform-commission", response_model=PlatformCommissionResponse)
+async def get_platform_commission(
+    current_user: Any = Depends(require_admin), db: Session = Depends(get_db)
+) -> PlatformCommissionResponse:
+    """
+    Read the platform's commission on Stripe Connect sales (admin only).
+
+    Args:
+        current_user: Current authenticated admin user.
+        db: Database session.
+
+    Returns:
+        The commission rate in percent (0 when nothing is taken).
+    """
+    settings: CreditSettings | None = db.query(CreditSettings).filter(CreditSettings.id == 1).first()
+    return PlatformCommissionResponse(percent=float(settings.platform_commission_percent) if settings else 0.0)
 
 
 @router.put("", response_model=CreditSettingsResponse)
@@ -77,6 +95,8 @@ async def update_credit_settings(
         settings.free_credits_on_signup = settings_data.free_credits_on_signup
     if settings_data.minimum_credits_purchase is not None:
         settings.minimum_credits_purchase = settings_data.minimum_credits_purchase
+    if settings_data.platform_commission_percent is not None:
+        settings.platform_commission_percent = settings_data.platform_commission_percent
 
     db.commit()
     db.refresh(settings)

@@ -8,6 +8,11 @@ import { ApiClient } from './api'
 
 const CREDIT_SETTINGS_BASE_URL: string = '/api/v1/credit-settings'
 
+/** The platform's cut on sales invoiced through a user's Stripe Connect account. */
+export type PlatformCommission = {
+  percent: number
+}
+
 export class CreditSettingsService {
   /**
    * Get current credit settings (public read access)
@@ -26,5 +31,23 @@ export class CreditSettingsService {
    */
   static async updateCreditSettings(settingsData: Partial<CreditSettings>): Promise<CreditSettings> {
     return ApiClient.put<CreditSettings>(CREDIT_SETTINGS_BASE_URL, settingsData)
+  }
+
+  /**
+   * Read the platform commission on Stripe Connect sales (admin only)
+   * @returns The commission rate in percent
+   * @throws If request fails
+   */
+  static async getPlatformCommission(): Promise<PlatformCommission> {
+    return ApiClient.get<PlatformCommission>(`${CREDIT_SETTINGS_BASE_URL}/platform-commission`)
+  }
+
+  /**
+   * Update the platform commission on Stripe Connect sales (admin only)
+   * @param percent - Commission rate in percent (0 disables it)
+   * @throws If request fails
+   */
+  static async updatePlatformCommission(percent: number): Promise<void> {
+    await ApiClient.put<CreditSettings>(CREDIT_SETTINGS_BASE_URL, { platform_commission_percent: percent })
   }
 }

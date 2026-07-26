@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from enums.order_status import OrderStatus
+from enums.payment_provider import PaymentProvider
 from services.order_service import OrderService, _split_postal_address
 from services.payment_providers.base import IssuedInvoice
 
@@ -28,6 +29,8 @@ class _FakeDB:
 
 class _FakeProvider:
     """Records the invoice request and returns a canned issued invoice."""
+
+    provider = PaymentProvider.QONTO
 
     def __init__(self) -> None:
         self.ensure_client_called_with: object = None
@@ -112,6 +115,38 @@ def test_ensure_invoice_bills_the_reviewed_address(monkeypatch: pytest.MonkeyPat
     assert counterpart.zip_code == "75002"
     assert counterpart.city == "Paris"
     assert counterpart.country_code == "FR"
+
+
+def test_stripe_invoice_carries_the_platform_commission(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A configured rate becomes the Stripe application fee, in cents."""
+    service = OrderService()
+    provider = _FakeProvider()
+    provider.provider = PaymentProvider.STRIPE
+
+    async def _fake_resolve(_db: object, _user: object) -> _FakeProvider:
+        return provider
+
+    monkeypatch.setattr(service, "_resolve_provider", _fake_resolve)
+    monkeypatch.setattr(service, "platform_commission_cents", lambda _db, amount: amount // 10)
+    asyncio.run(service.ensure_invoice(_FakeDB(), SimpleNamespace(id=1), _order()))
+
+    assert provider.create_invoice_called_with.application_fee_amount == 5000
+
+
+def test_qonto_invoice_never_carries_a_commission(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Léo invoices his own clients through Qonto — the platform takes nothing."""
+    service = OrderService()
+    provider = _FakeProvider()
+    provider.provider = PaymentProvider.QONTO
+
+    async def _fake_resolve(_db: object, _user: object) -> _FakeProvider:
+        return provider
+
+    monkeypatch.setattr(service, "_resolve_provider", _fake_resolve)
+    monkeypatch.setattr(service, "platform_commission_cents", lambda _db, _amount: 5000)
+    asyncio.run(service.ensure_invoice(_FakeDB(), SimpleNamespace(id=1), _order()))
+
+    assert provider.create_invoice_called_with.application_fee_amount is None
 
 
 def test_finalize_sale_refuses_incomplete_billing(monkeypatch: pytest.MonkeyPatch) -> None:

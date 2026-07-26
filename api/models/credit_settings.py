@@ -55,6 +55,15 @@ class CreditSettings(Base):
     minimum_credits_purchase: Mapped[int] = mapped_column(
         nullable=False, default=10, comment="Minimum number of credits that can be purchased"
     )
+    # Platform cut on sales invoiced through a user's Stripe Connect account, taken
+    # as an application fee. Qonto ignores it (Léo invoices his own clients).
+    platform_commission_percent: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),
+        nullable=False,
+        default=Decimal("0.00"),
+        server_default="0.00",
+        comment="Platform commission on Stripe Connect sales, in percent",
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(onupdate=func.now(), nullable=True)
 
