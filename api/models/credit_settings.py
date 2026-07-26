@@ -5,7 +5,7 @@ Credit settings model for storing credit pricing and costs configuration.
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Numeric
+from sqlalchemy import Integer, Numeric
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -57,12 +57,20 @@ class CreditSettings(Base):
     )
     # Platform cut on sales invoiced through a user's Stripe Connect account, taken
     # as an application fee. Qonto ignores it (Léo invoices his own clients).
+    # Both terms add up: a fixed part keeps small sales worth invoicing.
     platform_commission_percent: Mapped[Decimal] = mapped_column(
         Numeric(5, 2),
         nullable=False,
         default=Decimal("0.00"),
         server_default="0.00",
         comment="Platform commission on Stripe Connect sales, in percent",
+    )
+    platform_commission_fixed_cents: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="Fixed platform commission on Stripe Connect sales, in cents",
     )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(onupdate=func.now(), nullable=True)

@@ -50,10 +50,15 @@ async def get_platform_commission(
         db: Database session.
 
     Returns:
-        The commission rate in percent (0 when nothing is taken).
+        The commission rate and its fixed part (both 0 when nothing is taken).
     """
     settings: CreditSettings | None = db.query(CreditSettings).filter(CreditSettings.id == 1).first()
-    return PlatformCommissionResponse(percent=float(settings.platform_commission_percent) if settings else 0.0)
+    if settings is None:
+        return PlatformCommissionResponse(percent=0.0, fixed_cents=0)
+    return PlatformCommissionResponse(
+        percent=float(settings.platform_commission_percent),
+        fixed_cents=settings.platform_commission_fixed_cents,
+    )
 
 
 @router.put("", response_model=CreditSettingsResponse)
@@ -97,6 +102,8 @@ async def update_credit_settings(
         settings.minimum_credits_purchase = settings_data.minimum_credits_purchase
     if settings_data.platform_commission_percent is not None:
         settings.platform_commission_percent = settings_data.platform_commission_percent
+    if settings_data.platform_commission_fixed_cents is not None:
+        settings.platform_commission_fixed_cents = settings_data.platform_commission_fixed_cents
 
     db.commit()
     db.refresh(settings)

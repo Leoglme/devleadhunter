@@ -396,23 +396,31 @@ class OrderService:
 
     def platform_commission_cents(self, db: Session, amount_cents: int) -> int | None:
         """
-        The platform's cut on a sale, in cents, from the global admin rate.
+        The platform's cut on a sale, in cents: a percentage plus a fixed part.
+
+        The fixed part is what keeps a small sale worth invoicing (10 % of 10 €
+        is 1 €); the total is capped at the sale itself, since Stripe rejects an
+        application fee larger than the amount charged.
 
         Args:
             db: Active database session.
             amount_cents: The invoiced amount.
 
         Returns:
-            The commission in cents, or ``None`` when no rate is configured —
+            The commission in cents, or ``None`` when nothing is configured —
             Stripe then charges the connected account with no application fee.
         """
         from models.credit_settings import CreditSettings
 
         settings = db.query(CreditSettings).filter(CreditSettings.id == 1).first()
-        percent = Decimal(settings.platform_commission_percent) if settings else Decimal(0)
-        if percent <= 0:
+        if settings is None:
             return None
-        return int((Decimal(amount_cents) * percent / Decimal(100)).to_integral_value(rounding=ROUND_HALF_UP))
+        percent = Decimal(settings.platform_commission_percent)
+        fixed_cents = settings.platform_commission_fixed_cents or 0
+        if percent <= 0 and fixed_cents <= 0:
+            return None
+        variable_cents = int((Decimal(amount_cents) * percent / Decimal(100)).to_integral_value(rounding=ROUND_HALF_UP))
+        return min(variable_cents + fixed_cents, amount_cents)
 
     async def _resolve_provider(self, db: Session, user: User):
         """Return the user's connected encashment provider client, or None (manual sale)."""

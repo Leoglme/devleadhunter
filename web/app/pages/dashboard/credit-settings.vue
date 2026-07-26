@@ -133,9 +133,9 @@
         facture. Sans effet sur vos propres ventes, encaissées par Qonto.
       </p>
       <form class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end" @submit.prevent="handleCommissionSubmit">
-        <div class="sm:w-56">
+        <div class="sm:w-40">
           <label for="platform-commission" class="mb-2 block text-sm font-medium text-[var(--app-ink)]">
-            Taux de commission
+            Pourcentage
           </label>
           <div class="relative">
             <input
@@ -150,6 +150,22 @@
             <span class="absolute top-1/2 right-3 -translate-y-1/2 text-[var(--app-ink-soft)]">%</span>
           </div>
         </div>
+        <div class="sm:w-40">
+          <label for="platform-commission-fixed" class="mb-2 block text-sm font-medium text-[var(--app-ink)]">
+            Montant fixe
+          </label>
+          <div class="relative">
+            <span class="absolute top-1/2 left-3 -translate-y-1/2 text-[var(--app-ink-soft)]">€</span>
+            <input
+              id="platform-commission-fixed"
+              v-model.number="commissionFixedEuros"
+              type="number"
+              step="0.5"
+              min="0"
+              class="input-field pl-8"
+            />
+          </div>
+        </div>
         <div class="sm:pb-1">
           <p class="text-xs text-[var(--app-ink-soft)]">
             {{ commissionExample }}
@@ -158,7 +174,7 @@
         <button
           type="submit"
           class="btn-primary cursor-pointer sm:ml-auto"
-          :disabled="isSavingCommission || commissionPercent === originalCommissionPercent"
+          :disabled="isSavingCommission || !hasCommissionChanges"
         >
           <span v-if="isSavingCommission">Enregistrement…</span>
           <span v-else>Enregistrer</span>
@@ -239,7 +255,9 @@ const originalForm: Ref<CreditSettingsForm> = ref({
  * it is admin-only, where the credit settings above are read publicly).
  */
 const commissionPercent: Ref<number> = ref(0)
+const commissionFixedEuros: Ref<number> = ref(0)
 const originalCommissionPercent: Ref<number> = ref(0)
+const originalCommissionFixedEuros: Ref<number> = ref(0)
 const isSavingCommission: Ref<boolean> = ref(false)
 
 /**
@@ -247,11 +265,22 @@ const isSavingCommission: Ref<boolean> = ref(false)
  */
 const toast: UseToastReturn = useToast()
 
-/** What the current rate takes on a standard 500 € sale. */
+/** Whether either commission field differs from what is stored. */
+const hasCommissionChanges: ComputedRef<boolean> = computed((): boolean => {
+  return (
+    commissionPercent.value !== originalCommissionPercent.value ||
+    commissionFixedEuros.value !== originalCommissionFixedEuros.value
+  )
+})
+
+/** What the configured commission takes on a standard 500 € sale and on a small one. */
 const commissionExample: ComputedRef<string> = computed((): string => {
-  if (!commissionPercent.value) return 'Aucune commission prélevée.'
-  const cut: number = (500 * commissionPercent.value) / 100
-  return `Soit ${cut.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} € sur une vente de 500 €.`
+  if (!commissionPercent.value && !commissionFixedEuros.value) return 'Aucune commission prélevée.'
+  const cutOn: (saleEuros: number) => string = (saleEuros: number): string => {
+    const cut: number = (saleEuros * commissionPercent.value) / 100 + commissionFixedEuros.value
+    return Math.min(cut, saleEuros).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  }
+  return `Soit ${cutOn(500)} € sur une vente de 500 €, et ${cutOn(10)} € sur une vente de 10 €.`
 })
 
 /**
@@ -308,7 +337,9 @@ const loadPlatformCommission: () => Promise<void> = async (): Promise<void> => {
   try {
     const commission: PlatformCommission = await CreditSettingsService.getPlatformCommission()
     commissionPercent.value = commission.percent
-    originalCommissionPercent.value = commission.percent
+    commissionFixedEuros.value = commission.fixed_cents / 100
+    originalCommissionPercent.value = commissionPercent.value
+    originalCommissionFixedEuros.value = commissionFixedEuros.value
   } catch {
     // Non-blocking: the credit settings above stay usable.
   }
@@ -321,8 +352,12 @@ const loadPlatformCommission: () => Promise<void> = async (): Promise<void> => {
 const handleCommissionSubmit: () => Promise<void> = async (): Promise<void> => {
   try {
     isSavingCommission.value = true
-    await CreditSettingsService.updatePlatformCommission(commissionPercent.value)
+    await CreditSettingsService.updatePlatformCommission(
+      commissionPercent.value,
+      Math.round(commissionFixedEuros.value * 100),
+    )
     originalCommissionPercent.value = commissionPercent.value
+    originalCommissionFixedEuros.value = commissionFixedEuros.value
     toast.success('Commission plateforme mise à jour')
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Erreur lors de la mise à jour de la commission')

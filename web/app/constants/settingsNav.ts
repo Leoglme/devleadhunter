@@ -6,13 +6,6 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
     entries: [
       { kind: 'link', to: '/dashboard/credits', label: 'Mes crédits', icon: 'i-lucide-coins' },
       { kind: 'link', to: '/dashboard/buy-credits', label: 'Acheter des crédits', icon: 'i-lucide-credit-card' },
-      {
-        kind: 'link',
-        to: '/dashboard/credit-settings',
-        label: 'Paramètres des crédits',
-        icon: 'i-lucide-sliders-horizontal',
-        adminOnly: true,
-      },
     ],
   },
   {
@@ -54,6 +47,12 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
     adminOnly: true,
     entries: [
       { kind: 'link', to: '/dashboard/users', label: 'Utilisateurs', icon: 'i-lucide-users' },
+      {
+        kind: 'link',
+        to: '/dashboard/credit-settings',
+        label: 'Crédits & commission',
+        icon: 'i-lucide-sliders-horizontal',
+      },
       { kind: 'link', to: '/dashboard/admin/monitoring', label: 'Monitoring', icon: 'i-lucide-activity' },
       { kind: 'link', to: '/dashboard/admin/storage', label: 'Stockage', icon: 'i-lucide-hard-drive' },
       { kind: 'link', to: '/dashboard/accounting', label: 'Comptabilité', icon: 'i-lucide-calculator' },

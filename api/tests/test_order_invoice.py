@@ -7,6 +7,7 @@ and the email copy (no "Stripe", black button, generic payment URL).
 """
 
 import asyncio
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -115,6 +116,45 @@ def test_ensure_invoice_bills_the_reviewed_address(monkeypatch: pytest.MonkeyPat
     assert counterpart.zip_code == "75002"
     assert counterpart.city == "Paris"
     assert counterpart.country_code == "FR"
+
+
+class _SettingsDB(_FakeDB):
+    """Fake session returning canned credit settings for the commission maths."""
+
+    def __init__(self, settings: object) -> None:
+        self._settings = settings
+
+    def query(self, _model: object) -> "_SettingsDB":
+        return self
+
+    def filter(self, *_args: object) -> "_SettingsDB":
+        return self
+
+    def first(self) -> object:
+        return self._settings
+
+
+def _commission(percent: str, fixed_cents: int, amount_cents: int) -> int | None:
+    settings = SimpleNamespace(
+        platform_commission_percent=Decimal(percent), platform_commission_fixed_cents=fixed_cents
+    )
+    return OrderService().platform_commission_cents(_SettingsDB(settings), amount_cents)
+
+
+def test_platform_commission_adds_the_percentage_and_the_fixed_part() -> None:
+    """10 % + 1 € on a 10 € sale is 2 € — the fixed part is what makes it worth invoicing."""
+    assert _commission("10", 100, 1000) == 200
+    assert _commission("10", 100, 50000) == 5100
+
+
+def test_platform_commission_is_none_when_nothing_is_configured() -> None:
+    """Both terms at zero means no application fee at all."""
+    assert _commission("0", 0, 50000) is None
+
+
+def test_platform_commission_never_exceeds_the_sale() -> None:
+    """Stripe rejects an application fee larger than the amount charged."""
+    assert _commission("0", 500, 300) == 300
 
 
 def test_stripe_invoice_carries_the_platform_commission(monkeypatch: pytest.MonkeyPatch) -> None:
