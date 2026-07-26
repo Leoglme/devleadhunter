@@ -18,8 +18,24 @@ from services.order_service import OrderService, _split_postal_address
 from services.payment_providers.base import IssuedInvoice
 
 
+class _FakeLockQuery:
+    """No-op stand-in for the ``SELECT ... FOR UPDATE`` row lock chain."""
+
+    def filter(self, *_conditions: object) -> "_FakeLockQuery":
+        return self
+
+    def with_for_update(self) -> "_FakeLockQuery":
+        return self
+
+    def first(self) -> None:
+        return None
+
+
 class _FakeDB:
-    """No-op session: the service only calls commit/refresh on it."""
+    """No-op session: the service only calls query/commit/refresh on it."""
+
+    def query(self, *_entities: object) -> _FakeLockQuery:
+        return _FakeLockQuery()
 
     def commit(self) -> None:
         return None

@@ -120,6 +120,14 @@ jobs:
             STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
             STRIPE_PUBLIC_KEY=${{ secrets.STRIPE_PUBLIC_KEY }}
             STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}
+            # Qonto (encaissement des ventes, admin-only). En production : credentials
+            # issus du "Release my app" du Developer Portal, PAS de staging token.
+            # Tant que les secrets ne sont pas créés, les valeurs sont vides et la
+            # connexion Qonto échoue bruyamment (aucun fallback sandbox possible).
+            QONTO_ENVIRONMENT=production
+            QONTO_CLIENT_ID=${{ secrets.QONTO_CLIENT_ID }}
+            QONTO_CLIENT_SECRET=${{ secrets.QONTO_CLIENT_SECRET }}
+            QONTO_REDIRECT_URI=https://api.devleadhunter.dibodev.fr/api/v1/payment-accounts/qonto/callback
             DEMO_HOST_BASE_URL=https://demo.dibodev.fr
             DEMO_SITE_VERIFY_RETRIES=3
             DEMO_SITE_VERIFY_RETRY_DELAY_SECONDS=2

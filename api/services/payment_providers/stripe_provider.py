@@ -15,7 +15,7 @@ import httpx
 import stripe
 
 from core.config import settings
-from enums.payment_provider import PaymentProvider
+from enums.payment_provider import PaymentEnvironment, PaymentProvider
 from models.payment_account import PaymentAccount
 from services.payment_providers.base import (
     BillingClient,
@@ -56,6 +56,17 @@ class StripePaymentProvider(PaymentProviderClient):
             raise StripeConnectError("No Stripe connected account id on this payment account.")
         if not account.stripe_charges_enabled:
             raise StripeConnectError("Stripe connected account cannot accept charges yet (onboarding incomplete).")
+        # Same fail-loudly rule as Qonto: an account onboarded in test mode must
+        # never be invoiced with a live key (and vice versa).
+        runtime = (
+            PaymentEnvironment.SANDBOX.value
+            if settings.stripe_secret_key.startswith("sk_test")
+            else PaymentEnvironment.PRODUCTION.value
+        )
+        if account.environment and account.environment != runtime:
+            raise StripeConnectError(
+                f"Stripe account was connected in '{account.environment}' but the platform key is '{runtime}'."
+            )
         self._account = account
         self._connected_account_id = account.stripe_account_id
         stripe.api_key = settings.stripe_secret_key

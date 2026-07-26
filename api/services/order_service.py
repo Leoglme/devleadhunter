@@ -8,6 +8,7 @@ via the Stripe webhook), then fulfil it (deploy to prod + hand over CMS access).
 
 from __future__ import annotations
 
+import html
 import logging
 import re
 from datetime import UTC, datetime, timedelta
@@ -377,6 +378,8 @@ class OrderService:
         Raises:
             ValueError: When a provider-required billing field is missing.
         """
+        if order.status in (OrderStatus.CANCELLED.value, OrderStatus.REFUNDED.value):
+            raise ValueError("Cette commande est annulée ou remboursée — aucune facture ne sera émise.")
         missing = self.missing_billing_fields(db, user, billing)
         if missing:
             raise ValueError(f"Facturation incomplète : renseignez {', '.join(missing)}.")
@@ -432,8 +435,13 @@ class OrderService:
         if account is None or not account.is_connected:
             return None
         if account.provider == PaymentProvider.QONTO.value:
-            token = await payment_account_service.get_valid_qonto_access_token(db, account)
-            return get_payment_provider(account, qonto_access_token=token)
+            # OAuth when tokens are stored; otherwise the admin-only API-key fallback.
+            if account.qonto_access_token and account.qonto_refresh_token:
+                token = await payment_account_service.get_valid_qonto_access_token(db, account)
+                return get_payment_provider(account, qonto_access_token=token)
+            return get_payment_provider(
+                account, qonto_api_credentials=payment_account_service.qonto_api_credentials(account)
+            )
         return get_payment_provider(account)
 
     async def ensure_invoice(self, db: Session, user: User, order: Order) -> Order:
@@ -455,6 +463,17 @@ class OrderService:
                 order.payment_url = order.stripe_payment_url
                 db.commit()
                 db.refresh(order)
+            return order
+
+        # Serialize concurrent finalizations of the same order (double-click, two
+        # tabs): the row lock — taken after the provider resolution, whose token
+        # refresh may commit and would release it — makes the second request wait,
+        # then see the first one's invoice instead of burning a second number.
+        # Held across the provider calls, released by the commit below. No-op on
+        # SQLite (tests).
+        db.query(Order).filter(Order.id == order.id).with_for_update().first()
+        db.refresh(order)
+        if order.invoice_id:
             return order
 
         from enums.payment_provider import PaymentProvider
@@ -549,14 +568,19 @@ class OrderService:
         Returns:
             The rendered ``subject`` and ``body_html``.
         """
-        business = order.business_name or "votre entreprise"
+        # Escaped: the business name comes from scraping and the sender name from
+        # the user profile — neither may inject markup into the client's email.
+        business = html.escape(order.business_name or "votre entreprise")
+        sender = html.escape(sender_name)
         amount = format_amount(order.amount_cents, order.currency)
         product = PRODUCT_LABELS.get(order.product_type, "site web")
-        url = order.payment_url or order.stripe_payment_url or "#"
+        url = html.escape(order.payment_url or order.stripe_payment_url or "#", quote=True)
         attachment_note = " Vous trouverez la facture en pièce jointe." if order.invoice_id else ""
         # Naming the invoice ties the button to the attached PDF — a reference an
         # impersonator would not have.
-        action = f"Régler la facture {order.invoice_number}" if order.invoice_number else "Procéder au paiement"
+        action = (
+            f"Régler la facture {html.escape(order.invoice_number)}" if order.invoice_number else "Procéder au paiement"
+        )
 
         subject = f"Votre {product} est prêt — finalisons ensemble"
         body_html = f"""
@@ -582,7 +606,7 @@ class OrderService:
             votre contenu.
           </p>
           <p>Une question avant de valider ? Répondez simplement à cet email.</p>
-          <p>Bien à vous,<br/>{sender_name}</p>
+          <p>Bien à vous,<br/>{sender}</p>
         </div>
         """.strip()
         return {"subject": subject, "body_html": body_html}

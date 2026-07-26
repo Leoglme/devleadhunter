@@ -97,20 +97,17 @@ async def qonto_callback(
     """
     Qonto OAuth redirect target: exchange the code and store the tokens.
 
-    Hit by the system browser without a JWT, so the owner is carried in ``state``
-    (``user_<id>``, set at authorize time) — same pattern as the Gmail callback.
+    Hit by the system browser without a JWT, so the owner is carried in ``state``,
+    minted and HMAC-signed at authorize time — an unsigned state would let anyone
+    bind an arbitrary Qonto organization to any user id.
     Renders a standalone result page; the app polls its status to reflect it.
     """
     if error or not code:
         logger.warning("[Qonto OAuth] Callback without code (error=%r)", error)
         return _connection_result_page(provider="Qonto", ok=False)
-    if not state.startswith("user_"):
-        logger.warning("[Qonto OAuth] Callback with unexpected state=%r", state)
-        return _connection_result_page(provider="Qonto", ok=False)
-    try:
-        # state is "user_<id>_<random>" — the id is the second segment.
-        user_id = int(state.split("_")[1])
-    except (IndexError, ValueError):
+    user_id = payment_account_service.parse_qonto_state(state)
+    if user_id is None:
+        logger.warning("[Qonto OAuth] Callback with invalid or expired state=%r", state)
         return _connection_result_page(provider="Qonto", ok=False)
 
     try:

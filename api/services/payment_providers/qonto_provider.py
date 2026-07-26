@@ -52,20 +52,32 @@ class QontoPaymentProvider(PaymentProviderClient):
 
     provider = PaymentProvider.QONTO
 
-    def __init__(self, account: PaymentAccount, access_token: str) -> None:
+    def __init__(
+        self,
+        account: PaymentAccount,
+        access_token: str | None = None,
+        *,
+        api_credentials: tuple[str, str] | None = None,
+    ) -> None:
         """
         Build the provider for a connected account, guarding the environment.
 
         Args:
             account: The user's connected Qonto account.
             access_token: A valid (refreshed if needed) OAuth access token.
+            api_credentials: ``(login, secret)`` API-key pair — the admin-only
+                fallback used when no OAuth tokens are stored.
 
         Raises:
+            ValueError: When neither an access token nor API credentials are given.
             QontoEnvironmentError: If the runtime environment is inconsistent
                 with itself or with the account's stored environment.
         """
+        if not access_token and not api_credentials:
+            raise ValueError("Qonto provider needs an OAuth access token or API-key credentials.")
         self._account = account
         self._access_token = access_token
+        self._api_credentials = api_credentials
         self._assert_environment_consistent()
 
     def _assert_environment_consistent(self) -> None:
@@ -92,9 +104,15 @@ class QontoPaymentProvider(PaymentProviderClient):
         Build the request headers, adding the staging-token header in sandbox.
 
         Returns:
-            Headers carrying the bearer token (+ ``X-Qonto-Staging-Token`` in sandbox).
+            Headers carrying the OAuth bearer token — or the ``login:secret``
+            API-key form Qonto expects — plus ``X-Qonto-Staging-Token`` in sandbox.
         """
-        headers = {"Authorization": f"Bearer {self._access_token}"}
+        if self._access_token:
+            authorization = f"Bearer {self._access_token}"
+        else:
+            login, secret = self._api_credentials or ("", "")
+            authorization = f"{login}:{secret}"
+        headers = {"Authorization": authorization}
         if settings.qonto_environment == PaymentEnvironment.SANDBOX.value:
             headers["X-Qonto-Staging-Token"] = settings.qonto_staging_token
         return headers
