@@ -158,25 +158,26 @@
             </NuxtLink>
           </div>
 
-          <div class="rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-4">
-            <p class="app-label mb-3">Comment ça marche</p>
-            <ol class="space-y-2.5">
-              <li v-for="(text, index) in SEARCH_STEPS" :key="text" class="flex items-start gap-2.5">
-                <span
-                  class="font-label flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--app-surface-2)] text-[0.6rem] font-semibold text-[var(--app-ink)]"
-                >
-                  {{ index + 1 }}
-                </span>
-                <p class="text-[11px] leading-relaxed text-[var(--app-ink-soft)]">{{ text }}</p>
-              </li>
-            </ol>
-            <p
-              class="mt-3 flex items-center gap-2 border-t border-[var(--app-line-soft)] pt-3 text-[11px] text-[var(--app-ink-soft)]"
-            >
-              <UIcon name="i-lucide-info" class="h-3.5 w-3.5 shrink-0 text-[var(--app-accent-ink)]" />
-              Chaque prospect trouvé consomme des crédits selon vos paramètres.
-            </p>
-          </div>
+          <UiCollapsibleCard icon="i-lucide-info" title="Comment ça marche">
+            <div class="px-4 py-4">
+              <ol class="space-y-2.5">
+                <li v-for="(text, index) in SEARCH_STEPS" :key="text" class="flex items-start gap-2.5">
+                  <span
+                    class="font-label flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--app-surface-2)] text-[0.6rem] font-semibold text-[var(--app-ink)]"
+                  >
+                    {{ index + 1 }}
+                  </span>
+                  <p class="text-[11px] leading-relaxed text-[var(--app-ink-soft)]">{{ text }}</p>
+                </li>
+              </ol>
+              <p
+                class="mt-3 flex items-center gap-2 border-t border-[var(--app-line-soft)] pt-3 text-[11px] text-[var(--app-ink-soft)]"
+              >
+                <UIcon name="i-lucide-info" class="h-3.5 w-3.5 shrink-0 text-[var(--app-accent-ink)]" />
+                Chaque prospect trouvé consomme des crédits selon vos paramètres.
+              </p>
+            </div>
+          </UiCollapsibleCard>
         </div>
 
         <div class="flex gap-2 border-t border-[var(--app-line)] px-5 py-4">

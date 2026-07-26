@@ -150,35 +150,43 @@
         Réputation Gmail — <span class="font-mono text-[var(--app-accent-ink)]">{{ postmaster.domain }}</span>
       </h2>
 
-      <div v-if="!postmaster.configured" class="mt-3 rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-4">
-        <p class="flex items-center gap-2 text-sm text-[var(--app-ink)]">
-          <UIcon name="i-lucide-plug-zap" class="h-4 w-4 text-[var(--app-accent-ink)]" />
-          Branchez Google Postmaster Tools (gratuit) pour voir la réputation de votre domaine telle que Gmail la
-          calcule.
-        </p>
-        <ol class="mt-3 list-inside list-decimal space-y-1.5 text-xs leading-relaxed text-[var(--app-ink-soft)]">
-          <li>
-            Vérifiez le domaine sur
-            <a href="https://postmaster.google.com" target="_blank" rel="noopener" class="underline">
-              postmaster.google.com</a
-            >
-            (un enregistrement TXT à poser).
-          </li>
-          <li>
-            Dans Google Cloud : activez l'API « Postmaster Tools », créez un service account et téléchargez sa clé JSON.
-          </li>
-          <li>
-            Dans Postmaster Tools <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> votre
-            domaine <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> « Gérer les
-            utilisateurs » : ajoutez l'email du service account.
-          </li>
-          <li>
-            Ajoutez
-            <code class="rounded bg-[var(--app-surface-2)] px-1">GOOGLE_POSTMASTER_CREDENTIALS_FILE</code> (chemin de la
-            clé JSON) dans le <code class="rounded bg-[var(--app-surface-2)] px-1">.env</code> de l'API.
-          </li>
-        </ol>
-      </div>
+      <UiCollapsibleCard
+        v-if="!postmaster.configured"
+        class="mt-3"
+        icon="i-lucide-plug-zap"
+        title="Brancher Google Postmaster Tools"
+        suffix="gratuit"
+      >
+        <div class="px-4 py-4">
+          <p class="text-xs leading-relaxed text-[var(--app-ink-soft)]">
+            Postmaster Tools montre la réputation de votre domaine telle que Gmail la calcule.
+          </p>
+          <ol class="mt-3 list-inside list-decimal space-y-1.5 text-xs leading-relaxed text-[var(--app-ink-soft)]">
+            <li>
+              Vérifiez le domaine sur
+              <a href="https://postmaster.google.com" target="_blank" rel="noopener" class="underline">
+                postmaster.google.com</a
+              >
+              (un enregistrement TXT à poser).
+            </li>
+            <li>
+              Dans Google Cloud : activez l'API « Postmaster Tools », créez un service account et téléchargez sa clé
+              JSON.
+            </li>
+            <li>
+              Dans Postmaster Tools
+              <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> votre domaine
+              <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> « Gérer les utilisateurs »
+              : ajoutez l'email du service account.
+            </li>
+            <li>
+              Ajoutez
+              <code class="rounded bg-[var(--app-surface-2)] px-1">GOOGLE_POSTMASTER_CREDENTIALS_FILE</code> (chemin de
+              la clé JSON) dans le <code class="rounded bg-[var(--app-surface-2)] px-1">.env</code> de l'API.
+            </li>
+          </ol>
+        </div>
+      </UiCollapsibleCard>
 
       <p v-else-if="postmaster.error" class="mt-3 text-sm text-[var(--app-red)]">{{ postmaster.error }}</p>
 
