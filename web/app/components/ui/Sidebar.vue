@@ -60,13 +60,6 @@
     </div>
 
     <div class="px-4 pt-3">
-      <NuxtLink to="/dashboard/automations/new" class="app-btn-primary h-8 min-h-8 w-full text-xs" @click="handleClick">
-        <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" />
-        Créer une automatisation
-      </NuxtLink>
-    </div>
-
-    <div class="px-4 pt-2">
       <button
         type="button"
         class="flex w-full cursor-pointer items-center justify-between rounded-lg border border-[var(--app-line)] bg-[var(--app-bg)] px-2.5 py-1.5 text-xs text-[var(--app-faint)] transition-colors hover:border-[var(--app-ink-soft)] hover:text-[var(--app-ink-soft)]"
@@ -82,6 +75,13 @@
           Ctrl K
         </span>
       </button>
+    </div>
+
+    <div class="px-4 pt-2">
+      <NuxtLink to="/dashboard/automations/new" class="app-btn-primary h-8 min-h-8 w-full text-xs" @click="handleClick">
+        <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" />
+        Créer une automatisation
+      </NuxtLink>
     </div>
 
     <nav class="flex flex-1 flex-col overflow-y-auto px-4 py-3">
