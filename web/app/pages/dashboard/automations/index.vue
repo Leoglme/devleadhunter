@@ -8,7 +8,9 @@
         </p>
         <h1 class="app-page-title mt-2">Automatisations</h1>
         <p class="mt-1.5 text-sm text-[var(--app-ink-soft)]">
-          Trouver → générer les sites → valider → démarcher, en une passe.
+          Trouver <UIcon name="i-lucide-arrow-right" class="inline-block h-3.5 w-3.5 align-[-2px]" /> générer les sites
+          <UIcon name="i-lucide-arrow-right" class="inline-block h-3.5 w-3.5 align-[-2px]" /> valider
+          <UIcon name="i-lucide-arrow-right" class="inline-block h-3.5 w-3.5 align-[-2px]" /> démarcher, en une passe.
         </p>
       </div>
       <NuxtLink to="/dashboard/automations/new" class="app-btn-primary h-9 px-4 text-xs">

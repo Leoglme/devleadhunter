@@ -58,7 +58,8 @@
               <p class="text-xs font-medium text-[var(--app-ink)]">Aucun compte d'encaissement connecté</p>
               <p class="mt-0.5 text-[11px] text-[var(--app-ink-soft)]">
                 La vente reste possible (virement, espèces) mais aucune facture ne sera émise. Connectez Qonto ou Stripe
-                dans Paramètres → Facturation.
+                dans Paramètres
+                <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> Facturation.
               </p>
             </div>
 

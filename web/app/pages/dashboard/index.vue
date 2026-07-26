@@ -82,8 +82,11 @@
                 ({{ hotLeads.length }})
               </span>
             </h2>
-            <NuxtLink to="/dashboard/my-prospects" class="text-xs font-medium text-[var(--app-ink)] hover:underline">
-              Tous les prospects →
+            <NuxtLink
+              to="/dashboard/my-prospects"
+              class="inline-flex items-center gap-1 text-xs font-medium text-[var(--app-ink)] hover:underline"
+            >
+              Tous les prospects <UIcon name="i-lucide-arrow-right" class="h-3 w-3" />
             </NuxtLink>
           </div>
 
@@ -131,6 +134,10 @@
             <p class="max-w-xs text-xs text-[var(--app-ink-soft)]">
               Les prospects qui ouvrent vos emails et visitent leur démo apparaîtront ici.
             </p>
+            <button type="button" class="app-btn-primary mt-3" @click="openSearchDrawer">
+              <UIcon name="i-lucide-search" class="h-4 w-4" />
+              Trouver des prospects
+            </button>
           </div>
         </div>
 
@@ -143,13 +150,15 @@
               @click="openSearchDrawer"
             >
               <span
-                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)]"
+                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--app-line)] bg-[var(--app-blue-soft)]"
               >
-                <UIcon name="i-lucide-search" class="h-4 w-4 text-[var(--app-ink)]" />
+                <UIcon name="i-lucide-search" class="h-4 w-4 text-[var(--app-blue)]" />
               </span>
               <span class="min-w-0 flex-1">
                 <span class="block text-sm font-medium text-[var(--app-ink)]">Trouver des prospects</span>
-                <span class="block truncate text-[11px] text-[var(--app-ink-soft)]">Métier + ville → artisans</span>
+                <span class="flex items-center gap-1 text-[11px] text-[var(--app-ink-soft)]">
+                  Métier + ville <UIcon name="i-lucide-arrow-right" class="h-3 w-3 shrink-0" /> artisans
+                </span>
               </span>
               <UIcon name="i-lucide-chevron-right" class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
             </button>
@@ -161,9 +170,12 @@
               class="group flex w-full items-center gap-3 rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] px-3 py-2.5 transition-all hover:-translate-y-0.5 hover:border-[var(--app-ink-soft)]"
             >
               <span
-                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)]"
+                :class="[
+                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--app-line)]',
+                  shortcut.iconBackgroundClass,
+                ]"
               >
-                <UIcon :name="shortcut.icon" class="h-4 w-4 text-[var(--app-ink)]" />
+                <UIcon :name="shortcut.icon" :class="['h-4 w-4', shortcut.iconColorClass]" />
               </span>
               <span class="min-w-0 flex-1">
                 <span class="block text-sm font-medium text-[var(--app-ink)]">{{ shortcut.label }}</span>
@@ -179,8 +191,11 @@
         <div class="app-card p-5 md:p-6">
           <div class="mb-4 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-[var(--app-ink)]">Activité email — 30 jours</h2>
-            <NuxtLink to="/dashboard/email-health" class="text-xs font-medium text-[var(--app-ink)] hover:underline">
-              Santé email →
+            <NuxtLink
+              to="/dashboard/email-health"
+              class="inline-flex items-center gap-1 text-xs font-medium text-[var(--app-ink)] hover:underline"
+            >
+              Santé email <UIcon name="i-lucide-arrow-right" class="h-3 w-3" />
             </NuxtLink>
           </div>
           <EmailHealthVolumeChart
@@ -208,8 +223,13 @@
         <div class="app-card p-5 md:p-6">
           <div class="mb-4 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-[var(--app-ink)]">Tunnel de conversion</h2>
-            <span v-if="funnelConversionLabel" class="text-xs text-[var(--app-ink-soft)] tabular-nums">
-              {{ funnelConversionLabel }}
+            <span
+              v-if="funnelConversionPercentLabel"
+              class="inline-flex items-center gap-1 text-xs text-[var(--app-ink-soft)] tabular-nums"
+            >
+              {{ funnelConversionPercentLabel }} prospect
+              <UIcon name="i-lucide-arrow-right" class="h-3 w-3" />
+              vente
             </span>
           </div>
           <div class="space-y-3">
@@ -244,8 +264,11 @@
                 {{ formatCents(stats.pipeline_cents) }}
               </span>
             </p>
-            <NuxtLink to="/dashboard/orders" class="text-xs font-medium text-[var(--app-ink)] hover:underline">
-              Voir les ventes →
+            <NuxtLink
+              to="/dashboard/orders"
+              class="inline-flex items-center gap-1 text-xs font-medium text-[var(--app-ink)] hover:underline"
+            >
+              Voir les ventes <UIcon name="i-lucide-arrow-right" class="h-3 w-3" />
             </NuxtLink>
           </div>
         </div>
@@ -262,7 +285,7 @@
 <script lang="ts" setup>
 import { formatShortMonthDayTime } from '~/utils/date'
 import type { Prospect } from '~/types/index'
-import type { FunnelBarStage, PipelineTile } from '~/types/DashboardHomePage'
+import type { FunnelBarStage, PipelineTile, QuickLinkShortcut } from '~/types/DashboardHomePage'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, onMounted, ref } from 'vue'
 import type { DashboardStats, HotLead, HotLeadsResponse } from '~/services/dashboardService'
@@ -278,19 +301,30 @@ definePageMeta({
 })
 
 /** Shortcuts of the quick-actions card (the search one opens a drawer instead). */
-const QUICK_LINKS: { to: string; label: string; hint: string; icon: string }[] = [
+const QUICK_LINKS: QuickLinkShortcut[] = [
   {
     to: '/dashboard/campaigns',
     label: 'Lancer une campagne',
     hint: 'Cold email A/B + relances',
     icon: 'i-lucide-megaphone',
+    iconColorClass: 'text-[var(--app-violet)]',
+    iconBackgroundClass: 'bg-[var(--app-violet-soft)]',
   },
-  { to: '/dashboard/coverage', label: 'Carte de prospection', hint: 'Où prospecter ensuite', icon: 'i-lucide-map' },
+  {
+    to: '/dashboard/coverage',
+    label: 'Carte de prospection',
+    hint: 'Où prospecter ensuite',
+    icon: 'i-lucide-map',
+    iconColorClass: 'text-[var(--app-green)]',
+    iconBackgroundClass: 'bg-[var(--app-green-soft)]',
+  },
   {
     to: '/dashboard/email-health',
     label: 'Santé email',
     hint: 'Délivrabilité + réputation',
     icon: 'i-lucide-heart-pulse',
+    iconColorClass: 'text-[var(--app-red)]',
+    iconBackgroundClass: 'bg-[var(--app-red-soft)]',
   },
 ]
 
@@ -396,12 +430,12 @@ const funnelStages: ComputedRef<FunnelBarStage[]> = computed((): FunnelBarStage[
   })
 })
 
-/** Overall prospect → sale conversion label. */
-const funnelConversionLabel: ComputedRef<string> = computed((): string => {
+/** Overall prospect-to-sale conversion percentage (e.g. "4,9%"). */
+const funnelConversionPercentLabel: ComputedRef<string> = computed((): string => {
   const s: DashboardStats | null = stats.value
   if (!s || s.prospects_total <= 0) return ''
   const pct: number = Math.round((s.sales_won / s.prospects_total) * 1000) / 10
-  return `${pct.toLocaleString('fr-FR')}% prospect → vente`
+  return `${pct.toLocaleString('fr-FR')}%`
 })
 
 /**

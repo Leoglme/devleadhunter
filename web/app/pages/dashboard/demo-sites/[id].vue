@@ -197,7 +197,8 @@
               to="/dashboard/settings/video"
               class="mt-2 block w-full text-center text-[11px] text-[var(--app-ink-soft)] underline underline-offset-2 transition-colors hover:text-[var(--app-ink)]"
             >
-              Configurer mon clip webcam (Paramètres → Vidéo de prospection)
+              Configurer mon clip webcam (Paramètres
+              <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> Vidéo de prospection)
             </NuxtLink>
           </div>
 

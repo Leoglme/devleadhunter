@@ -168,7 +168,9 @@
             Dans Google Cloud : activez l'API « Postmaster Tools », créez un service account et téléchargez sa clé JSON.
           </li>
           <li>
-            Dans Postmaster Tools → votre domaine → « Gérer les utilisateurs » : ajoutez l'email du service account.
+            Dans Postmaster Tools <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> votre
+            domaine <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> « Gérer les
+            utilisateurs » : ajoutez l'email du service account.
           </li>
           <li>
             Ajoutez

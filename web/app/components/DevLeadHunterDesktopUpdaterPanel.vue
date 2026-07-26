@@ -26,7 +26,11 @@
                 class="rounded-md bg-[var(--app-surface-2)] px-2 py-1 font-mono text-xs text-[var(--app-ink-soft)]"
                 >v{{ currentVersion }}</span
               >
-              <span v-if="currentVersion && nextVersion" class="text-[var(--app-faint)]">→</span>
+              <UIcon
+                v-if="currentVersion && nextVersion"
+                name="i-lucide-arrow-right"
+                class="h-3 w-3 text-[var(--app-faint)]"
+              />
               <span
                 v-if="nextVersion"
                 class="rounded-md bg-[var(--app-accent-soft)] px-2 py-1 font-mono text-xs text-[var(--app-accent-ink)]"

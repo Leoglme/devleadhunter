@@ -90,7 +90,10 @@
 
         <UiCallout variant="info">
           Rien à décider maintenant — ces réglages restent modifiables à tout moment depuis
-          <span class="font-medium text-[var(--app-ink)]">Paramètres → Réglages d'envoi</span>.
+          <span class="font-medium text-[var(--app-ink)]"
+            >Paramètres <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> Réglages
+            d'envoi</span
+          >.
         </UiCallout>
       </div>
 

@@ -107,8 +107,9 @@
                 </button>
               </div>
               <p class="text-muted mt-1.5 text-xs">
-                Nécessaire pour le suivi temps réel (ouvertures, clics, bounces). Webhook à créer dans Resend → Settings
-                → Webhooks vers
+                Nécessaire pour le suivi temps réel (ouvertures, clics, bounces). Webhook à créer dans Resend
+                <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> Settings
+                <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> Webhooks vers
                 <code class="rounded bg-[var(--app-surface-2)] px-1 py-0.5 text-[var(--app-ink)]">
                   /api/v1/webhooks/resend </code
                 >.

@@ -24,7 +24,7 @@
       title="Écrase la base LOCALE avec les données de PROD (desktop dev uniquement). Requiert web/.env.sync (voir .env.sync.example)."
       @click="onSyncDatabase"
     >
-      Sync DB prod → local
+      Sync DB prod <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> local
     </UButton>
   </div>
 </template>

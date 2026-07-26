@@ -4,7 +4,9 @@
       <div>
         <h1 class="text-xl font-semibold text-[var(--app-ink)]">Carte de prospection</h1>
         <p class="text-muted mt-1 max-w-2xl text-sm leading-relaxed">
-          Cliquez une ville ou une région : zone couverte → ses prospects, zone vierge → nouvelle recherche.
+          Cliquez une ville ou une région : zone couverte
+          <UIcon name="i-lucide-arrow-right" class="inline-block h-3.5 w-3.5 align-[-2px]" /> ses prospects, zone vierge
+          <UIcon name="i-lucide-arrow-right" class="inline-block h-3.5 w-3.5 align-[-2px]" /> nouvelle recherche.
         </p>
       </div>
 

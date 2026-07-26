@@ -226,6 +226,15 @@
       @confirm="confirmDeleteProspect"
     />
 
+    <UiConfirmModal
+      ref="bulkDeleteConfirmModal"
+      title="Supprimer les prospects sélectionnés"
+      :message="bulkDeleteConfirmMessage"
+      confirm-text="Supprimer"
+      cancel-text="Annuler"
+      @confirm="confirmBulkDelete"
+    />
+
     <Transition name="bulkbar">
       <div v-if="selectedProspects.length > 0" class="fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
         <div
@@ -255,6 +264,18 @@
           </button>
           <button type="button" class="app-btn-primary h-9 px-4 text-xs" @click="bulkGenerateOpen = true">
             <UIcon name="i-lucide-globe" class="h-3.5 w-3.5" />Générer les sites
+          </button>
+          <button
+            type="button"
+            class="app-btn-danger h-9 px-4 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="bulkDeleting"
+            @click="bulkDeleteConfirmModal?.open()"
+          >
+            <UIcon
+              :name="bulkDeleting ? 'i-lucide-loader-circle' : 'i-lucide-trash-2'"
+              :class="['h-3.5 w-3.5', bulkDeleting && 'animate-spin']"
+            />
+            Supprimer
           </button>
           <button
             type="button"
@@ -330,6 +351,10 @@ const pageSize: number = 50
 const prospectToDelete: Ref<Prospect | null> = ref(null)
 const deleteConfirmModal: Ref<{ open: () => void; close: () => void } | null> = ref(null)
 
+// Bulk delete (from the selection bar)
+const bulkDeleting: Ref<boolean> = ref(false)
+const bulkDeleteConfirmModal: Ref<{ open: () => void; close: () => void } | null> = ref(null)
+
 // Detail drawer
 /** Persistent drawer stack (the prospect drawer is hosted by the layout). */
 const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
@@ -339,6 +364,12 @@ const toast: UseToastReturn = useToast()
 const deleteConfirmMessage: ComputedRef<string> = computed(() => {
   if (!prospectToDelete.value) return 'Cette action est irréversible.'
   return `Supprimer définitivement « ${prospectToDelete.value.name} » ? Cette action est irréversible.`
+})
+
+const bulkDeleteConfirmMessage: ComputedRef<string> = computed(() => {
+  const count: number = selectedIds.value.length
+  if (count === 1) return 'Supprimer définitivement ce prospect ? Il restera trouvable via une nouvelle recherche.'
+  return `Supprimer définitivement ces ${count} prospects ? Ils resteront trouvables via une nouvelle recherche.`
 })
 
 const selectedIds: ComputedRef<number[]> = computed<number[]>(() =>
@@ -681,6 +712,37 @@ async function confirmDeleteProspect(): Promise<void> {
     toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression')
   } finally {
     prospectToDelete.value = null
+  }
+}
+
+/**
+ * Delete every selected prospect, then sync the local list and the selection.
+ */
+async function confirmBulkDelete(): Promise<void> {
+  const prospectIds: number[] = selectedIds.value
+  if (bulkDeleting.value || prospectIds.length === 0) return
+  bulkDeleting.value = true
+  try {
+    const results: PromiseSettledResult<void>[] = await Promise.allSettled(
+      prospectIds.map((prospectId: number): Promise<void> => ProspectsService.deleteProspect(prospectId)),
+    )
+    const deletedIds: number[] = prospectIds.filter(
+      (prospectId: number, index: number): boolean => results[index]?.status === 'fulfilled',
+    )
+    deletedIds.forEach((prospectId: number): void => handleProspectDeleted(prospectId))
+    if (deletedIds.length > 0) {
+      toast.success(deletedIds.length === 1 ? 'Prospect supprimé' : `${deletedIds.length} prospects supprimés`)
+    }
+    const failedCount: number = prospectIds.length - deletedIds.length
+    if (failedCount > 0) {
+      toast.error(
+        failedCount === 1
+          ? "1 prospect n'a pas pu être supprimé"
+          : `${failedCount} prospects n'ont pas pu être supprimés`,
+      )
+    }
+  } finally {
+    bulkDeleting.value = false
   }
 }
 

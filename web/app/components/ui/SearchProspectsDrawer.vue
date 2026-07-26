@@ -21,7 +21,9 @@
           </span>
           <div class="min-w-0 flex-1">
             <h2 class="text-base leading-tight font-semibold text-[var(--app-ink)]">Trouver des prospects</h2>
-            <p class="mt-0.5 text-[11px] text-[var(--app-ink-soft)]">Métier + ville → artisans qui correspondent</p>
+            <p class="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--app-ink-soft)]">
+              Métier + ville <UIcon name="i-lucide-arrow-right" class="h-3 w-3 shrink-0" /> artisans qui correspondent
+            </p>
           </div>
           <button
             class="flex h-7 w-7 shrink-0 items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
