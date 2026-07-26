@@ -29,6 +29,9 @@ from services.payment_providers.base import (
 logger = logging.getLogger(__name__)
 
 _INVOICE_DUE_DAYS = 30
+# Offered on the invoice's pay page. Transfer is listed alongside the card methods
+# so attaching a payment link adds ways to pay instead of replacing the transfer.
+_PAYMENT_METHODS = ["bank_transfer", "credit_card", "apple_pay"]
 _VAT_RATE = "0"
 _VAT_EXEMPTION_REASON = "S293B"
 # The invoice PDF is generated asynchronously by Qonto — poll for its attachment.
@@ -249,7 +252,7 @@ class QontoPaymentProvider(PaymentProviderClient):
                 "invoice_number": invoice.get("number"),
                 "amount": {"value": f"{request.amount_cents / 100:.2f}", "currency": currency},
                 "debitor_name": request.client.name,
-                "potential_payment_methods": ["credit_card", "apple_pay"],
+                "potential_payment_methods": _PAYMENT_METHODS,
             }
         }
         try:

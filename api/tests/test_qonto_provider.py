@@ -198,7 +198,7 @@ def test_create_invoice_builds_finalized_body_and_parses_result() -> None:
     assert link["invoice_id"] == "inv_1"
     assert link["invoice_number"] == "F-2026-006"
     assert link["amount"] == {"value": "500.00", "currency": "EUR"}
-    assert link["potential_payment_methods"] == ["credit_card", "apple_pay"]
+    assert link["potential_payment_methods"] == ["bank_transfer", "credit_card", "apple_pay"]
 
 
 def test_create_invoice_requires_iban() -> None:
