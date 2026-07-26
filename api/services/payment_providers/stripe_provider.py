@@ -56,8 +56,7 @@ class StripePaymentProvider(PaymentProviderClient):
             raise StripeConnectError("No Stripe connected account id on this payment account.")
         if not account.stripe_charges_enabled:
             raise StripeConnectError("Stripe connected account cannot accept charges yet (onboarding incomplete).")
-        # Same fail-loudly rule as Qonto: an account onboarded in test mode must
-        # never be invoiced with a live key (and vice versa).
+        # Same fail-loudly rule as Qonto: a test-mode account is never invoiced live.
         runtime = (
             PaymentEnvironment.SANDBOX.value
             if settings.stripe_secret_key.startswith("sk_test")

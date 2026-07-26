@@ -465,12 +465,8 @@ class OrderService:
                 db.refresh(order)
             return order
 
-        # Serialize concurrent finalizations of the same order (double-click, two
-        # tabs): the row lock — taken after the provider resolution, whose token
-        # refresh may commit and would release it — makes the second request wait,
-        # then see the first one's invoice instead of burning a second number.
-        # Held across the provider calls, released by the commit below. No-op on
-        # SQLite (tests).
+        # Row lock so two concurrent finalizations can't both issue an invoice — taken
+        # after the provider resolution, whose token-refresh commit would release it.
         db.query(Order).filter(Order.id == order.id).with_for_update().first()
         db.refresh(order)
         if order.invoice_id:
@@ -568,8 +564,7 @@ class OrderService:
         Returns:
             The rendered ``subject`` and ``body_html``.
         """
-        # Escaped: the business name comes from scraping and the sender name from
-        # the user profile — neither may inject markup into the client's email.
+        # Escaped: the scraped business name must not inject markup into the email.
         business = html.escape(order.business_name or "votre entreprise")
         sender = html.escape(sender_name)
         amount = format_amount(order.amount_cents, order.currency)

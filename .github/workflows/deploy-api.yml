@@ -120,10 +120,8 @@ jobs:
             STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
             STRIPE_PUBLIC_KEY=${{ secrets.STRIPE_PUBLIC_KEY }}
             STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}
-            # Qonto (encaissement des ventes, admin-only). En production : credentials
-            # issus du "Release my app" du Developer Portal, PAS de staging token.
-            # Tant que les secrets ne sont pas créés, les valeurs sont vides et la
-            # connexion Qonto échoue bruyamment (aucun fallback sandbox possible).
+            # Qonto (encaissement des ventes) : credentials du "Release my app" du
+            # Developer Portal — secrets vides = connexion refusée, jamais de fallback sandbox.
             QONTO_ENVIRONMENT=production
             QONTO_CLIENT_ID=${{ secrets.QONTO_CLIENT_ID }}
             QONTO_CLIENT_SECRET=${{ secrets.QONTO_CLIENT_SECRET }}

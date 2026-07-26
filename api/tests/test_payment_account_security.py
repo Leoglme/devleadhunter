@@ -28,11 +28,6 @@ def _stable_secret(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "secret_key", "test-secret-key")
 
 
-# ---------------------------------------------------------------------- #
-# Qonto OAuth state
-# ---------------------------------------------------------------------- #
-
-
 def test_qonto_state_round_trip() -> None:
     """A freshly minted state resolves back to its user id."""
     service = PaymentAccountService()
@@ -63,11 +58,6 @@ def test_qonto_state_rejects_expired() -> None:
     assert service.parse_qonto_state(f"user_42_{issued_at}_{signature}") is None
 
 
-# ---------------------------------------------------------------------- #
-# IBAN validation
-# ---------------------------------------------------------------------- #
-
-
 def test_iban_normalization_and_valid_checksum() -> None:
     """A well-formed IBAN passes, whatever the spacing and case."""
     assert _is_valid_iban(_normalize_iban("fr14 2004 1010 0505 0001 3M02 606"))
@@ -77,11 +67,6 @@ def test_iban_rejects_bad_checksum_and_shape() -> None:
     """A single-digit typo or a truncated IBAN is refused."""
     assert not _is_valid_iban("FR1420041010050500013M02607")
     assert not _is_valid_iban("FR76")
-
-
-# ---------------------------------------------------------------------- #
-# Qonto API-key fallback
-# ---------------------------------------------------------------------- #
 
 
 def test_qonto_api_key_authorization_header(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -113,11 +98,6 @@ def test_qonto_api_credentials_none_when_absent() -> None:
     """No stored key → None, so the caller falls through to a clean error."""
     account = SimpleNamespace(qonto_api_login=None, qonto_api_secret=None)
     assert PaymentAccountService().qonto_api_credentials(account) is None
-
-
-# ---------------------------------------------------------------------- #
-# Stripe environment guard
-# ---------------------------------------------------------------------- #
 
 
 def test_stripe_provider_refuses_environment_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
