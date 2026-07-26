@@ -492,29 +492,50 @@ class OrderService:
     # ------------------------------------------------------------------ #
 
     def build_payment_email(self, order: Order, sender_name: str) -> dict[str, str]:
-        """Render the subject + HTML body of the payment-link email for an order."""
+        """
+        Render the subject + HTML body of the payment-link email for an order.
+
+        Reads as a one-to-one message rather than a campaign: everything is flush
+        left, the call to action names the invoice it opens (a stranger asking for
+        500 € online is exactly what a scam looks like), and the raw URL sits under
+        the button for clients that strip its styling.
+
+        Args:
+            order: The order being invoiced.
+            sender_name: Display name signing the email.
+
+        Returns:
+            The rendered ``subject`` and ``body_html``.
+        """
         business = order.business_name or "votre entreprise"
         amount = format_amount(order.amount_cents, order.currency)
         product = PRODUCT_LABELS.get(order.product_type, "site web")
         url = order.payment_url or order.stripe_payment_url or "#"
         attachment_note = " Vous trouverez la facture en pièce jointe." if order.invoice_id else ""
+        # Naming the invoice ties the button to the attached PDF — a reference an
+        # impersonator would not have.
+        action = f"Régler la facture {order.invoice_number}" if order.invoice_number else "Procéder au paiement"
 
         subject = f"Votre {product} est prêt — finalisons ensemble"
         body_html = f"""
-        <div style="font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; color:#1a1a1a; max-width:560px; margin:0 auto;">
+        <div style="font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; color:#1a1a1a; max-width:560px; margin:0 auto; text-align:left;">
           <p>Bonjour,</p>
           <p>
             Comme convenu, le <strong>{product}</strong> de <strong>{business}</strong> est prêt.
             Pour le mettre en ligne sur votre nom de domaine et vous transmettre vos accès,
             il vous suffit de finaliser le paiement unique de <strong>{amount}</strong> (pas d'abonnement, site à vie).{attachment_note}
           </p>
-          <p style="text-align:center; margin:32px 0;">
+          <p style="margin:32px 0 12px;">
             <a href="{url}" style="background:#111111; color:#ffffff; text-decoration:none; padding:14px 28px; border-radius:8px; font-weight:600; display:inline-block;">
-              Régler {amount} en ligne
+              {action}
             </a>
           </p>
+          <p style="font-size:12px; color:#777; margin:0 0 28px; word-break:break-all;">
+            Si le bouton ne s'ouvre pas, copiez ce lien dans votre navigateur :<br/>
+            <a href="{url}" style="color:#777;">{url}</a>
+          </p>
           <p style="font-size:13px; color:#555;">
-            Paiement sécurisé par carte bancaire ou virement, avec validation par votre banque (3D Secure).
+            Le règlement se fait sur une page sécurisée, directement depuis la facture.
             Dès réception, je mets votre site en ligne et je vous envoie vos identifiants pour gérer vous-même
             votre contenu.
           </p>

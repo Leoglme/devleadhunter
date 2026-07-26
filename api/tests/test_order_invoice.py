@@ -193,6 +193,27 @@ def test_build_payment_email_has_no_stripe_black_button_and_generic_url() -> Non
     assert "#111111" in body
     assert "https://pay.qonto.com/invoices/inv_1" in body
     assert "pièce jointe" in body  # an invoice exists → the attachment is announced
+    # No centred block: a one-to-one email, not a campaign.
+    assert "text-align:center" not in body
+    # Card and 3D Secure are only true once the payment-links provider is connected.
+    assert "3D Secure" not in body
+
+
+def test_build_payment_email_names_the_invoice_and_repeats_the_url() -> None:
+    """The button names the invoice, and the raw link survives a stripped button."""
+    order = _order(invoice_id="inv_1", invoice_number="F-2026-006", payment_url="https://pay.qonto.com/invoices/inv_1")
+    body = OrderService().build_payment_email(order, sender_name="Léo")["body_html"]
+
+    assert "Régler la facture F-2026-006" in body
+    assert "Si le bouton ne s'ouvre pas" in body
+    assert body.count("https://pay.qonto.com/invoices/inv_1") >= 2
+
+
+def test_build_payment_email_falls_back_to_a_neutral_action_without_an_invoice() -> None:
+    """With no invoice number to name, the button stays generic rather than lying."""
+    order = _order(payment_url="https://buy.stripe.com/x")
+    body = OrderService().build_payment_email(order, sender_name="Léo")["body_html"]
+    assert "Procéder au paiement" in body
 
 
 def test_build_payment_email_omits_attachment_note_without_invoice() -> None:
