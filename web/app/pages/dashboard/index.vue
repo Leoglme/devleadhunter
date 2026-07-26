@@ -64,7 +64,7 @@
             <p class="text-2xl font-bold text-[var(--app-ink)] tabular-nums">{{ stage.value }}</p>
             <p class="text-[11px] leading-snug text-[var(--app-ink-soft)]">{{ stage.hint }}</p>
             <span
-              class="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-[var(--app-ink)] opacity-0 transition-opacity group-hover:opacity-100"
+              class="mt-auto inline-flex items-center gap-1 pt-1 text-[11px] font-medium text-[var(--app-ink-soft)] transition-colors group-hover:text-[var(--app-accent-ink)]"
             >
               {{ stage.linkLabel }} <UIcon name="i-lucide-arrow-right" class="h-3 w-3" />
             </span>
