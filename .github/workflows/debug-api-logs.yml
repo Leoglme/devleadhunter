@@ -1,0 +1,23 @@
+name: 🔍 Debug API service logs (manual)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  logs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📜 Dump service status and recent logs (SSH)
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "===== systemctl status ====="
+            sudo systemctl status devleadhunter-api.service --no-pager -l || true
+            echo "===== last 120 journal lines ====="
+            sudo journalctl -u devleadhunter-api.service -n 120 --no-pager || true
+            echo "===== local port check ====="
+            curl -s -o /dev/null -w "localhost:8005 -> %{http_code}\n" http://127.0.0.1:8005/docs || true
