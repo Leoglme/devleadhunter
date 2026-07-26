@@ -9,51 +9,58 @@
   >
     <div
       v-if="visible"
-      class="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--app-overlay)] p-4 backdrop-blur-md"
+      class="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--app-overlay)] p-4 backdrop-blur-sm"
       @click.self="closePanel"
     >
-      <div
-        class="border-muted relative w-full max-w-lg overflow-hidden rounded-2xl border bg-[var(--app-surface)] p-6 sm:p-8"
-      >
+      <div class="app-card w-full max-w-lg p-6 shadow-[var(--app-shadow-soft)] sm:p-8">
         <div class="space-y-6">
           <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div class="min-w-0 space-y-2">
-              <p class="text-xs font-semibold tracking-[0.12em] text-blue-400 uppercase">Desktop update</p>
+              <p class="app-label text-[var(--app-accent-ink)]">Mise à jour</p>
               <h2 class="text-xl font-semibold text-[var(--app-ink)] sm:text-2xl">{{ statusTitle }}</h2>
-              <p class="text-muted text-sm leading-relaxed">{{ statusDescription }}</p>
+              <p class="text-sm leading-relaxed text-[var(--app-ink-soft)]">{{ statusDescription }}</p>
             </div>
             <div v-if="currentVersion || nextVersion" class="flex shrink-0 flex-wrap items-center gap-2">
-              <span v-if="currentVersion" class="text-muted rounded-md bg-[#252525] px-2 py-1 font-mono text-xs"
+              <span
+                v-if="currentVersion"
+                class="rounded-md bg-[var(--app-surface-2)] px-2 py-1 font-mono text-xs text-[var(--app-ink-soft)]"
                 >v{{ currentVersion }}</span
               >
-              <span v-if="currentVersion && nextVersion" class="text-muted">→</span>
-              <span v-if="nextVersion" class="rounded-md bg-blue-500/10 px-2 py-1 font-mono text-xs text-blue-300"
+              <span v-if="currentVersion && nextVersion" class="text-[var(--app-faint)]">→</span>
+              <span
+                v-if="nextVersion"
+                class="rounded-md bg-[var(--app-accent-soft)] px-2 py-1 font-mono text-xs text-[var(--app-accent-ink)]"
                 >v{{ nextVersion }}</span
               >
             </div>
           </div>
 
           <div v-if="status === 'downloading'" class="space-y-3">
-            <div class="text-muted flex items-center justify-between gap-3 text-xs">
+            <div class="flex items-center justify-between gap-3 text-xs text-[var(--app-ink-soft)]">
               <span class="font-medium text-[var(--app-ink)] tabular-nums">{{ downloadLabel }}</span>
               <span v-if="totalBytes && totalBytes > 0" class="tabular-nums">
-                {{ (downloadedBytes / (1024 * 1024)).toFixed(1) }} / {{ (totalBytes / (1024 * 1024)).toFixed(1) }} MB
+                {{ (downloadedBytes / (1024 * 1024)).toFixed(1) }} / {{ (totalBytes / (1024 * 1024)).toFixed(1) }} Mo
               </span>
             </div>
-            <div v-if="downloadPercent != null" class="h-2 overflow-hidden rounded-full bg-[#252525]">
-              <div class="h-full rounded-full bg-blue-500 transition-all" :style="{ width: `${downloadPercent}%` }" />
+            <div v-if="downloadPercent != null" class="h-2 overflow-hidden rounded-full bg-[var(--app-surface-2)]">
+              <div
+                class="h-full rounded-full bg-[var(--app-accent)] transition-all"
+                :style="{ width: `${downloadPercent}%` }"
+              />
             </div>
           </div>
 
           <div class="flex flex-wrap justify-end gap-3">
-            <button v-if="canDismiss" type="button" class="btn-secondary" @click="closePanel">Later</button>
-            <button v-if="status === 'available'" type="button" class="btn-primary" @click="installUpdate">
-              Install update
+            <button v-if="canDismiss" type="button" class="app-btn-secondary" @click="closePanel">Plus tard</button>
+            <button v-if="status === 'available'" type="button" class="app-btn-primary" @click="installUpdate">
+              Installer la mise à jour
             </button>
-            <button v-if="status === 'installed'" type="button" class="btn-primary" @click="restartApp">
-              Restart app
+            <button v-if="status === 'installed'" type="button" class="app-btn-primary" @click="restartApp">
+              Redémarrer l'application
             </button>
-            <button v-if="status === 'error'" type="button" class="btn-primary" @click="installUpdate">Retry</button>
+            <button v-if="status === 'error'" type="button" class="app-btn-primary" @click="installUpdate">
+              Réessayer
+            </button>
           </div>
         </div>
       </div>
@@ -98,9 +105,9 @@ const downloadLabel: ComputedRef<string> = computed((): string => {
     return `${pct}%`
   }
   if (downloadedBytes.value > 0) {
-    return `${(downloadedBytes.value / (1024 * 1024)).toFixed(1)} MB downloaded`
+    return `${(downloadedBytes.value / (1024 * 1024)).toFixed(1)} Mo téléchargés`
   }
-  return 'Preparing download…'
+  return 'Préparation du téléchargement…'
 })
 
 const canDismiss: ComputedRef<boolean> = computed(
@@ -108,28 +115,28 @@ const canDismiss: ComputedRef<boolean> = computed(
 )
 
 const statusTitle: ComputedRef<string> = computed((): string => {
-  if (status.value === 'available') return 'Update available'
-  if (status.value === 'downloading') return 'Downloading and installing'
-  if (status.value === 'installed') return 'Update installed'
-  if (status.value === 'error') return 'Update failed'
-  return 'Update'
+  if (status.value === 'available') return 'Mise à jour disponible'
+  if (status.value === 'downloading') return 'Téléchargement et installation'
+  if (status.value === 'installed') return 'Mise à jour installée'
+  if (status.value === 'error') return 'Échec de la mise à jour'
+  return 'Mise à jour'
 })
 
 const statusDescription: ComputedRef<string> = computed((): string => {
   if (status.value === 'available') {
     if (nextVersion.value && currentVersion.value) {
-      return `Upgrade from ${currentVersion.value} to ${nextVersion.value}. The app will close briefly to finish installation.`
+      return `Passez de la version ${currentVersion.value} à la version ${nextVersion.value}. L'application se fermera brièvement pour finaliser l'installation.`
     }
-    return 'A new version is ready. The app will close briefly to finish installation.'
+    return "Une nouvelle version est prête. L'application se fermera brièvement pour finaliser l'installation."
   }
   if (status.value === 'downloading') {
-    return 'Do not close DevLeadHunter during this step. Restart the app when installation completes.'
+    return "Ne fermez pas DevLeadHunter pendant cette étape. Redémarrez l'application une fois l'installation terminée."
   }
   if (status.value === 'installed') {
-    return 'Restart DevLeadHunter to load the new version. Your data and session are preserved.'
+    return 'Redémarrez DevLeadHunter pour charger la nouvelle version. Vos données et votre session sont conservées.'
   }
   if (status.value === 'error') {
-    return errorMessage.value || 'An error occurred during the update.'
+    return errorMessage.value || 'Une erreur est survenue pendant la mise à jour.'
   }
   return ''
 })
