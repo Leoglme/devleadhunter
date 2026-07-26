@@ -556,6 +556,7 @@ class OrderService:
             prospect_id=str(order.prospect_id) if order.prospect_id else None,
             bcc=[user.email] if user.email else None,
             attachments=attachments,
+            is_transactional=True,
         )
         if result.get("success"):
             order.payment_link_sent_at = datetime.now(UTC)

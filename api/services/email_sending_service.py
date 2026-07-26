@@ -186,6 +186,7 @@ class EmailSendingService:
         ab_variant: str | None = None,
         bcc: list[str] | None = None,
         attachments: list[EmailAttachment] | None = None,
+        is_transactional: bool = False,
     ) -> dict:
         """
         Send an email via the user's active sending identity (Resend or Gmail).
@@ -207,6 +208,11 @@ class EmailSendingService:
             prospect_id:     Prospect ID for logging / unsubscribe link (optional).
             campaign_id:     Campaign ID for logging (optional).
             ab_variant:      A/B variant ('A'/'B') stamped on the log (optional).
+            bcc:             Addresses in blind copy (optional).
+            attachments:     Files to attach (optional).
+            is_transactional: Invoice / payment email owed to a client rather than
+                             outreach — sent without the unsubscribe footer and
+                             headers, and never blocked by an unsubscribe.
 
         Returns:
             Dict with ``success``, ``email_log_id`` and ``message_id`` / ``error``.
@@ -220,17 +226,21 @@ class EmailSendingService:
         # Dev safety: reroute every outbound email to a single test inbox (no-op in prod).
         recipient_email, subject = self._apply_dev_redirect(recipient_email, subject)
 
-        # RGPD: never send to an unsubscribed address.
-        if unsubscribe_service.is_unsubscribed(self.db, recipient_email):
-            raise Exception(f"{recipient_email} s'est désabonné")
+        # RGPD: never send outreach to an unsubscribed address. A client who owes an
+        # invoice is still owed it — unsubscribing from prospection must not make them
+        # unbillable, and a transactional email carries no unsubscribe link to honour.
+        unsubscribe_link: str | None = None
+        if not is_transactional:
+            if unsubscribe_service.is_unsubscribed(self.db, recipient_email):
+                raise Exception(f"{recipient_email} s'est désabonné")
 
-        base_url = getattr(settings, "frontend_url", "http://localhost:3000")
-        unsubscribe_link = unsubscribe_service.generate_unsubscribe_link(
-            recipient_email,
-            int(prospect_id) if prospect_id else None,
-            base_url,
-        )
-        body_html = unsubscribe_service.add_unsubscribe_footer(body_html, unsubscribe_link)
+            base_url = getattr(settings, "frontend_url", "http://localhost:3000")
+            unsubscribe_link = unsubscribe_service.generate_unsubscribe_link(
+                recipient_email,
+                int(prospect_id) if prospect_id else None,
+                base_url,
+            )
+            body_html = unsubscribe_service.add_unsubscribe_footer(body_html, unsubscribe_link)
 
         email_log = EmailLog(
             user_id=user_id,
@@ -275,7 +285,7 @@ class EmailSendingService:
                     api_key_override=identity.resend_api_key,
                     # RFC 8058 one-click unsubscribe — required by Gmail/Yahoo for bulk
                     # senders; the POST route exists on /api/v1/unsubscribe.
-                    extra_headers=self._unsubscribe_headers(unsubscribe_link),
+                    extra_headers=self._unsubscribe_headers(unsubscribe_link) if unsubscribe_link else None,
                     bcc=bcc,
                     attachments=attachments,
                 )
