@@ -1,5 +1,7 @@
 [tool.ruff]
-target-version = "py312"
+# py311 = le Python du venv de production (VPS). Une cible plus récente pousse des
+# syntaxes (PEP 695) qui font crasher uvicorn au boot alors que tout est vert en local.
+target-version = "py311"
 line-length = 120
 exclude = [".venv", "venv", "__pycache__", "migrations/versions"]
 

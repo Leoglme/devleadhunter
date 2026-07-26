@@ -225,6 +225,29 @@ jobs:
             sudo systemctl enable ${SERVICE_NAME}
             sudo systemctl restart ${SERVICE_NAME}
 
+      # Sans ce check, un crash au boot (ex. SyntaxError) laisse le service en
+      # crashloop et le deploy vert — c'est arrivé 2 jours sans que personne ne le voie.
+      - name: 🩺 Health check API (SSH)
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            for attempt in $(seq 1 12); do
+              code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8005/docs || true)
+              if [ "$code" = "200" ]; then
+                echo "API up (HTTP $code) after ${attempt} attempt(s)."
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "API did not come up — service status and last logs:"
+            sudo systemctl status devleadhunter-api.service --no-pager -l || true
+            sudo journalctl -u devleadhunter-api.service -n 60 --no-pager || true
+            exit 1
+
       - name: 🔄 Test & reload Nginx (SSH)
         uses: appleboy/ssh-action@v0.1.6
         with:

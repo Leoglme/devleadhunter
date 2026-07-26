@@ -77,7 +77,7 @@ def _running_loop() -> asyncio.AbstractEventLoop | None:
         return None
 
 
-async def run_nodriver_task[T](task: Callable[[], Coroutine[Any, Any, T]], *, timeout: float = 600) -> T:
+async def run_nodriver_task(task: Callable[[], Coroutine[Any, Any, T]], *, timeout: float = 600) -> T:
     """
     Run nodriver coroutine work on the dedicated loop when required.
 
