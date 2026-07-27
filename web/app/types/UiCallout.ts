@@ -1,5 +1,5 @@
 /** Semantic variant of a callout annotation. */
-export type UiCalloutVariant = 'info' | 'warning' | 'success' | 'neutral'
+export type UiCalloutVariant = 'info' | 'warning' | 'success' | 'danger' | 'neutral'
 
 /**
  * Props of the UiCallout component.

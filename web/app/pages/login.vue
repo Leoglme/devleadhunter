@@ -1,7 +1,7 @@
 <template>
   <div>
     <div v-if="isLoading || isNavigating" class="landing-loader-vars">
-      <UiLoader />
+      <UiLoader full-screen />
     </div>
     <AuthShell v-else mode="login">
       <LandingAsterisk class="auth-rise text-2xl text-[#e8a33c]" :style="{ animationDelay: '0ms' }" />

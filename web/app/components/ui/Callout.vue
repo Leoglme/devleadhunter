@@ -47,6 +47,12 @@ const STYLES: Record<UiCalloutVariant, CalloutToneClasses> = {
     bg: 'var(--app-green-soft)',
     border: 'color-mix(in srgb, var(--app-green) 30%, transparent)',
   },
+  danger: {
+    icon: 'i-lucide-circle-alert',
+    accent: 'var(--app-red)',
+    bg: 'var(--app-red-soft)',
+    border: 'color-mix(in srgb, var(--app-red) 30%, transparent)',
+  },
   neutral: {
     icon: 'i-lucide-info',
     accent: 'var(--app-ink-soft)',

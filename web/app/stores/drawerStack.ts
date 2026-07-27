@@ -28,6 +28,7 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
   const orderMutationCounter: Ref<number> = ref(0)
   const emailLogsRefreshCounter: Ref<number> = ref(0)
   const emailTemplatesRefreshCounter: Ref<number> = ref(0)
+  const usersRefreshCounter: Ref<number> = ref(0)
 
   // Getters
   const topEntry: ComputedRef<DrawerStackEntry | null> = computed(
@@ -124,6 +125,11 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     emailTemplatesRefreshCounter.value++
   }
 
+  /** Signal that users changed (created or edited from a drawer). */
+  function bumpUsersRefresh(): void {
+    usersRefreshCounter.value++
+  }
+
   // Persister chaque mutation de la pile (F5 ne ferme plus les drawers).
   watch(
     stack,
@@ -147,6 +153,7 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     orderMutationCounter,
     emailLogsRefreshCounter,
     emailTemplatesRefreshCounter,
+    usersRefreshCounter,
     topEntry,
     hasPrevious,
     push,
@@ -157,5 +164,6 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     notifyOrderDeleted,
     bumpEmailLogsRefresh,
     bumpEmailTemplatesRefresh,
+    bumpUsersRefresh,
   }
 })

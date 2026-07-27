@@ -1,8 +1,12 @@
 <template>
-  <div class="mx-auto max-w-2xl space-y-8">
+  <div class="max-w-3xl space-y-5">
     <div>
-      <h1 class="text-3xl font-bold text-[var(--app-ink)]">Facturation & paiement</h1>
-      <p class="text-muted mt-2 text-sm leading-relaxed">
+      <p class="app-label flex items-center gap-2">
+        <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+        Compte
+      </p>
+      <h1 class="app-page-title mt-2">Facturation &amp; paiement</h1>
+      <p class="mt-1.5 max-w-2xl text-sm leading-relaxed text-[var(--app-ink-soft)]">
         Connectez le compte qui émettra vos factures et encaissera vos ventes. DevLeadHunter ne touche jamais l'argent :
         tout passe par votre propre compte.
       </p>

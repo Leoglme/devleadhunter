@@ -128,6 +128,16 @@
       @back="drawerStack.back()"
       @updated="drawerStack.notifyOrderUpdated"
     />
+
+    <UiUserFormDrawer
+      :open="userFormEntry !== null"
+      :mode="userFormEntry?.mode ?? 'create'"
+      :user="userFormEntry?.user ?? null"
+      :show-back="hasPrevious"
+      @close="drawerStack.closeAll()"
+      @back="drawerStack.back()"
+      @saved="handleUserSaved"
+    />
   </div>
 </template>
 
@@ -150,6 +160,7 @@ import type {
   SearchProspectsDrawerEntry,
   SendEmailDrawerEntry,
   SendPolicyDrawerEntry,
+  UserFormDrawerEntry,
 } from '~/types/DrawerStack'
 import type { EmailTemplate, Prospect } from '~/types'
 import type { Order } from '~/services/ordersService'
@@ -242,6 +253,21 @@ const orderEntry: ComputedRef<OrderDrawerEntry | null> = computed((): OrderDrawe
 const finalizeSaleEntry: ComputedRef<FinalizeSaleDrawerEntry | null> = computed((): FinalizeSaleDrawerEntry | null => {
   return drawerStack.topEntry?.kind === 'finalize-sale' ? drawerStack.topEntry : null
 })
+
+/** Top entry narrowed to the user create/edit drawer. */
+const userFormEntry: ComputedRef<UserFormDrawerEntry | null> = computed((): UserFormDrawerEntry | null => {
+  return drawerStack.topEntry?.kind === 'user-form' ? drawerStack.topEntry : null
+})
+
+/** User saved from its drawer — refresh the list page, then leave the stack. */
+function handleUserSaved(): void {
+  drawerStack.bumpUsersRefresh()
+  if (drawerStack.hasPrevious) {
+    drawerStack.back()
+  } else {
+    drawerStack.closeAll()
+  }
+}
 
 /** Stack the sale finalization on top of the order drawer. */
 function handleFinalizeSale(): void {

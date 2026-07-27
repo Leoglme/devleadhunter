@@ -457,59 +457,57 @@
           <p class="text-muted text-sm">Aucun élément en file d'attente</p>
         </div>
 
-        <div v-else class="overflow-hidden rounded-xl border border-[var(--app-line)]">
-          <table class="w-full border-collapse">
-            <thead>
-              <tr class="bg-[var(--app-bg)]">
-                <th class="text-muted px-3 py-2.5 text-left text-xs font-semibold">Prospect</th>
-                <th class="text-muted px-3 py-2.5 text-left text-xs font-semibold">Type</th>
-                <th class="text-muted px-3 py-2.5 text-left text-xs font-semibold">Planifié</th>
-                <th class="text-muted px-3 py-2.5 text-left text-xs font-semibold">Statut</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="item in queueData.items"
-                :key="item.id"
-                class="border-t border-[var(--app-line)] transition-colors hover:bg-[var(--app-surface)]"
-              >
-                <td class="px-3 py-2.5">
-                  <div class="text-sm text-[var(--app-ink)]">{{ item.prospect_name || `#${item.prospect_id}` }}</div>
-                  <div class="text-muted text-xs">{{ item.prospect_email || '' }}</div>
-                </td>
-                <td class="px-3 py-2.5">
+        <div v-else class="app-card overflow-hidden">
+          <BaseTable min-width="640px">
+            <template #head>
+              <BaseTableTh>Prospect</BaseTableTh>
+              <BaseTableTh>Type</BaseTableTh>
+              <BaseTableTh>Planifié</BaseTableTh>
+              <BaseTableTh align="center">Statut</BaseTableTh>
+            </template>
+
+            <BaseTableTr v-for="item in queueData.items" :key="item.id">
+              <BaseTableTd>
+                <span class="block text-sm font-semibold text-[var(--app-ink)]">
+                  {{ item.prospect_name || `#${item.prospect_id}` }}
+                </span>
+                <span v-if="item.prospect_email" class="font-label text-xs text-[var(--app-ink-soft)]">
+                  {{ item.prospect_email }}
+                </span>
+              </BaseTableTd>
+
+              <BaseTableTd>
+                <span class="flex items-center gap-1.5">
                   <span
-                    :class="[
-                      'rounded px-1.5 py-0.5 text-xs font-medium',
-                      item.queue_type === 'initial'
-                        ? 'bg-[var(--app-blue-soft)] text-[var(--app-blue)]'
-                        : 'bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]',
-                    ]"
+                    :class="['app-badge', item.queue_type === 'initial' ? 'app-badge--info' : 'app-badge--progress']"
                   >
                     {{ item.queue_type === 'initial' ? 'J1' : `Relance ${item.follow_up_index}` }}
                   </span>
                   <span
                     v-if="item.ab_variant"
                     :class="[
-                      'ml-1 text-[10px] font-bold',
-                      item.ab_variant === 'A' ? 'text-[var(--app-accent-ink)]' : 'text-[var(--app-violet)]',
+                      'rounded px-1.5 py-0.5 text-xs font-bold',
+                      item.ab_variant === 'A'
+                        ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]'
+                        : 'bg-[var(--app-violet-soft)] text-[var(--app-violet)]',
                     ]"
-                    >{{ item.ab_variant }}</span
                   >
-                </td>
-                <td class="text-muted px-3 py-2.5 text-sm">{{ formatCompactDateTime(item.scheduled_at) }}</td>
-                <td class="px-3 py-2.5">
-                  <span
-                    :class="[
-                      'rounded px-1.5 py-0.5 text-xs font-medium',
-                      QUEUE_STATUS_STYLE[item.status] ?? 'bg-[var(--app-surface-2)] text-[var(--app-ink-soft)]',
-                    ]"
-                    >{{ QUEUE_STATUS_LABELS[item.status] ?? item.status }}</span
-                  >
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                    {{ item.ab_variant }}
+                  </span>
+                </span>
+              </BaseTableTd>
+
+              <BaseTableTd class="font-label text-xs text-[var(--app-ink-soft)]">
+                {{ formatCompactDateTime(item.scheduled_at) }}
+              </BaseTableTd>
+
+              <BaseTableTd align="center">
+                <span :class="['app-badge', QUEUE_STATUS_BADGE_CLASS[item.status] ?? '']">
+                  {{ QUEUE_STATUS_LABELS[item.status] ?? item.status }}
+                </span>
+              </BaseTableTd>
+            </BaseTableTr>
+          </BaseTable>
         </div>
       </div>
     </template>
@@ -674,12 +672,12 @@ const QUEUE_STATUS_LABELS: Record<string, string> = {
   skipped: 'Ignoré',
   failed: 'Échoué',
 }
-const QUEUE_STATUS_STYLE: Record<string, string> = {
-  pending: 'bg-[var(--app-blue-soft)] text-[var(--app-blue)]',
-  sending: 'bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]',
-  sent: 'bg-[var(--app-green-soft)] text-[var(--app-green)]',
-  skipped: 'bg-[var(--app-surface-2)] text-[var(--app-ink-soft)]',
-  failed: 'bg-[var(--app-red-soft)] text-[var(--app-red)]',
+const QUEUE_STATUS_BADGE_CLASS: Record<string, string> = {
+  pending: 'app-badge--info',
+  sending: 'app-badge--progress',
+  sent: 'app-badge--success',
+  skipped: '',
+  failed: 'app-badge--danger',
 }
 
 const campaign: Ref<CampaignDetailResponse | null> = ref(null)

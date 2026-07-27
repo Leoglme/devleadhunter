@@ -1,4 +1,4 @@
-import type { EmailLog, EmailTemplate, Prospect } from '~/types'
+import type { EmailLog, EmailTemplate, Prospect, User } from '~/types'
 import type { Order } from '~/services/ordersService'
 import type { SearchProspectsPrefill } from '~/types/SearchProspectsDrawer'
 
@@ -79,6 +79,14 @@ export type OrderDrawerEntry = {
   order: Order
 }
 
+export type UserFormDrawerMode = 'create' | 'edit'
+
+export type UserFormDrawerEntry = {
+  kind: 'user-form'
+  mode: UserFormDrawerMode
+  user: User | null
+}
+
 /** Sale finalization: reviewed billing details → invoice → sale email. */
 export type FinalizeSaleDrawerEntry = {
   kind: 'finalize-sale'
@@ -120,6 +128,7 @@ export type DrawerStackEntry =
   | CoverageProspectsDrawerEntry
   | OrderDrawerEntry
   | FinalizeSaleDrawerEntry
+  | UserFormDrawerEntry
 
 /** Cross-page notice describing the latest prospect mutation done from a drawer. */
 export type ProspectMutationNotice = { type: 'updated'; prospect: Prospect }

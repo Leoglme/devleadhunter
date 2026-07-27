@@ -1,9 +1,13 @@
 <template>
-  <div class="mx-auto max-w-3xl space-y-8">
-    <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-start @2xl:justify-between">
-      <div>
-        <h1 class="text-3xl font-bold text-[var(--app-ink)]">Stockage</h1>
-        <p class="text-muted mt-2 text-sm leading-relaxed">
+  <div class="space-y-5">
+    <div class="flex flex-col gap-4 @2xl:flex-row @2xl:items-end @2xl:justify-between">
+      <div class="min-w-0">
+        <p class="app-label flex items-center gap-2">
+          <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+          Administration
+        </p>
+        <h1 class="app-page-title mt-2">Stockage</h1>
+        <p class="mt-1.5 max-w-2xl text-sm text-[var(--app-ink-soft)]">
           <template v-if="listing">
             {{ listing.total }} fichier{{ listing.total > 1 ? 's' : '' }} · {{ formatSize(listing.total_size) }} ·
             <span class="text-[var(--app-ink)]">{{ listing.bucket }}</span>
@@ -13,20 +17,20 @@
       </div>
       <button
         type="button"
-        class="btn-secondary h-9 min-h-9 shrink-0 px-2.5"
-        title="Actualiser"
+        class="app-btn-secondary h-9 shrink-0 self-start px-4 text-xs whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
         :disabled="isLoading"
         @click="load"
       >
-        <UIcon name="i-lucide-rotate-cw" :class="['h-4 w-4', isLoading ? 'animate-spin' : '']" />
+        <UIcon name="i-lucide-refresh-cw" :class="['h-3.5 w-3.5', isLoading && 'animate-spin']" />
+        Actualiser
       </button>
     </div>
 
-    <p v-if="error" class="text-sm text-[var(--app-red)]">{{ error }}</p>
+    <UiCallout v-if="error" variant="danger">{{ error }}</UiCallout>
 
     <div
       v-if="expiredCount > 0"
-      class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-3.5"
+      class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--app-red)]/30 bg-[var(--app-red-soft)] px-4 py-3.5"
     >
       <div class="flex min-w-0 items-start gap-3">
         <UIcon name="i-lucide-circle-alert" class="mt-0.5 h-4 w-4 shrink-0 text-[var(--app-red)]" />
@@ -34,10 +38,14 @@
           <p class="text-sm font-semibold text-[var(--app-ink)]">
             {{ expiredCount }} fichier{{ expiredCount > 1 ? 's' : '' }} au-delà de {{ TTL_DAYS }} jours
           </p>
-          <p class="text-muted text-xs leading-relaxed">Le nettoyage automatique aurait dû les supprimer.</p>
+          <p class="text-xs leading-relaxed text-[var(--app-ink-soft)]">
+            Le nettoyage automatique aurait dû les supprimer.
+          </p>
         </div>
       </div>
-      <button type="button" class="btn-danger shrink-0 text-xs" :disabled="isActing" @click="askPurge">Purger</button>
+      <button type="button" class="app-btn-danger h-9 shrink-0 px-4 text-xs" :disabled="isActing" @click="askPurge">
+        Purger
+      </button>
     </div>
 
     <div class="flex flex-wrap gap-2">
@@ -46,7 +54,7 @@
         :key="filter.prefix"
         type="button"
         :class="[
-          'rounded-full border px-3 py-1 text-xs transition-colors',
+          'cursor-pointer rounded-full border px-3 py-1 text-xs transition-colors',
           activePrefix === filter.prefix
             ? 'border-[var(--app-ink)] bg-[var(--app-ink)] text-[var(--app-surface)]'
             : 'border-[var(--app-line)] text-[var(--app-ink)] hover:bg-[var(--app-surface-2)]',
@@ -57,14 +65,10 @@
       </button>
     </div>
 
-    <UiLoader v-if="isLoading" />
+    <UiLoader v-if="isLoading" label="Lecture du bucket…" />
 
     <div v-else-if="listing && listing.items.length" class="space-y-2">
-      <div
-        v-for="item in listing.items"
-        :key="item.key"
-        class="overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)]"
-      >
+      <div v-for="item in listing.items" :key="item.key" class="app-card overflow-hidden p-0">
         <div class="flex items-center gap-3 px-4 py-3">
           <button
             type="button"
@@ -77,7 +81,7 @@
             </span>
             <span class="min-w-0 flex-1">
               <span class="block truncate text-sm font-medium text-[var(--app-ink)]">{{ displayName(item) }}</span>
-              <span class="text-muted block truncate text-xs">
+              <span class="block truncate text-xs text-[var(--app-ink-soft)]">
                 {{ kindLabel(item.kind) }} · {{ formatSize(item.size) }} ·
                 {{ formatShortMonthDate(item.last_modified) }}
                 <template v-if="item.is_expired"> · <span class="text-[var(--app-red)]">expiré</span></template>
@@ -91,18 +95,13 @@
           <div class="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
-              class="btn-secondary h-8 min-h-8 px-2.5 text-xs"
+              class="app-btn-secondary h-8 px-2.5 text-xs"
               title="Copier le lien"
               @click="copyLink(item.url)"
             >
               <UIcon name="i-lucide-link" class="h-3.5 w-3.5" />
             </button>
-            <button
-              type="button"
-              class="btn-danger flex h-8 min-h-8 items-center justify-center px-2.5 text-xs"
-              title="Supprimer"
-              @click="askDelete(item)"
-            >
+            <button type="button" class="app-btn-danger h-8 px-2.5 text-xs" title="Supprimer" @click="askDelete(item)">
               <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />
             </button>
           </div>
@@ -128,12 +127,12 @@
                 :alt="displayName(item)"
                 class="max-h-64 rounded-lg border border-[var(--app-line)]"
               />
-              <p class="text-muted font-mono text-xs break-all">{{ item.key }}</p>
+              <p class="font-mono text-xs break-all text-[var(--app-ink-soft)]">{{ item.key }}</p>
               <a
                 :href="item.url"
                 target="_blank"
                 rel="noopener"
-                class="text-muted inline-flex items-center gap-1.5 text-xs font-medium hover:text-[var(--app-ink)]"
+                class="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--app-ink-soft)] hover:text-[var(--app-ink)]"
               >
                 <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5" />
                 Ouvrir dans un onglet
@@ -144,22 +143,17 @@
       </div>
     </div>
 
-    <div
+    <UiEmptyState
       v-else-if="listing"
-      class="flex flex-col items-center gap-3 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] px-6 py-14 text-center"
-    >
-      <span class="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--app-surface-2)]">
-        <UIcon name="i-lucide-hard-drive" class="h-5 w-5 text-[var(--app-ink-soft)]" />
-      </span>
-      <p class="text-sm font-medium text-[var(--app-ink)]">Aucun fichier</p>
-      <p class="text-muted max-w-xs text-sm leading-relaxed">
-        {{ activePrefix ? 'Rien dans ce filtre.' : 'Le bucket est vide — les vidéos générées apparaîtront ici.' }}
-      </p>
-    </div>
+      title="Aucun fichier"
+      :description="
+        activePrefix ? 'Rien dans ce filtre.' : 'Le bucket est vide — les vidéos générées apparaîtront ici.'
+      "
+    />
 
     <UiCollapsibleCard icon="i-lucide-stethoscope" title="Cohérence avec la base" :suffix="healthSuffix">
       <div class="space-y-4 px-4 py-4">
-        <p v-if="!hasHealthIssues" class="text-muted text-xs leading-relaxed">
+        <p v-if="!hasHealthIssues" class="text-xs leading-relaxed text-[var(--app-ink-soft)]">
           Chaque vidéo marquée « prête » a bien son fichier, et rien ne traîne au-delà de {{ TTL_DAYS }} jours.
         </p>
         <div v-for="group in healthGroups" v-else :key="group.label">
@@ -167,10 +161,12 @@
             <p class="text-[11px] font-semibold tracking-wide text-[var(--app-ink-soft)] uppercase">
               {{ group.label }} ({{ group.keys.length }})
             </p>
-            <p class="text-muted mt-0.5 text-xs leading-relaxed">{{ group.hint }}</p>
+            <p class="mt-0.5 text-xs leading-relaxed text-[var(--app-ink-soft)]">{{ group.hint }}</p>
             <ul class="mt-1.5 space-y-1">
               <li v-for="key in group.keys.slice(0, 5)" :key="key" class="truncate font-mono text-xs">{{ key }}</li>
-              <li v-if="group.keys.length > 5" class="text-muted text-xs">+ {{ group.keys.length - 5 }} autre(s)</li>
+              <li v-if="group.keys.length > 5" class="text-xs text-[var(--app-ink-soft)]">
+                + {{ group.keys.length - 5 }} autre(s)
+              </li>
             </ul>
           </template>
         </div>

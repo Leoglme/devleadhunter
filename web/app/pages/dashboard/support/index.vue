@@ -1,22 +1,28 @@
 <template>
-  <div class="mx-auto max-w-3xl space-y-8">
-    <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-start @2xl:justify-between">
-      <div>
-        <h1 class="text-3xl font-bold text-[var(--app-ink)]">Support</h1>
-        <p class="text-muted mt-2 text-sm leading-relaxed">Vos demandes et leurs réponses, au même endroit.</p>
+  <div class="space-y-5">
+    <div class="flex flex-col gap-4 @2xl:flex-row @2xl:items-end @2xl:justify-between">
+      <div class="min-w-0">
+        <p class="app-label flex items-center gap-2">
+          <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+          Aide
+        </p>
+        <h1 class="app-page-title mt-2">Support</h1>
+        <p class="mt-1.5 max-w-2xl text-sm text-[var(--app-ink-soft)]">
+          Vos demandes et leurs réponses, au même endroit.
+        </p>
       </div>
-      <div class="flex shrink-0 items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2 sm:gap-3 @2xl:justify-end">
         <button
           type="button"
-          class="btn-secondary h-9 min-h-9 px-2.5"
-          title="Actualiser"
+          class="app-btn-secondary h-9 shrink-0 px-4 text-xs whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="isLoading"
           @click="loadTickets"
         >
-          <UIcon name="i-lucide-rotate-cw" :class="['h-4 w-4', isLoading ? 'animate-spin' : '']" />
+          <UIcon name="i-lucide-refresh-cw" :class="['h-3.5 w-3.5', isLoading && 'animate-spin']" />
+          Actualiser
         </button>
-        <NuxtLink to="/dashboard/support/new" class="btn-primary gap-2">
-          <UIcon name="i-lucide-plus" class="h-4 w-4" />
+        <NuxtLink to="/dashboard/support/new" class="app-btn-primary h-9 shrink-0 px-4 text-xs whitespace-nowrap">
+          <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" />
           Nouveau ticket
         </NuxtLink>
       </div>
@@ -28,7 +34,7 @@
         :key="filter.value"
         type="button"
         :class="[
-          'rounded-full border px-3 py-1 text-xs transition-colors',
+          'cursor-pointer rounded-full border px-3 py-1 text-xs transition-colors',
           activeStatus === filter.value
             ? 'border-[var(--app-ink)] bg-[var(--app-ink)] text-[var(--app-surface)]'
             : 'border-[var(--app-line)] text-[var(--app-ink)] hover:bg-[var(--app-surface-2)]',
@@ -39,57 +45,60 @@
       </button>
     </div>
 
-    <UiLoader v-if="isLoading" />
+    <UiLoader v-if="isLoading" label="Chargement des tickets…" />
 
-    <div v-else-if="filteredTickets.length" class="space-y-2">
+    <div v-else-if="filteredTickets.length" class="grid gap-3 @3xl:grid-cols-2">
       <NuxtLink
         v-for="ticket in filteredTickets"
         :key="ticket.id"
         :to="`/dashboard/support/${ticket.id}`"
-        class="block rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-3.5 transition-colors hover:border-[var(--app-ink-soft)]"
+        class="app-card group flex flex-col gap-3 p-4 transition-colors hover:border-[var(--app-ink-soft)]"
       >
         <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0 flex-1">
-            <p class="truncate text-sm font-semibold text-[var(--app-ink)]">{{ ticket.subject }}</p>
-            <p class="text-muted mt-1 line-clamp-1 text-xs leading-relaxed">{{ ticket.description }}</p>
-            <p class="text-muted mt-1.5 flex flex-wrap items-center gap-x-2 text-xs">
-              <span v-if="isAdmin">{{ ticket.user_name }}</span>
-              <span v-if="isAdmin" aria-hidden="true">·</span>
-              <span>{{ topicLabel(ticket.topic) }}</span>
-              <span aria-hidden="true">·</span>
-              <span>{{ formatRelative(ticket.last_message_at || ticket.created_at) }}</span>
-              <span v-if="ticket.attachments_count > 0" class="inline-flex items-center gap-1">
-                <span aria-hidden="true">·</span>
-                <UIcon name="i-lucide-paperclip" class="h-3 w-3" />
-                {{ ticket.attachments_count }}
-              </span>
-            </p>
-          </div>
+          <p class="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--app-ink)]">{{ ticket.subject }}</p>
           <span
             :class="['app-badge shrink-0 font-medium', SUPPORT_STATUS_PRESENTATION[ticket.status]?.badgeClass ?? '']"
           >
             {{ SUPPORT_STATUS_PRESENTATION[ticket.status]?.label ?? ticket.status }}
           </span>
         </div>
+
+        <p class="line-clamp-2 text-xs leading-relaxed text-[var(--app-ink-soft)]">{{ ticket.description }}</p>
+
+        <div
+          class="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-[var(--app-line-soft)] pt-3 text-xs text-[var(--app-ink-soft)]"
+        >
+          <span class="app-badge">{{ topicLabel(ticket.topic) }}</span>
+          <span v-if="isAdmin" class="truncate">{{ ticket.user_name }}</span>
+          <span v-if="isAdmin" aria-hidden="true">·</span>
+          <span>{{ formatRelative(ticket.last_message_at || ticket.created_at) }}</span>
+          <span v-if="ticket.attachments_count > 0" class="inline-flex items-center gap-1">
+            <span aria-hidden="true">·</span>
+            <UIcon name="i-lucide-paperclip" class="h-3 w-3" />
+            {{ ticket.attachments_count }}
+          </span>
+          <UIcon
+            name="i-lucide-arrow-right"
+            class="ml-auto h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"
+          />
+        </div>
       </NuxtLink>
     </div>
 
-    <div
+    <UiEmptyState
       v-else
-      class="flex flex-col items-center gap-3 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] px-6 py-14 text-center"
+      title="Aucun ticket"
+      :description="
+        isAdmin ? 'Rien pour ce filtre.' : 'Une question ou un souci ? Ouvrez un ticket, on vous répond ici.'
+      "
     >
-      <span class="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--app-surface-2)]">
-        <UIcon name="i-lucide-life-buoy" class="h-5 w-5 text-[var(--app-ink-soft)]" />
-      </span>
-      <p class="text-sm font-medium text-[var(--app-ink)]">Aucun ticket</p>
-      <p class="text-muted max-w-xs text-sm leading-relaxed">
-        {{ isAdmin ? 'Rien pour ce filtre.' : 'Une question ou un souci ? Ouvrez un ticket, on vous répond ici.' }}
-      </p>
-      <NuxtLink to="/dashboard/support/new" class="btn-primary mt-1 gap-2">
-        <UIcon name="i-lucide-plus" class="h-4 w-4" />
-        Nouveau ticket
-      </NuxtLink>
-    </div>
+      <template #action>
+        <NuxtLink to="/dashboard/support/new" class="app-btn-primary">
+          <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" />
+          Nouveau ticket
+        </NuxtLink>
+      </template>
+    </UiEmptyState>
   </div>
 </template>
 
