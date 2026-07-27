@@ -36,6 +36,7 @@ TEMPLATE_META: dict[str, object] = {
     ),
     "preview_image_url": None,
     "category": "artisan",
+    "trades": [],
     # Editorial B&W + honey amber (the landing DA). Palette drives the template's
     # ink / secondary / accent tones.
     "default_theme": {

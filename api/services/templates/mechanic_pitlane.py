@@ -35,6 +35,7 @@ TEMPLATE_META: dict[str, object] = {
     ),
     "preview_image_url": None,
     "category": "artisan",
+    "trades": ["garagiste", "mecanicien", "garage", "mechanic", "automobile"],
     "default_theme": {
         "primary": "#E11D2E",
         "secondary": "#0C0C0D",

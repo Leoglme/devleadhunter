@@ -34,6 +34,7 @@ TEMPLATE_META: dict[str, object] = {
     ),
     "preview_image_url": None,
     "category": "sante",
+    "trades": ["dentiste", "dentist", "orthodontiste", "dentaire"],
     "default_theme": {
         "primary": "#b1040e",
         "secondary": "#2e333e",

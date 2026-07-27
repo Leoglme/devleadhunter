@@ -34,6 +34,7 @@ TEMPLATE_META: dict[str, object] = {
     ),
     "preview_image_url": None,
     "category": "artisan",
+    "trades": ["barbier", "coiffeur", "barber", "coiffure"],
     "default_theme": {
         "primary": "#121212",
         "secondary": "#f8f5ef",

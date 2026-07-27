@@ -34,6 +34,7 @@ TEMPLATE_META: dict[str, object] = {
     ),
     "preview_image_url": None,
     "category": "artisan",
+    "trades": ["restaurant", "foodtruck", "food truck", "traiteur", "restauration"],
     "default_theme": {
         "primary": "#055346",
         "secondary": "#f9efe6",

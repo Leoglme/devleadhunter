@@ -81,6 +81,7 @@ class DemoSiteTemplateResponse(BaseModel):
     preview_image_url: str | None = None
     default_theme: DemoSiteTemplateTheme
     category: str = "artisan"
+    trades: list[str] = []
 
 
 class DemoSiteResponse(BaseModel):

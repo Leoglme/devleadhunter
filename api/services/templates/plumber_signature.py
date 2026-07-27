@@ -29,6 +29,7 @@ TEMPLATE_META: dict[str, object] = {
     ),
     "preview_image_url": None,
     "category": "artisan",
+    "trades": ["plombier", "plumber", "chauffagiste", "plomberie"],
     "default_theme": {
         "primary": "#0F5257",
         "secondary": "#14181C",

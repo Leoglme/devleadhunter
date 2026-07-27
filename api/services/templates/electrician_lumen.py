@@ -33,6 +33,7 @@ TEMPLATE_META: dict[str, object] = {
     ),
     "preview_image_url": None,
     "category": "artisan",
+    "trades": ["electricien", "electrician", "electricite"],
     "default_theme": {
         "primary": "#FFD400",
         "secondary": "#070B14",
