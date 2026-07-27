@@ -18,7 +18,7 @@
     "lint:prettier:fix": "prettier --write .",
     "lint:eslint": "eslint .",
     "lint:eslint:fix": "eslint . --fix",
-    "lint:ts": "vue-tsc --build --force",
+    "lint:ts": "node scripts/typecheck.mjs",
     "lint": "npm run lint:prettier && npm run lint:eslint && npm run lint:ts",
     "lint:fix": "npm run lint:prettier:fix && npm run lint:eslint:fix",
     "typecheck": "nuxt typecheck"

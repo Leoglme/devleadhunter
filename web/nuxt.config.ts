@@ -3,9 +3,14 @@ import { defineNuxtConfig } from 'nuxt/config'
 
 const isDesktopBuild: boolean = process.env.NUXT_DESKTOP_BUILD === '1'
 
+// Dedicated build dir for `scripts/typecheck.mjs`: the running dev server owns `.nuxt`.
+const typecheckBuildDirectory: string | undefined = process.env.NUXT_TYPECHECK_BUILD_DIR
+
 const siteUrl: string = 'https://devleadhunter.dibodev.fr'
 
 export default defineNuxtConfig({
+  ...(typecheckBuildDirectory ? { buildDir: typecheckBuildDirectory } : {}),
+
   modules: [
     '@nuxt/eslint',
     '@nuxt/ui',
