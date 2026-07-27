@@ -133,6 +133,7 @@
                   max="30"
                   step="0.5"
                   class="input-field"
+                  placeholder="5"
                 />
               </div>
               <div>
@@ -145,6 +146,7 @@
                   max="30"
                   step="0.5"
                   class="input-field"
+                  placeholder="8"
                 />
               </div>
             </div>

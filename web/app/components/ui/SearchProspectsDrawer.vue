@@ -81,6 +81,7 @@
                 type="number"
                 min="1"
                 max="100"
+                placeholder="10"
                 required
                 class="app-input w-full"
               />

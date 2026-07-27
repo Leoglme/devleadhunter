@@ -40,29 +40,23 @@
           <div v-if="showImportMenu" class="fixed inset-0 z-40" @click="showImportMenu = false"></div>
           <div
             v-if="showImportMenu"
-            class="absolute right-0 z-50 mt-1.5 w-64 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-1 shadow-lg shadow-black/5"
+            class="absolute right-0 z-50 mt-1.5 w-56 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-1 shadow-lg shadow-black/5"
           >
             <button
               type="button"
-              class="flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--app-surface-2)]"
+              class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
               @click="handleImportClick"
             >
-              <UIcon name="i-lucide-upload" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
-              <span>
-                <span class="block text-xs font-medium text-[var(--app-ink)]">Importer un fichier JSON</span>
-                <span class="text-[11px] text-[var(--app-faint)]">Ajoute les prospects du fichier à votre liste</span>
-              </span>
+              <UIcon name="i-lucide-upload" class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
+              Importer un fichier JSON
             </button>
             <button
               type="button"
-              class="flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--app-surface-2)]"
+              class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
               @click="handleDownloadTemplate"
             >
-              <UIcon name="i-lucide-file-json" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
-              <span>
-                <span class="block text-xs font-medium text-[var(--app-ink)]">Télécharger le modèle JSON</span>
-                <span class="text-[11px] text-[var(--app-faint)]">Gabarit à remplir puis à importer</span>
-              </span>
+              <UIcon name="i-lucide-file-json" class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
+              Télécharger le modèle JSON
             </button>
           </div>
         </div>

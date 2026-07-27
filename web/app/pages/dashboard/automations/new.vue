@@ -137,7 +137,14 @@
             </div>
             <div>
               <label class="app-label mb-1.5 block">Objectif — jours de démarchage *</label>
-              <input v-model.number="form.targetDays" type="number" min="1" max="90" class="app-input w-full" />
+              <input
+                v-model.number="form.targetDays"
+                type="number"
+                min="1"
+                max="90"
+                class="app-input w-full"
+                placeholder="15"
+              />
             </div>
             <label class="flex items-center gap-2 self-end pb-2.5 text-sm text-[var(--app-ink-soft)]">
               <input v-model="form.onlyWithoutWebsite" type="checkbox" class="h-4 w-4 accent-(--app-accent)" />

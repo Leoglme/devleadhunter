@@ -146,6 +146,7 @@
               min="0"
               max="100"
               class="input-field pr-8"
+              placeholder="10"
             />
             <span class="absolute top-1/2 right-3 -translate-y-1/2 text-[var(--app-ink-soft)]">%</span>
           </div>
@@ -163,6 +164,7 @@
               step="0.5"
               min="0"
               class="input-field pl-8"
+              placeholder="2"
             />
           </div>
         </div>

@@ -127,6 +127,7 @@
               min="1"
               max="1440"
               class="input-field h-9 w-20 text-center"
+              placeholder="20"
             />
             <span>minutes</span>
           </div>
@@ -247,6 +248,7 @@
                     min="1"
                     max="365"
                     class="input-field h-7 w-14 px-2 text-center text-xs"
+                    placeholder="5"
                   />
                   <span>après l'envoi précédent</span>
                 </div>
@@ -559,11 +561,22 @@
         <form class="space-y-3" @submit.prevent="handleUpdateCampaign">
           <div>
             <label class="text-muted mb-1.5 block text-xs font-medium">Nom</label>
-            <input v-model="editForm.name" type="text" required class="input-field" />
+            <input
+              v-model="editForm.name"
+              type="text"
+              required
+              class="input-field"
+              placeholder="Plombiers Rennes — vague de juillet"
+            />
           </div>
           <div>
             <label class="text-muted mb-1.5 block text-xs font-medium">Description</label>
-            <textarea v-model="editForm.description" class="input-field" rows="3" />
+            <textarea
+              v-model="editForm.description"
+              class="input-field"
+              rows="3"
+              placeholder="Objectif, angle des emails, notes internes…"
+            />
           </div>
           <div class="flex gap-3 pt-2">
             <button type="button" class="btn-secondary flex-1" @click="showEditModal = false">Annuler</button>

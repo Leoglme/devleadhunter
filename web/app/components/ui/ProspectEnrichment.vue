@@ -88,16 +88,29 @@
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="mb-1 block text-[10px] text-[var(--app-ink-soft)]">Note (/5)</label>
-            <input v-model.number="form.rating" type="number" min="0" max="5" step="0.1" class="input-field" />
+            <input
+              v-model.number="form.rating"
+              type="number"
+              min="0"
+              max="5"
+              step="0.1"
+              class="input-field"
+              placeholder="4.8"
+            />
           </div>
           <div>
             <label class="mb-1 block text-[10px] text-[var(--app-ink-soft)]">Nb d'avis</label>
-            <input v-model.number="form.reviews_count" type="number" min="0" class="input-field" />
+            <input v-model.number="form.reviews_count" type="number" min="0" class="input-field" placeholder="27" />
           </div>
         </div>
         <div>
           <label class="mb-1 block text-[10px] text-[var(--app-ink-soft)]">Description</label>
-          <textarea v-model="form.description" rows="2" class="input-field"></textarea>
+          <textarea
+            v-model="form.description"
+            rows="2"
+            class="input-field"
+            placeholder="Plombier chauffagiste à Rennes depuis 2010, dépannage et rénovation…"
+          ></textarea>
         </div>
 
         <div>

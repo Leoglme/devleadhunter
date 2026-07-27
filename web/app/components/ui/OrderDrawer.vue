@@ -104,19 +104,31 @@
               <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
                 >Montant (€)</label
               >
-              <input v-model.number="editForm.amount_euros" type="number" min="0" step="1" class="input-field" />
+              <input
+                v-model.number="editForm.amount_euros"
+                type="number"
+                min="0"
+                step="1"
+                class="input-field"
+                placeholder="500"
+              />
             </div>
             <div>
               <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
                 >Nom de l'entreprise</label
               >
-              <input v-model="editForm.business_name" type="text" class="input-field" />
+              <input v-model="editForm.business_name" type="text" class="input-field" placeholder="Plomberie Martin" />
             </div>
             <div>
               <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
                 >Email client</label
               >
-              <input v-model="editForm.customer_email" type="email" class="input-field" />
+              <input
+                v-model="editForm.customer_email"
+                type="email"
+                class="input-field"
+                placeholder="contact@plomberie-martin.fr"
+              />
             </div>
             <div>
               <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
@@ -136,7 +148,12 @@
               <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
                 >Notes</label
               >
-              <textarea v-model="editForm.notes" rows="3" class="input-field"></textarea>
+              <textarea
+                v-model="editForm.notes"
+                rows="3"
+                class="input-field"
+                placeholder="Négociation, contexte de la vente, à relancer le…"
+              ></textarea>
             </div>
           </form>
         </div>

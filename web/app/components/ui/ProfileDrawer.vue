@@ -37,12 +37,26 @@
         <form id="profile-form" class="flex-1 space-y-4 overflow-y-auto px-5 py-4" @submit.prevent="handleSave">
           <div>
             <label class="text-muted mb-1.5 block text-xs font-medium" for="profile-name">Nom</label>
-            <input id="profile-name" v-model="form.name" type="text" required class="input-field" />
+            <input
+              id="profile-name"
+              v-model="form.name"
+              type="text"
+              required
+              class="input-field"
+              placeholder="Jean Dupont"
+            />
           </div>
 
           <div>
             <label class="text-muted mb-1.5 block text-xs font-medium" for="profile-email"> Email de connexion </label>
-            <input id="profile-email" v-model="form.email" type="email" required class="input-field" />
+            <input
+              id="profile-email"
+              v-model="form.email"
+              type="email"
+              required
+              class="input-field"
+              placeholder="jean@exemple.fr"
+            />
             <UiCallout variant="info" class="mt-3">
               Cette adresse sert uniquement à
               <strong class="font-medium text-[var(--app-ink)]">vous connecter</strong> à DevLeadHunter. L'adresse

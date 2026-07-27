@@ -74,6 +74,7 @@
                   min="0"
                   step="1"
                   class="input-field"
+                  placeholder="500"
                   :disabled="isInvoiceIssued"
                 />
               </div>
@@ -88,13 +89,25 @@
                 <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
                   >Raison sociale</label
                 >
-                <input v-model="form.name" type="text" class="input-field" :disabled="isInvoiceIssued" />
+                <input
+                  v-model="form.name"
+                  type="text"
+                  class="input-field"
+                  placeholder="Plomberie Martin"
+                  :disabled="isInvoiceIssued"
+                />
               </div>
               <div>
                 <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
                   >Email du client</label
                 >
-                <input v-model="form.email" type="email" class="input-field" :disabled="isInvoiceIssued" />
+                <input
+                  v-model="form.email"
+                  type="email"
+                  class="input-field"
+                  placeholder="contact@plomberie-martin.fr"
+                  :disabled="isInvoiceIssued"
+                />
               </div>
               <div>
                 <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
@@ -113,13 +126,25 @@
                   <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
                     >Code postal</label
                   >
-                  <input v-model="form.zip_code" type="text" class="input-field" :disabled="isInvoiceIssued" />
+                  <input
+                    v-model="form.zip_code"
+                    type="text"
+                    class="input-field"
+                    placeholder="35000"
+                    :disabled="isInvoiceIssued"
+                  />
                 </div>
                 <div class="col-span-2">
                   <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
                     >Ville</label
                   >
-                  <input v-model="form.city" type="text" class="input-field" :disabled="isInvoiceIssued" />
+                  <input
+                    v-model="form.city"
+                    type="text"
+                    class="input-field"
+                    placeholder="Rennes"
+                    :disabled="isInvoiceIssued"
+                  />
                 </div>
               </div>
               <div>
@@ -141,7 +166,13 @@
                 <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
                   >N° de TVA (facultatif)</label
                 >
-                <input v-model="form.vat_number" type="text" class="input-field" :disabled="isInvoiceIssued" />
+                <input
+                  v-model="form.vat_number"
+                  type="text"
+                  class="input-field"
+                  placeholder="FR32123456789"
+                  :disabled="isInvoiceIssued"
+                />
               </div>
 
               <p v-if="missingLabel" class="text-xs text-[var(--app-red)]">Renseignez {{ missingLabel }}.</p>

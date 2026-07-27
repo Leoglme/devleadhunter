@@ -145,6 +145,7 @@
               :value="currentSegment.text"
               rows="4"
               class="app-input h-auto min-h-24 w-full resize-y py-2 leading-relaxed"
+              placeholder="Bonjour, je me présente, Léo, développeur web…"
               @input="onScriptInput"
             />
             <p class="text-muted text-[11px] leading-relaxed">

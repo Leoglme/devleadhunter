@@ -6,12 +6,12 @@
       <form class="space-y-4" @submit.prevent="handleSubmit">
         <div>
           <label for="name" class="text-muted mb-1.5 block text-xs font-medium"> Nom </label>
-          <input id="name" v-model="name" type="text" required class="input-field" />
+          <input id="name" v-model="name" type="text" required class="input-field" placeholder="Jean Dupont" />
         </div>
 
         <div>
           <label for="email" class="text-muted mb-1.5 block text-xs font-medium"> Email </label>
-          <input id="email" v-model="email" type="email" required class="input-field" />
+          <input id="email" v-model="email" type="email" required class="input-field" placeholder="jean@exemple.fr" />
         </div>
 
         <div class="flex justify-end gap-3 pt-2">

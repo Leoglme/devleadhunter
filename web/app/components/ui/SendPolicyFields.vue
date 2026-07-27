@@ -2,7 +2,15 @@
   <div class="space-y-6">
     <div>
       <label class="app-label mb-1.5 block" for="sp-daily-cap">Emails maximum par jour</label>
-      <input id="sp-daily-cap" v-model.number="dailyCap" type="number" min="1" max="500" class="app-input w-32" />
+      <input
+        id="sp-daily-cap"
+        v-model.number="dailyCap"
+        type="number"
+        min="1"
+        max="500"
+        class="app-input w-32"
+        placeholder="20"
+      />
     </div>
 
     <div>
@@ -42,7 +50,15 @@
 
     <div>
       <label class="app-label mb-1.5 block" for="sp-spacing">Délai minimum entre deux envois (min)</label>
-      <input id="sp-spacing" v-model.number="spacingMinutes" type="number" min="1" max="1440" class="app-input w-32" />
+      <input
+        id="sp-spacing"
+        v-model.number="spacingMinutes"
+        type="number"
+        min="1"
+        max="1440"
+        class="app-input w-32"
+        placeholder="20"
+      />
     </div>
 
     <p

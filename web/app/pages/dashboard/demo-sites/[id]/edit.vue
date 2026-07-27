@@ -21,25 +21,42 @@
         <h2 class="font-semibold text-[var(--app-ink)]">Informations entreprise</h2>
         <div>
           <label class="mb-1 block text-sm text-[var(--app-ink-soft)]">Nom de l'entreprise *</label>
-          <input v-model="form.business_name" type="text" class="input-field w-full" required />
+          <input
+            v-model="form.business_name"
+            type="text"
+            class="input-field w-full"
+            placeholder="Plomberie Martin"
+            required
+          />
         </div>
         <div class="grid gap-4 @sm:grid-cols-2">
           <div>
             <label class="mb-1 block text-sm text-[var(--app-ink-soft)]">Téléphone</label>
-            <input v-model="form.phone" type="text" class="input-field w-full" />
+            <input v-model="form.phone" type="text" class="input-field w-full" placeholder="06 12 34 56 78" />
           </div>
           <div>
             <label class="mb-1 block text-sm text-[var(--app-ink-soft)]">Ville</label>
-            <input v-model="form.city" type="text" class="input-field w-full" />
+            <input v-model="form.city" type="text" class="input-field w-full" placeholder="Rennes" />
           </div>
         </div>
         <div>
           <label class="mb-1 block text-sm text-[var(--app-ink-soft)]">Email client *</label>
-          <input v-model="form.email" type="email" required class="input-field w-full" />
+          <input
+            v-model="form.email"
+            type="email"
+            required
+            class="input-field w-full"
+            placeholder="contact@plomberie-martin.fr"
+          />
         </div>
         <div>
           <label class="mb-1 block text-sm text-[var(--app-ink-soft)]">Description</label>
-          <textarea v-model="form.description" rows="3" class="input-field w-full" />
+          <textarea
+            v-model="form.description"
+            rows="3"
+            class="input-field w-full"
+            placeholder="Plombier chauffagiste à Rennes depuis 2010, dépannage et rénovation…"
+          />
         </div>
       </div>
 

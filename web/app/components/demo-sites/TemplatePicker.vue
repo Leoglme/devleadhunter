@@ -81,6 +81,7 @@
               :value="theme[colorKey]"
               type="text"
               class="input-field h-8 text-xs"
+              placeholder="#1d4ed8"
               maxlength="7"
               @input="updateThemeColor(colorKey, ($event.target as HTMLInputElement).value)"
             />

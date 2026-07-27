@@ -96,7 +96,14 @@
               <label class="text-muted mb-1.5 block text-xs font-medium" for="draft-name">
                 Nom <span class="text-[var(--app-accent)]">*</span>
               </label>
-              <input id="draft-name" v-model="prospectDraft.name" type="text" class="input-field" required />
+              <input
+                id="draft-name"
+                v-model="prospectDraft.name"
+                type="text"
+                class="input-field"
+                placeholder="Plomberie Martin"
+                required
+              />
             </div>
             <div>
               <label class="text-muted mb-1.5 block text-xs font-medium" for="draft-category">
@@ -113,7 +120,13 @@
             </div>
             <div>
               <label class="text-muted mb-1.5 block text-xs font-medium" for="draft-address">Adresse</label>
-              <input id="draft-address" v-model="prospectDraft.address" type="text" class="input-field" />
+              <input
+                id="draft-address"
+                v-model="prospectDraft.address"
+                type="text"
+                class="input-field"
+                placeholder="12 rue des Artisans"
+              />
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
@@ -122,12 +135,24 @@
               </div>
               <div>
                 <label class="text-muted mb-1.5 block text-xs font-medium" for="draft-phone">Téléphone</label>
-                <input id="draft-phone" v-model="prospectDraft.phone" type="text" class="input-field" />
+                <input
+                  id="draft-phone"
+                  v-model="prospectDraft.phone"
+                  type="text"
+                  class="input-field"
+                  placeholder="06 12 34 56 78"
+                />
               </div>
             </div>
             <div>
               <label class="text-muted mb-1.5 block text-xs font-medium" for="draft-email">Email</label>
-              <input id="draft-email" v-model="prospectDraft.email" type="email" class="input-field" />
+              <input
+                id="draft-email"
+                v-model="prospectDraft.email"
+                type="email"
+                class="input-field"
+                placeholder="contact@plomberie-martin.fr"
+              />
             </div>
             <div>
               <label class="text-muted mb-1.5 block text-xs font-medium" for="draft-website">Site web</label>
