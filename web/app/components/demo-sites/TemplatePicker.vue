@@ -66,6 +66,7 @@
               ]"
               :style="liveFrameStyle"
               title="Aperçu interactif du template"
+              @load="endPreviewLoad"
             />
           </template>
           <template v-else>
@@ -77,6 +78,16 @@
             />
             <div v-else class="absolute inset-0" :style="{ background: fallbackGradient(selectedTemplate) }"></div>
           </template>
+
+          <Transition name="preview-veil">
+            <div
+              v-if="isLivePreview && isPreviewLoading"
+              class="absolute inset-0 flex flex-col items-center justify-center gap-3.5 bg-[var(--app-surface)]"
+            >
+              <div class="loader-smooth"></div>
+              <span class="text-xs text-[var(--app-ink-soft)]">Chargement de l'aperçu…</span>
+            </div>
+          </Transition>
 
           <div
             v-if="isLivePreview"
@@ -237,12 +248,15 @@ const paneHeight: Ref<number> = ref(400)
 const isLivePreview: Ref<boolean> = ref(true)
 const previewDevice: Ref<TemplatePreviewDevice> = ref('desktop')
 const livePreviewUrl: Ref<string> = ref('')
+const isPreviewLoading: Ref<boolean> = ref(true)
 const failedThumbnails: Ref<Set<string>> = ref(new Set())
 
 /** ResizeObserver keeping the scaled iframe in sync with the preview pane width. */
 let previewResizeObserver: ResizeObserver | null = null
 /** Timer debouncing live preview reloads while colors are edited. */
 let livePreviewReloadTimer: ReturnType<typeof setTimeout> | null = null
+/** Timer lifting the loading veil when the iframe never reports a load. */
+let previewLoadTimeoutTimer: ReturnType<typeof setTimeout> | null = null
 
 /** The template currently selected in the list. */
 const selectedTemplate: ComputedRef<DemoSiteTemplate | null> = computed(
@@ -343,13 +357,38 @@ function buildLivePreviewUrl(template: DemoSiteTemplate): string {
 }
 
 /**
+ * Point the live iframe at the selected template with the current colors.
+ */
+function applyLivePreviewUrl(): void {
+  if (selectedTemplate.value) livePreviewUrl.value = buildLivePreviewUrl(selectedTemplate.value)
+}
+
+/**
  * Refresh the live iframe URL, debounced so hex typing doesn't reload on every keystroke.
  */
 function scheduleLivePreviewReload(): void {
   if (livePreviewReloadTimer) clearTimeout(livePreviewReloadTimer)
-  livePreviewReloadTimer = setTimeout((): void => {
-    if (selectedTemplate.value) livePreviewUrl.value = buildLivePreviewUrl(selectedTemplate.value)
-  }, 600)
+  livePreviewReloadTimer = setTimeout(applyLivePreviewUrl, 600)
+}
+
+/**
+ * Cover the preview until the iframe reports its document is ready.
+ */
+function beginPreviewLoad(): void {
+  isPreviewLoading.value = true
+  if (previewLoadTimeoutTimer) clearTimeout(previewLoadTimeoutTimer)
+  // An unreachable demo-host never fires load: never leave the veil spinning for good.
+  previewLoadTimeoutTimer = setTimeout((): void => {
+    isPreviewLoading.value = false
+  }, 8000)
+}
+
+/**
+ * Lift the loading veil once the iframe finished loading.
+ */
+function endPreviewLoad(): void {
+  if (previewLoadTimeoutTimer) clearTimeout(previewLoadTimeoutTimer)
+  isPreviewLoading.value = false
 }
 
 /**
@@ -423,12 +462,17 @@ watch(
   (): string => props.modelValue,
   (): void => {
     isLivePreview.value = true
-    if (selectedTemplate.value) livePreviewUrl.value = buildLivePreviewUrl(selectedTemplate.value)
+    beginPreviewLoad()
+    applyLivePreviewUrl()
   },
   { immediate: true },
 )
 
 watch((): DemoSiteTheme => props.theme, scheduleLivePreviewReload, { deep: true })
+
+watch([livePreviewUrl, isLivePreview], (): void => {
+  if (isLivePreview.value) beginPreviewLoad()
+})
 
 // The detail pane mounts only once templates are loaded: follow the element, not onMounted.
 watch(previewContainer, (element: HTMLElement | null): void => {
@@ -450,5 +494,20 @@ onMounted((): void => {
 onBeforeUnmount((): void => {
   previewResizeObserver?.disconnect()
   if (livePreviewReloadTimer) clearTimeout(livePreviewReloadTimer)
+  if (previewLoadTimeoutTimer) clearTimeout(previewLoadTimeoutTimer)
 })
 </script>
+
+<style scoped>
+.preview-veil-leave-active {
+  transition: opacity 0.2s ease;
+}
+.preview-veil-leave-to {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .preview-veil-leave-active {
+    transition: none;
+  }
+}
+</style>

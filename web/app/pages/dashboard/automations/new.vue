@@ -304,7 +304,7 @@
 import type { LocationQueryValue } from 'vue-router'
 import type { EmailTemplate } from '~/types/index'
 import type { AutomationDetail } from '~/types/Automation'
-import type { UseToastReturn } from '~/types/Composables'
+import type { UseDashboardScrollReturn, UseToastReturn } from '~/types/Composables'
 import type { AutomationRecapRow, TunnelForm } from '~/types/AutomationCreatePage'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, onMounted, ref, watch } from 'vue'
@@ -318,6 +318,7 @@ import { EmailTemplatesService } from '~/services/emailTemplatesService'
 import { DemoSiteService } from '~/services/demoSiteService'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import { useProspectSearchStore } from '~/stores/prospectSearch'
+import { useDashboardScroll } from '~/composables/useDashboardScroll'
 import { useToast } from '~/composables/useToast'
 
 definePageMeta({
@@ -329,6 +330,7 @@ const toast: UseToastReturn = useToast()
 const route: ReturnType<typeof useRoute> = useRoute()
 const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 const searchStore: ReturnType<typeof useProspectSearchStore> = useProspectSearchStore()
+const { scrollToTop }: UseDashboardScrollReturn = useDashboardScroll()
 
 const defaultTheme: DemoSiteTheme = { primary: '#0284c7', secondary: '#0f172a', accent: '#f59e0b' }
 
@@ -493,7 +495,7 @@ function segmentClass(active: boolean): string {
  */
 function goToStep(step: number): void {
   currentStep.value = step
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+  scrollToTop()
 }
 
 /** Reset the filters. */

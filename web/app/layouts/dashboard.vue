@@ -61,7 +61,10 @@
           </div>
         </header>
 
-        <main class="@container flex-1 scroll-pb-28 overflow-x-hidden overflow-y-auto px-4 py-5 md:px-6 md:py-6">
+        <main
+          :id="DASHBOARD_SCROLL_CONTAINER_ID"
+          class="@container flex-1 scroll-pb-28 overflow-x-hidden overflow-y-auto px-4 py-5 md:px-6 md:py-6"
+        >
           <slot />
         </main>
       </div>
@@ -80,6 +83,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useUserStore } from '~/stores/user'
 import { useAppTheme } from '~/composables/useAppTheme'
 import { useDrawerStackStore } from '~/stores/drawerStack'
+import { DASHBOARD_SCROLL_CONTAINER_ID } from '~/composables/useDashboardScroll'
 
 /** Auth initialization state (boot loader overlay). */
 const isInitializing: Ref<boolean> = ref(true)

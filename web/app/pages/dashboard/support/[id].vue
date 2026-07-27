@@ -162,13 +162,14 @@
 <script lang="ts" setup>
 import { SUPPORT_STATUS_PRESENTATION } from '~/constants/supportStatus'
 import { formatShortMonthDate, formatShortMonthDateTime } from '~/utils/date'
-import type { UseToastReturn } from '~/types/Composables'
+import type { UseDashboardScrollReturn, UseToastReturn } from '~/types/Composables'
 import type { SupportWebsocketEvent } from '~/types/SupportTicketPage'
 import type { ComputedRef, Ref } from 'vue'
 import type { SupportMessage, SupportTicketDetail } from '~/types'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '~/stores/user'
+import { useDashboardScroll } from '~/composables/useDashboardScroll'
 import { useToast } from '~/composables/useToast'
 import { SupportService } from '~/services/supportService'
 
@@ -194,6 +195,7 @@ const MAX_ATTACHMENT_BYTES: number = 8 * 1024 * 1024
 
 const route: ReturnType<typeof useRoute> = useRoute()
 const toast: UseToastReturn = useToast()
+const { scrollToBottom }: UseDashboardScrollReturn = useDashboardScroll()
 const userStore: ReturnType<typeof useUserStore> = useUserStore()
 const runtimeConfig: ReturnType<typeof useRuntimeConfig> = useRuntimeConfig()
 
@@ -228,11 +230,11 @@ function topicLabel(topic: SupportTicketDetail['topic']): string {
 }
 
 /**
- * Scroll the window to the latest message.
+ * Scroll the conversation down to the latest message, once it is rendered.
  */
-function scrollToBottom(): void {
+function scrollToLatestMessage(): void {
   requestAnimationFrame((): void => {
-    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+    scrollToBottom()
   })
 }
 
@@ -277,7 +279,7 @@ function appendMessage(message: SupportMessage): void {
   if (ticket.value.messages.some((item: SupportMessage): boolean => item.id === message.id)) return
   ticket.value.messages.push(message)
   ticket.value.last_message_at = message.created_at
-  scrollToBottom()
+  scrollToLatestMessage()
 }
 
 /**
@@ -416,7 +418,7 @@ async function loadTicket(): Promise<void> {
     isLoading.value = true
     ticket.value = await SupportService.getTicket(ticketId.value)
     await nextTick()
-    scrollToBottom()
+    scrollToLatestMessage()
     connectWebSocket()
   } catch {
     toast.error('Impossible de charger ce ticket pour le moment.')

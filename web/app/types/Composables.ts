@@ -20,6 +20,11 @@ export type UseCopyToClipboardReturn = {
   copied: Ref<boolean>
 }
 
+export type UseDashboardScrollReturn = {
+  scrollToTop: (behavior?: ScrollBehavior) => void
+  scrollToBottom: (behavior?: ScrollBehavior) => void
+}
+
 export type UseDesktopRuntimeReturn = {
   isDesktopApp: ComputedRef<boolean>
   isLocalDev: boolean
