@@ -1120,5 +1120,92 @@
     "faqHeading": "Pourquoi nous choisir",
     "aboutHeading": "Votre barbier de quartier à Lyon",
     "contactHeading": "Prendre rendez-vous"
+  },
+  "landscaper-verdure": {
+    "businessName": "Les Jardins d’Émeraude",
+    "phone": "02 99 47 12 58",
+    "email": "contact@jardins-emeraude.fr",
+    "city": "Rennes",
+    "area": "Rennes et sa métropole et ses alentours",
+    "subtitle": "Création, aménagement et entretien de jardins à Rennes et sa métropole — devis gratuit et pratiques durables.",
+    "about": "Paysagiste local, nous accompagnons particuliers et professionnels dans la création et l'entretien de leurs espaces verts. Chaque projet commence par une visite et un devis gratuit — et se termine par un extérieur dont on prend plaisir à profiter.",
+    "logo": "",
+    "heroImage": "",
+    "aboutImage": "",
+    "gallery": [],
+    "palette": {
+      "primary": "#2d746d",
+      "secondary": "#003f2e",
+      "accent": "#bcff83"
+    },
+    "reviews": [],
+    "openingHours": [
+      {
+        "day": "Lundi – Vendredi",
+        "hours": "8h00 – 18h30"
+      },
+      {
+        "day": "Samedi",
+        "hours": "9h00 – 12h30"
+      }
+    ],
+    "social": [
+      {
+        "network": "Facebook",
+        "url": "https://facebook.com/jardins-emeraude"
+      },
+      {
+        "network": "Instagram",
+        "url": "https://instagram.com/jardins.emeraude"
+      }
+    ],
+    "services": [
+      {
+        "title": "Création de jardins",
+        "description": "Conception et plantation d'un jardin qui vous ressemble, pensé pour durer au fil des saisons."
+      },
+      {
+        "title": "Entretien & tonte",
+        "description": "Tonte, taille, désherbage et soins réguliers pour une pelouse dense et des massifs impeccables."
+      },
+      {
+        "title": "Terrasses & allées",
+        "description": "Terrasses, allées et murets : des aménagements minéraux propres qui structurent votre extérieur."
+      },
+      {
+        "title": "Arrosage & clôtures",
+        "description": "Arrosage automatique, clôtures et portails posés dans les règles, sans mauvaise surprise."
+      }
+    ],
+    "faq": [
+      {
+        "question": "À quelle fréquence intervenez-vous pour l'entretien ?",
+        "answer": "Selon vos besoins : au contrat à l'année (passages réguliers planifiés ensemble) ou à la demande. En pleine saison de pousse, un passage toutes les une à deux semaines garde un jardin impeccable."
+      },
+      {
+        "question": "Le devis est-il vraiment gratuit ?",
+        "answer": "Oui. Nous nous déplaçons, écoutons votre projet et vous remettons un devis écrit, détaillé et sans engagement, avant tout début de chantier."
+      },
+      {
+        "question": "Travaillez-vous avec des produits respectueux de l'environnement ?",
+        "answer": "Absolument. Nous privilégions les traitements naturels, le paillage, des végétaux adaptés au climat local et l'évacuation responsable des déchets verts."
+      },
+      {
+        "question": "Puis-je bénéficier du crédit d'impôt pour l'entretien de jardin ?",
+        "answer": "Oui, les prestations d'entretien courant (tonte, taille de haies…) ouvrent droit au crédit d'impôt services à la personne de 50 % dans la limite du plafond en vigueur. Nous vous fournissons l'attestation."
+      }
+    ],
+    "ctaCallLabel": "Être rappelé",
+    "ctaQuoteLabel": "Demander un devis gratuit",
+    "servicesHeading": "Un seul artisan pour tout votre extérieur",
+    "galleryHeading": "Nos derniers chantiers",
+    "faqHeading": "Vos questions, nos réponses",
+    "zones": [
+      "Rennes",
+      "Cesson-Sévigné",
+      "Bruz",
+      "Betton",
+      "Saint-Grégoire"
+    ]
   }
 }

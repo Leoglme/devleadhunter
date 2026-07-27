@@ -15,6 +15,7 @@ import {
   LazyDentalRoot,
   LazyFoodRoot,
   LazyBarberRoot,
+  LazyLandscaperVerdureRoot,
 } from '#components'
 import {
   fetchStoryblokDraftContent,
@@ -46,6 +47,7 @@ const TEMPLATE_ROOTS: Record<string, Component> = {
   dental: LazyDentalRoot,
   food: LazyFoodRoot,
   barber: LazyBarberRoot,
+  'landscaper-verdure': LazyLandscaperVerdureRoot,
 }
 
 const route: ReturnType<typeof useRoute> = useRoute()
