@@ -48,12 +48,23 @@
       </div>
 
       <div v-if="selectedTemplate" class="app-card self-start overflow-hidden">
-        <div ref="previewContainer" class="relative aspect-[16/10] overflow-hidden border-b border-[var(--app-line)]">
+        <div
+          ref="previewContainer"
+          :class="[
+            'relative aspect-[16/10] overflow-hidden border-b border-[var(--app-line)]',
+            isLivePreview && previewDevice === 'mobile' ? 'bg-[var(--app-surface-2)]' : '',
+          ]"
+        >
           <template v-if="isLivePreview">
             <iframe
               :src="livePreviewUrl"
-              class="absolute top-0 left-0 h-[800px] w-[1280px] origin-top-left border-0 bg-white"
-              :style="{ transform: `scale(${previewScale})` }"
+              :class="[
+                'absolute top-0 origin-top-left border-0 bg-white',
+                previewDevice === 'mobile'
+                  ? 'h-[844px] w-[390px] rounded-xl shadow-[var(--app-shadow-soft)]'
+                  : 'left-0 h-[800px] w-[1280px]',
+              ]"
+              :style="liveFrameStyle"
               title="Aperçu interactif du template"
             />
           </template>
@@ -66,6 +77,28 @@
             />
             <div v-else class="absolute inset-0" :style="{ background: fallbackGradient(selectedTemplate) }"></div>
           </template>
+
+          <div
+            v-if="isLivePreview"
+            class="absolute top-3 right-3 flex overflow-hidden rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] shadow-[var(--app-shadow-soft)]"
+          >
+            <button
+              type="button"
+              title="Aperçu ordinateur"
+              :class="deviceButtonClass('desktop')"
+              @click="previewDevice = 'desktop'"
+            >
+              <UIcon name="i-lucide-monitor" class="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              title="Aperçu mobile"
+              :class="deviceButtonClass('mobile')"
+              @click="previewDevice = 'mobile'"
+            >
+              <UIcon name="i-lucide-smartphone" class="h-3.5 w-3.5" />
+            </button>
+          </div>
 
           <div class="absolute right-3 bottom-3 flex gap-2">
             <button
@@ -140,7 +173,7 @@
             </div>
             <p class="mt-2.5 flex items-center gap-1.5 text-[11px] text-[var(--app-ink-soft)]">
               <UIcon name="i-lucide-info" class="h-3 w-3 shrink-0" />
-              Modifier une couleur bascule l'aperçu en mode live pour voir le résultat.
+              L'aperçu est interactif : vos couleurs s'y appliquent en direct.
             </p>
           </div>
         </div>
@@ -150,7 +183,12 @@
 </template>
 
 <script lang="ts" setup>
-import type { TemplatePickerEmits, TemplatePickerProps, TemplateThemeColorKey } from '~/types/TemplatePicker'
+import type {
+  TemplatePickerEmits,
+  TemplatePickerProps,
+  TemplatePreviewDevice,
+  TemplateThemeColorKey,
+} from '~/types/TemplatePicker'
 import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
 import type { DemoSiteTemplate, DemoSiteTheme } from '~/services/demoSiteService'
 
@@ -185,14 +223,19 @@ const colorLabels: Record<TemplateThemeColorKey, string> = {
   accent: 'Accent',
 }
 
-/** Native width of the catalog pages the live iframe renders (scaled down to fit). */
-const LIVE_PREVIEW_WIDTH: number = 1280
+/** Native viewport of the live iframe per device (scaled down to fit the pane). */
+const LIVE_VIEWPORTS: Record<TemplatePreviewDevice, { width: number; height: number }> = {
+  desktop: { width: 1280, height: 800 },
+  mobile: { width: 390, height: 844 },
+}
 
 const colorInputRef: Ref<HTMLInputElement | null> = ref(null)
 const activeColorKey: Ref<TemplateThemeColorKey> = ref('primary')
 const previewContainer: Ref<HTMLElement | null> = ref(null)
-const previewScale: Ref<number> = ref(0.5)
-const isLivePreview: Ref<boolean> = ref(false)
+const paneWidth: Ref<number> = ref(640)
+const paneHeight: Ref<number> = ref(400)
+const isLivePreview: Ref<boolean> = ref(true)
+const previewDevice: Ref<TemplatePreviewDevice> = ref('desktop')
 const livePreviewUrl: Ref<string> = ref('')
 const failedThumbnails: Ref<Set<string>> = ref(new Set())
 
@@ -217,6 +260,19 @@ const sortedTemplates: ComputedRef<DemoSiteTemplate[]> = computed((): DemoSiteTe
     (template: DemoSiteTemplate): boolean => !isRecommended(template),
   )
   return [...recommended, ...others]
+})
+
+/** Scaled position of the live iframe: full-width desktop, or a centered phone. */
+const liveFrameStyle: ComputedRef<Record<string, string>> = computed((): Record<string, string> => {
+  const viewport: { width: number; height: number } = LIVE_VIEWPORTS[previewDevice.value]
+  if (previewDevice.value === 'mobile') {
+    const scale: number = paneHeight.value / viewport.height
+    return {
+      transform: `scale(${scale})`,
+      left: `calc(50% - ${(viewport.width * scale) / 2}px)`,
+    }
+  }
+  return { transform: `scale(${paneWidth.value / viewport.width})` }
 })
 
 /** Whether the current theme differs from the selected template's defaults. */
@@ -304,6 +360,19 @@ function toggleLivePreview(): void {
 }
 
 /**
+ * Classes of a device toggle button (active device highlighted).
+ * @param device - The device the button switches to.
+ * @returns Button classes.
+ */
+function deviceButtonClass(device: TemplatePreviewDevice): string {
+  const base: string = 'flex h-8 w-9 cursor-pointer items-center justify-center transition-colors'
+  if (previewDevice.value === device) {
+    return `${base} bg-[var(--app-ink)] text-[var(--app-bg)]`
+  }
+  return `${base} text-[var(--app-ink-soft)] hover:text-[var(--app-ink)]`
+}
+
+/**
  * Select a template and sync its default theme.
  * @param template - Template picked in the list.
  */
@@ -353,7 +422,7 @@ function updateThemeColor(key: TemplateThemeColorKey, value: string): void {
 watch(
   (): string => props.modelValue,
   (): void => {
-    isLivePreview.value = false
+    isLivePreview.value = true
     if (selectedTemplate.value) livePreviewUrl.value = buildLivePreviewUrl(selectedTemplate.value)
   },
   { immediate: true },
@@ -369,8 +438,11 @@ watch(previewContainer, (element: HTMLElement | null): void => {
 
 onMounted((): void => {
   previewResizeObserver = new ResizeObserver((entries: ResizeObserverEntry[]): void => {
-    const width: number = entries[0]?.contentRect.width ?? 0
-    if (width > 0) previewScale.value = width / LIVE_PREVIEW_WIDTH
+    const rect: DOMRectReadOnly | undefined = entries[0]?.contentRect
+    if (rect && rect.width > 0) {
+      paneWidth.value = rect.width
+      paneHeight.value = rect.height
+    }
   })
   if (previewContainer.value) previewResizeObserver.observe(previewContainer.value)
 })
