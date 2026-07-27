@@ -4,6 +4,7 @@ export type TemplatePickerProps = {
   templates: DemoSiteTemplate[]
   modelValue: string
   theme: DemoSiteTheme
+  recommendedTrade?: string | null
 }
 
 export type TemplateThemeColorKey = keyof DemoSiteTheme

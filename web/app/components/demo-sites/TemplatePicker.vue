@@ -1,103 +1,160 @@
 <template>
-  <div class="grid gap-6 lg:grid-cols-2">
+  <div class="@container">
     <input ref="colorInputRef" type="color" class="sr-only" :value="theme[activeColorKey]" @input="onColorInput" />
-    <button
-      v-for="template in templates"
-      :key="template.id"
-      type="button"
-      :class="[
-        'group overflow-hidden rounded-2xl border text-left transition-all duration-300',
-        modelValue === template.id
-          ? 'border-[var(--app-ink)] bg-[var(--app-surface)] shadow-[var(--app-shadow-soft)] ring-1 ring-[var(--app-ink)]/15'
-          : 'border-[var(--app-line)] bg-[var(--app-surface)] hover:border-[var(--app-ink-soft)] hover:shadow-md',
-      ]"
-      @click="selectTemplate(template)"
-    >
-      <div class="relative h-44 overflow-hidden border-b border-[var(--app-line)]">
-        <div
-          class="absolute inset-0 transition-transform duration-500 group-hover:scale-105"
-          :style="{ background: previewGradient(template) }"
+
+    <div class="grid gap-4 @3xl:grid-cols-[280px_minmax(0,1fr)]">
+      <div
+        class="flex gap-2 overflow-x-auto pb-1 @3xl:max-h-[560px] @3xl:flex-col @3xl:overflow-x-visible @3xl:overflow-y-auto @3xl:pr-1 @3xl:pb-0"
+      >
+        <button
+          v-for="template in sortedTemplates"
+          :key="template.id"
+          type="button"
+          :class="[
+            'w-56 shrink-0 rounded-xl border p-2 text-left transition-colors @3xl:w-full',
+            modelValue === template.id
+              ? 'border-[var(--app-ink)] bg-[var(--app-surface)] ring-1 ring-[var(--app-ink)]/15'
+              : 'border-[var(--app-line)] bg-[var(--app-surface)] hover:border-[var(--app-ink-soft)]',
+          ]"
+          @click="selectTemplate(template)"
         >
-          <div class="absolute inset-x-0 top-0 flex items-center gap-1.5 px-4 py-3">
-            <span class="h-2 w-2 rounded-full bg-white/30"></span>
-            <span class="h-2 w-2 rounded-full bg-white/30"></span>
-            <span class="h-2 w-2 rounded-full bg-white/30"></span>
-          </div>
-          <div class="px-6 pt-8">
-            <div class="h-2 w-16 rounded bg-white/40"></div>
-            <div class="mt-4 h-4 w-3/4 max-w-[200px] rounded bg-white/80"></div>
-            <div class="mt-2 h-2 w-1/2 max-w-[120px] rounded bg-white/40"></div>
-            <div
-              class="mt-6 inline-block rounded-lg px-4 py-2 text-xs font-bold"
-              :style="{ backgroundColor: template.default_theme.accent, color: template.default_theme.secondary }"
+          <div class="relative aspect-[16/10] overflow-hidden rounded-lg border border-[var(--app-line)]">
+            <img
+              v-if="!failedThumbnails.has(template.id)"
+              :src="thumbnailUrl(template.id)"
+              :alt="`Aperçu du template ${template.name}`"
+              class="absolute inset-0 h-full w-full object-cover object-top"
+              loading="lazy"
+              @error="failedThumbnails.add(template.id)"
+            />
+            <div v-else class="absolute inset-0" :style="{ background: fallbackGradient(template) }"></div>
+            <span
+              v-if="modelValue === template.id"
+              class="absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--app-ink)] text-[var(--app-bg)]"
             >
-              Appeler
-            </div>
+              <UIcon name="i-lucide-check" class="h-3 w-3" />
+            </span>
           </div>
-          <div class="absolute right-0 bottom-0 left-0 grid grid-cols-3 gap-2 p-4">
-            <div v-for="i in 3" :key="i" class="h-8 rounded bg-white/10 backdrop-blur-sm"></div>
+          <div class="mt-2 flex items-center justify-between gap-2 px-0.5 pb-0.5">
+            <span class="truncate text-[13px] font-semibold text-[var(--app-ink)]">{{ template.name }}</span>
+            <span
+              v-if="isRecommended(template)"
+              class="shrink-0 rounded-full bg-[var(--app-accent-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--app-accent-ink)]"
+            >
+              Recommandé
+            </span>
           </div>
-        </div>
-        <div
-          v-if="modelValue === template.id"
-          class="absolute top-3 right-3 flex h-7 w-7 items-center justify-center rounded-full bg-[var(--app-ink)] text-[var(--app-bg)]"
-        >
-          <UIcon name="i-lucide-check" class="h-3.5 w-3.5" />
-        </div>
+        </button>
       </div>
 
-      <div class="p-5">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <p class="font-semibold text-[var(--app-ink)]">{{ template.name }}</p>
-            <p class="mt-1 text-sm leading-relaxed text-[var(--app-ink-soft)]">{{ template.description }}</p>
-          </div>
-        </div>
+      <div v-if="selectedTemplate" class="app-card self-start overflow-hidden">
+        <div ref="previewContainer" class="relative aspect-[16/10] overflow-hidden border-b border-[var(--app-line)]">
+          <template v-if="isLivePreview">
+            <iframe
+              :src="livePreviewUrl"
+              class="absolute top-0 left-0 h-[800px] w-[1280px] origin-top-left border-0 bg-white"
+              :style="{ transform: `scale(${previewScale})` }"
+              title="Aperçu interactif du template"
+            />
+          </template>
+          <template v-else>
+            <img
+              v-if="!failedThumbnails.has(selectedTemplate.id)"
+              :src="thumbnailUrl(selectedTemplate.id)"
+              :alt="`Aperçu du template ${selectedTemplate.name}`"
+              class="absolute inset-0 h-full w-full object-cover object-top"
+            />
+            <div v-else class="absolute inset-0" :style="{ background: fallbackGradient(selectedTemplate) }"></div>
+          </template>
 
-        <div class="mt-4 flex items-center gap-3">
-          <span class="text-xs text-[var(--app-ink-soft)]">Couleurs</span>
-          <div class="flex gap-2">
+          <div class="absolute right-3 bottom-3 flex gap-2">
             <button
-              v-for="colorKey in colorKeys"
-              :key="colorKey"
               type="button"
-              :title="colorLabels[colorKey]"
-              :class="[
-                'h-7 w-7 rounded-full border-2 transition hover:scale-110',
-                modelValue === template.id ? 'border-white/40' : 'border-transparent',
-              ]"
-              :style="{ backgroundColor: getThemeColor(template, colorKey) }"
-              @click.stop="openColorPicker(template.id, colorKey)"
-            />
+              class="app-btn-secondary h-8 px-3 text-xs shadow-[var(--app-shadow-soft)]"
+              @click="toggleLivePreview"
+            >
+              <UIcon :name="isLivePreview ? 'i-lucide-image' : 'i-lucide-play'" class="h-3.5 w-3.5" />
+              {{ isLivePreview ? 'Image' : 'Aperçu live' }}
+            </button>
+            <a
+              :href="livePreviewUrl"
+              target="_blank"
+              rel="noopener"
+              class="app-btn-secondary h-8 px-3 text-xs shadow-[var(--app-shadow-soft)]"
+              title="Ouvrir l'aperçu dans un nouvel onglet"
+            >
+              <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5" />
+            </a>
           </div>
         </div>
 
-        <div v-if="modelValue === template.id" class="mt-4 grid grid-cols-3 gap-2">
-          <label v-for="colorKey in colorKeys" :key="colorKey" class="space-y-1">
-            <span class="text-[10px] tracking-wide text-[var(--app-ink-soft)] uppercase">{{
-              colorLabels[colorKey]
-            }}</span>
-            <input
-              :value="theme[colorKey]"
-              type="text"
-              class="input-field h-8 text-xs"
-              placeholder="#1d4ed8"
-              maxlength="7"
-              @input="updateThemeColor(colorKey, ($event.target as HTMLInputElement).value)"
-            />
-          </label>
+        <div class="space-y-4 p-5">
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <p class="font-semibold text-[var(--app-ink)]">{{ selectedTemplate.name }}</p>
+              <span
+                v-if="isRecommended(selectedTemplate)"
+                class="rounded-full bg-[var(--app-accent-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--app-accent-ink)]"
+              >
+                Recommandé pour {{ recommendedTrade }}
+              </span>
+            </div>
+            <p class="mt-1.5 text-xs leading-relaxed text-[var(--app-ink-soft)]">{{ selectedTemplate.description }}</p>
+          </div>
+
+          <div class="border-t border-[var(--app-line-soft)] pt-4">
+            <div class="mb-2.5 flex items-center justify-between">
+              <p class="app-label">Couleurs du site</p>
+              <button
+                v-if="isThemeCustomised"
+                type="button"
+                class="cursor-pointer text-[11px] font-medium text-[var(--app-ink-soft)] underline underline-offset-2 hover:text-[var(--app-ink)]"
+                @click="resetTheme"
+              >
+                Revenir aux couleurs du template
+              </button>
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+              <div v-for="colorKey in colorKeys" :key="colorKey">
+                <span class="mb-1 block text-[10px] tracking-wide text-[var(--app-ink-soft)] uppercase">
+                  {{ colorLabels[colorKey] }}
+                </span>
+                <div class="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    :title="`Choisir la couleur ${colorLabels[colorKey].toLowerCase()}`"
+                    class="h-8 w-8 shrink-0 cursor-pointer rounded-lg border border-[var(--app-line)] transition-transform hover:scale-105"
+                    :style="{ backgroundColor: theme[colorKey] }"
+                    @click="openColorPicker(colorKey)"
+                  />
+                  <input
+                    :value="theme[colorKey]"
+                    type="text"
+                    class="input-field h-8 min-w-0 text-xs"
+                    placeholder="#1d4ed8"
+                    maxlength="7"
+                    @input="updateThemeColor(colorKey, ($event.target as HTMLInputElement).value)"
+                  />
+                </div>
+              </div>
+            </div>
+            <p class="mt-2.5 flex items-center gap-1.5 text-[11px] text-[var(--app-ink-soft)]">
+              <UIcon name="i-lucide-info" class="h-3 w-3 shrink-0" />
+              Modifier une couleur bascule l'aperçu en mode live pour voir le résultat.
+            </p>
+          </div>
         </div>
       </div>
-    </button>
+    </div>
   </div>
 </template>
 
 <script lang="ts" setup>
 import type { TemplatePickerEmits, TemplatePickerProps, TemplateThemeColorKey } from '~/types/TemplatePicker'
-import type { EmitFn, PropType, Ref } from 'vue'
+import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
 import type { DemoSiteTemplate, DemoSiteTheme } from '~/services/demoSiteService'
 
-/** Demo site template picker with live theme color editing. */
+/** Template picker: compact list, real screenshot, live iframe preview with theme colors applied. */
 const props: TemplatePickerProps = defineProps({
   templates: {
     type: Array as PropType<DemoSiteTemplate[]>,
@@ -111,9 +168,15 @@ const props: TemplatePickerProps = defineProps({
     type: Object as PropType<DemoSiteTheme>,
     required: true,
   },
+  recommendedTrade: {
+    type: String as PropType<string | null>,
+    default: null,
+  },
 })
 
 const emit: EmitFn<TemplatePickerEmits> = defineEmits<TemplatePickerEmits>()
+
+const config: ReturnType<typeof useRuntimeConfig> = useRuntimeConfig()
 
 const colorKeys: TemplateThemeColorKey[] = ['primary', 'secondary', 'accent']
 const colorLabels: Record<TemplateThemeColorKey, string> = {
@@ -122,26 +185,127 @@ const colorLabels: Record<TemplateThemeColorKey, string> = {
   accent: 'Accent',
 }
 
+/** Native width of the catalog pages the live iframe renders (scaled down to fit). */
+const LIVE_PREVIEW_WIDTH: number = 1280
+
 const colorInputRef: Ref<HTMLInputElement | null> = ref(null)
 const activeColorKey: Ref<TemplateThemeColorKey> = ref('primary')
+const previewContainer: Ref<HTMLElement | null> = ref(null)
+const previewScale: Ref<number> = ref(0.5)
+const isLivePreview: Ref<boolean> = ref(false)
+const livePreviewUrl: Ref<string> = ref('')
+const failedThumbnails: Ref<Set<string>> = ref(new Set())
+
+/** ResizeObserver keeping the scaled iframe in sync with the preview pane width. */
+let previewResizeObserver: ResizeObserver | null = null
+/** Timer debouncing live preview reloads while colors are edited. */
+let livePreviewReloadTimer: ReturnType<typeof setTimeout> | null = null
+
+/** The template currently selected in the list. */
+const selectedTemplate: ComputedRef<DemoSiteTemplate | null> = computed(
+  (): DemoSiteTemplate | null =>
+    props.templates.find((template: DemoSiteTemplate): boolean => template.id === props.modelValue) ?? null,
+)
+
+/** Templates with the ones recommended for the targeted trade bubbled to the top. */
+const sortedTemplates: ComputedRef<DemoSiteTemplate[]> = computed((): DemoSiteTemplate[] => {
+  if (!props.recommendedTrade) return props.templates
+  const recommended: DemoSiteTemplate[] = props.templates.filter((template: DemoSiteTemplate): boolean =>
+    isRecommended(template),
+  )
+  const others: DemoSiteTemplate[] = props.templates.filter(
+    (template: DemoSiteTemplate): boolean => !isRecommended(template),
+  )
+  return [...recommended, ...others]
+})
+
+/** Whether the current theme differs from the selected template's defaults. */
+const isThemeCustomised: ComputedRef<boolean> = computed((): boolean => {
+  const defaults: DemoSiteTheme | undefined = selectedTemplate.value?.default_theme
+  if (!defaults) return false
+  return colorKeys.some((key: TemplateThemeColorKey): boolean => defaults[key] !== props.theme[key])
+})
 
 /**
- * Build a CSS gradient preview from the template theme.
+ * Lowercase a trade string and strip its accents for keyword matching.
+ * @param value - Raw trade or category label.
+ * @returns The normalized string.
  */
-function previewGradient(template: DemoSiteTemplate): string {
-  const t: DemoSiteTheme = props.modelValue === template.id ? props.theme : template.default_theme
-  return `linear-gradient(135deg, ${t.secondary} 0%, ${t.primary} 100%)`
+function normalizeTrade(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
 }
 
 /**
- * Resolve a theme color for the given template and key.
+ * Whether a template targets the trade the picker recommends for.
+ * @param template - Template to test.
+ * @returns True when one of the template's trade keywords matches.
  */
-function getThemeColor(template: DemoSiteTemplate, key: TemplateThemeColorKey): string {
-  return props.modelValue === template.id ? props.theme[key] : template.default_theme[key]
+function isRecommended(template: DemoSiteTemplate): boolean {
+  if (!props.recommendedTrade) return false
+  const trade: string = normalizeTrade(props.recommendedTrade)
+  if (!trade) return false
+  return (template.trades ?? []).some((keyword: string): boolean => {
+    const normalized: string = normalizeTrade(keyword)
+    return trade.includes(normalized) || normalized.includes(trade)
+  })
+}
+
+/**
+ * Static screenshot path of a template (bundled with the app).
+ * @param templateId - Template identifier.
+ * @returns The public thumbnail URL.
+ */
+function thumbnailUrl(templateId: string): string {
+  return `/templates/${templateId}.jpg`
+}
+
+/**
+ * Gradient used when a template has no screenshot yet.
+ * @param template - Template whose default theme feeds the gradient.
+ * @returns A CSS gradient string.
+ */
+function fallbackGradient(template: DemoSiteTemplate): string {
+  return `linear-gradient(135deg, ${template.default_theme.secondary} 0%, ${template.default_theme.primary} 100%)`
+}
+
+/**
+ * Build the demo-host catalog URL for a template, with the current colors applied.
+ * @param template - Template to preview.
+ * @returns The catalog page URL.
+ */
+function buildLivePreviewUrl(template: DemoSiteTemplate): string {
+  const base: string = String(config.public.demoHostBase).replace(/\/$/, '')
+  const params: URLSearchParams = new URLSearchParams()
+  for (const key of colorKeys) {
+    const color: string = props.modelValue === template.id ? props.theme[key] : template.default_theme[key]
+    params.set(key, color.replace('#', ''))
+  }
+  return `${base}/t/${template.id}?${params.toString()}`
+}
+
+/**
+ * Refresh the live iframe URL, debounced so hex typing doesn't reload on every keystroke.
+ */
+function scheduleLivePreviewReload(): void {
+  if (livePreviewReloadTimer) clearTimeout(livePreviewReloadTimer)
+  livePreviewReloadTimer = setTimeout((): void => {
+    if (selectedTemplate.value) livePreviewUrl.value = buildLivePreviewUrl(selectedTemplate.value)
+  }, 600)
+}
+
+/**
+ * Toggle between the static screenshot and the live iframe.
+ */
+function toggleLivePreview(): void {
+  isLivePreview.value = !isLivePreview.value
 }
 
 /**
  * Select a template and sync its default theme.
+ * @param template - Template picked in the list.
  */
 function selectTemplate(template: DemoSiteTemplate): void {
   emit('update:modelValue', template.id)
@@ -149,33 +313,70 @@ function selectTemplate(template: DemoSiteTemplate): void {
 }
 
 /**
- * Open the native color picker for a template swatch.
+ * Reset the theme to the selected template's default colors.
  */
-function openColorPicker(templateId: string, colorKey: TemplateThemeColorKey): void {
-  if (props.modelValue !== templateId) {
-    const template: DemoSiteTemplate | undefined = props.templates.find(
-      (template: DemoSiteTemplate) => template.id === templateId,
-    )
-    if (template) selectTemplate(template)
-  }
+function resetTheme(): void {
+  const defaults: DemoSiteTheme | undefined = selectedTemplate.value?.default_theme
+  if (defaults) emit('update:theme', { ...defaults })
+}
+
+/**
+ * Open the native color picker for a theme key.
+ * @param colorKey - Theme key being edited.
+ */
+function openColorPicker(colorKey: TemplateThemeColorKey): void {
   activeColorKey.value = colorKey
-  nextTick(() => {
+  nextTick((): void => {
     colorInputRef.value?.click()
   })
 }
 
 /**
- * Handle a color input change from the hidden picker.
+ * Handle a color input change from the hidden native picker.
+ * @param event - Input event of the hidden color input.
  */
 function onColorInput(event: Event): void {
   updateThemeColor(activeColorKey.value, (event.target as HTMLInputElement).value)
 }
 
 /**
- * Update a single theme color when the hex value is valid.
+ * Update a single theme color when the hex value is valid, and show it live.
+ * @param key - Theme key being edited.
+ * @param value - Candidate hex color.
  */
 function updateThemeColor(key: TemplateThemeColorKey, value: string): void {
   if (!/^#[0-9A-Fa-f]{6}$/.test(value)) return
   emit('update:theme', { ...props.theme, [key]: value })
+  isLivePreview.value = true
 }
+
+watch(
+  (): string => props.modelValue,
+  (): void => {
+    isLivePreview.value = false
+    if (selectedTemplate.value) livePreviewUrl.value = buildLivePreviewUrl(selectedTemplate.value)
+  },
+  { immediate: true },
+)
+
+watch((): DemoSiteTheme => props.theme, scheduleLivePreviewReload, { deep: true })
+
+// The detail pane mounts only once templates are loaded: follow the element, not onMounted.
+watch(previewContainer, (element: HTMLElement | null): void => {
+  previewResizeObserver?.disconnect()
+  if (element) previewResizeObserver?.observe(element)
+})
+
+onMounted((): void => {
+  previewResizeObserver = new ResizeObserver((entries: ResizeObserverEntry[]): void => {
+    const width: number = entries[0]?.contentRect.width ?? 0
+    if (width > 0) previewScale.value = width / LIVE_PREVIEW_WIDTH
+  })
+  if (previewContainer.value) previewResizeObserver.observe(previewContainer.value)
+})
+
+onBeforeUnmount((): void => {
+  previewResizeObserver?.disconnect()
+  if (livePreviewReloadTimer) clearTimeout(livePreviewReloadTimer)
+})
 </script>

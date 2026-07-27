@@ -172,6 +172,7 @@
           v-model="form.templateId"
           :templates="templates"
           :theme="form.theme"
+          :recommended-trade="recommendedTrade"
           @update:theme="form.theme = $event"
         />
       </div>
@@ -409,6 +410,20 @@ const filteredProspects: ComputedRef<Prospect[]> = computed((): Prospect[] => {
   if (filterWebsite.value === 'yes') list = list.filter((p: Prospect): boolean => Boolean(p.website))
   else if (filterWebsite.value === 'no') list = list.filter((p: Prospect): boolean => !p.website)
   return list
+})
+
+/** Trade guiding the template recommendation: targeted métier, or the first selected prospect's category. */
+const recommendedTrade: ComputedRef<string | null> = computed((): string | null => {
+  if (form.value.mode === 'full_auto') {
+    const firstTrade: string = (form.value.metiers.split(',')[0] ?? '').trim()
+    return firstTrade || null
+  }
+  const firstSelectedId: string | undefined = selectedProspectIds.value[0]
+  if (!firstSelectedId) return null
+  const prospect: Prospect | undefined = prospects.value.find(
+    (candidate: Prospect): boolean => String(candidate.id) === firstSelectedId,
+  )
+  return prospect?.category ?? null
 })
 
 /** Total filtered pages. */

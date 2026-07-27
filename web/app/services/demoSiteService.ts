@@ -15,6 +15,7 @@ export type DemoSiteTemplate = {
   preview_image_url?: string | null
   default_theme: DemoSiteTheme
   category?: string
+  trades?: string[]
 }
 
 export type DemoSiteCreatePayload = {
