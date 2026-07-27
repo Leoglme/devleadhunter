@@ -79,7 +79,7 @@ export default defineNuxtConfig({
         { name: 'twitter:card', content: 'summary_large_image' },
         { name: 'twitter:image', content: 'https://devleadhunter.dibodev.fr/og-image.png' },
         { name: 'twitter:site', content: '@devleadhunter' },
-        { name: 'theme-color', content: '#050505' },
+        { name: 'theme-color', content: '#f4f1e9' },
       ],
       link: [
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },

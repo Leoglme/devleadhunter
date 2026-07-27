@@ -9,8 +9,10 @@
     scroll-behavior: smooth;
   }
 
+  html,
   body {
-    @apply bg-[#050505] font-sans text-[#f9f9f9];
+    background-color: var(--app-bg);
+    color: var(--app-ink);
     font-family: 'Inter', sans-serif;
   }
 

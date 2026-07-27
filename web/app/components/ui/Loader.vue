@@ -1,7 +1,7 @@
 <template>
   <div
     class="fixed inset-0 z-50 flex items-center justify-center"
-    :style="{ backgroundColor: 'var(--app-bg, #050505)' }"
+    :style="{ backgroundColor: 'var(--app-bg, #f4f1e9)' }"
   >
     <div class="loader-ring"></div>
   </div>
@@ -10,7 +10,7 @@
 <script lang="ts" setup>
 /**
  * Full-screen loader overlay themed by the app variables
- * (falls back to the legacy dark backdrop outside the dashboard shell).
+ * (falls back to the default paper backdrop outside the dashboard shell).
  * @module components/ui/Loader
  */
 </script>
