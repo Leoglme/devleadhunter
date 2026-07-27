@@ -62,13 +62,11 @@
 import type { ComputedRef, Ref } from 'vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import type { SendPolicy } from '~/types/Automation'
+import { SEND_POLICY_DAY_LABELS } from '~/constants/sendPolicyDayLabels'
 import { SendPolicyService } from '~/services/sendPolicyService'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 
 definePageMeta({ layout: 'dashboard', middleware: ['auth'] })
-
-/** Weekday labels indexed like `SendPolicy.days_of_week` (0 = Monday). */
-const DAY_LABELS: string[] = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 
 const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 
@@ -82,7 +80,7 @@ const sendingDaysLabel: ComputedRef<string> = computed((): string => {
   const isContiguous: boolean = days.every(
     (day: number, index: number): boolean => index === 0 || day === (days[index - 1] ?? 0) + 1,
   )
-  const labels: string[] = days.map((day: number): string => DAY_LABELS[day] ?? '')
+  const labels: string[] = days.map((day: number): string => SEND_POLICY_DAY_LABELS[day] ?? '')
   if (isContiguous && days.length > 2) return `${labels[0]} – ${labels[labels.length - 1]}`
   return labels.join(', ')
 })

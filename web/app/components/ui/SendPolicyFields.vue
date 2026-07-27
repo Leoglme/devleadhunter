@@ -17,7 +17,7 @@
       <p class="app-label mb-2">Jours d'envoi</p>
       <div class="flex flex-wrap gap-1.5">
         <button
-          v-for="(label, index) in DAY_LABELS"
+          v-for="(label, index) in SEND_POLICY_DAY_LABELS"
           :key="label"
           type="button"
           class="cursor-pointer rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors"
@@ -81,6 +81,7 @@ import type { ComputedRef, EmitFn, PropType, WritableComputedRef } from 'vue'
 import { computed } from 'vue'
 import type { SendPolicy } from '~/types/Automation'
 import type { UiSendPolicyFieldsEmits, UiSendPolicyFieldsProps } from '~/types/UiSendPolicyFields'
+import { SEND_POLICY_DAY_LABELS } from '~/constants/sendPolicyDayLabels'
 
 /** Send-policy form fields shared by the drawer and setup wizard. */
 const props: UiSendPolicyFieldsProps = defineProps({
@@ -91,9 +92,6 @@ const props: UiSendPolicyFieldsProps = defineProps({
 })
 
 const emit: EmitFn<UiSendPolicyFieldsEmits> = defineEmits<UiSendPolicyFieldsEmits>()
-
-/** Weekday labels (index 0 = Monday). */
-const DAY_LABELS: string[] = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 
 /** Maximum emails sent per day. */
 const dailyCap: WritableComputedRef<number> = computed({
@@ -122,7 +120,7 @@ const spacingMinutes: WritableComputedRef<number> = computed({
 /** Human list of the selected days. */
 const selectedDaysLabel: ComputedRef<string> = computed((): string => {
   const days: number[] = [...props.modelValue.days_of_week].sort((a: number, b: number): number => a - b)
-  return days.length ? days.map((day: number): string => DAY_LABELS[day] ?? '').join(', ') : 'aucun jour'
+  return days.length ? days.map((day: number): string => SEND_POLICY_DAY_LABELS[day] ?? '').join(', ') : 'aucun jour'
 })
 
 /**
