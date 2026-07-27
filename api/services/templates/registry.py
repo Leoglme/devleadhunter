@@ -29,6 +29,7 @@ from services.templates import (
     dental,
     electrician_lumen,
     food,
+    landscaper_verdure,
     mechanic_pitlane,
     plumber_atelier,
     plumber_cuivre,
@@ -46,6 +47,7 @@ TEMPLATE_MODULES = [
     dental,
     food,
     barber,
+    landscaper_verdure,
 ]
 
 TEMPLATES_BY_ID: dict[str, Any] = {module.TEMPLATE_ID: module for module in TEMPLATE_MODULES}
