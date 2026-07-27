@@ -24,6 +24,7 @@ from schemas.email_sending import (
     SendEmailResponse,
 )
 from services.auth_service import get_current_user
+from services.email_log_stats import aggregate_email_log_counts, compute_engagement_rates
 from services.email_sending_service import EmailSendingService
 from services.encryption_service import encryption_service
 
@@ -289,50 +290,21 @@ async def get_email_stats(
     """
     Get email statistics for the current user.
     """
-    # Build base query
-    base_stmt = select(EmailLog).where(EmailLog.user_id == current_user.id)
-
+    filters: list[object] = [EmailLog.user_id == current_user.id]
     if campaign_id:
-        base_stmt = base_stmt.where(EmailLog.campaign_id == campaign_id)
+        filters.append(EmailLog.campaign_id == campaign_id)
 
-    # Count by status
-    total_sent = db.execute(
-        select(func.count()).select_from(base_stmt.where(EmailLog.status == EmailStatus.SENT.value).subquery())
-    ).scalar()
-
-    total_delivered = db.execute(
-        select(func.count()).select_from(base_stmt.where(EmailLog.status == EmailStatus.DELIVERED.value).subquery())
-    ).scalar()
-
-    total_opened = db.execute(
-        select(func.count()).select_from(base_stmt.where(EmailLog.status == EmailStatus.OPENED.value).subquery())
-    ).scalar()
-
-    total_clicked = db.execute(
-        select(func.count()).select_from(base_stmt.where(EmailLog.status == EmailStatus.CLICKED.value).subquery())
-    ).scalar()
-
-    total_bounced = db.execute(
-        select(func.count()).select_from(base_stmt.where(EmailLog.status == EmailStatus.BOUNCED.value).subquery())
-    ).scalar()
-
-    total_failed = db.execute(
-        select(func.count()).select_from(base_stmt.where(EmailLog.status == EmailStatus.FAILED.value).subquery())
-    ).scalar()
-
-    # Calculate rates
-    delivery_rate = (total_delivered / total_sent * 100) if total_sent > 0 else 0.0
-    open_rate = (total_opened / total_delivered * 100) if total_delivered > 0 else 0.0
-    click_rate = (total_clicked / total_opened * 100) if total_opened > 0 else 0.0
+    counts = aggregate_email_log_counts(db, *filters)
+    rates = compute_engagement_rates(counts)
 
     return EmailStatsResponse(
-        total_sent=total_sent,
-        total_delivered=total_delivered,
-        total_opened=total_opened,
-        total_clicked=total_clicked,
-        total_bounced=total_bounced,
-        total_failed=total_failed,
-        delivery_rate=round(delivery_rate, 2),
-        open_rate=round(open_rate, 2),
-        click_rate=round(click_rate, 2),
+        total_sent=counts.sent,
+        total_delivered=counts.delivered,
+        total_opened=counts.opened,
+        total_clicked=counts.clicked,
+        total_bounced=counts.bounced,
+        total_failed=counts.failed,
+        delivery_rate=rates.delivery_rate,
+        open_rate=rates.open_rate,
+        click_rate=rates.click_rate,
     )

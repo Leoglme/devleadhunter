@@ -3,10 +3,8 @@ Campaign service for managing email campaigns.
 """
 
 from fastapi import HTTPException, status
-from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload
 
-from enums.email_status import EmailStatus
 from models.campaign import Campaign, CampaignStatus
 from models.email_log import EmailLog
 from models.prospect_db import ProspectDB
@@ -16,6 +14,7 @@ from schemas.campaign import (
     CampaignUpdate,
     CampaignVariantStats,
 )
+from services.email_log_stats import aggregate_email_log_counts, compute_engagement_rates
 
 
 class CampaignService:
@@ -251,79 +250,49 @@ class CampaignService:
         # Count prospects
         total_prospects = len(campaign.prospects)
 
-        # Get email statistics
-        email_stats = (
-            db.query(
-                func.count(EmailLog.id).label("total_sent"),
-                func.sum(case((EmailLog.status == EmailStatus.DELIVERED.value, 1), else_=0)).label("delivered"),
-                func.sum(case((EmailLog.status == EmailStatus.OPENED.value, 1), else_=0)).label("opened"),
-                func.sum(case((EmailLog.clicked_at.isnot(None), 1), else_=0)).label("clicked"),
-                func.sum(case((EmailLog.status == EmailStatus.BOUNCED.value, 1), else_=0)).label("bounced"),
-                func.sum(case((EmailLog.status == EmailStatus.FAILED.value, 1), else_=0)).label("failed"),
-            )
-            .filter(EmailLog.campaign_id == campaign_id, EmailLog.user_id == user_id)
-            .first()
+        counts = aggregate_email_log_counts(
+            db,
+            EmailLog.campaign_id == campaign_id,
+            EmailLog.user_id == user_id,
         )
-
-        total_sent = email_stats.total_sent or 0
-        delivered = email_stats.delivered or 0
-        opened = email_stats.opened or 0
-        clicked = email_stats.clicked or 0
-        bounced = email_stats.bounced or 0
-        failed = email_stats.failed or 0
-
-        # Calculate rates
-        delivery_rate = (delivered / total_sent * 100) if total_sent > 0 else 0
-        open_rate = (opened / delivered * 100) if delivered > 0 else 0
-        click_rate = (clicked / opened * 100) if opened > 0 else 0
+        rates = compute_engagement_rates(counts)
 
         # A/B breakdown (only when campaign has a B variant)
         ab_stats: list[CampaignVariantStats] | None = None
         if campaign.ab_template_id_b:
             ab_stats = []
             for variant in ("A", "B"):
-                row = (
-                    db.query(
-                        func.count(EmailLog.id).label("sent"),
-                        func.sum(case((EmailLog.status == EmailStatus.DELIVERED.value, 1), else_=0)).label("delivered"),
-                        func.sum(case((EmailLog.status == EmailStatus.OPENED.value, 1), else_=0)).label("opened"),
-                        func.sum(case((EmailLog.clicked_at.isnot(None), 1), else_=0)).label("clicked"),
-                    )
-                    .filter(
-                        EmailLog.campaign_id == campaign_id,
-                        EmailLog.user_id == user_id,
-                        EmailLog.ab_variant == variant,
-                    )
-                    .first()
+                variant_counts = aggregate_email_log_counts(
+                    db,
+                    EmailLog.campaign_id == campaign_id,
+                    EmailLog.user_id == user_id,
+                    EmailLog.ab_variant == variant,
                 )
-                v_sent = row.sent or 0
-                v_delivered = row.delivered or 0
-                v_opened = row.opened or 0
-                v_clicked = row.clicked or 0
+                variant_rates = compute_engagement_rates(variant_counts)
                 ab_stats.append(
                     CampaignVariantStats(
                         variant=variant,
-                        sent=v_sent,
-                        delivered=v_delivered,
-                        opened=v_opened,
-                        clicked=v_clicked,
-                        open_rate=round((v_opened / v_delivered * 100) if v_delivered else 0, 2),
-                        click_rate=round((v_clicked / v_opened * 100) if v_opened else 0, 2),
+                        sent=variant_counts.sent,
+                        delivered=variant_counts.delivered,
+                        opened=variant_counts.opened,
+                        clicked=variant_counts.clicked,
+                        open_rate=variant_rates.open_rate,
+                        click_rate=variant_rates.click_rate,
                     )
                 )
 
         return CampaignStats(
             campaign_id=campaign_id,
             total_prospects=total_prospects,
-            total_emails_sent=total_sent,
-            emails_delivered=delivered,
-            emails_opened=opened,
-            emails_clicked=clicked,
-            emails_bounced=bounced,
-            emails_failed=failed,
-            delivery_rate=round(delivery_rate, 2),
-            open_rate=round(open_rate, 2),
-            click_rate=round(click_rate, 2),
+            total_emails_sent=counts.sent,
+            emails_delivered=counts.delivered,
+            emails_opened=counts.opened,
+            emails_clicked=counts.clicked,
+            emails_bounced=counts.bounced,
+            emails_failed=counts.failed,
+            delivery_rate=rates.delivery_rate,
+            open_rate=rates.open_rate,
+            click_rate=rates.click_rate,
             ab_stats=ab_stats,
         )
 
