@@ -421,55 +421,18 @@
           <button class="btn-secondary mt-4" @click="showAddProspectsModal = true">Ajouter des prospects</button>
         </div>
 
-        <div v-else class="overflow-hidden rounded-xl border border-[var(--app-line)]">
-          <table class="w-full border-collapse">
-            <thead>
-              <tr class="bg-[var(--app-bg)]">
-                <th class="text-muted px-3 py-2.5 text-left text-xs font-semibold">Prospect</th>
-                <th class="text-muted px-3 py-2.5 text-left text-xs font-semibold">Ville</th>
-                <th class="text-muted px-3 py-2.5 text-left text-xs font-semibold">Catégorie</th>
-                <th v-if="campaign.ab_template_id_b" class="text-muted px-3 py-2.5 text-center text-xs font-semibold">
-                  Variante
-                </th>
-                <th class="text-muted px-3 py-2.5 text-right text-xs font-semibold">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="prospect in campaign.prospects"
-                :key="prospect.id"
-                class="border-t border-[var(--app-line)] transition-colors hover:bg-[var(--app-surface)]"
-              >
-                <td class="px-3 py-2.5">
-                  <div class="text-sm font-medium text-[var(--app-ink)]">{{ prospect.name }}</div>
-                  <div class="text-muted text-xs">{{ prospect.email || '—' }}</div>
-                </td>
-                <td class="text-muted px-3 py-2.5 text-sm">{{ prospect.city || '—' }}</td>
-                <td class="text-muted px-3 py-2.5 text-sm">{{ prospect.category }}</td>
-                <td v-if="campaign.ab_template_id_b" class="px-3 py-2.5 text-center">
-                  <span
-                    v-if="prospect.ab_variant"
-                    :class="[
-                      'rounded px-1.5 py-0.5 text-xs font-bold',
-                      prospect.ab_variant === 'A'
-                        ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]'
-                        : 'bg-[var(--app-violet-soft)] text-[var(--app-violet)]',
-                    ]"
-                    >{{ prospect.ab_variant }}</span
-                  >
-                  <span v-else class="text-muted text-xs">—</span>
-                </td>
-                <td class="px-3 py-2.5 text-right">
-                  <button
-                    class="inline-flex items-center gap-1 rounded-lg border border-[var(--app-red)]/30 px-2 py-1 text-xs text-[var(--app-red)] transition-colors hover:bg-[var(--app-red)]/10"
-                    @click="startRemoveProspect(prospect.id)"
-                  >
-                    <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />Retirer
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div v-else class="app-card overflow-hidden">
+          <UiProspectTable
+            :prospects="campaignProspectRows"
+            :selected-prospects="campaignSelectedProspects"
+            :show-ab-variant="!!campaign.ab_template_id_b"
+            :ab-variants="campaignAbVariants"
+            row-action="remove"
+            @view-prospect="openProspectDrawer"
+            @remove-prospect="startRemoveProspectFromRow"
+            @toggle-select="toggleCampaignProspectSelect"
+            @toggle-select-all="toggleCampaignProspectSelectAll"
+          />
         </div>
       </div>
 
@@ -665,9 +628,10 @@ import type {
 import { CampaignService } from '~/services/campaignService'
 import { ProspectsService } from '~/services/prospectsService'
 import { ApiClient } from '~/services/api'
-import type { CampaignFollowUp, CampaignVariantStats, Prospect } from '~/types'
+import type { CampaignFollowUp, CampaignVariantStats, Prospect, ProspectSource } from '~/types'
 import { formatCompactDateTime } from '~/utils/date'
 import { useToast } from '~/composables/useToast'
+import { useDrawerStackStore } from '~/stores/drawerStack'
 
 definePageMeta({ layout: 'dashboard', middleware: 'auth' })
 
@@ -729,6 +693,7 @@ const activeTab: Ref<string> = ref('config')
 const showEditModal: Ref<boolean> = ref(false)
 const showAddProspectsModal: Ref<boolean> = ref(false)
 const selectedProspectIds: Ref<number[]> = ref([])
+const campaignSelectedProspects: Ref<string[]> = ref([])
 const prospectToRemoveId: Ref<number | null> = ref(null)
 const removeProspectModal: Ref<{ open: () => void } | null> = ref(null)
 const confirmDeleteModal: Ref<{ open: () => void } | null> = ref(null)
@@ -753,7 +718,44 @@ const settingsForm: Ref<{
 
 const { openCreate }: EmailTemplateCreator = useEmailTemplateCreator(templates, reloadTemplates)
 
+/** Persistent drawer stack (prospect detail lives in the layout). */
+const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
+
 const campaignId: ComputedRef<number> = computed((): number => Number(route.params.id))
+
+/** Campaign prospects enriched with full list data when available. */
+const campaignProspectRows: ComputedRef<Prospect[]> = computed((): Prospect[] => {
+  if (!campaign.value) return []
+  const byId: Map<number, Prospect> = new Map(allProspects.value.map((prospect: Prospect) => [prospect.id, prospect]))
+  return campaign.value.prospects.map((cp: CampaignProspect): Prospect => {
+    const full: Prospect | undefined = byId.get(cp.id)
+    if (full) return full
+    return {
+      id: cp.id,
+      user_id: 0,
+      name: cp.name,
+      city: cp.city ?? undefined,
+      phone: cp.phone ?? undefined,
+      email: cp.email ?? undefined,
+      category: cp.category,
+      source: cp.source as ProspectSource,
+      confidence: cp.confidence,
+      contacted: false,
+    }
+  })
+})
+
+/** A/B variant labels keyed by prospect id (campaign tab only). */
+const campaignAbVariants: ComputedRef<Record<number, string | null | undefined>> = computed(
+  (): Record<number, string | null | undefined> => {
+    if (!campaign.value?.ab_template_id_b) return {}
+    const variants: Record<number, string | null | undefined> = {}
+    for (const prospect of campaign.value.prospects) {
+      variants[prospect.id] = prospect.ab_variant
+    }
+    return variants
+  },
+)
 
 const availableProspects: ComputedRef<Prospect[]> = computed((): Prospect[] => {
   if (!campaign.value) return []
@@ -1021,6 +1023,45 @@ async function handleAddProspects(): Promise<void> {
     showAddProspectsModal.value = false
   } catch {
     toast.error("Erreur lors de l'ajout")
+  }
+}
+
+/**
+ * Open the prospect detail drawer from the campaign prospects tab.
+ * @param prospect - Prospect row that was clicked.
+ */
+function openProspectDrawer(prospect: Prospect): void {
+  drawerStack.push({ kind: 'prospect', prospect })
+}
+
+/**
+ * Relay a table row removal to the existing confirm flow.
+ * @param prospect - Prospect to remove from the campaign.
+ */
+function startRemoveProspectFromRow(prospect: Prospect): void {
+  startRemoveProspect(prospect.id)
+}
+
+/**
+ * Toggle a single prospect in the campaign tab selection.
+ * @param prospect - The prospect whose checkbox was toggled.
+ */
+function toggleCampaignProspectSelect(prospect: Prospect): void {
+  const id: string = String(prospect.id)
+  const index: number = campaignSelectedProspects.value.indexOf(id)
+  if (index === -1) campaignSelectedProspects.value.push(id)
+  else campaignSelectedProspects.value.splice(index, 1)
+}
+
+/**
+ * Select or clear every prospect in the campaign tab table.
+ * @param checked - True to select all visible rows, false to clear them.
+ */
+function toggleCampaignProspectSelectAll(checked: boolean): void {
+  if (checked) {
+    campaignSelectedProspects.value = campaignProspectRows.value.map((prospect: Prospect) => String(prospect.id))
+  } else {
+    campaignSelectedProspects.value = []
   }
 }
 

@@ -4,7 +4,7 @@
       <table class="w-full min-w-[720px] border-collapse">
         <thead>
           <tr class="bg-[var(--app-surface-2)]">
-            <th class="w-12 border-b border-[var(--app-line)] px-4 py-2.5 text-left">
+            <th v-if="!hideSelection" class="w-12 border-b border-[var(--app-line)] px-4 py-2.5 text-left">
               <input
                 type="checkbox"
                 class="h-4 w-4 cursor-pointer accent-(--app-accent)"
@@ -21,6 +21,9 @@
             <th class="app-label border-b border-[var(--app-line)] px-4 py-2.5 text-left">Site web</th>
             <th class="app-label border-b border-[var(--app-line)] px-4 py-2.5 text-left">Contacté</th>
             <th class="app-label border-b border-[var(--app-line)] px-4 py-2.5 text-left">Source</th>
+            <th v-if="showAbVariant" class="app-label border-b border-[var(--app-line)] px-4 py-2.5 text-center">
+              Variante
+            </th>
             <th class="border-b border-[var(--app-line)] px-4 py-2.5 text-center">
               <span class="sr-only">Actions</span>
             </th>
@@ -36,7 +39,7 @@
               isLockedForMe(prospect) ? 'bg-[var(--app-surface-2)]/40' : 'hover:bg-[var(--app-surface-2)]/60',
             ]"
           >
-            <td class="px-4 py-3">
+            <td v-if="!hideSelection" class="px-4 py-3">
               <input
                 type="checkbox"
                 class="h-4 w-4 accent-(--app-accent)"
@@ -119,9 +122,33 @@
               <UiProspectSourceBadge :source="prospect.source" />
             </td>
 
+            <td v-if="showAbVariant" class="px-4 py-3 text-center">
+              <span
+                v-if="abVariants?.[prospect.id]"
+                :class="[
+                  'rounded px-1.5 py-0.5 text-xs font-bold',
+                  abVariants[prospect.id] === 'A'
+                    ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]'
+                    : 'bg-[var(--app-violet-soft)] text-[var(--app-violet)]',
+                ]"
+              >
+                {{ abVariants[prospect.id] }}
+              </span>
+              <span v-else class="text-sm text-[var(--app-faint)]">—</span>
+            </td>
+
             <td class="px-4 py-3 text-center">
               <button
-                v-if="!isLockedForMe(prospect)"
+                v-if="rowAction === 'remove' && !isLockedForMe(prospect)"
+                type="button"
+                class="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-[var(--app-red)]/30 px-2 py-1 text-xs text-[var(--app-red)] transition-colors hover:bg-[var(--app-red)]/10"
+                @click="emit('removeProspect', prospect)"
+              >
+                <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />
+                Retirer
+              </button>
+              <button
+                v-else-if="rowAction === 'delete' && !isLockedForMe(prospect)"
                 type="button"
                 class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] opacity-0 transition-all group-hover:opacity-100 hover:bg-[var(--app-red-soft)] hover:text-[var(--app-red)] focus-visible:opacity-100"
                 title="Supprimer ce prospect"
@@ -158,6 +185,22 @@ const props: UiProspectTableProps = defineProps({
   selectedProspects: {
     type: Array as PropType<string[]>,
     default: () => [],
+  },
+  showAbVariant: {
+    type: Boolean,
+    default: false,
+  },
+  abVariants: {
+    type: Object as PropType<Record<number, string | null | undefined>>,
+    default: () => ({}),
+  },
+  rowAction: {
+    type: String as PropType<'delete' | 'remove'>,
+    default: 'delete',
+  },
+  hideSelection: {
+    type: Boolean,
+    default: false,
   },
 })
 
