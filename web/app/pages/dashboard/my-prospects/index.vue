@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-5">
     <div class="flex flex-col gap-4 @2xl:flex-row @2xl:items-end @2xl:justify-between">
-      <div>
+      <div class="min-w-0">
         <p class="app-label flex items-center gap-2">
           <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
           Prospection
@@ -9,69 +9,77 @@
         <h1 class="app-page-title mt-2">Mes prospects</h1>
         <p class="mt-1.5 text-sm text-[var(--app-ink-soft)]">Tous vos prospects sauvegardés depuis vos recherches</p>
       </div>
-      <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-        <button
-          :disabled="isLoading"
-          class="app-btn-secondary h-9 px-4 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-          @click="refreshProspects"
-        >
-          <UIcon name="i-lucide-refresh-cw" class="h-3.5 w-3.5" />
-          Actualiser
-        </button>
-        <div class="relative">
+      <div
+        class="flex w-full flex-col-reverse items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end @2xl:w-auto"
+      >
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+          <button
+            :disabled="isLoading"
+            class="app-btn-secondary h-9 shrink-0 px-4 text-xs whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
+            @click="refreshProspects"
+          >
+            <UIcon name="i-lucide-refresh-cw" class="h-3.5 w-3.5" />
+            Actualiser
+          </button>
+          <div class="relative shrink-0">
+            <button
+              type="button"
+              class="app-btn-secondary h-9 px-4 text-xs whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="isImporting"
+              :aria-expanded="showImportMenu"
+              @click.stop="showImportMenu = !showImportMenu"
+            >
+              <UIcon
+                :name="isImporting ? 'i-lucide-loader-circle' : 'i-lucide-upload'"
+                :class="['h-3.5 w-3.5', isImporting && 'animate-spin']"
+              />
+              {{ isImporting ? 'Import…' : 'Importer' }}
+              <UIcon
+                name="i-lucide-chevron-down"
+                :class="['h-3 w-3 opacity-60 transition-transform', showImportMenu && 'rotate-180']"
+              />
+            </button>
+
+            <div v-if="showImportMenu" class="fixed inset-0 z-40" @click="showImportMenu = false"></div>
+            <div
+              v-if="showImportMenu"
+              class="absolute right-0 z-50 mt-1.5 w-56 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-1 shadow-lg shadow-black/5"
+            >
+              <button
+                type="button"
+                class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
+                @click="handleImportClick"
+              >
+                <UIcon name="i-lucide-upload" class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
+                Importer un fichier JSON
+              </button>
+              <button
+                type="button"
+                class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
+                @click="handleDownloadTemplate"
+              >
+                <UIcon name="i-lucide-file-json" class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
+                Télécharger le modèle JSON
+              </button>
+            </div>
+          </div>
+          <input
+            ref="importInput"
+            type="file"
+            accept=".json,application/json"
+            class="hidden"
+            @change="handleImportFile"
+          />
           <button
             type="button"
-            class="app-btn-secondary h-9 px-4 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-            :disabled="isImporting"
-            :aria-expanded="showImportMenu"
-            @click.stop="showImportMenu = !showImportMenu"
+            class="app-btn-secondary h-9 shrink-0 px-4 text-xs whitespace-nowrap"
+            @click="openAddProspectDrawer"
           >
-            <UIcon
-              :name="isImporting ? 'i-lucide-loader-circle' : 'i-lucide-upload'"
-              :class="['h-3.5 w-3.5', isImporting && 'animate-spin']"
-            />
-            {{ isImporting ? 'Import…' : 'Importer' }}
-            <UIcon
-              name="i-lucide-chevron-down"
-              :class="['h-3 w-3 opacity-60 transition-transform', showImportMenu && 'rotate-180']"
-            />
+            <UIcon name="i-lucide-user-plus" class="h-3.5 w-3.5" />
+            Ajouter manuellement
           </button>
-
-          <div v-if="showImportMenu" class="fixed inset-0 z-40" @click="showImportMenu = false"></div>
-          <div
-            v-if="showImportMenu"
-            class="absolute right-0 z-50 mt-1.5 w-56 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-1 shadow-lg shadow-black/5"
-          >
-            <button
-              type="button"
-              class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
-              @click="handleImportClick"
-            >
-              <UIcon name="i-lucide-upload" class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
-              Importer un fichier JSON
-            </button>
-            <button
-              type="button"
-              class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
-              @click="handleDownloadTemplate"
-            >
-              <UIcon name="i-lucide-file-json" class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
-              Télécharger le modèle JSON
-            </button>
-          </div>
         </div>
-        <input
-          ref="importInput"
-          type="file"
-          accept=".json,application/json"
-          class="hidden"
-          @change="handleImportFile"
-        />
-        <button type="button" class="app-btn-secondary h-9 px-4 text-xs" @click="openAddProspectDrawer">
-          <UIcon name="i-lucide-user-plus" class="h-3.5 w-3.5" />
-          Ajouter manuellement
-        </button>
-        <NuxtLink to="/dashboard/search-prospects" class="app-btn-primary h-9 px-4 text-xs">
+        <NuxtLink to="/dashboard/search-prospects" class="app-btn-primary h-9 w-full shrink-0 px-4 text-xs sm:w-auto">
           <UIcon name="i-lucide-search" class="h-3.5 w-3.5" />
           Nouvelle recherche
         </NuxtLink>

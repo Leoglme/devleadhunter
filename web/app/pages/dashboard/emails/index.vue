@@ -1,43 +1,56 @@
 <template>
   <div class="space-y-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-3xl font-bold text-[var(--app-ink)]">Suivi des emails</h1>
-        <p class="text-muted mt-2 text-sm">Historique et statut de chaque email de prospection envoyé</p>
+    <div class="flex flex-col gap-4 @2xl:flex-row @2xl:items-end @2xl:justify-between">
+      <div class="min-w-0">
+        <p class="app-label flex items-center gap-2">
+          <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+          Campagnes
+        </p>
+        <h1 class="app-page-title mt-2">Suivi des emails</h1>
+        <p class="mt-1.5 text-sm text-[var(--app-ink-soft)]">
+          Historique et statut de chaque email de prospection envoyé
+        </p>
       </div>
-      <div class="flex items-center gap-3">
-        <NuxtLink to="/dashboard/email-health" class="btn-secondary">
-          <UIcon name="i-lucide-heart-pulse" class="h-4 w-4" />
-          Santé email
-        </NuxtLink>
+      <div
+        class="flex w-full flex-col-reverse items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end @2xl:w-auto"
+      >
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+          <NuxtLink to="/dashboard/email-health" class="app-btn-secondary h-9 shrink-0 px-4 text-xs whitespace-nowrap">
+            <UIcon name="i-lucide-heart-pulse" class="h-3.5 w-3.5" />
+            Santé email
+          </NuxtLink>
+          <button
+            :disabled="isLoading || isSyncing"
+            class="app-btn-secondary h-9 shrink-0 px-4 text-xs whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
+            :title="'Synchronise les statuts depuis Resend (utile en local sans webhook)'"
+            @click="syncStatus"
+          >
+            <UIcon
+              :name="isSyncing ? 'i-lucide-loader-circle' : 'i-lucide-rotate-cw'"
+              :class="['h-3.5 w-3.5', isSyncing && 'animate-spin']"
+            />
+            {{ isSyncing ? 'Sync…' : 'Sync Resend' }}
+          </button>
+          <button
+            :disabled="isLoading"
+            class="app-btn-secondary h-9 shrink-0 px-4 text-xs whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
+            @click="loadLogs"
+          >
+            <UIcon name="i-lucide-rotate-cw" class="h-3.5 w-3.5" />
+            Actualiser
+          </button>
+        </div>
         <button
-          :disabled="isLoading || isSyncing"
-          class="btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
-          :title="'Synchronise les statuts depuis Resend (utile en local sans webhook)'"
-          @click="syncStatus"
+          class="app-btn-primary h-9 w-full shrink-0 px-4 text-xs sm:w-auto"
+          @click="drawerStack.push({ kind: 'send-email', prospect: null })"
         >
-          <UIcon
-            :name="isSyncing ? 'i-lucide-loader-circle' : 'i-lucide-rotate-cw'"
-            :class="['h-4 w-4', isSyncing && 'animate-spin']"
-          />
-          {{ isSyncing ? 'Sync…' : 'Sync Resend' }}
-        </button>
-        <button
-          :disabled="isLoading"
-          class="btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
-          @click="loadLogs"
-        >
-          <UIcon name="i-lucide-rotate-cw" class="h-4 w-4" />
-          Actualiser
-        </button>
-        <button class="btn-primary" @click="drawerStack.push({ kind: 'send-email', prospect: null })">
-          <UIcon name="i-lucide-send" class="h-4 w-4" />
+          <UIcon name="i-lucide-send" class="h-3.5 w-3.5" />
           Envoyer un email
         </button>
       </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-4 @3xl:grid-cols-6">
+    <div class="grid grid-cols-2 gap-3 @sm:grid-cols-3 @4xl:grid-cols-6">
       <div class="card text-center">
         <p class="text-muted text-xs font-medium">Envoyés</p>
         <p class="mt-1 text-2xl font-bold text-[var(--app-ink)]">{{ stats.total_sent }}</p>
@@ -65,7 +78,7 @@
     </div>
 
     <div class="card">
-      <div class="grid grid-cols-1 gap-4 @3xl:grid-cols-4">
+      <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
         <div>
           <label class="text-muted mb-1.5 block text-xs font-medium">Rechercher</label>
           <input v-model="searchQuery" type="text" placeholder="Email, nom, sujet..." class="input-field" />
@@ -109,69 +122,78 @@
     </div>
 
     <div v-else class="card overflow-hidden">
-      <table class="w-full border-collapse">
-        <thead>
-          <tr class="bg-[var(--app-bg)]">
-            <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Destinataire</th>
-            <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Sujet</th>
-            <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Campagne</th>
-            <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Statut</th>
-            <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Activité</th>
-            <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Envoyé le</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="log in paginatedLogs"
-            :key="log.id"
-            class="border-muted cursor-pointer border-b transition-colors last:border-b-0 hover:bg-[var(--app-surface-2)]"
-            @click="openDrawer(log)"
-          >
-            <td class="px-3 py-2.5">
-              <div class="text-sm font-medium text-[var(--app-ink)]">
-                {{ log.recipient_name || log.recipient_email }}
-              </div>
-              <div class="text-muted text-xs">{{ log.recipient_email }}</div>
-            </td>
-            <td class="text-muted max-w-[200px] truncate px-3 py-2.5 text-sm">
-              {{ log.subject }}
-            </td>
-            <td class="text-muted px-3 py-2.5 text-sm">
-              {{ resolveCampaignName(log.campaign_id) ?? '—' }}
-            </td>
-            <td class="px-3 py-2.5">
-              <div class="flex flex-wrap gap-1">
-                <UiEmailStatusBadge v-for="s in getEmailBadges(log)" :key="s" :status="s" />
-              </div>
-            </td>
-            <td class="px-3 py-2.5">
-              <div class="flex items-center gap-2">
-                <span
-                  v-for="step in getEngagement(log)"
-                  :key="step.key"
-                  :title="step.ts ? `${step.label} — ${formatCompactDateTime(step.ts)}` : `${step.label} : pas encore`"
-                  class="flex h-6 w-6 items-center justify-center rounded-md"
-                  :class="step.ts ? 'bg-[var(--app-surface)]' : 'bg-transparent'"
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[720px] border-collapse">
+          <thead>
+            <tr class="bg-[var(--app-bg)]">
+              <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Destinataire</th>
+              <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Sujet</th>
+              <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Campagne</th>
+              <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Statut</th>
+              <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Activité</th>
+              <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Envoyé le</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="log in paginatedLogs"
+              :key="log.id"
+              class="border-muted cursor-pointer border-b transition-colors last:border-b-0 hover:bg-[var(--app-surface-2)]"
+              @click="openDrawer(log)"
+            >
+              <td class="px-3 py-2.5">
+                <div class="text-sm font-medium text-[var(--app-ink)]">
+                  {{ log.recipient_name || log.recipient_email }}
+                </div>
+                <div class="text-muted text-xs">{{ log.recipient_email }}</div>
+              </td>
+              <td class="text-muted max-w-[200px] truncate px-3 py-2.5 text-sm">
+                {{ log.subject }}
+              </td>
+              <td class="text-muted px-3 py-2.5 text-sm">
+                {{ resolveCampaignName(log.campaign_id) ?? '—' }}
+              </td>
+              <td class="px-3 py-2.5">
+                <div class="flex flex-wrap gap-1">
+                  <UiEmailStatusBadge v-for="s in getEmailBadges(log)" :key="s" :status="s" />
+                </div>
+              </td>
+              <td class="px-3 py-2.5">
+                <div class="flex items-center gap-2">
+                  <span
+                    v-for="step in getEngagement(log)"
+                    :key="step.key"
+                    :title="
+                      step.ts ? `${step.label} — ${formatCompactDateTime(step.ts)}` : `${step.label} : pas encore`
+                    "
+                    class="flex h-6 w-6 items-center justify-center rounded-md"
+                    :class="step.ts ? 'bg-[var(--app-surface)]' : 'bg-transparent'"
+                  >
+                    <UIcon
+                      :name="step.icon"
+                      class="h-3.5 w-3.5"
+                      :class="step.ts ? step.color : 'text-[var(--app-faint)]'"
+                    />
+                  </span>
+                </div>
+              </td>
+              <td class="px-3 py-2.5 text-sm">
+                <div class="text-[var(--app-ink)]">{{ log.sent_at ? formatCompactDateTime(log.sent_at) : '—' }}</div>
+                <div
+                  v-if="lastActivityAt(log) && lastActivityAt(log) !== log.sent_at"
+                  class="text-muted mt-0.5 text-xs"
                 >
-                  <UIcon
-                    :name="step.icon"
-                    class="h-3.5 w-3.5"
-                    :class="step.ts ? step.color : 'text-[var(--app-faint)]'"
-                  />
-                </span>
-              </div>
-            </td>
-            <td class="px-3 py-2.5 text-sm">
-              <div class="text-[var(--app-ink)]">{{ log.sent_at ? formatCompactDateTime(log.sent_at) : '—' }}</div>
-              <div v-if="lastActivityAt(log) && lastActivityAt(log) !== log.sent_at" class="text-muted mt-0.5 text-xs">
-                Activité : {{ formatCompactDateTime(lastActivityAt(log)) }}
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+                  Activité : {{ formatCompactDateTime(lastActivityAt(log)) }}
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-      <div class="flex items-center justify-between border-t border-[var(--app-line)] px-6 py-4">
+      <div
+        class="flex flex-col gap-3 border-t border-[var(--app-line)] px-4 py-3.5 sm:px-6 @2xl:flex-row @2xl:items-center @2xl:justify-between"
+      >
         <div class="text-muted text-sm">
           {{ (currentPage - 1) * pageSize + 1 }}–{{ Math.min(currentPage * pageSize, filteredLogs.length) }} sur
           {{ filteredLogs.length }}
