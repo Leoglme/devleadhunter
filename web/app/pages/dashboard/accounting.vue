@@ -11,14 +11,7 @@
       </p>
     </div>
 
-    <div v-if="isLoading" class="app-card">
-      <div class="animate-pulse space-y-4">
-        <div class="h-6 w-1/4 rounded bg-[var(--app-surface-2)]"></div>
-        <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
-          <div v-for="i in 4" :key="i" class="h-24 rounded-xl bg-[var(--app-surface-2)]"></div>
-        </div>
-      </div>
-    </div>
+    <UiLoader v-if="isLoading" label="Chargement de la comptabilité…" />
 
     <template v-else>
       <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
