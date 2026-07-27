@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from models.campaign import CampaignStatus
 from models.campaign_follow_up import CampaignFollowUp
+from models.email_queue import EmailQueue
 from models.user import User
 from schemas.campaign import (
     CampaignCreate,
@@ -62,8 +63,20 @@ def _has_resend_config(db: Session, user_id: int) -> bool:
     return config is not None and bool(config.api_key)
 
 
-def _detail_response(campaign) -> CampaignDetailResponse:
+def _ab_variants_by_prospect(db: Session, campaign_id: int) -> dict[int, str | None]:
+    """Map each prospect to the A/B variant assigned on its initial queue item."""
+    rows = db.execute(
+        select(EmailQueue.prospect_id, EmailQueue.ab_variant).where(
+            EmailQueue.campaign_id == campaign_id,
+            EmailQueue.queue_type == "initial",
+        )
+    ).all()
+    return dict(rows)
+
+
+def _detail_response(db: Session, campaign) -> CampaignDetailResponse:
     """Build a CampaignDetailResponse from a Campaign ORM object."""
+    ab_variants = _ab_variants_by_prospect(db, campaign.id)
     return CampaignDetailResponse(
         id=campaign.id,
         user_id=campaign.user_id,
@@ -80,16 +93,17 @@ def _detail_response(campaign) -> CampaignDetailResponse:
         prospects_count=len(campaign.prospects),
         prospects=[
             CampaignProspectResponse(
-                id=p.id,
-                name=p.name,
-                email=p.email,
-                phone=p.phone,
-                city=p.city,
-                category=p.category,
-                source=p.source,
-                confidence=p.confidence,
+                id=prospect.id,
+                name=prospect.name,
+                email=prospect.email,
+                phone=prospect.phone,
+                city=prospect.city,
+                category=prospect.category,
+                source=prospect.source,
+                confidence=prospect.confidence,
+                ab_variant=ab_variants.get(prospect.id),
             )
-            for p in campaign.prospects
+            for prospect in campaign.prospects
         ],
         follow_ups=[
             CampaignFollowUpResponse(
@@ -123,7 +137,7 @@ async def create_campaign(
 ):
     """Create a new email campaign."""
     campaign = campaign_service.create_campaign(db, current_user.id, campaign_data)
-    return _detail_response(campaign)
+    return _detail_response(db, campaign)
 
 
 @router.get("", response_model=CampaignListResponse)
@@ -167,7 +181,7 @@ async def get_campaign(
 ):
     """Get a campaign with its prospects and follow-up sequence."""
     campaign = _get_or_404(db, campaign_id, current_user.id)
-    return _detail_response(campaign)
+    return _detail_response(db, campaign)
 
 
 @router.patch("/{campaign_id}", response_model=CampaignDetailResponse)
@@ -181,7 +195,7 @@ async def update_campaign(
     campaign = campaign_service.update_campaign(db, campaign_id, current_user.id, campaign_data)
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
-    return _detail_response(campaign)
+    return _detail_response(db, campaign)
 
 
 @router.delete("/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -239,7 +253,7 @@ async def update_campaign_settings(
 
     db.commit()
     db.refresh(campaign)
-    return _detail_response(campaign)
+    return _detail_response(db, campaign)
 
 
 @router.post("/{campaign_id}/prospects", response_model=CampaignDetailResponse)
@@ -253,7 +267,7 @@ async def add_prospects_to_campaign(
     campaign = campaign_service.add_prospects_to_campaign(db, campaign_id, current_user.id, data.prospect_ids)
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
-    return _detail_response(campaign)
+    return _detail_response(db, campaign)
 
 
 @router.delete("/{campaign_id}/prospects/{prospect_id}", response_model=CampaignDetailResponse)
@@ -267,7 +281,7 @@ async def remove_prospect_from_campaign(
     campaign = campaign_service.remove_prospect_from_campaign(db, campaign_id, current_user.id, prospect_id)
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
-    return _detail_response(campaign)
+    return _detail_response(db, campaign)
 
 
 @router.post("/{campaign_id}/follow-ups", response_model=CampaignFollowUpResponse)

@@ -202,6 +202,7 @@ import type {
 } from '~/types/TemplatePicker'
 import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
 import type { DemoSiteTemplate, DemoSiteTheme } from '~/services/demoSiteService'
+import { isTemplateRecommendedFor, sortTemplatesByRecommendation } from '~/utils/templateRecommendation'
 
 /** Template picker: compact list, real screenshot, live iframe preview with theme colors applied. */
 const props: TemplatePickerProps = defineProps({
@@ -265,16 +266,9 @@ const selectedTemplate: ComputedRef<DemoSiteTemplate | null> = computed(
 )
 
 /** Templates with the ones recommended for the targeted trade bubbled to the top. */
-const sortedTemplates: ComputedRef<DemoSiteTemplate[]> = computed((): DemoSiteTemplate[] => {
-  if (!props.recommendedTrade) return props.templates
-  const recommended: DemoSiteTemplate[] = props.templates.filter((template: DemoSiteTemplate): boolean =>
-    isRecommended(template),
-  )
-  const others: DemoSiteTemplate[] = props.templates.filter(
-    (template: DemoSiteTemplate): boolean => !isRecommended(template),
-  )
-  return [...recommended, ...others]
-})
+const sortedTemplates: ComputedRef<DemoSiteTemplate[]> = computed((): DemoSiteTemplate[] =>
+  sortTemplatesByRecommendation(props.templates, props.recommendedTrade ?? null),
+)
 
 /** Scaled position of the live iframe: full-width desktop, or a centered phone. */
 const liveFrameStyle: ComputedRef<Record<string, string>> = computed((): Record<string, string> => {
@@ -297,30 +291,12 @@ const isThemeCustomised: ComputedRef<boolean> = computed((): boolean => {
 })
 
 /**
- * Lowercase a trade string and strip its accents for keyword matching.
- * @param value - Raw trade or category label.
- * @returns The normalized string.
- */
-function normalizeTrade(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-}
-
-/**
  * Whether a template targets the trade the picker recommends for.
  * @param template - Template to test.
  * @returns True when one of the template's trade keywords matches.
  */
 function isRecommended(template: DemoSiteTemplate): boolean {
-  if (!props.recommendedTrade) return false
-  const trade: string = normalizeTrade(props.recommendedTrade)
-  if (!trade) return false
-  return (template.trades ?? []).some((keyword: string): boolean => {
-    const normalized: string = normalizeTrade(keyword)
-    return trade.includes(normalized) || normalized.includes(trade)
-  })
+  return isTemplateRecommendedFor(template, props.recommendedTrade ?? null)
 }
 
 /**

@@ -10,5 +10,5 @@ definePageMeta({
 })
 
 const route: ReturnType<typeof useRoute> = useRoute()
-await navigateTo({ path: '/dashboard/automations/new', query: route.query })
+await navigateTo({ path: '/dashboard/automations/new', query: { ...route.query, from: 'sites' } })
 </script>

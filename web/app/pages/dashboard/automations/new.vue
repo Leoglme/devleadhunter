@@ -2,19 +2,19 @@
   <div>
     <div class="mb-5">
       <NuxtLink
-        to="/dashboard/automations"
+        :to="originLink.to"
         class="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--app-ink-soft)] transition-colors hover:text-[var(--app-ink)]"
       >
         <UIcon name="i-lucide-arrow-left" class="h-3.5 w-3.5" />
-        Automatisations
+        {{ originLink.label }}
       </NuxtLink>
-      <h1 class="app-page-title mt-3">Créer une automatisation</h1>
+      <h1 class="app-page-title mt-3">{{ isSiteMode ? 'Créer des sites démo' : 'Créer une automatisation' }}</h1>
     </div>
 
     <UiWizardStepper :model-value="currentStep" :steps="steps" class="mb-6" @update:model-value="goToStep" />
 
     <div class="min-w-0">
-      <div v-if="currentStep === 1" key="step-1" class="wizard-step space-y-5">
+      <div v-if="activeStepKey === 'target'" key="step-target" class="wizard-step space-y-5">
         <div class="app-card space-y-5 p-5 md:p-6">
           <div>
             <label class="app-label mb-1.5 block">Nom de l'automatisation</label>
@@ -161,7 +161,7 @@
         </div>
       </div>
 
-      <div v-else-if="currentStep === 2" key="step-2" class="wizard-step space-y-6">
+      <div v-else-if="activeStepKey === 'site'" key="step-site" class="wizard-step space-y-6">
         <div>
           <h2 class="text-base font-semibold text-[var(--app-ink)]">Template de site</h2>
           <p class="mt-1 text-sm text-[var(--app-ink-soft)]">
@@ -169,40 +169,41 @@
           </p>
         </div>
         <DemoSitesTemplatePicker
-          v-model="form.templateId"
+          :model-value="form.templateId"
           :templates="templates"
           :theme="form.theme"
           :recommended-trade="recommendedTrade"
+          @update:model-value="selectTemplate"
           @update:theme="form.theme = $event"
         />
       </div>
 
-      <div v-else-if="currentStep === 3" key="step-3" class="wizard-step app-card space-y-5 p-5 md:p-6">
+      <div v-else-if="activeStepKey === 'emails'" key="step-emails" class="wizard-step app-card space-y-5 p-5 md:p-6">
         <div>
           <h2 class="text-base font-semibold text-[var(--app-ink)]">Démarchage</h2>
           <p class="mt-1 text-sm text-[var(--app-ink-soft)]">Le cold email envoyé avec le lien de démo.</p>
         </div>
 
-        <label
-          class="flex cursor-pointer items-start gap-3.5 rounded-xl border p-4 transition-colors"
-          :class="
-            form.autoCampaign
-              ? 'border-[var(--app-ink)] bg-[var(--app-surface-2)]/60'
-              : 'border-[var(--app-line)] bg-[var(--app-bg)] hover:border-[var(--app-ink-soft)]'
-          "
+        <div
+          class="flex items-center justify-between gap-4 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-3.5"
         >
-          <input v-model="form.autoCampaign" type="checkbox" class="mt-0.5 h-4 w-4 accent-(--app-accent)" />
-          <span>
-            <span class="text-sm font-medium text-[var(--app-ink)]">Démarcher les prospects par email</span>
-            <span class="mt-1 block text-xs leading-relaxed text-[var(--app-ink-soft)]">
-              Décoche pour seulement générer les sites (sans envoi).
-            </span>
-          </span>
-        </label>
+          <div class="flex min-w-0 items-start gap-3">
+            <UIcon name="i-lucide-send" class="mt-0.5 h-4 w-4 shrink-0 text-[var(--app-ink)]" />
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-[var(--app-ink)]">Démarcher les prospects par email</p>
+              <p class="text-xs leading-relaxed text-[var(--app-ink-soft)]">
+                Désactivez pour seulement générer les sites, sans aucun envoi.
+              </p>
+            </div>
+          </div>
+          <UiSwitch id="automation-auto-campaign" v-model="form.autoCampaign" />
+        </div>
 
         <div v-if="form.autoCampaign" class="grid gap-5 @2xl:grid-cols-2">
           <div>
-            <label class="app-label mb-1.5 block">Modèle A — envoi initial *</label>
+            <label class="app-label mb-1.5 block">
+              Modèle A — envoi initial <span class="text-[var(--app-accent)]">*</span>
+            </label>
             <UiTemplateSelect
               :model-value="form.emailA"
               :templates="emailTemplates"
@@ -223,6 +224,11 @@
           </div>
         </div>
 
+        <UiCallout v-if="form.autoCampaign && !form.emailA" variant="warning">
+          Choisissez un modèle A pour continuer — c'est l'email qui porte le lien de démo. Sans lui, l'automatisation
+          n'a rien à envoyer.
+        </UiCallout>
+
         <div
           v-if="form.autoCampaign"
           class="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs text-[var(--app-ink-soft)]"
@@ -242,10 +248,12 @@
         </div>
       </div>
 
-      <div v-else key="step-4" class="wizard-step app-card space-y-5 p-5 md:p-6">
+      <div v-else key="step-launch" class="wizard-step app-card space-y-5 p-5 md:p-6">
         <div>
           <h2 class="text-base font-semibold text-[var(--app-ink)]">Récapitulatif</h2>
-          <p class="mt-1 text-sm text-[var(--app-ink-soft)]">Vérifie puis lance l'automatisation.</p>
+          <p class="mt-1 text-sm text-[var(--app-ink-soft)]">
+            {{ isSiteMode ? 'Vérifiez puis lancez la génération.' : "Vérifiez puis lancez l'automatisation." }}
+          </p>
         </div>
         <dl class="grid gap-3 @sm:grid-cols-2">
           <div
@@ -293,7 +301,7 @@
             :name="isCreating ? 'i-lucide-loader-circle' : 'i-lucide-rocket'"
             :class="['h-3.5 w-3.5', isCreating && 'animate-spin']"
           />
-          {{ isCreating ? 'Lancement…' : "Lancer l'automatisation" }}
+          {{ launchLabel }}
         </button>
       </div>
     </div>
@@ -305,7 +313,13 @@ import type { LocationQueryValue } from 'vue-router'
 import type { EmailTemplate } from '~/types/index'
 import type { AutomationDetail } from '~/types/Automation'
 import type { UseDashboardScrollReturn, UseToastReturn } from '~/types/Composables'
-import type { AutomationRecapRow, TunnelForm } from '~/types/AutomationCreatePage'
+import type {
+  AutomationOriginLink,
+  AutomationRecapRow,
+  AutomationStepDefinition,
+  AutomationStepKey,
+  TunnelForm,
+} from '~/types/AutomationCreatePage'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import type { Prospect } from '~/types'
@@ -320,6 +334,7 @@ import { useDrawerStackStore } from '~/stores/drawerStack'
 import { useProspectSearchStore } from '~/stores/prospectSearch'
 import { useDashboardScroll } from '~/composables/useDashboardScroll'
 import { useToast } from '~/composables/useToast'
+import { sortTemplatesByRecommendation } from '~/utils/templateRecommendation'
 
 definePageMeta({
   layout: 'dashboard',
@@ -334,16 +349,18 @@ const { scrollToTop }: UseDashboardScrollReturn = useDashboardScroll()
 
 const defaultTheme: DemoSiteTheme = { primary: '#0284c7', secondary: '#0f172a', accent: '#f59e0b' }
 
-/** Wizard steps. */
-const steps: UiWizardStep[] = [
-  { id: 1, label: 'Cible', hint: 'Prospects ou métier + ville' },
-  { id: 2, label: 'Site', hint: 'Template des sites' },
-  { id: 3, label: 'Emails', hint: 'Cold email A/B' },
-  { id: 4, label: 'Lancer', hint: 'Vérifier & démarrer' },
+/** Every wizard step, in order; the emails one is dropped when the tunnel targets sites only. */
+const ALL_STEPS: AutomationStepDefinition[] = [
+  { key: 'target', label: 'Cible', hint: 'Prospects ou métier + ville' },
+  { key: 'site', label: 'Site', hint: 'Template des sites' },
+  { key: 'emails', label: 'Emails', hint: 'Cold email A/B' },
+  { key: 'launch', label: 'Lancer', hint: 'Vérifier & démarrer' },
 ]
 
-/** Current step (1-based). */
+/** Current step (1-based position among the visible steps). */
 const currentStep: Ref<number> = ref(1)
+/** Whether the user picked a template himself — stops the recommended default from overriding him. */
+const hasPickedTemplate: Ref<boolean> = ref(false)
 /** Whether the create request is in flight. */
 const isCreating: Ref<boolean> = ref(false)
 /** Whether prospects are loading. */
@@ -388,6 +405,40 @@ const form: Ref<TunnelForm> = ref({
 })
 
 const { openCreate }: EmailTemplateCreator = useEmailTemplateCreator(emailTemplates, reloadEmailTemplates)
+
+/** Entered from « Sites démo » : the tunnel generates sites, so the cold-email step is dropped. */
+const isSiteMode: ComputedRef<boolean> = computed((): boolean => route.query.from === 'sites')
+
+/** Steps actually shown, renumbered so the stepper stays 1..n. */
+const steps: ComputedRef<UiWizardStep[]> = computed((): UiWizardStep[] =>
+  ALL_STEPS.filter((step: AutomationStepDefinition): boolean => !isSiteMode.value || step.key !== 'emails').map(
+    (step: AutomationStepDefinition, index: number): UiWizardStep => ({
+      id: index + 1,
+      label: step.label,
+      hint: step.hint,
+    }),
+  ),
+)
+
+/** Which step the current position stands for. */
+const activeStepKey: ComputedRef<AutomationStepKey> = computed((): AutomationStepKey => {
+  const visible: AutomationStepDefinition[] = ALL_STEPS.filter(
+    (step: AutomationStepDefinition): boolean => !isSiteMode.value || step.key !== 'emails',
+  )
+  return visible[currentStep.value - 1]?.key ?? 'target'
+})
+
+const originLink: ComputedRef<AutomationOriginLink> = computed(
+  (): AutomationOriginLink =>
+    isSiteMode.value
+      ? { to: '/dashboard/demo-sites', label: 'Sites démo' }
+      : { to: '/dashboard/automations', label: 'Automatisations' },
+)
+
+const launchLabel: ComputedRef<string> = computed((): string => {
+  if (isCreating.value) return 'Lancement…'
+  return isSiteMode.value ? 'Générer les sites' : "Lancer l'automatisation"
+})
 
 /** Prospects matching every filter. */
 const filteredProspects: ComputedRef<Prospect[]> = computed((): Prospect[] => {
@@ -462,11 +513,11 @@ const recapItems: ComputedRef<AutomationRecapRow[]> = computed((): AutomationRec
 
 /** Whether the current step can advance. */
 const canContinue: ComputedRef<boolean> = computed((): boolean => {
-  if (currentStep.value === 1) {
+  if (activeStepKey.value === 'target') {
     if (form.value.mode === 'semi_auto') return selectedProspectIds.value.length > 0
     return Boolean(form.value.metiers.trim() && form.value.villes.trim() && form.value.targetDays > 0)
   }
-  if (currentStep.value === 3 && form.value.autoCampaign) return form.value.emailA > 0
+  if (activeStepKey.value === 'emails' && form.value.autoCampaign) return form.value.emailA > 0
   return true
 })
 
@@ -496,6 +547,26 @@ function segmentClass(active: boolean): string {
 function goToStep(step: number): void {
   currentStep.value = step
   scrollToTop()
+}
+
+/**
+ * Apply the user's template choice and stop defaulting to the recommended one.
+ * @param templateId - Identifier of the template picked in the list.
+ */
+function selectTemplate(templateId: string): void {
+  hasPickedTemplate.value = true
+  form.value.templateId = templateId
+}
+
+/**
+ * Preselect the first template recommended for the targeted trade, until the user picks one.
+ */
+function applyRecommendedTemplate(): void {
+  if (hasPickedTemplate.value || templates.value.length === 0) return
+  const best: DemoSiteTemplate | undefined = sortTemplatesByRecommendation(templates.value, recommendedTrade.value)[0]
+  if (!best || best.id === form.value.templateId) return
+  form.value.templateId = best.id
+  form.value.theme = { ...best.default_theme }
 }
 
 /** Reset the filters. */
@@ -678,18 +749,18 @@ watch(
   },
 )
 
+// The trade is only known once prospects load, well after the templates.
+watch([templates, recommendedTrade], applyRecommendedTemplate)
+
 onMounted(async (): Promise<void> => {
+  if (isSiteMode.value) form.value.autoCampaign = false
+
   try {
     const [, demoList]: [unknown, DemoSiteTemplate[]] = await Promise.all([
       reloadEmailTemplates(),
       DemoSiteService.listDemoSiteTemplates(),
     ])
     templates.value = demoList
-    const first: DemoSiteTemplate | undefined = demoList[0]
-    if (first) {
-      form.value.templateId = first.id
-      form.value.theme = { ...first.default_theme }
-    }
   } catch {
     // Non-critical — the wizard still works with what loaded.
   }

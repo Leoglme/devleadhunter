@@ -348,7 +348,7 @@ html {
       transform 0.2s ease;
   }
 
-  .app-btn-primary:hover {
+  .app-btn-primary:not(:disabled):hover {
     opacity: 0.88;
   }
 
@@ -362,7 +362,7 @@ html {
       background-color 0.2s ease;
   }
 
-  .app-btn-secondary:hover {
+  .app-btn-secondary:not(:disabled):hover {
     border-color: var(--app-ink-soft);
     background-color: var(--app-surface-2);
   }
@@ -374,8 +374,14 @@ html {
     transition: opacity 0.2s ease;
   }
 
-  .app-btn-danger:hover {
+  .app-btn-danger:not(:disabled):hover {
     opacity: 0.88;
+  }
+
+  .app-btn-primary:disabled,
+  .app-btn-secondary:disabled,
+  .app-btn-danger:disabled {
+    @apply cursor-not-allowed opacity-50;
   }
 
   .app-input {

@@ -476,6 +476,11 @@ function setTheme(value: AppTheme): void {
  */
 function isActive(path: string): boolean {
   const route: ReturnType<typeof useRoute> = useRoute()
+  // The creation tunnel is shared: `?from=sites` keeps the highlight on the section it was opened from.
+  if (route.path === '/dashboard/automations/new') {
+    const openedFromSites: boolean = route.query.from === 'sites'
+    return path === (openedFromSites ? '/dashboard/demo-sites' : '/dashboard/automations')
+  }
   if (route.path === path) return true
   if (path !== '/dashboard' && route.path.startsWith(path + '/')) return true
   return false
