@@ -352,21 +352,7 @@
         </div>
 
         <div class="border-t border-[var(--app-line)] px-5 py-4">
-          <div v-if="showDeleteConfirm" class="rounded-lg border border-[var(--app-red)]/40 bg-[var(--app-red)]/10 p-4">
-            <p class="mb-0.5 text-sm font-medium text-[var(--app-ink)]">Supprimer ce prospect ?</p>
-            <p class="mb-3 text-xs text-[var(--app-ink-soft)]">Cette action est irréversible.</p>
-            <div class="flex gap-2">
-              <button class="btn-secondary flex-1 text-xs" :disabled="isDeleting" @click="showDeleteConfirm = false">
-                Annuler
-              </button>
-              <button class="btn-danger flex-1 text-xs" :disabled="isDeleting" @click="handleDelete">
-                <UIcon v-if="isDeleting" name="i-lucide-loader-circle" class="mr-1 h-4 w-4 animate-spin" />
-                Confirmer
-              </button>
-            </div>
-          </div>
-
-          <div v-else-if="!editMode" class="space-y-2">
+          <div v-if="!editMode" class="space-y-2">
             <button
               class="btn-secondary w-full"
               :class="prospect.contacted ? 'text-[var(--app-green)]' : ''"
@@ -380,24 +366,11 @@
               {{ prospect.contacted ? 'Contacté' : 'Marquer comme contacté' }}
             </button>
             <div class="flex gap-2">
-              <button class="btn-secondary flex-1" @click="$emit('addToCampaign', prospect)">
-                <UIcon name="i-lucide-plus" class="mr-1.5 h-4 w-4" />Campagne
-              </button>
-              <button
-                class="btn-secondary flex-1"
-                :class="{ 'cursor-not-allowed opacity-40': !prospect.email }"
-                :disabled="!prospect.email"
-                @click="prospect.email && $emit('sendEmail', prospect)"
-              >
+              <button v-if="prospect.email" class="btn-secondary flex-1" @click="$emit('sendEmail', prospect)">
                 <UIcon name="i-lucide-mail" class="mr-1.5 h-4 w-4" />Email
               </button>
-            </div>
-            <div class="flex gap-2">
               <button class="btn-secondary flex-1" @click="startEdit">
                 <UIcon name="i-lucide-square-pen" class="mr-1.5 h-4 w-4" />Modifier
-              </button>
-              <button class="btn-danger flex-1" @click="showDeleteConfirm = true">
-                <UIcon name="i-lucide-trash-2" class="mr-1.5 h-4 w-4" />Supprimer
               </button>
             </div>
             <button class="btn-primary w-full" @click="$emit('markAsSold', prospect)">
@@ -457,8 +430,6 @@ const userStore: ReturnType<typeof useUserStore> = useUserStore()
 
 const editMode: Ref<boolean> = ref(false)
 const isSaving: Ref<boolean> = ref(false)
-const isDeleting: Ref<boolean> = ref(false)
-const showDeleteConfirm: Ref<boolean> = ref(false)
 const isReserving: Ref<boolean> = ref(false)
 const isAuditing: Ref<boolean> = ref(false)
 
@@ -570,7 +541,6 @@ watch(
       // Give the closing animation time to complete before resetting
       setTimeout(() => {
         editMode.value = false
-        showDeleteConfirm.value = false
       }, 250)
     }
   },
@@ -639,26 +609,6 @@ async function handleSave(): Promise<void> {
     toast.error(err instanceof Error ? err.message : 'Erreur lors de la mise à jour')
   } finally {
     isSaving.value = false
-  }
-}
-
-/**
- * Delete the current prospect after the inline confirmation.
- * Emits `deleted` then `close`.
- */
-async function handleDelete(): Promise<void> {
-  if (!props.prospect) return
-  isDeleting.value = true
-  try {
-    await ProspectsService.deleteProspect(props.prospect.id)
-    emit('deleted', props.prospect.id)
-    emit('close')
-    toast.success(`Prospect « ${props.prospect.name} » supprimé`)
-  } catch (err: unknown) {
-    toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression')
-  } finally {
-    isDeleting.value = false
-    showDeleteConfirm.value = false
   }
 }
 </script>

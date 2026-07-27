@@ -122,7 +122,7 @@ export type DrawerStackEntry =
   | FinalizeSaleDrawerEntry
 
 /** Cross-page notice describing the latest prospect mutation done from a drawer. */
-export type ProspectMutationNotice = { type: 'updated'; prospect: Prospect } | { type: 'deleted'; prospectId: number }
+export type ProspectMutationNotice = { type: 'updated'; prospect: Prospect }
 
 /** Cross-page notice describing the latest order mutation done from a drawer. */
 export type OrderMutationNotice = { type: 'updated'; order: Order } | { type: 'deleted'; orderId: number }

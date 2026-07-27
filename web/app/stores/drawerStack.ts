@@ -81,19 +81,6 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
   }
 
   /**
-   * Broadcast a prospect deletion: drop matching stacked entries and notify
-   * pages watching `prospectMutationCounter`.
-   * @param prospectId - Identifier of the deleted prospect.
-   */
-  function notifyProspectDeleted(prospectId: number): void {
-    stack.value = stack.value.filter(
-      (entry: DrawerStackEntry): boolean => !(entry.kind === 'prospect' && entry.prospect.id === prospectId),
-    )
-    lastProspectMutation.value = { type: 'deleted', prospectId }
-    prospectMutationCounter.value++
-  }
-
-  /**
    * Broadcast an order update: refresh matching stacked entries and notify
    * pages watching `orderMutationCounter`.
    * @param order - The freshly updated order.
@@ -166,7 +153,6 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     back,
     closeAll,
     notifyProspectUpdated,
-    notifyProspectDeleted,
     notifyOrderUpdated,
     notifyOrderDeleted,
     bumpEmailLogsRefresh,

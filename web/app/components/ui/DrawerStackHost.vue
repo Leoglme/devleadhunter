@@ -7,8 +7,6 @@
       @close="drawerStack.closeAll()"
       @back="drawerStack.back()"
       @updated="handleProspectUpdated"
-      @deleted="handleProspectDeleted"
-      @add-to-campaign="handleAddToCampaign"
       @send-email="handleSendEmail"
       @mark-as-sold="handleMarkAsSold"
       @toggle-contacted="handleToggleContacted"
@@ -286,19 +284,6 @@ const hasPrevious: ComputedRef<boolean> = computed((): boolean => drawerStack.ha
  */
 function handleProspectUpdated(updated: Prospect): void {
   drawerStack.notifyProspectUpdated(updated)
-}
-
-/**
- * Prospect deleted from the drawer — close it and notify pages.
- * @param prospectId - Identifier of the deleted prospect.
- */
-function handleProspectDeleted(prospectId: number): void {
-  drawerStack.notifyProspectDeleted(prospectId)
-}
-
-/** Stack prospect into campaigns page (drawer stays open across navigation). */
-function handleAddToCampaign(prospect: Prospect): void {
-  navigateTo(`/dashboard/campaigns?addProspect=${prospect.id}`)
 }
 
 /**

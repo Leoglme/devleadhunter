@@ -97,29 +97,17 @@
         <div v-for="group in settingsGroups" :key="group.heading" class="mb-4 last:mb-0">
           <p class="app-label mb-1.5 px-3 !text-[0.6rem]">{{ group.heading }}</p>
           <div class="space-y-0.5">
-            <template v-for="entry in group.entries" :key="entry.kind === 'link' ? entry.to : entry.action">
-              <NuxtLink
-                v-if="entry.kind === 'link'"
-                :to="entry.to"
-                :class="navItemClass(isSettingsLinkActive(entry.to))"
-                @click="handleClick"
-              >
-                <span :class="navBarClass(isSettingsLinkActive(entry.to))"></span>
-                <UIcon :name="entry.icon" class="h-4 w-4 shrink-0" />
-                <span class="truncate">{{ entry.label }}</span>
-              </NuxtLink>
-              <button
-                v-else
-                type="button"
-                class="w-full"
-                :class="navItemClass(false)"
-                @click="handleSettingsAction(entry.action)"
-              >
-                <span :class="navBarClass(false)"></span>
-                <UIcon :name="entry.icon" class="h-4 w-4 shrink-0" />
-                <span>{{ entry.label }}</span>
-              </button>
-            </template>
+            <NuxtLink
+              v-for="entry in group.entries"
+              :key="entry.to"
+              :to="entry.to"
+              :class="navItemClass(isSettingsLinkActive(entry.to))"
+              @click="handleClick"
+            >
+              <span :class="navBarClass(isSettingsLinkActive(entry.to))"></span>
+              <UIcon :name="entry.icon" class="h-4 w-4 shrink-0" />
+              <span class="truncate">{{ entry.label }}</span>
+            </NuxtLink>
           </div>
         </div>
       </template>
@@ -225,6 +213,15 @@
         </div>
 
         <div class="my-1 border-t border-[var(--app-line)]"></div>
+
+        <NuxtLink
+          to="/configuration"
+          class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
+          @click="showUserMenu = false"
+        >
+          <UIcon name="i-lucide-rocket" class="h-3.5 w-3.5 text-[var(--app-ink-soft)]" />
+          Mise en route
+        </NuxtLink>
 
         <NuxtLink
           v-if="!isDesktopApp"
@@ -491,17 +488,6 @@ function handleClick(): void {
   if (props.isMobile) {
     emit('toggle')
   }
-}
-
-/**
- * Handle a settings sub-panel action entry (opens the matching drawer).
- * @param action - The action key of the settings entry.
- */
-function handleSettingsAction(action: 'send-policy'): void {
-  if (action === 'send-policy') {
-    drawerStack.push({ kind: 'send-policy' })
-  }
-  handleClick()
 }
 
 /**

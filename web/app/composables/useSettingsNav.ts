@@ -1,6 +1,6 @@
 import type { ComputedRef, Ref } from 'vue'
 import { SETTINGS_NAV_GROUPS } from '~/constants/settingsNav'
-import type { SettingsNavEntry, SettingsNavGroup, SettingsNavLink } from '~/types/SettingsNav'
+import type { SettingsNavGroup, SettingsNavLink } from '~/types/SettingsNav'
 
 export type SettingsNav = {
   isAdmin: ComputedRef<boolean>
@@ -27,16 +27,16 @@ export function useSettingsNav(): SettingsNav {
       .map(
         (group: SettingsNavGroup): SettingsNavGroup => ({
           ...group,
-          entries: group.entries.filter((entry: SettingsNavEntry): boolean => !entry.adminOnly || isAdmin.value),
+          entries: group.entries.filter((entry: SettingsNavLink): boolean => !entry.adminOnly || isAdmin.value),
         }),
       )
       .filter((group: SettingsNavGroup): boolean => group.entries.length > 0),
   )
 
   const settingsPaths: ComputedRef<string[]> = computed((): string[] =>
-    SETTINGS_NAV_GROUPS.flatMap((group: SettingsNavGroup): SettingsNavEntry[] => group.entries)
-      .filter((entry: SettingsNavEntry): entry is SettingsNavLink => entry.kind === 'link')
-      .map((entry: SettingsNavLink): string => entry.to),
+    SETTINGS_NAV_GROUPS.flatMap((group: SettingsNavGroup): SettingsNavLink[] => group.entries).map(
+      (entry: SettingsNavLink): string => entry.to,
+    ),
   )
 
   /**
