@@ -100,72 +100,70 @@
 
     <section>
       <h2 class="mb-3 text-sm font-semibold text-[var(--app-ink)]">Journal des exécutions</h2>
-      <div class="overflow-x-auto rounded-lg border border-[var(--app-line)]">
-        <table class="w-full min-w-[720px] text-sm">
-          <thead>
-            <tr class="border-b border-[var(--app-line)] bg-[var(--app-bg)] text-left">
-              <th class="text-muted px-3 py-2 text-[10px] font-medium tracking-wide uppercase">Date</th>
-              <th class="text-muted px-3 py-2 text-[10px] font-medium tracking-wide uppercase">Source</th>
-              <th class="text-muted px-3 py-2 text-[10px] font-medium tracking-wide uppercase">Statut</th>
-              <th class="text-muted px-3 py-2 text-[10px] font-medium tracking-wide uppercase">Recherche</th>
-              <th class="text-muted px-3 py-2 text-right text-[10px] font-medium tracking-wide uppercase">Résultats</th>
-              <th class="text-muted px-3 py-2 text-[10px] font-medium tracking-wide uppercase">Détail</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="incidents.length === 0">
-              <td colspan="6" class="text-muted px-3 py-6 text-center">Aucune exécution enregistrée.</td>
-            </tr>
-            <tr
-              v-for="incident in incidents"
-              :key="incident.id"
-              class="border-b border-[var(--app-line-soft)] last:border-b-0"
-            >
-              <td class="text-muted px-3 py-2 whitespace-nowrap tabular-nums">
-                {{ incident.created_at ? formatNumericDayMonthTime(incident.created_at) : '—' }}
-              </td>
-              <td class="px-3 py-2 font-medium text-[var(--app-ink)]">{{ sourceLabel(incident.source) }}</td>
-              <td class="px-3 py-2">
-                <span
-                  class="rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
-                  :style="{ color: statusColor(incident.status), backgroundColor: statusSoft(incident.status) }"
-                >
-                  {{ statusLabel(incident.status) }}
-                </span>
-              </td>
-              <td class="text-muted px-3 py-2">
-                <span v-if="incident.category || incident.city">{{
-                  [incident.category, incident.city].filter(Boolean).join(' · ')
-                }}</span>
-                <span v-else>—</span>
-              </td>
-              <td class="px-3 py-2 text-right text-[var(--app-ink)] tabular-nums">
-                {{ incident.results_count
-                }}<span v-if="incident.expected_count" class="text-[var(--app-faint)]">
-                  / {{ incident.expected_count }}</span
-                >
-              </td>
-              <td class="px-3 py-2">
-                <button
-                  v-if="incident.has_html"
-                  type="button"
-                  class="text-xs font-medium text-[var(--app-blue)] underline underline-offset-2 hover:opacity-80"
-                  @click="openHtml(incident)"
-                >
-                  Voir le HTML
-                </button>
-                <span
-                  v-else-if="incident.error_message"
-                  class="text-muted truncate text-xs"
-                  :title="incident.error_message"
-                >
-                  {{ incident.error_message }}
-                </span>
-                <span v-else class="text-xs text-[var(--app-faint)]">—</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="app-card overflow-hidden p-0">
+        <BaseTable>
+          <template #head>
+            <BaseTableTh>Date</BaseTableTh>
+            <BaseTableTh>Source</BaseTableTh>
+            <BaseTableTh>Statut</BaseTableTh>
+            <BaseTableTh>Recherche</BaseTableTh>
+            <BaseTableTh align="right">Résultats</BaseTableTh>
+            <BaseTableTh>Détail</BaseTableTh>
+          </template>
+
+          <BaseTableTr v-if="incidents.length === 0">
+            <BaseTableTd colspan="6" class="py-8 text-center text-sm text-[var(--app-ink-soft)]">
+              Aucune exécution enregistrée.
+            </BaseTableTd>
+          </BaseTableTr>
+
+          <BaseTableTr v-for="incident in incidents" :key="incident.id">
+            <BaseTableTd class="font-label text-xs whitespace-nowrap text-[var(--app-ink-soft)] tabular-nums">
+              {{ incident.created_at ? formatNumericDayMonthTime(incident.created_at) : '—' }}
+            </BaseTableTd>
+            <BaseTableTd class="text-sm font-semibold text-[var(--app-ink)]">{{
+              sourceLabel(incident.source)
+            }}</BaseTableTd>
+            <BaseTableTd>
+              <span
+                class="app-badge"
+                :style="{ color: statusColor(incident.status), backgroundColor: statusSoft(incident.status) }"
+              >
+                {{ statusLabel(incident.status) }}
+              </span>
+            </BaseTableTd>
+            <BaseTableTd class="text-sm text-[var(--app-ink-soft)]">
+              <span v-if="incident.category || incident.city">{{
+                [incident.category, incident.city].filter(Boolean).join(' · ')
+              }}</span>
+              <span v-else>—</span>
+            </BaseTableTd>
+            <BaseTableTd align="right" class="text-sm text-[var(--app-ink)] tabular-nums">
+              {{ incident.results_count
+              }}<span v-if="incident.expected_count" class="text-[var(--app-faint)]">
+                / {{ incident.expected_count }}</span
+              >
+            </BaseTableTd>
+            <BaseTableTd>
+              <button
+                v-if="incident.has_html"
+                type="button"
+                class="cursor-pointer text-xs font-medium text-[var(--app-accent-ink)] underline-offset-2 hover:underline"
+                @click="openHtml(incident)"
+              >
+                Voir le HTML
+              </button>
+              <span
+                v-else-if="incident.error_message"
+                class="block max-w-[200px] truncate text-xs text-[var(--app-ink-soft)]"
+                :title="incident.error_message"
+              >
+                {{ incident.error_message }}
+              </span>
+              <span v-else class="text-sm text-[var(--app-faint)]">—</span>
+            </BaseTableTd>
+          </BaseTableTr>
+        </BaseTable>
       </div>
     </section>
 
