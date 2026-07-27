@@ -1,4 +1,101 @@
 {
+  "artisan-edito": {
+    "businessName": "Atelier Fontaine",
+    "phone": "02 99 41 22 33",
+    "email": "contact@atelier-fontaine.fr",
+    "city": "Rennes",
+    "area": "Rennes et ses environs et ses alentours",
+    "subtitle": "Artisan de confiance à Rennes et ses environs — un travail soigné, un devis clair, un interlocuteur unique.",
+    "about": "Artisan de confiance, j'interviens avec le même soin sur chaque chantier : diagnostic honnête, travail propre et fini, prix juste. Vous parlez à la personne qui fait le travail, pas à un standard.",
+    "logo": "",
+    "heroImage": "",
+    "aboutImage": "",
+    "gallery": [],
+    "palette": {
+      "primary": "#1B1813",
+      "secondary": "#6B6355",
+      "accent": "#E8A33C"
+    },
+    "reviews": [],
+    "openingHours": [],
+    "social": [],
+    "services": [
+      {
+        "title": "Conseil & devis",
+        "description": "On fait le point sur votre besoin et vous recevez un devis clair, gratuit et sans engagement."
+      },
+      {
+        "title": "Intervention & pose",
+        "description": "Installation ou pose réalisée dans les règles de l'art, avec du matériel de qualité."
+      },
+      {
+        "title": "Dépannage",
+        "description": "Un imprévu ? Intervention rapide pour remettre les choses en état, proprement."
+      },
+      {
+        "title": "Entretien",
+        "description": "Un suivi régulier pour éviter les pannes et faire durer vos installations."
+      },
+      {
+        "title": "Rénovation",
+        "description": "Un projet plus ambitieux mené du premier échange à la finition, sans mauvaise surprise."
+      }
+    ],
+    "faq": [
+      {
+        "question": "Le devis est-il gratuit ?",
+        "answer": "Oui, le devis est toujours gratuit et sans engagement, remis avant toute intervention."
+      },
+      {
+        "question": "Intervenez-vous en urgence ?",
+        "answer": "Selon les disponibilités, oui — appelez-nous, on vous dit tout de suite ce qu'on peut faire."
+      },
+      {
+        "question": "Quelles zones couvrez-vous ?",
+        "answer": "Votre ville et les communes voisines. Appelez pour vérifier, on se déplace souvent au-delà."
+      },
+      {
+        "question": "Quels moyens de paiement acceptez-vous ?",
+        "answer": "Carte, chèque et virement, avec une facture détaillée."
+      },
+      {
+        "question": "Vos travaux sont-ils garantis ?",
+        "answer": "Oui, nos interventions sont réalisées dans les règles et couvertes par les garanties en vigueur."
+      }
+    ],
+    "heroBadge": "Artisan à votre service",
+    "heroPoints": [
+      "Devis gratuit",
+      "Intervention soignée",
+      "Travail garanti"
+    ],
+    "ctaCallLabel": "Appeler",
+    "ctaQuoteLabel": "Demander un devis",
+    "trustItems": [
+      {
+        "value": "Réactif",
+        "label": "Réponse rapide"
+      },
+      {
+        "value": "Devis 0 €",
+        "label": "Sans engagement"
+      },
+      {
+        "value": "Local",
+        "label": "Près de chez vous"
+      },
+      {
+        "value": "Garanti",
+        "label": "Travail assuré"
+      }
+    ],
+    "servicesHeading": "Nos prestations",
+    "galleryHeading": "Nos réalisations",
+    "reviewsHeading": "Ils nous font confiance",
+    "faqHeading": "Questions fréquentes",
+    "aboutHeading": "L'artisan derrière l'entreprise",
+    "contactHeading": "Parlons de votre projet"
+  },
   "plumber-signature": {
     "businessName": "Plomberie Roche",
     "phone": "04 72 07 07 07",
