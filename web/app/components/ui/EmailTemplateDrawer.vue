@@ -44,14 +44,7 @@
             <UIcon name="i-lucide-loader-circle" class="h-6 w-6 animate-spin text-[var(--app-faint)]" />
           </div>
 
-          <div v-else class="rounded-lg border border-[var(--app-line)] bg-white p-6">
-            <div class="mb-4 border-b border-neutral-200 pb-4">
-              <p class="text-xs text-neutral-500">Sujet :</p>
-              <p class="text-sm font-medium text-neutral-900">{{ previewSubject }}</p>
-            </div>
-            <!-- eslint-disable-next-line vue/no-v-html -- Preview of user's own email template HTML -->
-            <div class="prose max-w-none text-sm text-neutral-900" v-html="previewHtml"></div>
-          </div>
+          <UiEmailPreviewPane v-else :subject="previewSubject" :body-html="previewHtml" />
         </div>
 
         <form
@@ -93,40 +86,60 @@
             </div>
 
             <div>
-              <label class="mb-2 block text-sm font-medium text-[var(--app-ink)]">
-                Message <span class="text-[var(--app-red)]">*</span>
-              </label>
-
-              <div class="mb-2 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface-2)]/50 p-3.5">
-                <div class="mb-3 flex items-center justify-between gap-2">
-                  <p class="text-xs font-medium text-[var(--app-ink)]">Variables personnalisées</p>
-                  <span
-                    class="inline-flex items-center gap-1 rounded-md border border-[var(--app-line)] bg-[var(--app-surface)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--app-ink-soft)]"
-                    title="Le clic insère dans ce champ"
+              <div class="mb-2 flex items-center justify-between gap-2">
+                <label class="block text-sm font-medium text-[var(--app-ink)]">
+                  Message <span class="text-[var(--app-red)]">*</span>
+                </label>
+                <div class="flex gap-1 rounded-full border border-[var(--app-line)] bg-[var(--app-bg)] p-0.5">
+                  <button
+                    type="button"
+                    :class="composerTabClass(!isComposerPreview)"
+                    @click="isComposerPreview = false"
                   >
-                    <UIcon name="i-lucide-corner-down-right" class="h-3 w-3" />
-                    {{ activeFieldLabel }}
-                  </span>
+                    <UIcon name="i-lucide-pencil" class="h-3 w-3" />
+                    Écrire
+                  </button>
+                  <button type="button" :class="composerTabClass(isComposerPreview)" @click="showComposerPreview">
+                    <UIcon name="i-lucide-eye" class="h-3 w-3" />
+                    Aperçu
+                  </button>
                 </div>
-                <UiVariableChips @insert="insertIntoActiveField" />
-                <p class="text-muted mt-3 text-[11px] leading-snug">
-                  Clic → insère au curseur dans le champ actif. Ou tapez «&nbsp;{&nbsp;» dans l'objet ou le message.
-                </p>
               </div>
 
-              <textarea
-                ref="bodyRef"
-                v-model="form.body_html"
-                required
-                rows="12"
-                class="input-field font-mono text-xs leading-relaxed"
-                placeholder="Bonjour {salutation},&#10;&#10;Je me présente..."
-                @focus="activeField = 'body'"
-                @input="bodyInsertion.onInput"
-                @keydown="bodyInsertion.onKeydown"
-                @blur="bodyInsertion.onBlur"
-              ></textarea>
-              <p class="text-muted mt-1.5 text-xs">Le message accepte du HTML.</p>
+              <UiEmailPreviewPane v-if="isComposerPreview" :subject="previewSubject" :body-html="previewHtml" />
+
+              <div v-show="!isComposerPreview">
+                <div class="mb-2 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface-2)]/50 p-3.5">
+                  <div class="mb-3 flex items-center justify-between gap-2">
+                    <p class="text-xs font-medium text-[var(--app-ink)]">Variables personnalisées</p>
+                    <span
+                      class="inline-flex items-center gap-1 rounded-md border border-[var(--app-line)] bg-[var(--app-surface)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--app-ink-soft)]"
+                      title="Le clic insère dans ce champ"
+                    >
+                      <UIcon name="i-lucide-corner-down-right" class="h-3 w-3" />
+                      {{ activeFieldLabel }}
+                    </span>
+                  </div>
+                  <UiVariableChips @insert="insertIntoActiveField" />
+                  <p class="mt-3 text-[11px] leading-snug text-[var(--app-ink-soft)]">
+                    Clic → insère au curseur dans le champ actif. Ou tapez «&nbsp;{&nbsp;» dans l'objet ou le message.
+                  </p>
+                </div>
+
+                <textarea
+                  ref="bodyRef"
+                  v-model="form.body_html"
+                  required
+                  rows="12"
+                  class="input-field font-mono text-xs leading-relaxed"
+                  placeholder="Bonjour {salutation},&#10;&#10;Je me présente..."
+                  @focus="activeField = 'body'"
+                  @input="bodyInsertion.onInput"
+                  @keydown="bodyInsertion.onKeydown"
+                  @blur="bodyInsertion.onBlur"
+                ></textarea>
+                <p class="mt-1.5 text-xs text-[var(--app-ink-soft)]">Le message accepte du HTML.</p>
+              </div>
             </div>
           </div>
 
@@ -281,6 +294,9 @@ const isSaving: Ref<boolean> = ref(false)
 /** Whether the preview render is loading. */
 const isPreviewLoading: Ref<boolean> = ref(false)
 
+/** Whether the composer shows the rendered draft instead of the HTML editor. */
+const isComposerPreview: Ref<boolean> = ref(false)
+
 /** Rendered preview subject. */
 const previewSubject: Ref<string> = ref('')
 
@@ -430,6 +446,26 @@ async function handleSave(): Promise<void> {
 }
 
 /**
+ * Classes of an Écrire/Aperçu tab.
+ * @param active - Whether the tab is the current one.
+ * @returns Tailwind classes.
+ */
+function composerTabClass(active: boolean): string {
+  const base: string =
+    'flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors'
+  return active
+    ? `${base} bg-[var(--app-btn-bg)] text-[var(--app-btn-text)]`
+    : `${base} text-[var(--app-ink-soft)] hover:text-[var(--app-ink)]`
+}
+
+/** Switch the composer to its preview tab, rendering the draft currently typed. */
+function showComposerPreview(): void {
+  previewSubject.value = EmailVariables.renderWithSampleValues(form.value.subject)
+  previewHtml.value = EmailVariables.renderWithSampleValues(form.value.body_html)
+  isComposerPreview.value = true
+}
+
+/**
  * Render the preview of the current template with sample data.
  * @returns A promise that resolves once the preview is loaded.
  */
@@ -465,6 +501,7 @@ watch(
   ],
   ([open, mode]: [boolean, EmailTemplateDrawerMode, number | undefined]): void => {
     if (!open) return
+    isComposerPreview.value = false
     if (mode === 'preview') {
       previewSubject.value = ''
       previewHtml.value = ''

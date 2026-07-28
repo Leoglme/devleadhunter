@@ -62,7 +62,7 @@
 import type { ComputedRef, Ref } from 'vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import type { SendPolicy } from '~/types/Automation'
-import { SEND_POLICY_DAY_LABELS } from '~/constants/sendPolicyDayLabels'
+import { formatSendPolicyDays } from '~/utils/sendPolicy'
 import { SendPolicyService } from '~/services/sendPolicyService'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 
@@ -74,16 +74,9 @@ const sendPolicy: Ref<SendPolicy | null> = ref(null)
 const isLoadingPolicy: Ref<boolean> = ref(true)
 
 /** Selected sending days, as a range ("Lun – Ven") when contiguous, a list otherwise. */
-const sendingDaysLabel: ComputedRef<string> = computed((): string => {
-  const days: number[] = [...(sendPolicy.value?.days_of_week ?? [])].sort((a: number, b: number): number => a - b)
-  if (days.length === 0) return 'aucun jour'
-  const isContiguous: boolean = days.every(
-    (day: number, index: number): boolean => index === 0 || day === (days[index - 1] ?? 0) + 1,
-  )
-  const labels: string[] = days.map((day: number): string => SEND_POLICY_DAY_LABELS[day] ?? '')
-  if (isContiguous && days.length > 2) return `${labels[0]} – ${labels[labels.length - 1]}`
-  return labels.join(', ')
-})
+const sendingDaysLabel: ComputedRef<string> = computed((): string =>
+  formatSendPolicyDays(sendPolicy.value?.days_of_week ?? []),
+)
 
 /**
  * Format an hour of day for the summary chips.

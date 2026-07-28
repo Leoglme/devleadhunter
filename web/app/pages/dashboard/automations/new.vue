@@ -211,6 +211,7 @@
               allow-create
               @update:model-value="form.emailA = $event"
               @create="openCreate((id) => (form.emailA = id))"
+              @preview="openPreview"
             />
           </div>
           <div>
@@ -221,6 +222,7 @@
               allow-create
               @update:model-value="form.emailB = $event"
               @create="openCreate((id) => (form.emailB = id))"
+              @preview="openPreview"
             />
           </div>
         </div>
@@ -351,7 +353,7 @@ import type {
   AutomationStepKey,
   TunnelForm,
 } from '~/types/AutomationCreatePage'
-import { SEND_POLICY_DAY_LABELS } from '~/constants/sendPolicyDayLabels'
+import { formatSendPolicySummary } from '~/utils/sendPolicy'
 import { SendPolicyService } from '~/services/sendPolicyService'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, onMounted, ref, watch } from 'vue'
@@ -446,7 +448,7 @@ const form: Ref<TunnelForm> = ref({
   onlyWithoutWebsite: true,
 })
 
-const { openCreate }: EmailTemplateCreator = useEmailTemplateCreator(emailTemplates, reloadEmailTemplates)
+const { openCreate, openPreview }: EmailTemplateCreator = useEmailTemplateCreator(emailTemplates, reloadEmailTemplates)
 
 /** Entered from « Sites démo » : the tunnel generates sites, so the cold-email step is dropped. */
 const isSiteMode: ComputedRef<boolean> = computed((): boolean => route.query.from === 'sites')
@@ -539,15 +541,7 @@ const selectedTemplateName: ComputedRef<string> = computed(
 )
 
 /** The cadence that will actually apply, read from the user's send policy. */
-const sendPolicySummary: ComputedRef<string> = computed((): string => {
-  const policy: SendPolicy | null = sendPolicy.value
-  if (!policy) return 'Selon vos réglages d’envoi'
-  const days: string = policy.days_of_week
-    .map((day: number): string => SEND_POLICY_DAY_LABELS[day] ?? '')
-    .filter(Boolean)
-    .join(', ')
-  return `${policy.daily_cap}/jour · ${policy.window_start_hour}h-${policy.window_end_hour}h · ${days}`
-})
+const sendPolicySummary: ComputedRef<string> = computed((): string => formatSendPolicySummary(sendPolicy.value))
 
 /** Prospects picked in step 1, resolved to their full record. */
 const selectedProspects: ComputedRef<Prospect[]> = computed((): Prospect[] => {

@@ -4,11 +4,22 @@ export type TemplateSelectOption = {
   subject: string
 }
 
-export type TemplateSelectCreateButtonPosition = 'top' | 'bottom' | 'both'
+/** Menu entry of the searchable picker: a template flattened for USelectMenu. */
+export type TemplateSelectItem = {
+  value: number
+  label: string
+  description: string
+}
 
 export type TemplateSelectProps = {
   modelValue: number | null
   templates: TemplateSelectOption[]
   allowCreate?: boolean
-  createButtonPosition?: TemplateSelectCreateButtonPosition
+}
+
+export type TemplateSelectEmits = {
+  /** New selection; `0` means none. */
+  'update:modelValue': [value: number]
+  create: []
+  preview: [templateId: number]
 }

@@ -88,6 +88,7 @@
                 allow-create
                 @update:model-value="form.templateIdA = $event"
                 @create="openCreateTemplate('a')"
+                @preview="previewTemplate"
               />
             </div>
 
@@ -107,6 +108,7 @@
                 allow-create
                 @update:model-value="form.templateIdB = $event"
                 @create="openCreateTemplate('b')"
+                @preview="previewTemplate"
               />
             </div>
           </div>
@@ -223,6 +225,17 @@ async function loadTemplates(): Promise<void> {
 function openCreateTemplate(slot: 'a' | 'b'): void {
   pendingTemplateSlot.value = slot
   drawerStack.push({ kind: 'email-template', mode: 'create', template: null })
+}
+
+/**
+ * Stack the read-only preview of a template, so its body is visible before picking it.
+ * @param templateId - Identifier of the template to preview.
+ */
+function previewTemplate(templateId: number): void {
+  const template: EmailTemplate | undefined = templates.value.find(
+    (candidate: EmailTemplate): boolean => candidate.id === templateId,
+  )
+  if (template) drawerStack.push({ kind: 'email-template', mode: 'preview', template })
 }
 
 /**

@@ -82,6 +82,7 @@ import { computed } from 'vue'
 import type { SendPolicy } from '~/types/Automation'
 import type { UiSendPolicyFieldsEmits, UiSendPolicyFieldsProps } from '~/types/UiSendPolicyFields'
 import { SEND_POLICY_DAY_LABELS } from '~/constants/sendPolicyDayLabels'
+import { formatSendPolicyDays } from '~/utils/sendPolicy'
 
 /** Send-policy form fields shared by the drawer and setup wizard. */
 const props: UiSendPolicyFieldsProps = defineProps({
@@ -118,10 +119,9 @@ const spacingMinutes: WritableComputedRef<number> = computed({
 })
 
 /** Human list of the selected days. */
-const selectedDaysLabel: ComputedRef<string> = computed((): string => {
-  const days: number[] = [...props.modelValue.days_of_week].sort((a: number, b: number): number => a - b)
-  return days.length ? days.map((day: number): string => SEND_POLICY_DAY_LABELS[day] ?? '').join(', ') : 'aucun jour'
-})
+const selectedDaysLabel: ComputedRef<string> = computed((): string =>
+  formatSendPolicyDays(props.modelValue.days_of_week),
+)
 
 /**
  * Emit an updated policy with the given fields replaced.

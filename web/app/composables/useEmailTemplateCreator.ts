@@ -1,6 +1,8 @@
 import type { Ref } from 'vue'
 import { ref, watch } from 'vue'
+import type { EmailTemplate } from '~/types'
 import { useDrawerStackStore } from '~/stores/drawerStack'
+import { EmailTemplatesService } from '~/services/emailTemplatesService'
 
 type IdentifiableTemplate = {
   id: number
@@ -8,13 +10,14 @@ type IdentifiableTemplate = {
 
 export type EmailTemplateCreator = {
   openCreate: (assign?: (templateId: number) => void) => void
+  openPreview: (templateId: number) => Promise<void>
 }
 
 /**
- * Shared create flow for pages hosting `UiTemplateSelect` (drawer + reload + auto-select).
+ * Shared create and preview flow for pages hosting `UiTemplateSelect`.
  * @param templates - Caller's reactive template list.
  * @param reload - Reloads that list in place after a template is saved.
- * @returns Handler to bind to `UiTemplateSelect`'s `@create`.
+ * @returns Handlers to bind to `UiTemplateSelect`'s `@create` and `@preview`.
  */
 export function useEmailTemplateCreator<T extends IdentifiableTemplate>(
   templates: Ref<T[]>,
@@ -32,6 +35,16 @@ export function useEmailTemplateCreator<T extends IdentifiableTemplate>(
     drawerStack.push({ kind: 'email-template', mode: 'create', template: null })
   }
 
+  /**
+   * Open the read-only preview of a template, so the body is visible before picking it.
+   * @param templateId - Identifier of the template to preview.
+   * @returns A promise resolved once the drawer is pushed.
+   */
+  async function openPreview(templateId: number): Promise<void> {
+    const template: EmailTemplate = await EmailTemplatesService.getEmailTemplate(templateId)
+    drawerStack.push({ kind: 'email-template', mode: 'preview', template })
+  }
+
   watch(
     (): number => drawerStack.emailTemplatesRefreshCounter,
     async (): Promise<void> => {
@@ -46,5 +59,5 @@ export function useEmailTemplateCreator<T extends IdentifiableTemplate>(
     },
   )
 
-  return { openCreate }
+  return { openCreate, openPreview }
 }

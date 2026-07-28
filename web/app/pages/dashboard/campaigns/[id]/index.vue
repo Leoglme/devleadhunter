@@ -119,21 +119,38 @@
             <UIcon name="i-lucide-timer" class="h-4 w-4 text-[var(--app-accent-ink)]" />
             <h3 class="text-sm font-semibold text-[var(--app-ink)]">Cadence d'envoi</h3>
           </div>
-          <div class="flex items-center gap-2 text-sm text-[var(--app-ink)]">
-            <span>1 email toutes les</span>
-            <input
-              v-model.number="settingsForm.send_delay_minutes"
-              type="number"
-              min="1"
-              max="1440"
-              class="input-field h-9 w-20 text-center"
-              placeholder="20"
-            />
-            <span>minutes</span>
-          </div>
-          <p class="text-muted mt-2 text-xs">
-            Rate limiting strict pour préserver ta délivrabilité. 20 min = ~72 emails/jour.
+
+          <p class="text-sm text-[var(--app-ink)]">
+            Cette campagne suit vos réglages d'envoi :
+            <strong class="font-semibold">{{ sendPolicySummary }}</strong>
           </p>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <button type="button" class="app-btn-secondary h-8 px-3 text-xs" @click="openSendPolicyDrawer">
+              <UIcon name="i-lucide-sliders-horizontal" class="h-3.5 w-3.5" />
+              Réglages d'envoi
+            </button>
+          </div>
+
+          <UiCollapsibleCard icon="i-lucide-wrench" title="Espacement (avancé)" class="mt-4">
+            <div class="space-y-2 px-4 py-4">
+              <div class="flex items-center gap-2 text-sm text-[var(--app-ink)]">
+                <span>1 email toutes les</span>
+                <input
+                  v-model.number="settingsForm.send_delay_minutes"
+                  type="number"
+                  min="1"
+                  max="1440"
+                  class="input-field h-9 w-20 text-center"
+                  placeholder="20"
+                />
+                <span>minutes</span>
+              </div>
+              <p class="text-xs leading-relaxed text-[var(--app-ink-soft)]">
+                Écart minimum entre deux envois. Le plafond journalier et la fenêtre horaire de vos réglages priment :
+                ils s'appliquent en plus de cet espacement.
+              </p>
+            </div>
+          </UiCollapsibleCard>
         </section>
 
         <section class="rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-5">
@@ -178,6 +195,7 @@
                 :templates="templates"
                 allow-create
                 @create="openCreate((id) => (settingsForm.template_id = id))"
+                @preview="openPreview"
               />
             </div>
             <div v-if="settingsForm.enable_ab">
@@ -189,6 +207,7 @@
                 :templates="templates"
                 allow-create
                 @create="openCreate((id) => (settingsForm.ab_template_id_b = id))"
+                @preview="openPreview"
               />
             </div>
           </div>
@@ -257,6 +276,7 @@
                   :templates="templates"
                   allow-create
                   @create="openCreate((id) => (fu.template_id = id))"
+                  @preview="openPreview"
                 />
               </div>
               <button
@@ -595,6 +615,9 @@ import type { CampaignFollowUp, CampaignVariantStats, Prospect, ProspectSource }
 import { formatCompactDateTime } from '~/utils/date'
 import { useToast } from '~/composables/useToast'
 import { useDrawerStackStore } from '~/stores/drawerStack'
+import type { SendPolicy } from '~/types/Automation'
+import { SendPolicyService } from '~/services/sendPolicyService'
+import { formatSendPolicySummary } from '~/utils/sendPolicy'
 
 definePageMeta({ layout: 'dashboard', middleware: 'auth' })
 
@@ -676,7 +699,12 @@ const settingsForm: Ref<{
   follow_ups: [],
 })
 
-const { openCreate }: EmailTemplateCreator = useEmailTemplateCreator(templates, reloadTemplates)
+const { openCreate, openPreview }: EmailTemplateCreator = useEmailTemplateCreator(templates, reloadTemplates)
+
+/** The user's effective sending cadence — it governs this campaign, not the raw spacing. */
+const sendPolicy: Ref<SendPolicy | null> = ref(null)
+
+const sendPolicySummary: ComputedRef<string> = computed((): string => formatSendPolicySummary(sendPolicy.value))
 
 /** Persistent drawer stack (prospect detail lives in the layout). */
 const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
@@ -818,6 +846,7 @@ async function loadAll(): Promise<void> {
     queueData.value = q
     allProspects.value = prospects
     templates.value = Array.isArray(tpls) ? tpls : []
+    sendPolicy.value = await SendPolicyService.getSendPolicy().catch((): null => null)
     syncSettingsForm(c)
   } catch {
     toast.error('Campagne introuvable')
@@ -1043,6 +1072,11 @@ function toggleProspect(id: number): void {
   const idx: number = selectedProspectIds.value.indexOf(id)
   if (idx > -1) selectedProspectIds.value.splice(idx, 1)
   else selectedProspectIds.value.push(id)
+}
+
+/** Open the send-policy drawer, where the effective cadence is set. */
+function openSendPolicyDrawer(): void {
+  drawerStack.push({ kind: 'send-policy' })
 }
 
 /** Open the campaign drawer in edit mode, on the persistent stack. */

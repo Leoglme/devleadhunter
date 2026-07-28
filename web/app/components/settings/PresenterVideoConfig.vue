@@ -6,35 +6,68 @@
       <section class="space-y-3">
         <div class="flex items-center justify-between gap-3">
           <h2 class="text-sm font-semibold text-[var(--app-ink)]">Votre clip</h2>
-          <span v-if="info?.has_video" class="app-badge app-badge--success font-medium">
+          <span v-if="isClipFileMissing" class="app-badge app-badge--danger font-medium">
+            <UIcon name="i-lucide-triangle-alert" class="h-3.5 w-3.5" />
+            Fichier introuvable
+          </span>
+          <span v-else-if="info?.has_video" class="app-badge app-badge--success font-medium">
             <UIcon name="i-lucide-check" class="h-3.5 w-3.5" />
             Prêt
           </span>
         </div>
-        <div v-if="info?.has_video && previewUrl" class="relative">
-          <video
-            :src="previewUrl"
-            controls
-            playsinline
-            preload="auto"
-            class="aspect-video w-full rounded-xl border border-[var(--app-line)] bg-black"
-            @loadeddata="revealFirstFrame"
-          />
-          <button
-            type="button"
-            class="btn-danger absolute top-3 right-3 z-10 flex h-8 min-h-8 items-center justify-center px-2.5 text-xs disabled:opacity-50"
-            :disabled="isDeleting"
-            aria-label="Supprimer le clip"
-            title="Supprimer le clip"
-            @click="askDeleteClip"
-          >
-            <UIcon
-              :name="isDeleting ? 'i-lucide-loader-circle' : 'i-lucide-x'"
-              :class="['h-3.5 w-3.5', isDeleting && 'animate-spin']"
+
+        <UiCallout v-if="isClipFileMissing" variant="danger">
+          Un clip est enregistré mais son fichier est introuvable sur le stockage — les vidéos de prospection ne peuvent
+          pas être générées. Refilmez ou réimportez un clip pour repartir.
+        </UiCallout>
+        <div v-if="showClipPlayer" class="space-y-3">
+          <div class="relative">
+            <video
+              :src="previewUrl ?? undefined"
+              controls
+              playsinline
+              preload="auto"
+              class="aspect-video w-full rounded-xl border border-[var(--app-line)] bg-black"
+              @loadeddata="revealFirstFrame"
             />
-          </button>
+            <button
+              type="button"
+              class="btn-danger absolute top-3 right-3 z-10 flex h-8 min-h-8 items-center justify-center px-2.5 text-xs disabled:opacity-50"
+              :disabled="isDeleting"
+              aria-label="Supprimer le clip"
+              title="Supprimer le clip"
+              @click="askDeleteClip"
+            >
+              <UIcon
+                :name="isDeleting ? 'i-lucide-loader-circle' : 'i-lucide-x'"
+                :class="['h-3.5 w-3.5', isDeleting && 'animate-spin']"
+              />
+            </button>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--app-ink-soft)]">
+              <span v-if="clipDurationLabel" class="font-label text-[var(--app-ink)]">{{ clipDurationLabel }}</span>
+              <span v-if="clipDurationLabel && info?.original_filename" aria-hidden="true">·</span>
+              <span v-if="info?.original_filename" class="truncate">{{ info.original_filename }}</span>
+              <span aria-hidden="true">·</span>
+              <span>{{ isRecordedClip ? 'Filmé dans l’application' : 'Fichier importé' }}</span>
+            </p>
+            <button type="button" class="app-btn-secondary h-8 px-3 text-xs" @click="startClipReplacement">
+              <UIcon name="i-lucide-refresh-cw" class="h-3.5 w-3.5" />
+              Remplacer le clip
+            </button>
+          </div>
         </div>
         <template v-else>
+          <button
+            v-if="isReplacingClip && captureMode === null"
+            type="button"
+            class="cursor-pointer text-xs font-medium text-[var(--app-ink-soft)] underline underline-offset-4 transition-colors hover:text-[var(--app-ink)]"
+            @click="isReplacingClip = false"
+          >
+            Garder le clip actuel
+          </button>
           <div v-if="captureMode === null" class="grid gap-3 sm:grid-cols-2">
             <button
               v-for="option in CAPTURE_OPTIONS"
@@ -306,6 +339,12 @@ const outroSeconds: Ref<number> = ref(5)
 const autoGenerate: Ref<boolean> = ref(true)
 const captureMode: Ref<PresenterVideoCaptureMode | null> = ref(null)
 
+/** Whether the capture UI is shown on purpose while a clip already exists. */
+const isReplacingClip: Ref<boolean> = ref(false)
+
+/** Whether the stored clip is registered but its file cannot be fetched. */
+const isClipFileMissing: Ref<boolean> = ref(false)
+
 /** Whether the stored clip was filmed in-app (its cut points are measured). */
 const isRecordedClip: ComputedRef<boolean> = computed((): boolean => info.value?.source === 'recorded')
 
@@ -343,6 +382,24 @@ const workflowSteps: ComputedRef<Array<{ title: string; detail: string }>> = com
   ],
 )
 
+/** Whether the stored clip is shown in its player rather than the capture UI. */
+const showClipPlayer: ComputedRef<boolean> = computed(
+  (): boolean => Boolean(info.value?.has_video) && previewUrl.value !== null && !isReplacingClip.value,
+)
+
+/** Clip length, spelled out next to the player. */
+const clipDurationLabel: ComputedRef<string> = computed((): string => {
+  const seconds: number | undefined = info.value?.duration_seconds
+  if (!seconds) return ''
+  return `${Math.round(seconds)} s`
+})
+
+/** Show the capture choice again, keeping the current clip until a new one is saved. */
+function startClipReplacement(): void {
+  captureMode.value = null
+  isReplacingClip.value = true
+}
+
 /** Seconds left for the site-scroll segment (duration - intro - outro). */
 const siteSegmentSeconds: ComputedRef<number | null> = computed((): number | null => {
   if (!info.value?.has_video || !info.value.duration_seconds) return null
@@ -375,12 +432,15 @@ function applyInfo(payload: PresenterVideo): void {
  */
 async function loadInfo(): Promise<void> {
   isLoading.value = true
+  isClipFileMissing.value = false
   try {
     applyInfo(await PresenterVideoService.getPresenterVideo())
+    isReplacingClip.value = false
     releasePreview()
-    if (info.value?.has_video) {
-      previewUrl.value = await PresenterVideoService.getPresenterVideoObjectUrl()
-    }
+    if (!info.value?.has_video) return
+    previewUrl.value = await PresenterVideoService.getPresenterVideoObjectUrl()
+    // Le service renvoie null sur une 404 : enregistrement présent, fichier absent du stockage.
+    isClipFileMissing.value = previewUrl.value === null
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : 'Impossible de charger le clip')
   } finally {
@@ -415,6 +475,7 @@ function formatSegment(seconds: number): string {
 async function handleRecorded(payload: PresenterVideo): Promise<void> {
   applyInfo(payload)
   captureMode.value = null
+  isReplacingClip.value = false
   releasePreview()
   previewUrl.value = await PresenterVideoService.getPresenterVideoObjectUrl()
 }
@@ -460,6 +521,7 @@ async function handleUpload(): Promise<void> {
     )
     selectedFile.value = null
     if (fileInputRef.value) fileInputRef.value.value = ''
+    isReplacingClip.value = false
     releasePreview()
     previewUrl.value = await PresenterVideoService.getPresenterVideoObjectUrl()
     toast.success('Clip de présentation enregistré — les prochains sites généreront leur vidéo automatiquement')
@@ -505,6 +567,7 @@ async function handleDeleteConfirmed(): Promise<void> {
   isDeleting.value = true
   try {
     applyInfo(await PresenterVideoService.deletePresenterVideo())
+    isReplacingClip.value = false
     releasePreview()
     // Repartir du choix, pas de la méthode utilisée la fois précédente.
     captureMode.value = null

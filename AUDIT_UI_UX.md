@@ -53,21 +53,17 @@ Deux causes qui se cumulent : les compteurs comptent le **statut courant** (un e
 
 **17. Tailles de titres de pages incohérentes** (vérifié dans le code) : 9 pages en `text-xl`, 3 en `text-2xl`, 8 en `text-3xl`. Même niveau hiérarchique, trois échelles. Idem pour le kicker (● PILOTAGE / ● PROSPECTION) : présent sur certaines pages, absent sur Ventes/Suivi des emails, et Santé email porte « CAMPAGNES » alors qu'elle vit dans Paramètres. À standardiser (le pattern kicker + titre de la home est le plus abouti).
 
-**18. Comptabilité : page 100 % anglaise et hors DA** (« Accounting », « Total received », icônes pastel vert/rose). Vestige pré-refonte. Admin-only donc pas urgent, mais c'est la seule page qui casse l'ensemble.
-
 **19. Téléphones cassés sur deux lignes** dans toutes les tables (« 06 52 57 26 / 94 »). `whitespace-nowrap` + `tabular-nums` sur ces colonnes.
 
 **20. La barre flottante « Continuer » du wizard recouvre la dernière ligne du tableau** de prospects (une ligne entière passe dessous). Padding-bottom sur la liste à hauteur de la barre.
 
 **21. Reflow drawer-ouvert perfectible.** Le socle container-queries marche, mais : le titre wrappe en 3 lignes (« Suivi / des / emails »), et la liste des modèles d'email compressée tronque les titres à « ★ Recomm... » tout en gardant 5 icônes d'action par ligne. En mode compressé, réduire les **actions** (menu ⋮), jamais le titre.
 
-**22. Modèles d'email : 17 poubelles rouges à l'écran.** L'action destructrice est l'élément le plus saillant de la page. La page Utilisateurs fait déjà mieux (menu ⋮ par ligne) — appliquer le même pattern : œil + éditer visibles, dupliquer/archiver/supprimer dans le ⋮.
+**22. Modèles d'email : 17 poubelles rouges à l'écran.** L'action destructrice est l'élément le plus saillant de la page. je sais pas comment gérer le cas, peut être couleur sur les autres bouton ? je te laisse choisir
 
 **23. Mes prospects : hiérarchie des boutons d'en-tête inversée.** Le CTA primaire « Nouvelle recherche » (noir) passe en 2ᵉ ligne sous Actualiser/Importer et chevauche le sous-titre. Le primaire devrait être en 1ʳᵉ position à droite.
 
-**24. Templates de site : aperçus abstraits.** Le picker montre des blocs colorés génériques alors que tu as 9 vraies templates magnifiques. De vraies captures (même statiques, régénérées au tag) rendraient le choix immédiat — et c'est aussi ce que verrait un futur utilisateur payant. Les champs couleur sont du hex texte brut sans color picker (`<input type="color">` natif suffirait).
-
-**25. Détails data qui font désordre** : doublons dans la liste de zone de la carte (« Dugué Chauffage » ×2, « EC Thermie » ×2 — dédup au scraping à prévoir) ; lignes Ventes nommées « #10 », « #9 » quand la commande n'a pas de client (fallback « Commande #10 — sans contact ») ; compteurs « Pas contacté 42 / Contacté 2 » qui ne parlent que des 44 filtrés alors que le KPI au-dessus dit 60 prospects.
+**25. Détails data qui font désordre** : doublons dans la liste de zone de la carte (« Dugué Chauffage » ×2, « EC Thermie » ×2 — dédup au scraping à prévoir) ; lignes Ventes nommées « #10 », « #9 » quand la commande n'a pas de client (fallback « Commande #10 — sans contact ») ; compteurs « Pas contacté 42 / Contacté 2 » qui ne parlent que des 44 filtrés alors que le KPI au-dessus dit 60 prospects. et si prospect à une adresse mettre son point à son adresse par exemple sa vrai adresse à rennes au lieu de juste Rennes, comme ça on voit son point dans sa rue etc quand on zoom sur la ville
 
 ---
 

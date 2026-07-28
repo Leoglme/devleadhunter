@@ -1,6 +1,6 @@
 <template>
   <div class="@container">
-    <div class="rounded-2xl border border-[var(--app-line)] bg-[var(--app-surface)] p-4 md:hidden">
+    <div class="rounded-2xl border border-[var(--app-line)] bg-[var(--app-surface)] p-4 lg:hidden">
       <div class="flex items-center gap-1.5">
         <span
           v-for="step in steps"
@@ -17,7 +17,7 @@
     </div>
 
     <ol
-      class="hidden rounded-2xl border border-[var(--app-line)] bg-[var(--app-surface)] p-2 md:flex md:items-center md:gap-2"
+      class="hidden rounded-2xl border border-[var(--app-line)] bg-[var(--app-surface)] p-2 lg:flex lg:items-center lg:gap-2"
       aria-label="Progression"
     >
       <li

@@ -213,8 +213,16 @@
               {{ blockingHint }}
             </span>
             <button
+              v-if="isCurrentStepSkippable"
               type="button"
-              class="app-btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+              class="cursor-pointer text-xs font-medium text-[var(--app-ink-soft)] underline underline-offset-4 transition-colors hover:text-[var(--app-ink)]"
+              @click="goToStep(currentStep + 1)"
+            >
+              Passer
+            </button>
+            <button
+              type="button"
+              class="app-btn-primary"
               :disabled="!canContinue || isSavingStep"
               @click="continueStep"
             >
@@ -354,6 +362,11 @@ const canContinue: ComputedRef<boolean> = computed((): boolean => {
   if (currentStep.value === 1) return isSendingReady.value
   return true
 })
+
+/** Whether the active step is optional — only the sending method is required. */
+const isCurrentStepSkippable: ComputedRef<boolean> = computed(
+  (): boolean => currentStep.value > 1 && currentStep.value < STEPS.length,
+)
 
 /** Why the « Continuer » button is disabled, when it is. */
 const blockingHint: ComputedRef<string> = computed((): string =>
@@ -533,8 +546,11 @@ watch([hasStarted, currentStep, isSendingReady], (): void => {
 })
 
 onMounted(async (): Promise<void> => {
-  // Re-entering an already finished setup (from Paramètres) skips the welcome.
-  if (userStore.user?.onboarding_completed) hasStarted.value = true
+  // Ouvrir sur le récapitulatif rend les étapes cliquables : sinon il faut re-valider 1-2-3 pour en revoir une.
+  if (userStore.user?.onboarding_completed) {
+    hasStarted.value = true
+    currentStep.value = STEPS.length
+  }
 
   await Promise.all([
     refreshSendingIdentity(),
