@@ -1,8 +1,7 @@
 <template>
   <div class="space-y-5">
-    <!-- Header -->
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div>
+    <div class="flex flex-col gap-4 @2xl:flex-row @2xl:items-end @2xl:justify-between">
+      <div class="min-w-0">
         <p class="app-label flex items-center gap-2">
           <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
           Prospection
@@ -10,93 +9,90 @@
         <h1 class="app-page-title mt-2">Mes prospects</h1>
         <p class="mt-1.5 text-sm text-[var(--app-ink-soft)]">Tous vos prospects sauvegardés depuis vos recherches</p>
       </div>
-      <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-        <button
-          :disabled="isLoading"
-          class="app-btn-secondary h-9 px-4 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-          @click="refreshProspects"
-        >
-          <UIcon name="i-lucide-refresh-cw" class="h-3.5 w-3.5" />
-          Actualiser
-        </button>
-        <div class="relative">
-          <button
-            type="button"
-            class="app-btn-secondary h-9 px-4 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-            :disabled="isImporting"
-            :aria-expanded="showImportMenu"
-            @click.stop="showImportMenu = !showImportMenu"
-          >
-            <UIcon
-              :name="isImporting ? 'i-lucide-loader-circle' : 'i-lucide-upload'"
-              :class="['h-3.5 w-3.5', isImporting && 'animate-spin']"
-            />
-            {{ isImporting ? 'Import…' : 'Importer' }}
-            <UIcon
-              name="i-lucide-chevron-down"
-              :class="['h-3 w-3 opacity-60 transition-transform', showImportMenu && 'rotate-180']"
-            />
-          </button>
-
-          <!-- Import dropdown -->
-          <div v-if="showImportMenu" class="fixed inset-0 z-40" @click="showImportMenu = false"></div>
-          <div
-            v-if="showImportMenu"
-            class="absolute right-0 z-50 mt-1.5 w-64 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-1 shadow-lg shadow-black/5"
-          >
-            <button
-              type="button"
-              class="flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--app-surface-2)]"
-              @click="handleImportClick"
-            >
-              <UIcon name="i-lucide-upload" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
-              <span>
-                <span class="block text-xs font-medium text-[var(--app-ink)]">Importer un fichier JSON</span>
-                <span class="text-[11px] text-[var(--app-faint)]">Ajoute les prospects du fichier à votre liste</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              class="flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--app-surface-2)]"
-              @click="handleDownloadTemplate"
-            >
-              <UIcon name="i-lucide-file-json" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
-              <span>
-                <span class="block text-xs font-medium text-[var(--app-ink)]">Télécharger le modèle JSON</span>
-                <span class="text-[11px] text-[var(--app-faint)]">Gabarit à remplir puis à importer</span>
-              </span>
-            </button>
-          </div>
-        </div>
-        <input
-          ref="importInput"
-          type="file"
-          accept=".json,application/json"
-          class="hidden"
-          @change="handleImportFile"
-        />
-        <button type="button" class="app-btn-secondary h-9 px-4 text-xs" @click="openAddProspectDrawer">
-          <UIcon name="i-lucide-user-plus" class="h-3.5 w-3.5" />
-          Ajouter manuellement
-        </button>
-        <NuxtLink to="/dashboard/search-prospects" class="app-btn-primary h-9 px-4 text-xs">
+      <div class="flex w-full flex-wrap items-center gap-2 sm:gap-3 @2xl:w-auto @2xl:justify-end">
+        <NuxtLink to="/dashboard/search-prospects" class="app-btn-primary h-9 shrink-0 px-4 text-xs whitespace-nowrap">
           <UIcon name="i-lucide-search" class="h-3.5 w-3.5" />
           Nouvelle recherche
         </NuxtLink>
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+          <button
+            :disabled="isLoading"
+            class="app-btn-secondary h-9 shrink-0 px-4 text-xs whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
+            @click="refreshProspects"
+          >
+            <UIcon name="i-lucide-refresh-cw" class="h-3.5 w-3.5" />
+            Actualiser
+          </button>
+          <div class="relative shrink-0">
+            <button
+              type="button"
+              class="app-btn-secondary h-9 px-4 text-xs whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="isImporting"
+              :aria-expanded="showImportMenu"
+              @click.stop="showImportMenu = !showImportMenu"
+            >
+              <UIcon
+                :name="isImporting ? 'i-lucide-loader-circle' : 'i-lucide-upload'"
+                :class="['h-3.5 w-3.5', isImporting && 'animate-spin']"
+              />
+              {{ isImporting ? 'Import…' : 'Importer' }}
+              <UIcon
+                name="i-lucide-chevron-down"
+                :class="['h-3 w-3 opacity-60 transition-transform', showImportMenu && 'rotate-180']"
+              />
+            </button>
+
+            <div v-if="showImportMenu" class="fixed inset-0 z-40" @click="showImportMenu = false"></div>
+            <div
+              v-if="showImportMenu"
+              class="absolute right-0 z-50 mt-1.5 w-56 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-1 shadow-lg shadow-black/5"
+            >
+              <button
+                type="button"
+                class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
+                @click="handleImportClick"
+              >
+                <UIcon name="i-lucide-upload" class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
+                Importer un fichier JSON
+              </button>
+              <button
+                type="button"
+                class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
+                @click="handleDownloadTemplate"
+              >
+                <UIcon name="i-lucide-file-json" class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
+                Télécharger le modèle JSON
+              </button>
+            </div>
+          </div>
+          <input
+            ref="importInput"
+            type="file"
+            accept=".json,application/json"
+            class="hidden"
+            @change="handleImportFile"
+          />
+          <button
+            type="button"
+            class="app-btn-secondary h-9 shrink-0 px-4 text-xs whitespace-nowrap"
+            @click="openAddProspectDrawer"
+          >
+            <UIcon name="i-lucide-user-plus" class="h-3.5 w-3.5" />
+            Ajouter manuellement
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- Stats -->
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
       <UiStatCard label="Total Prospects" :value="totalProspects" icon="i-lucide-users" accent="neutral" />
       <UiStatCard label="Avec Email" :value="prospectsWithEmail" icon="i-lucide-mail" accent="emerald" />
       <UiStatCard label="Sans Site Web" :value="prospectsWithoutWebsite" icon="i-lucide-globe-lock" accent="danger" />
       <UiStatCard label="Avec Téléphone" :value="prospectsWithPhone" icon="i-lucide-phone" accent="sky" />
     </div>
 
-    <!-- Filters -->
     <div class="app-card p-4">
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @5xl:grid-cols-5">
         <div>
           <label class="app-label mb-1.5 block">Rechercher</label>
           <input v-model="searchQuery" type="text" placeholder="Nom, ville, email..." class="app-input" />
@@ -119,8 +115,7 @@
       </div>
     </div>
 
-    <!-- Contacted tabs -->
-    <div class="flex items-center gap-1 border-b border-[var(--app-line)]">
+    <div class="flex flex-wrap items-center gap-1 border-b border-[var(--app-line)]">
       <button
         type="button"
         class="relative cursor-pointer px-4 py-2.5 text-sm font-medium transition-colors"
@@ -157,20 +152,29 @@
           class="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-[var(--app-accent)]"
         ></span>
       </button>
+
+      <p v-if="hasNarrowingFilters" class="ml-auto flex items-center gap-2 pr-1 text-xs text-[var(--app-ink-soft)]">
+        <UIcon name="i-lucide-filter" class="h-3 w-3" />
+        {{ baseFiltered.length }} sur {{ totalProspects }} prospects
+        <button
+          type="button"
+          class="cursor-pointer font-medium underline underline-offset-2 hover:text-[var(--app-ink)]"
+          @click="clearFilters"
+        >
+          Tout afficher
+        </button>
+      </p>
     </div>
 
-    <!-- Loader -->
     <div v-if="isLoading" class="flex items-center justify-center py-16">
       <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin text-[var(--app-accent)]" />
     </div>
 
-    <!-- Error -->
     <div v-else-if="error" class="app-card border-[var(--app-red)]/40 bg-[var(--app-red-soft)] p-5">
       <p class="font-semibold text-[var(--app-red)]">Erreur</p>
       <p class="mt-1 text-sm text-[var(--app-ink-soft)]">{{ error }}</p>
     </div>
 
-    <!-- Empty State -->
     <div v-else-if="filteredProspects.length === 0" class="app-card px-6 py-12 text-center">
       <LandingAsterisk class="text-4xl text-[var(--app-accent)]" />
       <h3 class="font-display mt-5 text-2xl font-semibold text-[var(--app-ink)]">Aucun prospect trouvé</h3>
@@ -186,20 +190,19 @@
       </NuxtLink>
     </div>
 
-    <!-- Prospects Table -->
     <div v-else class="app-card overflow-hidden">
       <UiProspectTable
         :prospects="paginatedProspects"
         :selected-prospects="selectedProspects"
         @view-prospect="openDrawer"
+        @edit-prospect="openProspectEditDrawer"
         @delete-prospect="handleDeleteProspect"
         @toggle-select="toggleSelect"
         @toggle-select-all="toggleSelectAll"
       />
 
-      <!-- Pagination -->
       <div
-        class="flex flex-col gap-3 border-t border-[var(--app-line)] bg-[var(--app-surface-2)]/50 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-6"
+        class="flex flex-col gap-3 border-t border-[var(--app-line)] bg-[var(--app-surface-2)]/50 px-4 py-3.5 sm:px-6 @2xl:flex-row @2xl:items-center @2xl:justify-between"
       >
         <div class="font-label text-xs text-[var(--app-ink-soft)]">
           {{ (currentPage - 1) * pageSize + 1 }}–{{ Math.min(currentPage * pageSize, filteredProspects.length) }} sur
@@ -227,7 +230,6 @@
       </div>
     </div>
 
-    <!-- Quick-delete confirmation modal -->
     <UiConfirmModal
       ref="deleteConfirmModal"
       title="Supprimer le prospect"
@@ -237,7 +239,15 @@
       @confirm="confirmDeleteProspect"
     />
 
-    <!-- Bulk action bar (visible when prospects are selected) -->
+    <UiConfirmModal
+      ref="bulkDeleteConfirmModal"
+      title="Supprimer les prospects sélectionnés"
+      :message="bulkDeleteConfirmMessage"
+      confirm-text="Supprimer"
+      cancel-text="Annuler"
+      @confirm="confirmBulkDelete"
+    />
+
     <Transition name="bulkbar">
       <div v-if="selectedProspects.length > 0" class="fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
         <div
@@ -270,6 +280,18 @@
           </button>
           <button
             type="button"
+            class="app-btn-danger h-9 px-4 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="bulkDeleting"
+            @click="bulkDeleteConfirmModal?.open()"
+          >
+            <UIcon
+              :name="bulkDeleting ? 'i-lucide-loader-circle' : 'i-lucide-trash-2'"
+              :class="['h-3.5 w-3.5', bulkDeleting && 'animate-spin']"
+            />
+            Supprimer
+          </button>
+          <button
+            type="button"
             class="ml-0.5 cursor-pointer rounded-full p-2 text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
             aria-label="Désélectionner tout"
             @click="clearSelection"
@@ -280,7 +302,6 @@
       </div>
     </Transition>
 
-    <!-- Bulk: add to campaign -->
     <UiBulkCampaignModal
       :open="bulkCampaignOpen"
       :prospect-ids="selectedIds"
@@ -288,7 +309,6 @@
       @added="handleBulkAdded"
     />
 
-    <!-- Bulk: generate websites -->
     <UiBulkGenerateModal
       :open="bulkGenerateOpen"
       :prospect-ids="selectedIds"
@@ -299,12 +319,16 @@
 </template>
 
 <script lang="ts" setup>
+import type { ProspectMutationNotice } from '~/types/DrawerStack'
+import type { BulkEnrichResult } from '~/services/enrichmentService'
+import type { LocationQueryValue } from 'vue-router'
+import type { UseToastReturn } from '~/types/Composables'
 import { ref, computed, watch, onMounted } from 'vue'
-import type { Ref } from 'vue'
+import type { ComputedRef, Ref } from 'vue'
 import type { Prospect } from '~/types'
-import { createProspect, deleteProspect as deleteProspectApi, listProspects } from '~/services/prospectsService'
+import { ProspectsService } from '~/services/prospectsService'
 import { downloadProspectsJson, downloadProspectTemplateJson, parseProspectsJson } from '~/utils/prospectJson'
-import { runBulkEnrichment } from '~/services/enrichmentService'
+import { EnrichmentService } from '~/services/enrichmentService'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import type { BulkGenerateResult } from '~/services/demoSiteService'
 import { useToast } from '~/composables/useToast'
@@ -314,114 +338,140 @@ definePageMeta({
   middleware: ['auth'],
 })
 
-// ─── State ────────────────────────────────────────────────────────────────────
+const prospects: Ref<Prospect[]> = ref([])
+const isLoading: Ref<boolean> = ref(false)
+const error: Ref<string | null> = ref(null)
+const selectedProspects: Ref<string[]> = ref([])
+const bulkCampaignOpen: Ref<boolean> = ref(false)
+const bulkGenerateOpen: Ref<boolean> = ref(false)
+const bulkBusy: Ref<boolean> = ref(false)
+const searchQuery: Ref<string> = ref('')
+const filterCategory: Ref<string> = ref('')
+const filterCity: Ref<string> = ref('')
+const filterWebsite: Ref<'all' | 'yes' | 'no' | 'improvable'> = ref('no')
+const activeTab: Ref<'not_contacted' | 'contacted'> = ref('not_contacted')
 
-const prospects = ref<Prospect[]>([])
-const isLoading = ref(false)
-const error = ref<string | null>(null)
-const selectedProspects = ref<string[]>([])
-const bulkCampaignOpen = ref(false)
-const bulkGenerateOpen = ref(false)
-const bulkBusy = ref(false)
-const searchQuery = ref('')
-const filterCategory = ref('')
-const filterCity = ref('')
-const filterWebsite = ref<'all' | 'yes' | 'no' | 'improvable'>('no')
-const activeTab = ref<'not_contacted' | 'contacted'>('not_contacted')
-
-const websiteFilterOptions = [
+const websiteFilterOptions: { value: string; label: string }[] = [
   { value: 'all', label: 'Tous' },
   { value: 'yes', label: 'Oui' },
   { value: 'no', label: 'Non' },
   { value: 'improvable', label: 'Améliorable (audit)' },
 ]
-const currentPage = ref(1)
-const pageSize = 50
+const currentPage: Ref<number> = ref(1)
+const pageSize: number = 50
 
 // Quick-delete (from table row icon)
-const prospectToDelete = ref<Prospect | null>(null)
-const deleteConfirmModal = ref<{ open: () => void; close: () => void } | null>(null)
+const prospectToDelete: Ref<Prospect | null> = ref(null)
+const deleteConfirmModal: Ref<{ open: () => void; close: () => void } | null> = ref(null)
+
+// Bulk delete (from the selection bar)
+const bulkDeleting: Ref<boolean> = ref(false)
+const bulkDeleteConfirmModal: Ref<{ open: () => void; close: () => void } | null> = ref(null)
 
 // Detail drawer
 /** Persistent drawer stack (the prospect drawer is hosted by the layout). */
-const drawerStack = useDrawerStackStore()
+const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 
-const toast = useToast()
+const toast: UseToastReturn = useToast()
 
-// ─── Computed ─────────────────────────────────────────────────────────────────
-
-const deleteConfirmMessage = computed(() => {
+const deleteConfirmMessage: ComputedRef<string> = computed(() => {
   if (!prospectToDelete.value) return 'Cette action est irréversible.'
   return `Supprimer définitivement « ${prospectToDelete.value.name} » ? Cette action est irréversible.`
 })
 
-const selectedIds = computed<number[]>(() =>
-  selectedProspects.value.map((id) => Number(id)).filter((n) => !Number.isNaN(n)),
+const bulkDeleteConfirmMessage: ComputedRef<string> = computed(() => {
+  const count: number = selectedIds.value.length
+  if (count === 1) return 'Supprimer définitivement ce prospect ? Il restera trouvable via une nouvelle recherche.'
+  return `Supprimer définitivement ces ${count} prospects ? Ils resteront trouvables via une nouvelle recherche.`
+})
+
+const selectedIds: ComputedRef<number[]> = computed<number[]>(() =>
+  selectedProspects.value.map((id: string) => Number(id)).filter((n: number) => !Number.isNaN(n)),
 )
 
-const totalProspects = computed(() => prospects.value.length)
-const prospectsWithEmail = computed(() => prospects.value.filter((p) => p.email).length)
-const prospectsWithoutWebsite = computed(() => prospects.value.filter((p) => !p.website).length)
-const prospectsWithPhone = computed(() => prospects.value.filter((p) => p.phone).length)
+const totalProspects: ComputedRef<number> = computed(() => prospects.value.length)
+const prospectsWithEmail: ComputedRef<number> = computed(
+  () => prospects.value.filter((prospect: Prospect) => prospect.email).length,
+)
+const prospectsWithoutWebsite: ComputedRef<number> = computed(
+  () => prospects.value.filter((prospect: Prospect) => !prospect.website).length,
+)
+const prospectsWithPhone: ComputedRef<number> = computed(
+  () => prospects.value.filter((prospect: Prospect) => prospect.phone).length,
+)
 
 /** Prospects matching every filter EXCEPT the contacted tab (drives the tab counts). */
-const baseFiltered = computed(() => {
-  let filtered = prospects.value
+const baseFiltered: ComputedRef<Prospect[]> = computed(() => {
+  let filtered: Prospect[] = prospects.value
 
   if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
+    const query: string = searchQuery.value.toLowerCase()
     filtered = filtered.filter(
-      (p) =>
-        p.name.toLowerCase().includes(query) ||
-        p.city?.toLowerCase().includes(query) ||
-        p.email?.toLowerCase().includes(query) ||
-        p.phone?.toLowerCase().includes(query),
+      (prospect: Prospect) =>
+        prospect.name.toLowerCase().includes(query) ||
+        prospect.city?.toLowerCase().includes(query) ||
+        prospect.email?.toLowerCase().includes(query) ||
+        prospect.phone?.toLowerCase().includes(query),
     )
   }
 
   if (filterCity.value) {
-    const city = filterCity.value.toLowerCase()
-    filtered = filtered.filter((p) => p.city?.toLowerCase().includes(city))
+    const city: string = filterCity.value.toLowerCase()
+    filtered = filtered.filter((prospect: Prospect) => prospect.city?.toLowerCase().includes(city))
   }
 
   if (filterCategory.value) {
-    const cat = filterCategory.value.toLowerCase()
-    filtered = filtered.filter((p) => p.category.toLowerCase().includes(cat))
+    const cat: string = filterCategory.value.toLowerCase()
+    filtered = filtered.filter((prospect: Prospect) => prospect.category.toLowerCase().includes(cat))
   }
 
   if (filterWebsite.value === 'yes') {
-    filtered = filtered.filter((p) => !!p.website)
+    filtered = filtered.filter((prospect: Prospect) => !!prospect.website)
   } else if (filterWebsite.value === 'no') {
-    filtered = filtered.filter((p) => !p.website)
+    filtered = filtered.filter((prospect: Prospect) => !prospect.website)
   } else if (filterWebsite.value === 'improvable') {
     // Site existant jugé faible par l'audit Lighthouse → cible refonte.
-    filtered = filtered.filter((p) => !!p.website && p.lighthouse_json?.is_improvable === true)
+    filtered = filtered.filter(
+      (prospect: Prospect) => !!prospect.website && prospect.lighthouse_json?.is_improvable === true,
+    )
   }
 
   return filtered
 })
 
-const notContactedCount = computed(() => baseFiltered.value.filter((p) => !p.contacted).length)
-const contactedCount = computed(() => baseFiltered.value.filter((p) => p.contacted).length)
-
-const filteredProspects = computed(() =>
-  baseFiltered.value.filter((p) => (activeTab.value === 'contacted' ? p.contacted : !p.contacted)),
+/** Whether the filters hide part of the prospects — the tab counters only cover what is left. */
+const hasNarrowingFilters: ComputedRef<boolean> = computed(
+  (): boolean => baseFiltered.value.length !== prospects.value.length,
 )
 
-const totalPages = computed(() => Math.ceil(filteredProspects.value.length / pageSize))
+const notContactedCount: ComputedRef<number> = computed(
+  () => baseFiltered.value.filter((prospect: Prospect) => !prospect.contacted).length,
+)
+const contactedCount: ComputedRef<number> = computed(
+  () => baseFiltered.value.filter((prospect: Prospect) => prospect.contacted).length,
+)
 
-const paginatedProspects = computed(() => {
-  const start = (currentPage.value - 1) * pageSize
+const filteredProspects: ComputedRef<Prospect[]> = computed(() =>
+  baseFiltered.value.filter((prospect: Prospect) =>
+    activeTab.value === 'contacted' ? prospect.contacted : !prospect.contacted,
+  ),
+)
+
+const totalPages: ComputedRef<number> = computed(() => Math.ceil(filteredProspects.value.length / pageSize))
+
+const paginatedProspects: ComputedRef<Prospect[]> = computed(() => {
+  const start: number = (currentPage.value - 1) * pageSize
   return filteredProspects.value.slice(start, start + pageSize)
 })
 
-// ─── Data loading ─────────────────────────────────────────────────────────────
-
+/**
+ * Fetch prospects from the API.
+ */
 async function loadProspects(): Promise<void> {
   try {
     isLoading.value = true
     error.value = null
-    prospects.value = await listProspects()
+    prospects.value = await ProspectsService.listProspects()
   } catch (err: unknown) {
     error.value = err instanceof Error ? err.message : 'Erreur lors du chargement des prospects'
   } finally {
@@ -429,11 +479,17 @@ async function loadProspects(): Promise<void> {
   }
 }
 
+/**
+ * Reload prospects and reset pagination.
+ */
 function refreshProspects(): void {
   currentPage.value = 1
   loadProspects()
 }
 
+/**
+ * Reset all list filters to their defaults.
+ */
 function clearFilters(): void {
   searchQuery.value = ''
   filterCity.value = ''
@@ -447,17 +503,15 @@ watch([activeTab, searchQuery, filterCity, filterCategory, filterWebsite], (): v
   currentPage.value = 1
 })
 
-// ─── Selection ──────────────────────────────────────────────────────────────
-
 /**
  * Toggle a single prospect in the selection.
  * @param prospect - The prospect whose checkbox was toggled.
  */
 function toggleSelect(prospect: Prospect): void {
-  const id = String(prospect.id)
-  const idx = selectedProspects.value.indexOf(id)
-  if (idx === -1) selectedProspects.value.push(id)
-  else selectedProspects.value.splice(idx, 1)
+  const id: string = String(prospect.id)
+  const index: number = selectedProspects.value.indexOf(id)
+  if (index === -1) selectedProspects.value.push(id)
+  else selectedProspects.value.splice(index, 1)
 }
 
 /**
@@ -465,13 +519,13 @@ function toggleSelect(prospect: Prospect): void {
  * @param checked - True to add the page's prospects, false to remove them.
  */
 function toggleSelectAll(checked: boolean): void {
-  const pageIds = paginatedProspects.value.map((p) => String(p.id))
+  const pageIds: string[] = paginatedProspects.value.map((prospect: Prospect) => String(prospect.id))
   if (checked) {
-    const set = new Set([...selectedProspects.value, ...pageIds])
+    const set: Set<string> = new Set([...selectedProspects.value, ...pageIds])
     selectedProspects.value = Array.from(set)
   } else {
-    const pageSet = new Set(pageIds)
-    selectedProspects.value = selectedProspects.value.filter((id) => !pageSet.has(id))
+    const pageSet: Set<string> = new Set(pageIds)
+    selectedProspects.value = selectedProspects.value.filter((id: string) => !pageSet.has(id))
   }
 }
 
@@ -479,8 +533,6 @@ function toggleSelectAll(checked: boolean): void {
 function clearSelection(): void {
   selectedProspects.value = []
 }
-
-// ─── Bulk actions ─────────────────────────────────────────────────────────────
 
 /**
  * Campaign modal succeeded — toast and clear the selection.
@@ -513,7 +565,7 @@ async function bulkEnrich(): Promise<void> {
   if (bulkBusy.value || selectedIds.value.length === 0) return
   bulkBusy.value = true
   try {
-    const res = await runBulkEnrichment(selectedIds.value)
+    const res: BulkEnrichResult = await EnrichmentService.runBulkEnrichment(selectedIds.value)
     toast.success(`Enrichissement : ${res.succeeded} réussi(s), ${res.failed} échec(s)`)
     clearSelection()
   } catch (err: unknown) {
@@ -523,30 +575,36 @@ async function bulkEnrich(): Promise<void> {
   }
 }
 
-// ─── Drawer (persistent stack hosted by the layout) ──────────────────────────
-
-/** Open the detail drawer for a given prospect. */
+/** Open the detail drawer for a given prospect, browsable across the filtered list. */
 function openDrawer(prospect: Prospect): void {
+  drawerStack.setProspectBrowseList(filteredProspects.value)
   drawerStack.push({ kind: 'prospect', prospect })
+}
+
+/**
+ * Open the prospect drawer straight on its edit form.
+ * @param prospect - The prospect to edit.
+ */
+function openProspectEditDrawer(prospect: Prospect): void {
+  drawerStack.setProspectBrowseList(filteredProspects.value)
+  drawerStack.push({ kind: 'prospect', prospect, startInEdit: true })
 }
 
 /** Drawer notified 'updated' — patch the local list, or insert a freshly created prospect. */
 function handleProspectUpdated(updated: Prospect): void {
-  const idx = prospects.value.findIndex((p) => p.id === updated.id)
-  if (idx !== -1) prospects.value.splice(idx, 1, updated)
+  const index: number = prospects.value.findIndex((prospect: Prospect) => prospect.id === updated.id)
+  if (index !== -1) prospects.value.splice(index, 1, updated)
   else prospects.value.unshift(updated)
 }
 
-// ─── Import / export JSON ─────────────────────────────────────────────────────
-
 /** Hidden file input used by the « Importer » dropdown. */
-const importInput: Ref<HTMLInputElement | null> = ref<HTMLInputElement | null>(null)
+const importInput: Ref<HTMLInputElement | null> = ref(null)
 
 /** Whether a JSON import is currently running. */
-const isImporting: Ref<boolean> = ref<boolean>(false)
+const isImporting: Ref<boolean> = ref(false)
 
 /** Whether the « Importer » dropdown menu is open. */
-const showImportMenu: Ref<boolean> = ref<boolean>(false)
+const showImportMenu: Ref<boolean> = ref(false)
 
 /**
  * « Importer un fichier JSON » — close the menu and open the file picker.
@@ -593,24 +651,24 @@ function exportSelected(): void {
  * @returns A promise resolved once the import completes.
  */
 async function handleImportFile(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement
+  const input: HTMLInputElement = event.target as HTMLInputElement
   const file: File | undefined = input.files?.[0]
   input.value = ''
   if (!file) return
 
   isImporting.value = true
   try {
-    const { valid, errors } = parseProspectsJson(await file.text())
+    const { valid, errors }: ProspectJsonParseResult = parseProspectsJson(await file.text())
     if (valid.length === 0) {
       toast.error(errors[0] ?? 'Aucun prospect valide dans ce fichier — utilisez le modèle JSON.')
       return
     }
 
-    let created = 0
-    let failed = 0
+    let created: number = 0
+    let failed: number = 0
     for (const item of valid) {
       try {
-        const prospect: Prospect = await createProspect({
+        const prospect: Prospect = await ProspectsService.createProspect({
           name: item.name,
           address: item.address || null,
           city: item.city || null,
@@ -645,34 +703,40 @@ async function handleImportFile(event: Event): Promise<void> {
 
 /** Drawer notified 'deleted' — remove from local list. */
 function handleProspectDeleted(prospectId: number): void {
-  prospects.value = prospects.value.filter((p) => p.id !== prospectId)
-  selectedProspects.value = selectedProspects.value.filter((id) => id !== String(prospectId))
+  prospects.value = prospects.value.filter((prospect: Prospect) => prospect.id !== prospectId)
+  selectedProspects.value = selectedProspects.value.filter((id: string) => id !== String(prospectId))
 }
 
-// Mutations done inside the drawer (edit, delete, contacted…) are broadcast
-// through the store — keep the local list in sync.
+// Les mutations du drawer transitent par le store : on resynchronise la liste locale.
 watch(
   (): number => drawerStack.prospectMutationCounter,
   (): void => {
-    const mutation = drawerStack.lastProspectMutation
+    const mutation: ProspectMutationNotice | null = drawerStack.lastProspectMutation
     if (!mutation) return
-    if (mutation.type === 'updated') handleProspectUpdated(mutation.prospect)
-    else handleProspectDeleted(mutation.prospectId)
+    if (mutation.type === 'deleted') {
+      handleProspectDeleted(mutation.prospectId)
+      return
+    }
+    handleProspectUpdated(mutation.prospect)
   },
 )
 
-// ─── Quick-delete (table row icon) ────────────────────────────────────────────
-
+/**
+ * Open the quick-delete confirmation modal for a prospect.
+ */
 function handleDeleteProspect(prospect: Prospect): void {
   prospectToDelete.value = prospect
   deleteConfirmModal.value?.open()
 }
 
+/**
+ * Delete the prospect selected in the quick-delete modal.
+ */
 async function confirmDeleteProspect(): Promise<void> {
-  const prospect = prospectToDelete.value
+  const prospect: Prospect | null = prospectToDelete.value
   if (!prospect) return
   try {
-    await deleteProspectApi(prospect.id)
+    await ProspectsService.deleteProspect(prospect.id)
     handleProspectDeleted(prospect.id)
     toast.success(`Prospect « ${prospect.name} » supprimé`)
   } catch (err: unknown) {
@@ -682,15 +746,44 @@ async function confirmDeleteProspect(): Promise<void> {
   }
 }
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
+/**
+ * Delete every selected prospect, then sync the local list and the selection.
+ */
+async function confirmBulkDelete(): Promise<void> {
+  const prospectIds: number[] = selectedIds.value
+  if (bulkDeleting.value || prospectIds.length === 0) return
+  bulkDeleting.value = true
+  try {
+    const results: PromiseSettledResult<void>[] = await Promise.allSettled(
+      prospectIds.map((prospectId: number): Promise<void> => ProspectsService.deleteProspect(prospectId)),
+    )
+    const deletedIds: number[] = prospectIds.filter(
+      (prospectId: number, index: number): boolean => results[index]?.status === 'fulfilled',
+    )
+    deletedIds.forEach((prospectId: number): void => handleProspectDeleted(prospectId))
+    if (deletedIds.length > 0) {
+      toast.success(deletedIds.length === 1 ? 'Prospect supprimé' : `${deletedIds.length} prospects supprimés`)
+    }
+    const failedCount: number = prospectIds.length - deletedIds.length
+    if (failedCount > 0) {
+      toast.error(
+        failedCount === 1
+          ? "1 prospect n'a pas pu être supprimé"
+          : `${failedCount} prospects n'ont pas pu être supprimés`,
+      )
+    }
+  } finally {
+    bulkDeleting.value = false
+  }
+}
 
 onMounted(async (): Promise<void> => {
   await loadProspects()
   // Deep-link from the dashboard hot-leads widget: ?open=<prospectId> opens the drawer.
-  const openParam = useRoute().query.open
+  const openParam: LocationQueryValue | LocationQueryValue[] | undefined = useRoute().query.open
   const openId: number = Number(Array.isArray(openParam) ? openParam[0] : openParam)
   if (!Number.isNaN(openId) && openId > 0) {
-    const target = prospects.value.find((p) => p.id === openId)
+    const target: Prospect | undefined = prospects.value.find((prospect: Prospect) => prospect.id === openId)
     if (target) openDrawer(target)
   }
 })

@@ -1,0 +1,157 @@
+/**
+ * Shared prospection-coverage store — scope, trade filter and geocoded cities for the map and drawers.
+ */
+import type { ComputedRef, Ref } from 'vue'
+import { computed, ref } from 'vue'
+import { defineStore } from 'pinia'
+import type { AddressGeo, CityGeo } from '~/composables/useFranceGeo'
+import { geocodeAddresses, geocodeCities, lookupCity } from '~/composables/useFranceGeo'
+import type { CoverageCity, CoverageResponse } from '~/services/dashboardService'
+import { DashboardService } from '~/services/dashboardService'
+import type { FranceMajorCity } from '~/utils/franceTerritory'
+import { FRANCE_MAJOR_CITIES, FRANCE_REGIONS } from '~/utils/franceTerritory'
+
+/**
+ * Normalise a city name for comparison (lowercase, accent-free, trimmed).
+ * @param name - Raw city name.
+ * @returns The comparable key.
+ */
+export function normalizeCityName(name: string): string {
+  return name.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+}
+
+// Pinia ne fournit pas de type nommé pour un store : TypeScript l'élide, il est inécrivable.
+// eslint-disable-next-line @typescript-eslint/typedef
+export const useCoverageStore = defineStore('coverage', () => {
+  const scope: Ref<string> = ref('me')
+  const selectedCategories: Ref<string[]> = ref([])
+  const coverage: Ref<CoverageResponse | null> = ref(null)
+  const cityGeo: Ref<Record<string, CityGeo | null>> = ref({})
+  const addressGeo: Ref<Record<string, AddressGeo | null>> = ref({})
+  const isLoading: Ref<boolean> = ref(false)
+  const hasLoaded: Ref<boolean> = ref(false)
+  const availableCategories: Ref<string[]> = ref([])
+
+  /**
+   * Split the scope value into an API scope + optional member id.
+   * @param value - 'me' | 'org' | 'member:{id}'.
+   * @returns A [scope, memberId] tuple.
+   */
+  function parseScope(value: string): [string, number | undefined] {
+    if (value.startsWith('member:')) return ['member', Number(value.slice('member:'.length))]
+    return [value, undefined]
+  }
+
+  /**
+   * Load coverage for the current scope + trade filter, then geocode cities.
+   * @returns A promise resolved once loaded.
+   */
+  async function load(): Promise<void> {
+    isLoading.value = true
+    try {
+      const [scopeName, memberId]: [string, number | undefined] = parseScope(scope.value)
+      const data: CoverageResponse = await DashboardService.getCoverage(scopeName, memberId, selectedCategories.value)
+      coverage.value = data
+      if (data.available_categories.length > 0) availableCategories.value = data.available_categories
+      cityGeo.value = await geocodeCities(data.cities.map((city: CoverageCity): string => city.city))
+      // Le géocodage rue n'est PAS attendu : la carte s'affiche sur les villes, puis se repeint quand
+      // les adresses arrivent. Un échec laisse simplement les points au centre-ville.
+      void geocodeAddresses(data.points, cityGeo.value)
+        .then((resolved: Record<string, AddressGeo | null>): void => {
+          addressGeo.value = { ...addressGeo.value, ...resolved }
+        })
+        .catch((): void => {})
+    } catch {
+      coverage.value = {
+        scope: scope.value,
+        cities: [],
+        points: [],
+        total_prospects: 0,
+        members: coverage.value?.members ?? [],
+        available_categories: availableCategories.value,
+      }
+    } finally {
+      isLoading.value = false
+      hasLoaded.value = true
+    }
+  }
+
+  /** Reset the trade filter to « all trades » and reload. */
+  function selectAllCategories(): void {
+    if (selectedCategories.value.length === 0) return
+    selectedCategories.value = []
+    void load()
+  }
+
+  /**
+   * Toggle one trade in the filter and reload.
+   * @param category - Trade to toggle.
+   */
+  function toggleCategory(category: string): void {
+    const current: string[] = selectedCategories.value
+    selectedCategories.value = current.includes(category)
+      ? current.filter((c: string): boolean => c !== category)
+      : [...current, category]
+    void load()
+  }
+
+  const coveredRegionCodes: ComputedRef<Set<string>> = computed((): Set<string> => {
+    const covered: Set<string> = new Set<string>()
+    for (const city of coverage.value?.cities ?? []) {
+      const geo: CityGeo | null = lookupCity(cityGeo.value, city.city)
+      if (geo && geo.region) covered.add(geo.region)
+    }
+    return covered
+  })
+
+  const uncoveredRegions: ComputedRef<string[]> = computed((): string[] =>
+    Object.entries(FRANCE_REGIONS)
+      .filter(([code]: [string, string]): boolean => !coveredRegionCodes.value.has(code))
+      .map(([, name]: [string, string]): string => name),
+  )
+
+  const coveredCityNames: ComputedRef<Set<string>> = computed((): Set<string> => {
+    const names: Set<string> = new Set<string>()
+    for (const city of coverage.value?.cities ?? []) names.add(normalizeCityName(city.city))
+    return names
+  })
+
+  const suggestedCities: ComputedRef<FranceMajorCity[]> = computed((): FranceMajorCity[] =>
+    FRANCE_MAJOR_CITIES.filter(
+      (city: FranceMajorCity): boolean => !coveredCityNames.value.has(normalizeCityName(city.name)),
+    ).slice(0, 10),
+  )
+
+  /**
+   * Covered city names belonging to one region (raw names, for zone queries).
+   * @param regionCode - INSEE region code.
+   * @returns The prospected city names of that region.
+   */
+  function coveredCitiesOfRegion(regionCode: string): string[] {
+    const cities: string[] = []
+    for (const city of coverage.value?.cities ?? []) {
+      const geo: CityGeo | null = lookupCity(cityGeo.value, city.city)
+      if (geo && geo.region === regionCode) cities.push(city.city)
+    }
+    return cities
+  }
+
+  return {
+    scope,
+    selectedCategories,
+    coverage,
+    cityGeo,
+    addressGeo,
+    isLoading,
+    hasLoaded,
+    availableCategories,
+    load,
+    selectAllCategories,
+    toggleCategory,
+    coveredRegionCodes,
+    uncoveredRegions,
+    coveredCityNames,
+    suggestedCities,
+    coveredCitiesOfRegion,
+  }
+})

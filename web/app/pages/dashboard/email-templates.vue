@@ -1,9 +1,12 @@
 <template>
   <div class="space-y-5">
-    <!-- Header -->
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="text-xl font-semibold text-[var(--app-ink)]">Modèles d'email</h1>
+        <p class="app-label flex items-center gap-2">
+          <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+          Prospection
+        </p>
+        <h1 class="app-page-title mt-2">Modèles d'email</h1>
         <p class="text-muted mt-1 text-sm">Les contenus réutilisés par vos campagnes et relances.</p>
       </div>
       <button class="btn-primary" @click="openCreateDrawer">
@@ -12,7 +15,6 @@
       </button>
     </div>
 
-    <!-- Toolbar -->
     <div class="flex flex-wrap items-center gap-3">
       <div class="relative w-full max-w-xs">
         <UIcon
@@ -29,7 +31,6 @@
       </p>
     </div>
 
-    <!-- Loading state -->
     <div v-if="isLoading" class="card">
       <div class="animate-pulse space-y-3">
         <div class="h-4 w-3/4 rounded bg-[var(--app-surface-2)]"></div>
@@ -37,7 +38,6 @@
       </div>
     </div>
 
-    <!-- Empty state -->
     <div v-else-if="emailTemplates.length === 0" class="card px-6 py-12 text-center">
       <LandingAsterisk class="text-4xl text-[var(--app-accent)]" />
       <h3 class="font-display mt-5 text-2xl font-semibold text-[var(--app-ink)]">Aucun modèle d'email</h3>
@@ -52,12 +52,10 @@
       </div>
     </div>
 
-    <!-- No search result -->
     <div v-else-if="filteredTemplates.length === 0" class="card px-6 py-10 text-center">
       <p class="text-muted text-sm">Aucun modèle ne correspond à « {{ searchQuery }} ».</p>
     </div>
 
-    <!-- Grouped list -->
     <template v-else>
       <section v-for="group in templateGroups" :key="group.key">
         <p class="app-label mb-2">{{ group.heading }} · {{ group.templates.length }}</p>
@@ -68,7 +66,6 @@
             class="group flex items-start gap-4 px-4 py-3 transition-colors hover:bg-[var(--app-surface-2)]/60"
             :class="template.is_active ? '' : 'opacity-70'"
           >
-            <!-- Identity -->
             <button type="button" class="min-w-0 flex-1 cursor-pointer text-left" @click="openPreviewDrawer(template)">
               <div class="flex flex-wrap items-center gap-2">
                 <h3
@@ -89,50 +86,79 @@
               </p>
             </button>
 
-            <!-- Actions -->
-            <div class="flex shrink-0 items-center gap-1.5">
+            <div class="flex shrink-0 items-center gap-1">
               <button
-                class="btn-secondary h-8 min-h-8 px-2.5 text-xs"
+                type="button"
+                class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
                 title="Aperçu avec des données d'exemple"
+                :aria-label="`Aperçu de ${template.name}`"
                 @click="openPreviewDrawer(template)"
               >
                 <UIcon name="i-lucide-eye" class="h-3.5 w-3.5" />
               </button>
               <button
-                class="btn-secondary h-8 min-h-8 px-2.5 text-xs"
+                type="button"
+                class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
                 title="Modifier"
+                :aria-label="`Modifier ${template.name}`"
                 @click="openEditDrawer(template)"
               >
                 <UIcon name="i-lucide-square-pen" class="h-3.5 w-3.5" />
               </button>
-              <button
-                class="btn-secondary h-8 min-h-8 px-2.5 text-xs"
-                title="Dupliquer"
-                @click="duplicateTemplate(template)"
-              >
-                <UIcon name="i-lucide-copy" class="h-3.5 w-3.5" />
-              </button>
-              <button
-                class="btn-secondary h-8 min-h-8 px-2.5 text-xs"
-                :title="template.is_active ? 'Désactiver' : 'Activer'"
-                @click="toggleTemplateActive(template)"
-              >
-                <UIcon :name="template.is_active ? 'i-lucide-pause' : 'i-lucide-play'" class="h-3.5 w-3.5" />
-              </button>
-              <button
-                class="btn-danger flex h-8 min-h-8 items-center justify-center px-2.5 text-xs"
-                title="Supprimer"
-                @click="confirmDelete(template)"
-              >
-                <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />
-              </button>
+
+              <div class="relative">
+                <button
+                  type="button"
+                  class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
+                  title="Plus d'actions"
+                  :aria-label="`Plus d'actions pour ${template.name}`"
+                  :aria-expanded="openMenuTemplateId === template.id"
+                  @click.stop="toggleActionsMenu(template.id)"
+                >
+                  <UIcon name="i-lucide-ellipsis-vertical" class="h-3.5 w-3.5" />
+                </button>
+
+                <template v-if="openMenuTemplateId === template.id">
+                  <div class="fixed inset-0 z-40" @click="openMenuTemplateId = null"></div>
+                  <div
+                    class="absolute right-0 z-50 mt-1.5 w-48 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-1 shadow-lg shadow-black/5"
+                  >
+                    <button
+                      type="button"
+                      class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
+                      @click="runRowAction(template, duplicateTemplate)"
+                    >
+                      <UIcon name="i-lucide-copy" class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
+                      Dupliquer
+                    </button>
+                    <button
+                      type="button"
+                      class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
+                      @click="runRowAction(template, toggleTemplateActive)"
+                    >
+                      <UIcon
+                        :name="template.is_active ? 'i-lucide-pause' : 'i-lucide-play'"
+                        class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]"
+                      />
+                      {{ template.is_active ? 'Désactiver' : 'Activer' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="mt-1 flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-t border-[var(--app-line-soft)] px-2.5 py-2 text-left text-xs font-medium text-[var(--app-red)] transition-colors hover:bg-[var(--app-red-soft)]"
+                      @click="runRowAction(template, confirmDelete)"
+                    >
+                      <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5 shrink-0" />
+                      Supprimer
+                    </button>
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
         </div>
       </section>
     </template>
 
-    <!-- Confirm Delete Modal -->
     <UiConfirmModal
       ref="confirmModal"
       title="Supprimer le modèle"
@@ -144,16 +170,13 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
+import type { UseToastReturn } from '~/types/Composables'
+import type { TemplateGroup } from '~/types/EmailTemplatesPage'
 import type { ComputedRef, Ref } from 'vue'
 import type { EmailTemplate } from '~/types'
 import { computed, onMounted, ref, watch } from 'vue'
-import {
-  getEmailTemplates,
-  createEmailTemplate,
-  updateEmailTemplate,
-  deleteEmailTemplate,
-} from '~/services/emailTemplatesService'
+import { EmailTemplatesService } from '~/services/emailTemplatesService'
 import { useToast } from '~/composables/useToast'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 
@@ -162,30 +185,18 @@ definePageMeta({
   middleware: 'auth',
 })
 
-/** One displayed group of templates. */
-interface TemplateGroup {
-  key: string
-  heading: string
-  templates: EmailTemplate[]
-}
-
-const toast = useToast()
+const toast: UseToastReturn = useToast()
 
 /** Persistent drawer stack (create/edit/preview live there). */
-const drawerStack = useDrawerStackStore()
+const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 
-// ─── State ────────────────────────────────────────────────────────────────────
-
-const emailTemplates: Ref<EmailTemplate[]> = ref<EmailTemplate[]>([])
-const isLoading: Ref<boolean> = ref<boolean>(false)
-const searchQuery: Ref<string> = ref<string>('')
-const templateToDelete: Ref<EmailTemplate | null> = ref<EmailTemplate | null>(null)
-const confirmModal: Ref<{ open: () => void; close: () => void } | null> = ref<{
-  open: () => void
-  close: () => void
-} | null>(null)
-
-// ─── Computed ─────────────────────────────────────────────────────────────────
+const emailTemplates: Ref<EmailTemplate[]> = ref([])
+const isLoading: Ref<boolean> = ref(false)
+const searchQuery: Ref<string> = ref('')
+const templateToDelete: Ref<EmailTemplate | null> = ref(null)
+/** Template whose overflow menu is open, if any. */
+const openMenuTemplateId: Ref<number | null> = ref(null)
+const confirmModal: Ref<{ open: () => void; close: () => void } | null> = ref(null)
 
 /** Templates matching the search query (name or subject). */
 const filteredTemplates: ComputedRef<EmailTemplate[]> = computed((): EmailTemplate[] => {
@@ -216,8 +227,6 @@ const templateGroups: ComputedRef<TemplateGroup[]> = computed((): TemplateGroup[
   return groups
 })
 
-// ─── Data loading ─────────────────────────────────────────────────────────────
-
 /**
  * Load every template of the current user.
  * @returns A promise that resolves once the list is loaded.
@@ -225,7 +234,7 @@ const templateGroups: ComputedRef<TemplateGroup[]> = computed((): TemplateGroup[
 async function loadTemplates(): Promise<void> {
   try {
     isLoading.value = true
-    emailTemplates.value = await getEmailTemplates()
+    emailTemplates.value = await EmailTemplatesService.getEmailTemplates()
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : 'Erreur lors du chargement des modèles')
   } finally {
@@ -243,8 +252,6 @@ async function loadTemplates(): Promise<void> {
 function variablesLabel(template: EmailTemplate): string {
   return (template.variables ?? []).map((variableName: string): string => '{' + variableName + '}').join(' ')
 }
-
-// ─── Drawer openers ───────────────────────────────────────────────────────────
 
 /** Open the creation drawer. */
 function openCreateDrawer(): void {
@@ -267,18 +274,17 @@ function openPreviewDrawer(template: EmailTemplate): void {
   drawerStack.push({ kind: 'email-template', mode: 'preview', template })
 }
 
-// ─── Quick actions ────────────────────────────────────────────────────────────
-
 /**
  * Duplicate a template (suffixe « (copie) »), useful to iterate on a variant.
  * @param template - Template to duplicate.
  */
 async function duplicateTemplate(template: EmailTemplate): Promise<void> {
   try {
-    const copy: EmailTemplate = await createEmailTemplate({
+    const copy: EmailTemplate = await EmailTemplatesService.createEmailTemplate({
       name: `${template.name} (copie)`,
       subject: template.subject,
       body_html: template.body_html,
+      signature_id: template.signature_id ?? null,
     })
     emailTemplates.value.unshift(copy)
     toast.success(`Modèle « ${template.name} » dupliqué`)
@@ -293,7 +299,9 @@ async function duplicateTemplate(template: EmailTemplate): Promise<void> {
  */
 async function toggleTemplateActive(template: EmailTemplate): Promise<void> {
   try {
-    const updated: EmailTemplate = await updateEmailTemplate(template.id, { is_active: !template.is_active })
+    const updated: EmailTemplate = await EmailTemplatesService.updateEmailTemplate(template.id, {
+      is_active: !template.is_active,
+    })
     const index: number = emailTemplates.value.findIndex((t: EmailTemplate): boolean => t.id === updated.id)
     if (index !== -1) emailTemplates.value.splice(index, 1, updated)
     toast.success(updated.is_active ? `« ${updated.name} » activé` : `« ${updated.name} » désactivé`)
@@ -305,6 +313,28 @@ async function toggleTemplateActive(template: EmailTemplate): Promise<void> {
 /**
  * Ask for confirmation before deleting a template.
  * @param template - Template to delete.
+ */
+/**
+ * Open or close the overflow menu of a row.
+ * @param templateId - Identifier of the row's template.
+ */
+function toggleActionsMenu(templateId: number): void {
+  openMenuTemplateId.value = openMenuTemplateId.value === templateId ? null : templateId
+}
+
+/**
+ * Run an overflow-menu action, then close the menu.
+ * @param template - Template the action applies to.
+ * @param action - Handler to run on that template.
+ */
+function runRowAction(template: EmailTemplate, action: (template: EmailTemplate) => void): void {
+  openMenuTemplateId.value = null
+  action(template)
+}
+
+/**
+ * Ask confirmation before deleting a template.
+ * @param template - Template about to be deleted.
  */
 function confirmDelete(template: EmailTemplate): void {
   templateToDelete.value = template
@@ -319,7 +349,7 @@ async function handleDeleteTemplate(): Promise<void> {
   const template: EmailTemplate | null = templateToDelete.value
   if (!template) return
   try {
-    await deleteEmailTemplate(template.id)
+    await EmailTemplatesService.deleteEmailTemplate(template.id)
     emailTemplates.value = emailTemplates.value.filter((t: EmailTemplate): boolean => t.id !== template.id)
     toast.success(`Modèle « ${template.name} » supprimé`)
   } catch (err: unknown) {
@@ -329,8 +359,6 @@ async function handleDeleteTemplate(): Promise<void> {
   }
 }
 
-// ─── Watchers ─────────────────────────────────────────────────────────────────
-
 // Créations/éditions faites dans le drawer (hébergé par le layout) → recharger.
 watch(
   (): number => drawerStack.emailTemplatesRefreshCounter,
@@ -338,8 +366,6 @@ watch(
     void loadTemplates()
   },
 )
-
-// ─── Init ─────────────────────────────────────────────────────────────────────
 
 onMounted(async (): Promise<void> => {
   await loadTemplates()

@@ -1,4 +1,5 @@
 """Prospect enrichment routes — on-demand rich data for site generation."""
+
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -51,6 +52,20 @@ async def run_prospect_enrichment(
     return ProspectEnrichmentResponse.model_validate(record)
 
 
+@router.post("/{prospect_id}/enrichment/resolve-contact", response_model=ProspectEnrichmentResponse)
+async def resolve_prospect_contact(
+    prospect_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> ProspectEnrichmentResponse:
+    """(Re)run only the decision-maker name resolution for a prospect."""
+    prospect = enrichment_service.get_prospect_for_user(db, current_user.id, prospect_id)
+    if not prospect:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    record = await enrichment_service.resolve_contact(db, current_user.id, prospect)
+    return ProspectEnrichmentResponse.model_validate(record)
+
+
 @router.post("/enrichment/bulk-run")
 async def run_bulk_enrichment(
     payload: BulkEnrichRequest,
@@ -79,11 +94,13 @@ async def run_bulk_enrichment(
             succeeded += 1
         else:
             failed += 1
-        results.append({
-            "prospect_id": prospect_id,
-            "status": record.status,
-            "error": record.error_message,
-        })
+        results.append(
+            {
+                "prospect_id": prospect_id,
+                "status": record.status,
+                "error": record.error_message,
+            }
+        )
 
     return {
         "results": results,

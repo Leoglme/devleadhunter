@@ -1,5 +1,6 @@
 <template>
   <UApp>
+    <NuxtLoadingIndicator color="var(--app-ink)" :height="2" :throttle="200" />
     <DevLeadHunterDesktopUpdaterPanel />
     <DevLeadHunterDevToolbar />
     <NuxtLayout>

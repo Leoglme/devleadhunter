@@ -1,25 +1,19 @@
 import { defineStore, skipHydrate } from 'pinia'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, ref, watch } from 'vue'
-import type { DrawerStackEntry, ProspectMutationNotice } from '~/types/DrawerStack'
+import type { DrawerStackEntry, OrderMutationNotice, ProspectMutationNotice } from '~/types/DrawerStack'
+import type { Order } from '~/services/ordersService'
 import type { Prospect } from '~/types'
 
 /** sessionStorage key persisting the drawer stack across page reloads. */
-const DRAWER_STACK_STORAGE_KEY = 'dlh-drawer-stack'
+const DRAWER_STACK_STORAGE_KEY: string = 'dlh-drawer-stack'
 
-/**
- * Pinia store driving the persistent right-side drawer stack.
- *
- * The stack survives page navigation because it is rendered once by
- * `UiDrawerStackHost` in the dashboard layout. Pages communicate with the
- * drawers through this store: they push entries to open drawers, and watch
- * the mutation/refresh counters to keep their local lists in sync with what
- * happens inside a drawer (edit, delete, email sent…).
- * @module stores/drawerStack
- */
+/** Pinia store driving the persistent right-side drawer stack (survives route changes via `UiDrawerStackHost`). */
+// Pinia ne fournit pas de type nommé pour un store : TypeScript l'élide, il est inécrivable.
+// eslint-disable-next-line @typescript-eslint/typedef
 export const useDrawerStackStore = defineStore('drawerStack', () => {
   // State — restored from sessionStorage so an open drawer survives a reload.
-  const stack: Ref<DrawerStackEntry[]> = ref<DrawerStackEntry[]>([])
+  const stack: Ref<DrawerStackEntry[]> = ref([])
   if (import.meta.client) {
     try {
       const raw: string | null = sessionStorage.getItem(DRAWER_STACK_STORAGE_KEY)
@@ -28,18 +22,22 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
       // État illisible → on repart d'une pile vide.
     }
   }
-  const lastProspectMutation: Ref<ProspectMutationNotice | null> = ref<ProspectMutationNotice | null>(null)
-  const prospectMutationCounter: Ref<number> = ref<number>(0)
-  const emailLogsRefreshCounter: Ref<number> = ref<number>(0)
-  const emailTemplatesRefreshCounter: Ref<number> = ref<number>(0)
+  const lastProspectMutation: Ref<ProspectMutationNotice | null> = ref(null)
+  const prospectMutationCounter: Ref<number> = ref(0)
+  // Volontairement hors sessionStorage : sert seulement à naviguer entre voisins pendant la session.
+  const prospectBrowseList: Ref<Prospect[]> = ref([])
+  const lastOrderMutation: Ref<OrderMutationNotice | null> = ref(null)
+  const orderMutationCounter: Ref<number> = ref(0)
+  const emailLogsRefreshCounter: Ref<number> = ref(0)
+  const emailTemplatesRefreshCounter: Ref<number> = ref(0)
+  const usersRefreshCounter: Ref<number> = ref(0)
+  const campaignsRefreshCounter: Ref<number> = ref(0)
 
   // Getters
-  /** Entry currently displayed (top of the stack), or null when closed. */
   const topEntry: ComputedRef<DrawerStackEntry | null> = computed(
     (): DrawerStackEntry | null => stack.value[stack.value.length - 1] ?? null,
   )
 
-  /** Whether a previous drawer exists below the top one (shows the back affordance). */
   const hasPrevious: ComputedRef<boolean> = computed((): boolean => stack.value.length > 1)
 
   /**
@@ -62,9 +60,18 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     stack.value.pop()
   }
 
-  /** Close every drawer. */
+  /** Close every drawer, and forget the list the prospect drawer was browsing. */
   function closeAll(): void {
     stack.value = []
+    prospectBrowseList.value = []
+  }
+
+  /**
+   * Remember the list the prospect drawer browses, so it can step to its neighbours.
+   * @param list - Prospects in the order they are displayed by the calling page.
+   */
+  function setProspectBrowseList(list: Prospect[]): void {
+    prospectBrowseList.value = list
   }
 
   /**
@@ -87,16 +94,37 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
   }
 
   /**
-   * Broadcast a prospect deletion: drop matching stacked entries and notify
-   * pages watching `prospectMutationCounter`.
-   * @param prospectId - Identifier of the deleted prospect.
+   * Broadcast an order update: refresh matching stacked entries and notify
+   * pages watching `orderMutationCounter`.
+   * @param order - The freshly updated order.
    */
-  function notifyProspectDeleted(prospectId: number): void {
-    stack.value = stack.value.filter(
-      (entry: DrawerStackEntry): boolean => !(entry.kind === 'prospect' && entry.prospect.id === prospectId),
-    )
-    lastProspectMutation.value = { type: 'deleted', prospectId }
-    prospectMutationCounter.value++
+  function notifyOrderUpdated(order: Order): void {
+    stack.value = stack.value.map((entry: DrawerStackEntry): DrawerStackEntry => {
+      if (entry.kind === 'order' && entry.order.id === order.id) {
+        return { ...entry, order }
+      }
+      if (entry.kind === 'finalize-sale' && entry.order.id === order.id) {
+        return { ...entry, order }
+      }
+      return entry
+    })
+    lastOrderMutation.value = { type: 'updated', order }
+    orderMutationCounter.value++
+  }
+
+  /**
+   * Broadcast an order deletion: drop matching stacked entries and notify
+   * pages watching `orderMutationCounter`.
+   * @param orderId - Identifier of the deleted order.
+   */
+  function notifyOrderDeleted(orderId: number): void {
+    stack.value = stack.value.filter((entry: DrawerStackEntry): boolean => {
+      const isSameOrder: boolean =
+        (entry.kind === 'order' || entry.kind === 'finalize-sale') && entry.order.id === orderId
+      return !isSameOrder
+    })
+    lastOrderMutation.value = { type: 'deleted', orderId }
+    orderMutationCounter.value++
   }
 
   /** Signal that email logs changed (an email was sent from a drawer). */
@@ -107,6 +135,32 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
   /** Signal that email templates changed (created/edited/deleted from a drawer). */
   function bumpEmailTemplatesRefresh(): void {
     emailTemplatesRefreshCounter.value++
+  }
+
+  /**
+   * Broadcast a prospect deletion: drop matching stacked entries and notify
+   * pages watching `prospectMutationCounter`.
+   * @param prospectId - Identifier of the deleted prospect.
+   */
+  function notifyProspectDeleted(prospectId: number): void {
+    stack.value = stack.value.filter((entry: DrawerStackEntry): boolean => {
+      const isSameProspect: boolean =
+        (entry.kind === 'prospect' && entry.prospect.id === prospectId) ||
+        (entry.kind === 'send-email' && entry.prospect?.id === prospectId)
+      return !isSameProspect
+    })
+    lastProspectMutation.value = { type: 'deleted', prospectId }
+    prospectMutationCounter.value++
+  }
+
+  /** Signal that users changed (created or edited from a drawer). */
+  function bumpUsersRefresh(): void {
+    usersRefreshCounter.value++
+  }
+
+  /** Signal that campaigns changed (created or edited from a drawer). */
+  function bumpCampaignsRefresh(): void {
+    campaignsRefreshCounter.value++
   }
 
   // Persister chaque mutation de la pile (F5 ne ferme plus les drawers).
@@ -124,21 +178,30 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
   )
 
   return {
-    // skipHydrate : l'état SSR (toujours vide) ne doit pas écraser la pile
-    // restaurée depuis sessionStorage au boot client.
+    // skipHydrate : l'état SSR, toujours vide, écraserait la pile restaurée du sessionStorage.
     stack: skipHydrate(stack),
     lastProspectMutation,
     prospectMutationCounter,
+    prospectBrowseList,
+    lastOrderMutation,
+    orderMutationCounter,
     emailLogsRefreshCounter,
     emailTemplatesRefreshCounter,
+    usersRefreshCounter,
+    campaignsRefreshCounter,
     topEntry,
     hasPrevious,
     push,
     back,
     closeAll,
+    setProspectBrowseList,
     notifyProspectUpdated,
     notifyProspectDeleted,
+    notifyOrderUpdated,
+    notifyOrderDeleted,
     bumpEmailLogsRefresh,
     bumpEmailTemplatesRefresh,
+    bumpUsersRefresh,
+    bumpCampaignsRefresh,
   }
 })

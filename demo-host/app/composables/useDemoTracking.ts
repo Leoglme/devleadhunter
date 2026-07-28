@@ -23,19 +23,19 @@ import type { PostHog } from 'posthog-js'
  *                            visit becomes "qualified" (a warm-lead signal to query on)
  *   - demo_time_on_page   { seconds, max_scroll }  — engaged (visible) time on exit
  */
-let initialized = false
+let initialized: boolean = false
 
 /** A qualified visit needs at least this many engaged seconds… */
-const ENGAGED_SECONDS_THRESHOLD = 20
+const ENGAGED_SECONDS_THRESHOLD: number = 20
 /** …or this much scroll depth (%). */
-const ENGAGED_SCROLL_THRESHOLD = 50
+const ENGAGED_SCROLL_THRESHOLD: number = 50
 
 /**
  * Composable exposing the demo tracking initialiser.
  * @returns An object with the ``init`` method.
  */
 export function useDemoTracking(): { init: (slug: string, status: string, variant: string | null) => Promise<void> } {
-  const config = useRuntimeConfig()
+  const config: ReturnType<typeof useRuntimeConfig> = useRuntimeConfig()
 
   /**
    * Resolve a human-readable name for the section an element belongs to.
@@ -46,11 +46,13 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
    * @returns A short section name, or 'unknown'.
    */
   function sectionOf(element: HTMLElement | null): string {
-    const container = element?.closest('section, header, footer, [data-section]') as HTMLElement | null
+    const container: HTMLElement | null = element?.closest(
+      'section, header, footer, [data-section]',
+    ) as HTMLElement | null
     if (!container) return 'unknown'
-    const explicit = container.dataset.section || container.id || container.getAttribute('aria-label')
+    const explicit: string | null = container.dataset.section || container.id || container.getAttribute('aria-label')
     if (explicit) return explicit.trim().slice(0, 40)
-    const heading = container.querySelector('h1, h2, h3')?.textContent?.trim()
+    const heading: string | undefined = container.querySelector('h1, h2, h3')?.textContent?.trim()
     if (heading) return heading.slice(0, 40)
     return container.tagName.toLowerCase()
   }
@@ -60,20 +62,20 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
    * @param posthog - Initialised PostHog instance.
    */
   function setupListeners(posthog: PostHog): void {
-    const reachedDepths = new Set<number>()
-    const seenSections = new Set<Element>()
-    let maxDepth = 0
-    let engagedSeconds = 0
-    let lastSentSeconds = 0
-    let interacted = false
-    let engagedFired = false
+    const reachedDepths: Set<number> = new Set<number>()
+    const seenSections: Set<Element> = new Set<Element>()
+    let maxDepth: number = 0
+    let engagedSeconds: number = 0
+    let lastSentSeconds: number = 0
+    let interacted: boolean = false
+    let engagedFired: boolean = false
 
     /**
      * Fire the one-shot ``demo_engaged`` qualified-visit signal once the visit
      * crosses any engagement threshold.
      * @param reason - What triggered qualification (click / scroll / time).
      */
-    const markEngaged = (reason: string): void => {
+    const markEngaged: (reason: string) => void = (reason: string): void => {
       if (engagedFired) return
       if (!interacted && engagedSeconds < ENGAGED_SECONDS_THRESHOLD && maxDepth < ENGAGED_SCROLL_THRESHOLD) return
       engagedFired = true
@@ -84,22 +86,22 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
     document.addEventListener(
       'click',
       (event: MouseEvent): void => {
-        const target = event.target as HTMLElement | null
+        const target: HTMLElement | null = event.target as HTMLElement | null
         if (!target) return
-        const anchor = target.closest('a')
-        const button = target.closest('button')
+        const anchor: HTMLAnchorElement | null = target.closest('a')
+        const button: HTMLButtonElement | null = target.closest('button')
         if (!anchor && !button) return
 
         interacted = true
-        const section = sectionOf(target)
-        const href = anchor?.getAttribute('href') ?? ''
+        const section: string = sectionOf(target)
+        const href: string = anchor?.getAttribute('href') ?? ''
 
         if (href.startsWith('tel:')) {
           posthog.capture('demo_phone_click', { href, section })
         } else if (href.startsWith('mailto:')) {
           posthog.capture('demo_contact_click', { href, section })
         } else if (/^https?:\/\//i.test(href) && !href.includes(window.location.host)) {
-          let host = ''
+          let host: string
           try {
             host = new URL(href).host
           } catch {
@@ -107,8 +109,13 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
           }
           posthog.capture('demo_outbound_click', { href, host, section })
         } else {
-          const label = (anchor ?? button ?? target).textContent?.trim().slice(0, 80) ?? ''
-          posthog.capture('demo_cta_click', { label, href, section, tag: (anchor ?? button)?.tagName.toLowerCase() ?? '' })
+          const label: string = (anchor ?? button ?? target).textContent?.trim().slice(0, 80) ?? ''
+          posthog.capture('demo_cta_click', {
+            label,
+            href,
+            section,
+            tag: (anchor ?? button)?.tagName.toLowerCase() ?? '',
+          })
         }
         markEngaged('click')
       },
@@ -119,9 +126,9 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
     window.addEventListener(
       'scroll',
       (): void => {
-        const scrollable = document.documentElement.scrollHeight - window.innerHeight
+        const scrollable: number = document.documentElement.scrollHeight - window.innerHeight
         if (scrollable <= 0) return
-        const percent = Math.round((window.scrollY / scrollable) * 100)
+        const percent: number = Math.round((window.scrollY / scrollable) * 100)
         if (percent > maxDepth) maxDepth = percent
         for (const threshold of [25, 50, 75, 100]) {
           if (percent >= threshold && !reachedDepths.has(threshold)) {
@@ -136,7 +143,7 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
 
     // ── Section views (which parts of the site were actually seen) ───────────
     if (typeof IntersectionObserver !== 'undefined') {
-      const observer = new IntersectionObserver(
+      const observer: IntersectionObserver = new IntersectionObserver(
         (entries: IntersectionObserverEntry[]): void => {
           for (const entry of entries) {
             if (!entry.isIntersecting || seenSections.has(entry.target)) continue
@@ -154,9 +161,8 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
       })
     }
 
-    // ── Engaged (visible) time — a 1s tick that only counts while the tab is
-    //    visible, so idle background time doesn't inflate the number. ─────────
-    const ticker = window.setInterval((): void => {
+    // Ne compte que pendant que l'onglet est visible, sinon le temps de fond gonfle la mesure.
+    const ticker: number = window.setInterval((): void => {
       if (document.visibilityState === 'visible') {
         engagedSeconds += 1
         markEngaged('time')
@@ -164,7 +170,7 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
     }, 1000)
 
     /** Send the engaged-time event (deduped: only when it grew since last send). */
-    const sendTime = (): void => {
+    const sendTime: () => void = (): void => {
       if (engagedSeconds <= lastSentSeconds) return
       lastSentSeconds = engagedSeconds
       posthog.capture('demo_time_on_page', { seconds: engagedSeconds, max_scroll: maxDepth })
@@ -187,34 +193,33 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
    */
   async function init(slug: string, status: string, variant: string | null): Promise<void> {
     if (!import.meta.client || initialized) return
-    const key = String(config.public.posthogProjectApiKey ?? '')
-    const host = String(config.public.posthogIngestionHost ?? '')
+    const key: string = String(config.public.posthogProjectApiKey ?? '')
+    const host: string = String(config.public.posthogIngestionHost ?? '')
     // Never track a delivered/sold site, and skip when PostHog is not configured.
     if (!key || status !== 'active') return
 
-    const { default: posthog } = await import('posthog-js')
+    const {
+      default: posthog,
+    }: typeof import('C:/Users/leogu/Desktop/Projects/devleadhunter/demo-host/node_modules/posthog-js/dist/module') =
+      await import('posthog-js')
     posthog.init(key, {
       api_host: host,
       capture_pageview: true,
-      // $pageleave carries an accurate "time on page" computed by PostHog, on top
-      // of our engaged-time event — useful cross-check without extra code.
+      // $pageleave apporte le temps sur page calculé par PostHog, en recoupement du nôtre.
       capture_pageleave: true,
       autocapture: false,
       // Frustration signal (rageclicks) without turning on full autocapture.
       rageclick: true,
       persistence: 'memory',
-      // Identité = le slug de la démo (= identité des events email côté serveur),
-      // pour que les funnels relient email ↔ démo sur la même "personne".
+      // Le slug sert aussi d'identité aux events email : un funnel email ↔ démo sur la même personne.
       bootstrap: { distinctID: slug, isIdentifiedID: true },
-      // Session replay activé (sans bandeau cookie). On masque tous les champs
-      // de saisie pour ne pas capter de données personnelles tapées par le visiteur.
+      // Replay sans bandeau cookie : tous les champs de saisie sont masqués.
       disable_session_recording: false,
       session_recording: {
         maskAllInputs: true,
       },
     })
-    // `surface` separates demo events from marketing-site events sharing the same
-    // PostHog project (e.g. $pageview). Never renamed: demo_* names are read by the API.
+    // Ne jamais renommer : les noms demo_* sont lus côté API.
     posthog.register({ surface: 'demo', demo_slug: slug, ...(variant ? { ab_variant: variant } : {}) })
     initialized = true
     setupListeners(posthog)

@@ -1,10 +1,11 @@
 """
 Campaign routes for API v1.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -37,21 +38,19 @@ from services.campaign_service import campaign_service
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
 
-# ---------------------------------------------------------------------------
-# Request schemas (route-local, not shared with other modules)
-# ---------------------------------------------------------------------------
-
 class LaunchCampaignRequest(BaseModel):
     """Payload for POST /campaigns/{id}/launch."""
-    template_id: Optional[int] = None
-    ab_template_id_b: Optional[int] = None
-    follow_up_template_id: Optional[int] = None
+
+    template_id: int | None = None
+    ab_template_id_b: int | None = None
+    follow_up_template_id: int | None = None
     follow_up_delay_days: int = 5
     send_delay_minutes: int = 20
 
 
 class SendNowRequest(BaseModel):
     """Payload for POST /campaigns/{id}/send-now."""
+
     prospect_id: int
     template_id: int
 
@@ -59,18 +58,25 @@ class SendNowRequest(BaseModel):
 def _has_resend_config(db: Session, user_id: int) -> bool:
     """Return True when the user has a Resend API key configured."""
     from models.resend_config import ResendConfig
-    config = db.execute(
-        select(ResendConfig).where(ResendConfig.user_id == user_id)
-    ).scalar_one_or_none()
+
+    config = db.execute(select(ResendConfig).where(ResendConfig.user_id == user_id)).scalar_one_or_none()
     return config is not None and bool(config.api_key)
 
 
-# ---------------------------------------------------------------------------
-# Response builder helper
-# ---------------------------------------------------------------------------
+def _ab_variants_by_prospect(db: Session, campaign_id: int) -> dict[int, str | None]:
+    """Map each prospect to the A/B variant assigned on its initial queue item."""
+    rows = db.execute(
+        select(EmailQueue.prospect_id, EmailQueue.ab_variant).where(
+            EmailQueue.campaign_id == campaign_id,
+            EmailQueue.queue_type == "initial",
+        )
+    ).all()
+    return dict(rows)
 
-def _detail_response(campaign) -> CampaignDetailResponse:
+
+def _detail_response(db: Session, campaign) -> CampaignDetailResponse:
     """Build a CampaignDetailResponse from a Campaign ORM object."""
+    ab_variants = _ab_variants_by_prospect(db, campaign.id)
     return CampaignDetailResponse(
         id=campaign.id,
         user_id=campaign.user_id,
@@ -87,16 +93,17 @@ def _detail_response(campaign) -> CampaignDetailResponse:
         prospects_count=len(campaign.prospects),
         prospects=[
             CampaignProspectResponse(
-                id=p.id,
-                name=p.name,
-                email=p.email,
-                phone=p.phone,
-                city=p.city,
-                category=p.category,
-                source=p.source,
-                confidence=p.confidence,
+                id=prospect.id,
+                name=prospect.name,
+                email=prospect.email,
+                phone=prospect.phone,
+                city=prospect.city,
+                category=prospect.category,
+                source=prospect.source,
+                confidence=prospect.confidence,
+                ab_variant=ab_variants.get(prospect.id),
             )
-            for p in campaign.prospects
+            for prospect in campaign.prospects
         ],
         follow_ups=[
             CampaignFollowUpResponse(
@@ -122,10 +129,6 @@ def _get_or_404(db: Session, campaign_id: int, user_id: int):
     return campaign
 
 
-# ---------------------------------------------------------------------------
-# CRUD
-# ---------------------------------------------------------------------------
-
 @router.post("", response_model=CampaignDetailResponse, status_code=status.HTTP_201_CREATED)
 async def create_campaign(
     campaign_data: CampaignCreate,
@@ -134,14 +137,14 @@ async def create_campaign(
 ):
     """Create a new email campaign."""
     campaign = campaign_service.create_campaign(db, current_user.id, campaign_data)
-    return _detail_response(campaign)
+    return _detail_response(db, campaign)
 
 
 @router.get("", response_model=CampaignListResponse)
 async def list_campaigns(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    status: Optional[str] = Query(None),
+    status: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -178,7 +181,7 @@ async def get_campaign(
 ):
     """Get a campaign with its prospects and follow-up sequence."""
     campaign = _get_or_404(db, campaign_id, current_user.id)
-    return _detail_response(campaign)
+    return _detail_response(db, campaign)
 
 
 @router.patch("/{campaign_id}", response_model=CampaignDetailResponse)
@@ -192,7 +195,7 @@ async def update_campaign(
     campaign = campaign_service.update_campaign(db, campaign_id, current_user.id, campaign_data)
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
-    return _detail_response(campaign)
+    return _detail_response(db, campaign)
 
 
 @router.delete("/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -206,10 +209,6 @@ async def delete_campaign(
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
 
-
-# ---------------------------------------------------------------------------
-# Settings — update send configuration (editable anytime, even when active)
-# ---------------------------------------------------------------------------
 
 @router.patch("/{campaign_id}/settings", response_model=CampaignDetailResponse)
 async def update_campaign_settings(
@@ -241,25 +240,21 @@ async def update_campaign_settings(
 
     if settings.follow_ups is not None:
         # Replace the entire follow-up sequence.
-        db.execute(
-            delete(CampaignFollowUp).where(CampaignFollowUp.campaign_id == campaign_id)
-        )
+        db.execute(delete(CampaignFollowUp).where(CampaignFollowUp.campaign_id == campaign_id))
         for i, fu in enumerate(settings.follow_ups, start=1):
-            db.add(CampaignFollowUp(
-                campaign_id=campaign_id,
-                template_id=fu.template_id,
-                delay_days=fu.delay_days,
-                position=i,
-            ))
+            db.add(
+                CampaignFollowUp(
+                    campaign_id=campaign_id,
+                    template_id=fu.template_id,
+                    delay_days=fu.delay_days,
+                    position=i,
+                )
+            )
 
     db.commit()
     db.refresh(campaign)
-    return _detail_response(campaign)
+    return _detail_response(db, campaign)
 
-
-# ---------------------------------------------------------------------------
-# Prospects
-# ---------------------------------------------------------------------------
 
 @router.post("/{campaign_id}/prospects", response_model=CampaignDetailResponse)
 async def add_prospects_to_campaign(
@@ -269,12 +264,10 @@ async def add_prospects_to_campaign(
     db: Session = Depends(get_db),
 ):
     """Add prospects to a campaign."""
-    campaign = campaign_service.add_prospects_to_campaign(
-        db, campaign_id, current_user.id, data.prospect_ids
-    )
+    campaign = campaign_service.add_prospects_to_campaign(db, campaign_id, current_user.id, data.prospect_ids)
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
-    return _detail_response(campaign)
+    return _detail_response(db, campaign)
 
 
 @router.delete("/{campaign_id}/prospects/{prospect_id}", response_model=CampaignDetailResponse)
@@ -285,17 +278,11 @@ async def remove_prospect_from_campaign(
     db: Session = Depends(get_db),
 ):
     """Remove a prospect from a campaign."""
-    campaign = campaign_service.remove_prospect_from_campaign(
-        db, campaign_id, current_user.id, prospect_id
-    )
+    campaign = campaign_service.remove_prospect_from_campaign(db, campaign_id, current_user.id, prospect_id)
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
-    return _detail_response(campaign)
+    return _detail_response(db, campaign)
 
-
-# ---------------------------------------------------------------------------
-# Follow-up sequence management
-# ---------------------------------------------------------------------------
 
 @router.post("/{campaign_id}/follow-ups", response_model=CampaignFollowUpResponse)
 async def add_follow_up(
@@ -308,11 +295,12 @@ async def add_follow_up(
     _get_or_404(db, campaign_id, current_user.id)
 
     # Auto-set position to last + 1 if not supplied or already taken.
-    max_pos: int = db.execute(
-        select(func.max(CampaignFollowUp.position)).where(
-            CampaignFollowUp.campaign_id == campaign_id
-        )
-    ).scalar() or 0
+    max_pos: int = (
+        db.execute(
+            select(func.max(CampaignFollowUp.position)).where(CampaignFollowUp.campaign_id == campaign_id)
+        ).scalar()
+        or 0
+    )
 
     fu = CampaignFollowUp(
         campaign_id=campaign_id,
@@ -388,10 +376,6 @@ async def delete_follow_up(
     db.commit()
 
 
-# ---------------------------------------------------------------------------
-# Launch / Pause / Resume
-# ---------------------------------------------------------------------------
-
 @router.post("/{campaign_id}/launch")
 async def launch_campaign(
     campaign_id: int,
@@ -435,7 +419,7 @@ async def launch_campaign(
         campaign.follow_up_template_id = launch_data.follow_up_template_id
         campaign.follow_up_delay_days = launch_data.follow_up_delay_days
     campaign.status = CampaignStatus.ACTIVE.value
-    campaign.started_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    campaign.started_at = datetime.now(UTC).replace(tzinfo=None)
     db.commit()
 
     queue_service = CampaignQueueService(db)
@@ -449,10 +433,13 @@ async def launch_campaign(
     message = f"{result.enqueued} email(s) mis en file{ab_info} — 1 toutes les {campaign.send_delay_minutes} min"
     if result.skipped_no_demo:
         message += f" · {len(result.skipped_no_demo)} prospect(s) ignoré(s) faute de site de démo"
+    if result.skipped_no_video:
+        message += f" · {len(result.skipped_no_video)} prospect(s) ignoré(s) faute de vidéo de prospection"
     return {
         "success": True,
         "enqueued": result.enqueued,
         "skipped_no_demo": result.skipped_no_demo,
+        "skipped_no_video": result.skipped_no_video,
         "message": message,
     }
 
@@ -516,12 +503,9 @@ async def resume_campaign(
         "success": True,
         "enqueued": result.enqueued,
         "skipped_no_demo": result.skipped_no_demo,
+        "skipped_no_video": result.skipped_no_video,
     }
 
-
-# ---------------------------------------------------------------------------
-# Immediate send (bypass delay for a specific prospect)
-# ---------------------------------------------------------------------------
 
 @router.post("/{campaign_id}/send-now")
 async def send_now(
@@ -550,10 +534,6 @@ async def send_now(
     return result
 
 
-# ---------------------------------------------------------------------------
-# Queue & Stats
-# ---------------------------------------------------------------------------
-
 @router.get("/{campaign_id}/queue")
 async def get_campaign_queue(
     campaign_id: int,
@@ -574,16 +554,16 @@ async def get_campaign_queue(
         "pending_count": pending,
         "items": [
             {
-                "id":               i.id,
-                "queue_type":       i.queue_type,
-                "status":           i.status,
-                "scheduled_at":     i.scheduled_at.isoformat(),
-                "prospect_id":      i.prospect_id,
-                "prospect_name":    i.prospect.name if i.prospect else None,
-                "prospect_email":   i.prospect.email if i.prospect else None,
-                "ab_variant":       i.ab_variant,
-                "follow_up_index":  i.follow_up_index,
-                "email_log_id":     i.email_log_id,
+                "id": i.id,
+                "queue_type": i.queue_type,
+                "status": i.status,
+                "scheduled_at": i.scheduled_at.isoformat(),
+                "prospect_id": i.prospect_id,
+                "prospect_name": i.prospect.name if i.prospect else None,
+                "prospect_email": i.prospect.email if i.prospect else None,
+                "ab_variant": i.ab_variant,
+                "follow_up_index": i.follow_up_index,
+                "email_log_id": i.email_log_id,
             }
             for i in items
         ],

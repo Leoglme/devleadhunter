@@ -6,7 +6,6 @@
     :class="position === null ? 'right-4 bottom-4' : ''"
     :style="floatingStyle"
   >
-    <!-- Drag handle -->
     <button
       type="button"
       class="flex cursor-grab touch-none items-center gap-1 rounded-full py-1 pr-1 pl-2 text-amber-400 active:cursor-grabbing"
@@ -25,31 +24,29 @@
       title="Écrase la base LOCALE avec les données de PROD (desktop dev uniquement). Requiert web/.env.sync (voir .env.sync.example)."
       @click="onSyncDatabase"
     >
-      Sync DB prod → local
+      Sync DB prod <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> local
     </UButton>
   </div>
 </template>
 
 <script lang="ts" setup>
+import type { UseDesktopRuntimeReturn } from '~/types/Composables'
+import type { StorageActionResponse } from '~/services/adminStorageService'
+import type { ToolbarPosition } from '~/types/DevLeadHunterDevToolbar'
 import type { CSSProperties, Ref } from 'vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-
-/** Persisted position of the floating dev toolbar. */
-interface ToolbarPosition {
-  left: number
-  top: number
-}
+import { AdminStorageService } from '~/services/adminStorageService'
 
 const STORAGE_KEY: string = 'dlh-devtoolbar-pos'
 
-const { isDesktopDev, syncDevDatabaseFromProd } = useDesktopRuntime()
-const toast = useToast()
+const { isDesktopDev, syncDevDatabaseFromProd }: UseDesktopRuntimeReturn = useDesktopRuntime()
+const toast: ReturnType<typeof useToast> = useToast()
 
-const isSyncing: Ref<boolean> = ref<boolean>(false)
+const isSyncing: Ref<boolean> = ref(false)
 /** Root element, used to measure the toolbar during a drag. */
-const rootEl: Ref<HTMLElement | null> = ref<HTMLElement | null>(null)
+const rootEl: Ref<HTMLElement | null> = ref(null)
 /** Current absolute position (null = default bottom-right). */
-const position: Ref<ToolbarPosition | null> = ref<ToolbarPosition | null>(null)
+const position: Ref<ToolbarPosition | null> = ref(null)
 
 // Drag bookkeeping.
 let dragPointerId: number | null = null
@@ -132,7 +129,9 @@ function endDrag(): void {
  */
 async function onSyncDatabase(): Promise<void> {
   const confirmed: boolean = window.confirm(
-    'Synchroniser la base LOCALE avec les données de PROD ?\n\nLes tables locales seront REMPLACÉES par le dump de prod.',
+    'Synchroniser la base LOCALE avec les données de PROD ?\n\n' +
+      'Les tables locales seront REMPLACÉES par le dump de prod, et le bucket R2 dev ' +
+      'sera aligné sur celui de prod (copie incrémentale).',
   )
   if (!confirmed) {
     return
@@ -140,7 +139,17 @@ async function onSyncDatabase(): Promise<void> {
   isSyncing.value = true
   try {
     const message: string = await syncDevDatabaseFromProd()
-    toast.add({ title: 'Synchro DB terminée', description: message, color: 'success' })
+    // Le stockage suit la base, sinon les démos pointent vers des vidéos absentes du bucket dev.
+    let storageMessage: string = ''
+    try {
+      const storage: StorageActionResponse = await AdminStorageService.syncStorageFromProd()
+      storageMessage = ` · Stockage : ${storage.message}`
+    } catch (storageError) {
+      storageMessage = ` · Stockage NON synchronisé (${
+        storageError instanceof Error ? storageError.message : String(storageError)
+      })`
+    }
+    toast.add({ title: 'Synchro terminée', description: `${message}${storageMessage}`, color: 'success' })
   } catch (error) {
     toast.add({
       title: 'Synchro DB — échec',

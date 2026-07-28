@@ -1,5 +1,6 @@
 """Pydantic schemas for the dashboard home KPIs."""
-from typing import Any, Optional
+
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -27,10 +28,10 @@ class HotLeadResponse(BaseModel):
 
     prospect_id: int
     name: str
-    city: Optional[str] = None
+    city: str | None = None
     temperature: str
     score: int
-    last_seen: Optional[str] = None
+    last_seen: str | None = None
     signals: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -62,6 +63,15 @@ class CoverageCity(BaseModel):
     count: int
 
 
+class CoverageProspectPoint(BaseModel):
+    """One prospect of the map, placed at its own address once geocoded."""
+
+    id: int
+    name: str
+    address: str | None = None
+    city: str
+
+
 class CoverageMember(BaseModel):
     """An organization member selectable as a coverage scope."""
 
@@ -69,11 +79,37 @@ class CoverageMember(BaseModel):
     name: str
 
 
+class CoverageProspectRow(BaseModel):
+    """Light prospect recap for the coverage zone drawer (kept airy on purpose)."""
+
+    id: int
+    name: str
+    city: str | None = None
+    category: str | None = None
+    has_demo: bool = False
+    emails_sent: int = 0
+    emails_opened: int = 0
+    emails_clicked: int = 0
+    is_sold: bool = False
+
+
+class CoverageProspectsResponse(BaseModel):
+    """Prospects of a coverage zone (one or several cities)."""
+
+    items: list[CoverageProspectRow]
+    total: int
+
+
 class CoverageResponse(BaseModel):
     """Prospection coverage aggregated by city, for the selected scope."""
 
     scope: str
     cities: list[CoverageCity]
+    # Un point par prospect, pour l'affichage rue par rue au zoom.
+    points: list[CoverageProspectPoint] = Field(default_factory=list)
     total_prospects: int
     # Populated only when the user belongs to an organization (scope selector).
     members: list[CoverageMember] = Field(default_factory=list)
+    # Distinct trades (ProspectDB.category) present in the SCOPE, ignoring the
+    # ``categories`` filter — feeds the trade multi-select without ghost values.
+    available_categories: list[str] = Field(default_factory=list)

@@ -1,28 +1,5 @@
 <template>
-  <div class="space-y-4">
-    <!-- Scope selector (organization only) + headline -->
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <p class="text-muted max-w-md text-xs leading-relaxed">
-        Votre territoire de prospection. Chaque ville prospectée colore sa région — l'objectif est d'en verdir un
-        maximum.
-      </p>
-      <div v-if="members.length > 0" class="shrink-0">
-        <select
-          v-model="scope"
-          class="input-field h-9 w-full text-xs sm:w-52"
-          :disabled="isLoading"
-          @change="onScopeChange"
-        >
-          <option value="me">Mes prospects</option>
-          <option value="org">Toute l'organisation</option>
-          <option v-for="member in members" :key="member.user_id" :value="`member:${member.user_id}`">
-            {{ member.name }}
-          </option>
-        </select>
-      </div>
-    </div>
-
-    <!-- Gamified counters -->
+  <div class="flex h-full min-h-0 flex-col gap-4">
     <div class="grid grid-cols-3 gap-3">
       <div class="rounded-lg border border-[var(--app-line)] bg-[var(--app-bg)] px-3 py-2.5 text-center">
         <p class="text-xl font-bold text-[var(--app-ink)] tabular-nums">{{ coveredCityCount }}</p>
@@ -42,7 +19,6 @@
       </div>
     </div>
 
-    <!-- Territory progress -->
     <div>
       <div class="mb-1 flex items-center justify-between text-[11px]">
         <span class="text-muted">Territoire couvert</span>
@@ -56,32 +32,28 @@
       </div>
     </div>
 
-    <!-- Initial loading -->
-    <div v-if="isLoading && !coverage" class="flex h-72 items-center justify-center">
+    <div v-if="!store.hasLoaded" class="flex h-72 items-center justify-center">
       <UIcon name="i-lucide-loader-circle" class="h-7 w-7 animate-spin text-[var(--app-ink-soft)]" />
     </div>
 
-    <!-- Empty -->
     <div
-      v-else-if="coverage && coverage.cities.length === 0"
+      v-else-if="store.coverage && store.coverage.cities.length === 0"
       class="flex h-72 flex-col items-center justify-center gap-3 text-center"
     >
       <UIcon name="i-lucide-map" class="h-8 w-8 text-[var(--app-faint)]" />
       <p class="text-muted max-w-xs text-sm leading-relaxed">
-        Aucune ville prospectée pour l'instant. Lancez une recherche pour commencer à colorer la carte.
+        Aucune ville prospectée pour ces filtres. Lancez une recherche pour commencer à colorer la carte.
       </p>
-      <NuxtLink to="/dashboard/search-prospects" class="btn-secondary text-xs">Trouver des prospects</NuxtLink>
+      <button type="button" class="btn-secondary text-xs" @click="openSearchDrawer">Trouver des prospects</button>
     </div>
 
-    <!-- Map (MapLibre GL + OpenFreeMap — free, key-less, unlimited) -->
-    <div v-else-if="!isMapFailed" ref="mapWrap" class="coverage-map relative">
+    <div v-else-if="!isMapFailed" ref="mapWrap" class="coverage-map relative flex min-h-0 flex-1 flex-col">
       <div
         ref="mapContainer"
-        class="coverage-map__canvas h-[420px] w-full overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-surface-2)] transition-opacity duration-300 md:h-[480px]"
-        :class="isLoading ? 'opacity-60' : 'opacity-100'"
+        class="coverage-map__canvas min-h-[420px] w-full flex-1 overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-surface-2)] transition-opacity duration-300"
+        :class="store.isLoading ? 'opacity-60' : 'opacity-100'"
       ></div>
 
-      <!-- Tooltip -->
       <div
         v-if="tip.show"
         class="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-[calc(100%+12px)] rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] px-2.5 py-1.5 text-xs shadow-lg"
@@ -91,7 +63,6 @@
         <p class="text-muted tabular-nums">{{ tip.sub }}</p>
       </div>
 
-      <!-- Legend -->
       <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
         <span class="text-muted text-[10px] tracking-wide uppercase">Intensité</span>
         <span v-for="bucket in legend" :key="bucket.label" class="flex items-center gap-1.5">
@@ -101,15 +72,18 @@
           ></span>
           <span class="text-[11px] text-[var(--app-ink-soft)]">{{ bucket.label }}</span>
         </span>
+        <span class="text-muted ml-auto hidden items-center gap-1.5 text-[11px] sm:flex">
+          <UIcon name="i-lucide-mouse-pointer-click" class="h-3 w-3" />
+          Cliquez une ville, une région ou un prospect pour agir
+        </span>
       </div>
     </div>
 
-    <!-- Map unavailable (WebGL/network) — fall back to a ranked city list -->
     <div v-else class="space-y-2">
       <p class="text-muted text-xs">Carte indisponible — voici vos villes les plus prospectées :</p>
       <ul class="divide-y divide-[var(--app-line-soft)]">
         <li
-          v-for="city in (coverage?.cities ?? []).slice(0, 12)"
+          v-for="city in (store.coverage?.cities ?? []).slice(0, 12)"
           :key="city.city"
           class="flex items-center justify-between py-1.5 text-sm"
         >
@@ -122,24 +96,35 @@
 </template>
 
 <script lang="ts" setup>
+import type { CoverageCity } from '~/services/dashboardService'
+import type { CityFeatureProperties, CoverageTierColors, ProspectFeatureProperties } from '~/types/DashboardCoverageMap'
 import type { Feature, FeatureCollection, Point } from 'geojson'
-import type { ExpressionSpecification, GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from 'maplibre-gl'
+import type {
+  ExpressionSpecification,
+  GeoJSONSource,
+  Map as MaplibreMap,
+  MapGeoJSONFeature,
+  MapMouseEvent,
+} from 'maplibre-gl'
 import type { ComputedRef, Ref } from 'vue'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import type { CityGeo } from '~/composables/useFranceGeo'
-import { geocodeCities, lookupCity } from '~/composables/useFranceGeo'
+import type { AddressGeo, CityGeo } from '~/composables/useFranceGeo'
+import { addressKey, lookupCity, reverseGeocodeCommune } from '~/composables/useFranceGeo'
 import { useAppTheme } from '~/composables/useAppTheme'
-import type { CoverageMember, CoverageResponse } from '~/services/dashboardService'
-import { getCoverage } from '~/services/dashboardService'
+import type { Prospect } from '~/types'
+import { ProspectsService } from '~/services/prospectsService'
+import { useCoverageStore } from '~/stores/coverage'
+import { useDrawerStackStore } from '~/stores/drawerStack'
 import type { AppTheme } from '~/types/AppTheme'
+import { FRANCE_MAJOR_CITIES, FRANCE_REGIONS } from '~/utils/franceTerritory'
 
 /**
  * Metropolitan region contours (simplified, ~220 KB) — the france-geojson reference
  * dataset. Loaded directly by MapLibre (its parser ignores the `text/plain`
  * content-type served by raw.githubusercontent.com, which breaks `$fetch`).
  */
-const REGIONS_GEOJSON_URL =
+const REGIONS_GEOJSON_URL: string =
   'https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/regions-version-simplifiee.geojson'
 
 /** OpenFreeMap basemap styles (free, no API key, no usage limit) per app theme. */
@@ -160,41 +145,28 @@ const MAP_MAX_BOUNDS: [[number, number], [number, number]] = [
   [16.5, 55.5],
 ]
 
-const REGIONS_SOURCE_ID = 'dlh-regions'
-const CITIES_SOURCE_ID = 'dlh-cities'
-const REGIONS_FILL_LAYER_ID = 'dlh-regions-fill'
-const REGIONS_LINE_LAYER_ID = 'dlh-regions-line'
-const CITIES_LAYER_ID = 'dlh-cities-dots'
+const REGIONS_SOURCE_ID: string = 'dlh-regions'
+const CITIES_SOURCE_ID: string = 'dlh-cities'
+const REGIONS_FILL_LAYER_ID: string = 'dlh-regions-fill'
+const REGIONS_LINE_LAYER_ID: string = 'dlh-regions-line'
+const CITIES_LAYER_ID: string = 'dlh-cities-dots'
+const PROSPECTS_SOURCE_ID: string = 'dlh-prospects'
+const PROSPECTS_LAYER_ID: string = 'dlh-prospects-dots'
 
-/** Properties carried by each city point feature. */
-interface CityFeatureProperties {
-  city: string
-  count: number
-  /** Precomputed circle radius in px (sqrt scale on the prospect count). */
-  radius: number
-}
+/** Zoom at which the city aggregate hands over to the per-prospect points. */
+const PROSPECT_DETAIL_ZOOM: number = 11
 
-/** Choropleth washes drawn over the basemap (amber → green, Atelier palette). */
-interface CoverageTierColors {
-  none: string
-  low: string
-  medium: string
-  good: string
-  strong: string
-}
+/** Amber of the coverage palette, marking a prospect fallen back to its city centre. */
+const APPROXIMATE_ADDRESS_DOT_COLOR: string = '#e8a33c'
 
-const { theme } = useAppTheme()
-
-const isLoading: Ref<boolean> = ref<boolean>(true)
-const scope: Ref<string> = ref<string>('me')
-const coverage: Ref<CoverageResponse | null> = ref<CoverageResponse | null>(null)
-const members: Ref<CoverageMember[]> = ref<CoverageMember[]>([])
-const cityGeo: Ref<Record<string, CityGeo | null>> = ref<Record<string, CityGeo | null>>({})
+const { theme }: { theme: Ref<AppTheme, AppTheme>; initTheme: () => void; toggleTheme: () => void } = useAppTheme()
+const store: ReturnType<typeof useCoverageStore> = useCoverageStore()
+const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 
 /** True when MapLibre could not start (WebGL unavailable, network down…). */
-const isMapFailed: Ref<boolean> = ref<boolean>(false)
+const isMapFailed: Ref<boolean> = ref(false)
 /** True once the overlay sources/layers exist on the current basemap style. */
-const isMapReady: Ref<boolean> = ref<boolean>(false)
+const isMapReady: Ref<boolean> = ref(false)
 
 const tip: Ref<{ show: boolean; x: number; y: number; title: string; sub: string }> = ref({
   show: false,
@@ -203,19 +175,17 @@ const tip: Ref<{ show: boolean; x: number; y: number; title: string; sub: string
   title: '',
   sub: '',
 })
-const mapWrap: Ref<HTMLElement | null> = ref<HTMLElement | null>(null)
-const mapContainer: Ref<HTMLElement | null> = ref<HTMLElement | null>(null)
+const mapWrap: Ref<HTMLElement | null> = ref(null)
+const mapContainer: Ref<HTMLElement | null> = ref(null)
 
 /** MapLibre instance — deliberately non-reactive (huge mutable object). */
 let mapInstance: MaplibreMap | null = null
 
-// ─── Aggregations ──────────────────────────────────────────────────────────────
-
 /** Prospect total per region code (from geocoded cities). */
 const regionTotals: ComputedRef<Record<string, number>> = computed((): Record<string, number> => {
   const totals: Record<string, number> = {}
-  for (const city of coverage.value?.cities ?? []) {
-    const geo: CityGeo | null = lookupCity(cityGeo.value, city.city)
+  for (const city of store.coverage?.cities ?? []) {
+    const geo: CityGeo | null = lookupCity(store.cityGeo, city.city)
     if (geo && geo.region) totals[geo.region] = (totals[geo.region] ?? 0) + city.count
   }
   return totals
@@ -223,9 +193,9 @@ const regionTotals: ComputedRef<Record<string, number>> = computed((): Record<st
 
 /** Distinct department codes touched. */
 const deptSet: ComputedRef<Set<string>> = computed((): Set<string> => {
-  const set = new Set<string>()
-  for (const city of coverage.value?.cities ?? []) {
-    const geo: CityGeo | null = lookupCity(cityGeo.value, city.city)
+  const set: Set<string> = new Set<string>()
+  for (const city of store.coverage?.cities ?? []) {
+    const geo: CityGeo | null = lookupCity(store.cityGeo, city.city)
     if (geo && geo.dept) set.add(geo.dept)
   }
   return set
@@ -234,7 +204,8 @@ const deptSet: ComputedRef<Set<string>> = computed((): Set<string> => {
 /** Cities successfully placed on the map. */
 const coveredCityCount: ComputedRef<number> = computed(
   (): number =>
-    (coverage.value?.cities ?? []).filter((c): boolean => lookupCity(cityGeo.value, c.city) !== null).length,
+    (store.coverage?.cities ?? []).filter((c: CoverageCity): boolean => lookupCity(store.cityGeo, c.city) !== null)
+      .length,
 )
 
 /** Number of regions with at least one prospect. */
@@ -256,8 +227,6 @@ const legend: ComputedRef<Array<{ label: string; color: string }>> = computed(
     ]
   },
 )
-
-// ─── Choropleth colours ────────────────────────────────────────────────────────
 
 /**
  * Choropleth washes for a theme (semi-transparent so the basemap shows through).
@@ -309,16 +278,14 @@ function regionFillColor(): string | ExpressionSpecification {
   return expression as unknown as ExpressionSpecification
 }
 
-// ─── Map data ─────────────────────────────────────────────────────────────────
-
 /**
  * Build the GeoJSON collection of prospected cities (geocoded ones only).
  * @returns A point collection with count + precomputed radius per city.
  */
 function buildCitiesCollection(): FeatureCollection<Point, CityFeatureProperties> {
   const features: Array<Feature<Point, CityFeatureProperties>> = []
-  for (const city of coverage.value?.cities ?? []) {
-    const geo: CityGeo | null = lookupCity(cityGeo.value, city.city)
+  for (const city of store.coverage?.cities ?? []) {
+    const geo: CityGeo | null = lookupCity(store.cityGeo, city.city)
     if (!geo) continue
     features.push({
       type: 'Feature',
@@ -327,6 +294,32 @@ function buildCitiesCollection(): FeatureCollection<Point, CityFeatureProperties
         city: city.city,
         count: city.count,
         radius: Math.min(16, 3.5 + Math.sqrt(city.count) * 2),
+      },
+    })
+  }
+  return { type: 'FeatureCollection', features }
+}
+
+/**
+ * Build the GeoJSON collection of individual prospects, placed at their street
+ * address when the BAN could resolve it, at the city centre otherwise.
+ * @returns A point collection, one feature per prospect.
+ */
+function buildProspectsCollection(): FeatureCollection<Point, ProspectFeatureProperties> {
+  const features: Array<Feature<Point, ProspectFeatureProperties>> = []
+  for (const point of store.coverage?.points ?? []) {
+    const precise: AddressGeo | null = store.addressGeo[addressKey(point.address, point.city)] ?? null
+    const fallback: CityGeo | null = lookupCity(store.cityGeo, point.city)
+    const position: AddressGeo | CityGeo | null = precise ?? fallback
+    if (!position) continue
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [position.lng, position.lat] },
+      properties: {
+        prospectId: point.id,
+        name: point.name,
+        city: point.city,
+        isPreciseAddress: precise !== null,
       },
     })
   }
@@ -364,10 +357,31 @@ function addMapOverlays(): void {
     id: CITIES_LAYER_ID,
     type: 'circle',
     source: CITIES_SOURCE_ID,
+    maxzoom: PROSPECT_DETAIL_ZOOM,
     paint: {
       'circle-radius': ['get', 'radius'],
       'circle-color': dark ? '#f0efeb' : '#1d1a14',
       'circle-opacity': 0.85,
+      'circle-stroke-color': dark ? '#131312' : '#fbf9f3',
+      'circle-stroke-width': 1.5,
+    },
+  })
+
+  map.addSource(PROSPECTS_SOURCE_ID, { type: 'geojson', data: buildProspectsCollection() })
+  map.addLayer({
+    id: PROSPECTS_LAYER_ID,
+    type: 'circle',
+    source: PROSPECTS_SOURCE_ID,
+    minzoom: PROSPECT_DETAIL_ZOOM,
+    paint: {
+      'circle-radius': 6,
+      'circle-color': [
+        'case',
+        ['get', 'isPreciseAddress'],
+        dark ? '#f0efeb' : '#1d1a14',
+        APPROXIMATE_ADDRESS_DOT_COLOR,
+      ],
+      'circle-opacity': 0.9,
       'circle-stroke-color': dark ? '#131312' : '#fbf9f3',
       'circle-stroke-width': 1.5,
     },
@@ -384,10 +398,10 @@ function refreshMapData(): void {
   if (!map || !isMapReady.value) return
   const source: GeoJSONSource | undefined = map.getSource(CITIES_SOURCE_ID) as GeoJSONSource | undefined
   source?.setData(buildCitiesCollection())
+  const prospectSource: GeoJSONSource | undefined = map.getSource(PROSPECTS_SOURCE_ID) as GeoJSONSource | undefined
+  prospectSource?.setData(buildProspectsCollection())
   map.setPaintProperty(REGIONS_FILL_LAYER_ID, 'fill-color', regionFillColor())
 }
-
-// ─── Map lifecycle ────────────────────────────────────────────────────────────
 
 /**
  * Create the MapLibre map in the container (client-only, lazy-loaded chunk),
@@ -398,7 +412,8 @@ async function initMap(): Promise<void> {
   const container: HTMLElement | null = mapContainer.value
   if (!container || mapInstance) return
   try {
-    const maplibregl = (await import('maplibre-gl')).default
+    const maplibregl: typeof import('C:/Users/leogu/Desktop/Projects/devleadhunter/web/node_modules/maplibre-gl/dist/maplibre-gl') =
+      (await import('maplibre-gl')).default
     const map: MaplibreMap = new maplibregl.Map({
       container,
       style: MAP_STYLES[theme.value],
@@ -427,13 +442,107 @@ async function initMap(): Promise<void> {
     })
     map.on('mousemove', onMapMouseMove)
     map.on('mouseout', hideTip)
+    map.on('click', (event: MapMouseEvent): void => {
+      void onMapClick(event)
+    })
     mapInstance = map
   } catch {
     isMapFailed.value = true
   }
 }
 
-// ─── Tooltip ───────────────────────────────────────────────────────────────────
+/**
+ * Trade prefilled into search drawers when exactly one trade is selected.
+ * @returns A prefill fragment ({} when 0 or several trades are selected).
+ */
+function categoryPrefill(): { category?: string } {
+  return store.selectedCategories.length === 1 ? { category: store.selectedCategories[0] as string } : {}
+}
+
+/**
+ * Open the detail drawer of a prospect clicked on the map.
+ * @param prospectId - Identifier carried by the clicked feature.
+ * @returns A promise resolved once the drawer is pushed.
+ */
+async function openProspectFromMap(prospectId: number): Promise<void> {
+  if (!prospectId) return
+  try {
+    const prospect: Prospect = await ProspectsService.getProspect(prospectId)
+    drawerStack.push({ kind: 'prospect', prospect })
+  } catch {
+    // Prospect supprimé entre le chargement de la carte et le clic : on ignore.
+  }
+}
+
+/**
+ * Route a map click to the right drawer:
+ * - city dot → zone drawer listing that city's prospects;
+ * - covered region → zone drawer listing the region's prospects;
+ * - anything else → reverse geocode the click and prefill a new search there
+ *   (fallback: the region's biggest city).
+ * @param event - MapLibre click event.
+ * @returns A promise resolved once the drawer is opened.
+ */
+async function onMapClick(event: MapMouseEvent): Promise<void> {
+  const map: MaplibreMap | null = mapInstance
+  if (!map || !isMapReady.value) return
+  const features: MapGeoJSONFeature[] = map.queryRenderedFeatures(event.point, {
+    layers: [PROSPECTS_LAYER_ID, CITIES_LAYER_ID, REGIONS_FILL_LAYER_ID],
+  })
+  const feature: MapGeoJSONFeature | undefined = features[0]
+  if (!feature) return
+
+  // ── Prospect dot: open that prospect directly ──
+  if (feature.layer.id === PROSPECTS_LAYER_ID) {
+    await openProspectFromMap(Number(feature.properties?.prospectId ?? 0))
+    return
+  }
+
+  // ── City dot: prospected city → its prospect list ──
+  if (feature.layer.id === CITIES_LAYER_ID) {
+    const city: string = String(feature.properties?.city ?? '')
+    if (!city) return
+    drawerStack.push({
+      kind: 'coverage-prospects',
+      zone: { kind: 'city', label: city, cities: [city], prefillCity: city },
+    })
+    return
+  }
+
+  // ── Region fill ──
+  const code: string = String(feature.properties?.code ?? '')
+  const regionLabel: string = String(feature.properties?.nom ?? FRANCE_REGIONS[code] ?? '')
+  const isCovered: boolean = (regionTotals.value[code] ?? 0) > 0
+
+  if (isCovered) {
+    drawerStack.push({
+      kind: 'coverage-prospects',
+      zone: {
+        kind: 'region',
+        label: regionLabel,
+        cities: store.coveredCitiesOfRegion(code),
+        prefillCity: FRANCE_MAJOR_CITIES.find((c: FranceMajorCity): boolean => c.region === code)?.name,
+      },
+    })
+    return
+  }
+
+  // Falls back to the region's biggest city when the cursor is not over a commune.
+  const commune: ReverseGeocodedCommune | null = await reverseGeocodeCommune(event.lngLat.lng, event.lngLat.lat)
+  const fallback: string | undefined = FRANCE_MAJOR_CITIES.find(
+    (c: FranceMajorCity): boolean => c.region === code,
+  )?.name
+  const city: string | undefined = commune?.name ?? fallback
+  drawerStack.push({
+    kind: 'search-prospects',
+    prefill: { ...(city ? { city } : {}), ...categoryPrefill() },
+  })
+}
+
+/** Open the search drawer from the empty state. */
+function openSearchDrawer(): void {
+  drawerStack.push({ kind: 'search-prospects', prefill: { ...categoryPrefill() } })
+}
 
 /**
  * Show the tooltip for the topmost hovered feature (city dot, else region).
@@ -442,24 +551,35 @@ async function initMap(): Promise<void> {
 function onMapMouseMove(event: MapMouseEvent): void {
   const map: MaplibreMap | null = mapInstance
   if (!map || !isMapReady.value) return
-  const features = map.queryRenderedFeatures(event.point, {
-    layers: [CITIES_LAYER_ID, REGIONS_FILL_LAYER_ID],
+  const features: MapGeoJSONFeature[] = map.queryRenderedFeatures(event.point, {
+    layers: [PROSPECTS_LAYER_ID, CITIES_LAYER_ID, REGIONS_FILL_LAYER_ID],
   })
-  const feature = features[0]
+  const feature: MapGeoJSONFeature | undefined = features[0]
   map.getCanvas().style.cursor = feature ? 'pointer' : ''
   if (!feature) {
     hideTip()
     return
   }
-  const { x, y } = event.point
-  if (feature.layer.id === CITIES_LAYER_ID) {
+  const { x, y }: { x: number; y: number } = event.point
+  if (feature.layer.id === PROSPECTS_LAYER_ID) {
+    const isPrecise: boolean = Boolean(feature.properties?.isPreciseAddress)
+    tip.value = {
+      show: true,
+      x,
+      y,
+      title: String(feature.properties?.name ?? ''),
+      sub: isPrecise
+        ? `${String(feature.properties?.city ?? '')} — cliquer pour ouvrir`
+        : `${String(feature.properties?.city ?? '')} — adresse approchée`,
+    }
+  } else if (feature.layer.id === CITIES_LAYER_ID) {
     const count: number = Number(feature.properties?.count ?? 0)
     tip.value = {
       show: true,
       x,
       y,
       title: String(feature.properties?.city ?? ''),
-      sub: `${count} prospect${count > 1 ? 's' : ''}`,
+      sub: `${count} prospect${count > 1 ? 's' : ''} — cliquer pour voir`,
     }
   } else {
     const code: string = String(feature.properties?.code ?? '')
@@ -469,7 +589,10 @@ function onMapMouseMove(event: MapMouseEvent): void {
       x,
       y,
       title: String(feature.properties?.nom ?? ''),
-      sub: total > 0 ? `${total} prospect${total > 1 ? 's' : ''}` : 'Non prospectée',
+      sub:
+        total > 0
+          ? `${total} prospect${total > 1 ? 's' : ''} — cliquer pour voir`
+          : 'Non prospectée — cliquer pour attaquer',
     }
   }
 }
@@ -479,47 +602,30 @@ function hideTip(): void {
   tip.value.show = false
 }
 
-// ─── Data loading ────────────────────────────────────────────────────────────
-
-/**
- * Load coverage for the current scope, geocode its cities, then refresh the map.
- * @returns A promise resolved once loaded.
- */
-async function loadCoverage(): Promise<void> {
-  isLoading.value = true
-  try {
-    const [scopeName, memberId] = parseScope(scope.value)
-    const data: CoverageResponse = await getCoverage(scopeName, memberId)
-    coverage.value = data
-    if (members.value.length === 0 && data.members.length > 0) members.value = data.members
-    cityGeo.value = await geocodeCities(data.cities.map((c): string => c.city))
-  } catch {
-    coverage.value = { scope: scope.value, cities: [], total_prospects: 0, members: members.value }
-  } finally {
-    isLoading.value = false
-    refreshMapData()
-  }
-}
-
-/**
- * Split the scope select value into an API scope + optional member id.
- * @param value - 'me' | 'org' | 'member:{id}'.
- * @returns A [scope, memberId] tuple.
- */
-function parseScope(value: string): [string, number | undefined] {
-  if (value.startsWith('member:')) return ['member', Number(value.slice('member:'.length))]
-  return [value, undefined]
-}
-
-/** Reload coverage when the scope changes. */
-function onScopeChange(): void {
-  void loadCoverage()
-}
-
-// The map branch renders only once data exists — init when its container appears.
+// After the empty state tore the branch down, the old instance points at a dead container.
 watch(mapContainer, (container: HTMLElement | null): void => {
-  if (container) void initMap()
+  if (!container) return
+  if (mapInstance && mapInstance.getContainer() !== container) {
+    mapInstance.remove()
+    mapInstance = null
+    isMapReady.value = false
+  }
+  void initMap()
 })
+
+// Repaint whenever the store data changes (scope / trade filter reloads).
+// Les adresses arrivent après les villes : sans elles ici, les points resteraient au centre-ville.
+watch(
+  (): [typeof store.coverage, Record<string, CityGeo | null>, Record<string, AddressGeo | null>] => [
+    store.coverage,
+    store.cityGeo,
+    store.addressGeo,
+  ],
+  (): void => {
+    refreshMapData()
+  },
+  { deep: false },
+)
 
 // Basemap follows the app theme; overlays are re-added after the style swap.
 watch(theme, (mode: AppTheme): void => {
@@ -532,10 +638,6 @@ watch(theme, (mode: AppTheme): void => {
     addMapOverlays()
     refreshMapData()
   })
-})
-
-onMounted((): void => {
-  void loadCoverage()
 })
 
 onBeforeUnmount((): void => {

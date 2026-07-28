@@ -1,9 +1,20 @@
-/**
- * Props for the UiSearchProspectsDrawer component.
- */
-export interface SearchProspectsDrawerProps {
-  /** Whether the drawer is open. */
+/** Optional values pre-filled into the search form when the drawer opens. */
+export type SearchProspectsPrefill = {
+  category?: string
+  city?: string
+}
+
+export type SearchProspectsDrawerProps = {
   open: boolean
-  /** Whether to show the "back" affordance (drawer stacked on another). */
   showBack: boolean
+  prefill?: SearchProspectsPrefill | null
+}
+
+export type SearchFormState = {
+  category: string
+  city: string
+  maxResults: number
+  source: string
+  skipDuplicates: boolean
+  onlyWithoutWebsite: boolean
 }

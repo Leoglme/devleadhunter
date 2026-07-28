@@ -11,11 +11,12 @@ complementary to Google rather than a replacement.
 Looked up by business name + city via Nominatim search with ``extratags`` (which returns the
 OSM tags directly) — purpose-built for named lookup, unlike a costly Overpass regex scan.
 """
+
 from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Optional
+from typing import Any
 
 import aiohttp
 
@@ -38,9 +39,15 @@ _SOCIAL_TAGS: dict[str, tuple[str, str]] = {
 
 # OSM English day tokens → French labels.
 _DAYS: dict[str, str] = {
-    "Mo": "Lun", "Tu": "Mar", "We": "Mer", "Th": "Jeu",
-    "Fr": "Ven", "Sa": "Sam", "Su": "Dim",
-    "PH": "Jours fériés", "SH": "Vacances scolaires",
+    "Mo": "Lun",
+    "Tu": "Mar",
+    "We": "Mer",
+    "Th": "Jeu",
+    "Fr": "Ven",
+    "Sa": "Sam",
+    "Su": "Dim",
+    "PH": "Jours fériés",
+    "SH": "Vacances scolaires",
 }
 
 
@@ -58,8 +65,11 @@ def parse_osm_opening_hours(spec: str) -> list[dict[str, str]]:
     ``24/7``); a rule it can't split is kept verbatim so nothing is lost. Not the full OSM
     spec (which is famously complex) — just enough for a website's hours section.
 
-    @param spec - Raw OSM ``opening_hours`` value.
-    @returns A list of ``{day, hours}`` (French day labels).
+    Args:
+        spec: Raw OSM ``opening_hours`` value.
+
+    Returns:
+        A list of ``{day, hours}`` (French day labels).
     """
     if not spec or not isinstance(spec, str):
         return []
@@ -156,13 +166,13 @@ def _result_name(result: dict[str, Any]) -> str:
     return display.split(",")[0]
 
 
-def _best_match(results: list[dict[str, Any]], business_name: str) -> Optional[dict[str, Any]]:
+def _best_match(results: list[dict[str, Any]], business_name: str) -> dict[str, Any] | None:
     """Pick the Nominatim result whose name best matches (exact-normalised > contains)."""
     target = _normalize_name(business_name)
     if not target:
         return None
-    exact: Optional[dict[str, Any]] = None
-    contains: Optional[dict[str, Any]] = None
+    exact: dict[str, Any] | None = None
+    contains: dict[str, Any] | None = None
     for result in results:
         name = _normalize_name(_result_name(result))
         if not name:
@@ -174,14 +184,15 @@ def _best_match(results: list[dict[str, Any]], business_name: str) -> Optional[d
     return exact or contains
 
 
-async def enrich_from_osm(business_name: str, city: Optional[str]) -> dict[str, Any]:
+async def enrich_from_osm(business_name: str, city: str | None) -> dict[str, Any]:
     """Fetch complementary enrichment for one business from OpenStreetMap.
 
-    @param business_name - The business to look up.
-    @param city - City appended to the search query to disambiguate.
-    @returns A partial enrichment dict (only the fields OSM could resolve): any of
-        ``opening_hours``, ``social_links``, ``description``, ``email``, ``website``,
-        ``phone``. Empty dict when nothing is found or OSM is unreachable.
+    Args:
+        business_name: The business to look up.
+        city: City appended to the search query to disambiguate.
+
+    Returns:
+        A partial enrichment dict (only the fields OSM could resolve): any of ``opening_hours``, ``social_links``, ``description``, ``email``, ``website``, ``phone``. Empty dict when nothing is found or OSM is unreachable.
     """
     if not business_name or not business_name.strip():
         return {}
@@ -195,20 +206,20 @@ async def enrich_from_osm(business_name: str, city: Optional[str]) -> dict[str, 
         "namedetails": 1,
     }
     try:
-        async with aiohttp.ClientSession(headers=_HEADERS) as session:
-            async with session.get(
-                _NOMINATIM_URL, params=params, timeout=aiohttp.ClientTimeout(total=15)
-            ) as response:
-                if response.status != 200:
-                    logger.info("Nominatim enrichment returned %s for %s", response.status, business_name)
-                    return {}
-                results = await response.json()
+        async with (
+            aiohttp.ClientSession(headers=_HEADERS) as session,
+            session.get(_NOMINATIM_URL, params=params, timeout=aiohttp.ClientTimeout(total=15)) as response,
+        ):
+            if response.status != 200:
+                logger.info("Nominatim enrichment returned %s for %s", response.status, business_name)
+                return {}
+            results = await response.json()
         if not isinstance(results, list) or not results:
             return {}
         match = _best_match(results, business_name)
         if match is None:
             return {}
         return _extract_from_tags(match.get("extratags") or {})
-    except Exception as exc:  # noqa: BLE001 — complementary source, never fatal
+    except Exception as exc:
         logger.info("OSM enrichment unavailable for %s: %s", business_name, exc)
         return {}

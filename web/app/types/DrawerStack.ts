@@ -1,4 +1,7 @@
-import type { EmailLog, EmailTemplate, Prospect } from '~/types'
+import type { EmailLog, EmailTemplate, Prospect, User } from '~/types'
+import type { Order } from '~/services/ordersService'
+import type { SearchProspectsPrefill } from '~/types/SearchProspectsDrawer'
+import type { CampaignDetailResponse } from '~/services/campaignService'
 
 /**
  * Entries of the persistent right-side drawer stack.
@@ -10,79 +13,112 @@ import type { EmailLog, EmailTemplate, Prospect } from '~/types'
  * the top entry.
  */
 
-/** Prospect detail drawer entry. */
-export interface ProspectDrawerEntry {
+export type ProspectDrawerEntry = {
   kind: 'prospect'
-  /** Prospect displayed by the drawer. */
   prospect: Prospect
+  /** Open straight on the edit form (pencil action of the prospect table). */
+  startInEdit?: boolean
 }
 
+/** Step taken by the prospect drawer inside the list it browses. */
+export type ProspectBrowseDirection = 'previous' | 'next'
+
 /** Prefilled values of the email composer (e.g. « Renvoyer » from a log). */
-export interface SendEmailPrefill {
+export type SendEmailPrefill = {
   recipient_email: string
   recipient_name: string
   subject: string
   body: string
 }
 
-/** Manual email composer drawer entry. */
-export interface SendEmailDrawerEntry {
+export type SendEmailDrawerEntry = {
   kind: 'send-email'
-  /** Prefilled recipient (null opens a blank composer). */
   prospect: Prospect | null
-  /** Explicit prefill overriding the prospect-derived values. */
   prefill?: SendEmailPrefill
 }
 
-/** Email log detail drawer entry. */
-export interface EmailLogDrawerEntry {
+export type EmailLogDrawerEntry = {
   kind: 'email-log'
-  /** Log displayed by the drawer. */
   log: EmailLog
-  /** Resolved campaign name (display only). */
   campaignName: string | undefined
 }
 
-/** Mode of the email template drawer. */
 export type EmailTemplateDrawerMode = 'create' | 'edit' | 'preview'
 
-/** Email template create/edit/preview drawer entry. */
-export interface EmailTemplateDrawerEntry {
+export type EmailTemplateDrawerEntry = {
   kind: 'email-template'
-  /** Drawer mode. */
   mode: EmailTemplateDrawerMode
-  /** Template being edited or previewed (null in create mode). */
   template: EmailTemplate | null
 }
 
-/** User profile edit drawer entry. */
-export interface ProfileDrawerEntry {
+export type EmailSignaturesDrawerEntry = {
+  kind: 'email-signatures'
+}
+
+export type ProfileDrawerEntry = {
   kind: 'profile'
 }
 
-/** Organization (team) management drawer entry. */
-export interface OrganizationDrawerEntry {
+export type OrganizationDrawerEntry = {
   kind: 'organization'
 }
 
-/** Campaign creation drawer entry. */
-export interface CreateCampaignDrawerEntry {
-  kind: 'create-campaign'
+export type CampaignFormDrawerMode = 'create' | 'edit'
+
+export type CampaignFormDrawerEntry = {
+  kind: 'campaign-form'
+  mode: CampaignFormDrawerMode
+  campaign: CampaignDetailResponse | null
 }
 
-/** Manual prospect creation drawer entry. */
-export interface AddProspectDrawerEntry {
+export type AddProspectDrawerEntry = {
   kind: 'add-prospect'
 }
 
-/** Prospect search (scraping) drawer entry. */
-export interface SearchProspectsDrawerEntry {
+export type SearchProspectsDrawerEntry = {
   kind: 'search-prospects'
+  prefill?: SearchProspectsPrefill
 }
 
-/** Send-policy (email cadence) drawer entry. */
-export interface SendPolicyDrawerEntry {
+export type SendPolicyDrawerEntry = {
   kind: 'send-policy'
+}
+
+export type OrderDrawerEntry = {
+  kind: 'order'
+  order: Order
+}
+
+export type UserFormDrawerMode = 'create' | 'edit'
+
+export type UserFormDrawerEntry = {
+  kind: 'user-form'
+  mode: UserFormDrawerMode
+  user: User | null
+}
+
+/** Sale finalization: reviewed billing details → invoice → sale email. */
+export type FinalizeSaleDrawerEntry = {
+  kind: 'finalize-sale'
+  order: Order
+}
+
+/** A zone of the coverage map (one city, or a region's covered cities). */
+export type CoverageZone = {
+  kind: 'city' | 'region'
+  label: string
+  cities: string[]
+  prefillCity?: string
+}
+
+/** Coverage-map filters drawer entry (trades + zones to attack). */
+export type CoverageFiltersDrawerEntry = {
+  kind: 'coverage-filters'
+}
+
+export type CoverageProspectsDrawerEntry = {
+  kind: 'coverage-prospects'
+  zone: CoverageZone
 }
 
 /** One entry of the persistent drawer stack. */
@@ -91,12 +127,21 @@ export type DrawerStackEntry =
   | SendEmailDrawerEntry
   | EmailLogDrawerEntry
   | EmailTemplateDrawerEntry
+  | EmailSignaturesDrawerEntry
   | ProfileDrawerEntry
   | OrganizationDrawerEntry
-  | CreateCampaignDrawerEntry
+  | CampaignFormDrawerEntry
   | AddProspectDrawerEntry
   | SearchProspectsDrawerEntry
   | SendPolicyDrawerEntry
+  | CoverageFiltersDrawerEntry
+  | CoverageProspectsDrawerEntry
+  | OrderDrawerEntry
+  | FinalizeSaleDrawerEntry
+  | UserFormDrawerEntry
 
 /** Cross-page notice describing the latest prospect mutation done from a drawer. */
 export type ProspectMutationNotice = { type: 'updated'; prospect: Prospect } | { type: 'deleted'; prospectId: number }
+
+/** Cross-page notice describing the latest order mutation done from a drawer. */
+export type OrderMutationNotice = { type: 'updated'; order: Order } | { type: 'deleted'; orderId: number }

@@ -1,21 +1,24 @@
 <template>
   <div>
-    <!-- Prospect detail -->
     <UiProspectDrawer
       :open="prospectEntry !== null"
       :prospect="prospectEntry?.prospect ?? null"
+      :start-in-edit="prospectEntry?.startInEdit ?? false"
+      :browse-position-label="browsePositionLabel"
+      :can-browse-previous="canBrowsePrevious"
+      :can-browse-next="canBrowseNext"
       :show-back="hasPrevious"
       @close="drawerStack.closeAll()"
       @back="drawerStack.back()"
+      @browse-previous="browseToProspect('previous')"
+      @browse-next="browseToProspect('next')"
       @updated="handleProspectUpdated"
       @deleted="handleProspectDeleted"
-      @add-to-campaign="handleAddToCampaign"
       @send-email="handleSendEmail"
       @mark-as-sold="handleMarkAsSold"
       @toggle-contacted="handleToggleContacted"
     />
 
-    <!-- Manual email composer -->
     <UiSendEmailDrawer
       :open="sendEmailEntry !== null"
       :prospect="sendEmailEntry?.prospect ?? null"
@@ -26,7 +29,6 @@
       @sent="handleEmailSent"
     />
 
-    <!-- Email log detail -->
     <UiEmailLogDrawer
       :open="emailLogEntry !== null"
       :log="emailLogEntry?.log ?? null"
@@ -37,7 +39,6 @@
       @resend="handleResendEmail"
     />
 
-    <!-- Email template create / edit / preview -->
     <UiEmailTemplateDrawer
       :open="emailTemplateEntry !== null"
       :mode="emailTemplateEntry?.mode ?? 'create'"
@@ -49,7 +50,13 @@
       @edit="handleTemplateEdit"
     />
 
-    <!-- User profile edit -->
+    <UiEmailSignaturesDrawer
+      :open="emailSignaturesEntry !== null"
+      :show-back="hasPrevious"
+      @close="drawerStack.closeAll()"
+      @back="drawerStack.back()"
+    />
+
     <UiProfileDrawer
       :open="profileEntry !== null"
       :show-back="hasPrevious"
@@ -57,7 +64,6 @@
       @back="drawerStack.back()"
     />
 
-    <!-- Organization (team) management -->
     <UiOrganizationDrawer
       :open="organizationEntry !== null"
       :show-back="hasPrevious"
@@ -65,15 +71,16 @@
       @back="drawerStack.back()"
     />
 
-    <!-- Campaign creation -->
-    <UiCreateCampaignDrawer
-      :open="createCampaignEntry !== null"
+    <UiCampaignDrawer
+      :open="campaignFormEntry !== null"
+      :mode="campaignFormEntry?.mode ?? 'create'"
+      :campaign="campaignFormEntry?.campaign ?? null"
       :show-back="hasPrevious"
       @close="drawerStack.closeAll()"
       @back="drawerStack.back()"
+      @saved="handleCampaignSaved"
     />
 
-    <!-- Manual prospect creation -->
     <UiAddProspectDrawer
       :open="addProspectEntry !== null"
       :show-back="hasPrevious"
@@ -82,48 +89,101 @@
       @created="handleProspectCreated"
     />
 
-    <!-- Prospect search (scraping) -->
     <UiSearchProspectsDrawer
       :open="searchProspectsEntry !== null"
       :show-back="hasPrevious"
+      :prefill="searchProspectsEntry?.prefill ?? null"
       @close="drawerStack.closeAll()"
       @back="drawerStack.back()"
     />
 
-    <!-- Send policy (email cadence) -->
     <UiSendPolicyDrawer
       :open="sendPolicyEntry !== null"
       :show-back="hasPrevious"
       @close="drawerStack.closeAll()"
       @back="drawerStack.back()"
     />
+
+    <UiCoverageFiltersDrawer
+      :open="coverageFiltersEntry !== null"
+      :show-back="hasPrevious"
+      @close="drawerStack.closeAll()"
+      @back="drawerStack.back()"
+    />
+
+    <UiCoverageProspectsDrawer
+      :open="coverageProspectsEntry !== null"
+      :show-back="hasPrevious"
+      :zone="coverageProspectsEntry?.zone ?? null"
+      @close="drawerStack.closeAll()"
+      @back="drawerStack.back()"
+    />
+
+    <UiOrderDrawer
+      :open="orderEntry !== null"
+      :order="orderEntry?.order ?? null"
+      :show-back="hasPrevious"
+      @close="drawerStack.closeAll()"
+      @back="drawerStack.back()"
+      @updated="drawerStack.notifyOrderUpdated"
+      @deleted="handleOrderDeleted"
+      @finalize="handleFinalizeSale"
+    />
+
+    <UiFinalizeSaleDrawer
+      :open="finalizeSaleEntry !== null"
+      :order="finalizeSaleEntry?.order ?? null"
+      :show-back="hasPrevious"
+      @close="drawerStack.closeAll()"
+      @back="drawerStack.back()"
+      @updated="drawerStack.notifyOrderUpdated"
+    />
+
+    <UiUserFormDrawer
+      :open="userFormEntry !== null"
+      :mode="userFormEntry?.mode ?? 'create'"
+      :user="userFormEntry?.user ?? null"
+      :show-back="hasPrevious"
+      @close="drawerStack.closeAll()"
+      @back="drawerStack.back()"
+      @saved="handleUserSaved"
+    />
   </div>
 </template>
 
 <script lang="ts" setup>
+import type { UseToastReturn } from '~/types/Composables'
 import type { ComputedRef } from 'vue'
 import type {
   AddProspectDrawerEntry,
-  CreateCampaignDrawerEntry,
+  CoverageFiltersDrawerEntry,
+  CoverageProspectsDrawerEntry,
+  CampaignFormDrawerEntry,
   EmailLogDrawerEntry,
+  EmailSignaturesDrawerEntry,
   EmailTemplateDrawerEntry,
+  FinalizeSaleDrawerEntry,
+  OrderDrawerEntry,
   OrganizationDrawerEntry,
   ProfileDrawerEntry,
+  ProspectBrowseDirection,
   ProspectDrawerEntry,
   SearchProspectsDrawerEntry,
   SendEmailDrawerEntry,
   SendPolicyDrawerEntry,
+  UserFormDrawerEntry,
 } from '~/types/DrawerStack'
 import type { EmailTemplate, Prospect } from '~/types'
+import type { Order } from '~/services/ordersService'
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useDrawerStackStore } from '~/stores/drawerStack'
-import { updateProspect } from '~/services/prospectsService'
-import { createOrder } from '~/services/ordersService'
+import { ProspectsService } from '~/services/prospectsService'
+import { OrdersService } from '~/services/ordersService'
 import { useToast } from '~/composables/useToast'
 
-const drawerStack = useDrawerStackStore()
+const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 
-const toast = useToast()
+const toast: UseToastReturn = useToast()
 
 /** Top entry narrowed to the prospect drawer (null when another kind is on top). */
 const prospectEntry: ComputedRef<ProspectDrawerEntry | null> = computed((): ProspectDrawerEntry | null => {
@@ -147,6 +207,13 @@ const emailTemplateEntry: ComputedRef<EmailTemplateDrawerEntry | null> = compute
   },
 )
 
+/** Top entry narrowed to the email-signatures drawer. */
+const emailSignaturesEntry: ComputedRef<EmailSignaturesDrawerEntry | null> = computed(
+  (): EmailSignaturesDrawerEntry | null => {
+    return drawerStack.topEntry?.kind === 'email-signatures' ? drawerStack.topEntry : null
+  },
+)
+
 /** Top entry narrowed to the profile drawer. */
 const profileEntry: ComputedRef<ProfileDrawerEntry | null> = computed((): ProfileDrawerEntry | null => {
   return drawerStack.topEntry?.kind === 'profile' ? drawerStack.topEntry : null
@@ -157,12 +224,20 @@ const organizationEntry: ComputedRef<OrganizationDrawerEntry | null> = computed(
   return drawerStack.topEntry?.kind === 'organization' ? drawerStack.topEntry : null
 })
 
-/** Top entry narrowed to the campaign creation drawer. */
-const createCampaignEntry: ComputedRef<CreateCampaignDrawerEntry | null> = computed(
-  (): CreateCampaignDrawerEntry | null => {
-    return drawerStack.topEntry?.kind === 'create-campaign' ? drawerStack.topEntry : null
-  },
-)
+/** Top entry narrowed to the campaign create/edit drawer. */
+const campaignFormEntry: ComputedRef<CampaignFormDrawerEntry | null> = computed((): CampaignFormDrawerEntry | null => {
+  return drawerStack.topEntry?.kind === 'campaign-form' ? drawerStack.topEntry : null
+})
+
+/** Campaign renamed from its drawer — refresh the page behind, then leave the stack. */
+function handleCampaignSaved(): void {
+  drawerStack.bumpCampaignsRefresh()
+  if (drawerStack.hasPrevious) {
+    drawerStack.back()
+  } else {
+    drawerStack.closeAll()
+  }
+}
 
 /** Top entry narrowed to the manual prospect creation drawer. */
 const addProspectEntry: ComputedRef<AddProspectDrawerEntry | null> = computed((): AddProspectDrawerEntry | null => {
@@ -180,6 +255,60 @@ const searchProspectsEntry: ComputedRef<SearchProspectsDrawerEntry | null> = com
 const sendPolicyEntry: ComputedRef<SendPolicyDrawerEntry | null> = computed((): SendPolicyDrawerEntry | null => {
   return drawerStack.topEntry?.kind === 'send-policy' ? drawerStack.topEntry : null
 })
+
+/** Coverage-map filters entry when it is the top of the stack. */
+const coverageFiltersEntry: ComputedRef<CoverageFiltersDrawerEntry | null> = computed(
+  (): CoverageFiltersDrawerEntry | null => {
+    return drawerStack.topEntry?.kind === 'coverage-filters' ? drawerStack.topEntry : null
+  },
+)
+
+/** Top entry narrowed to the order drawer. */
+const orderEntry: ComputedRef<OrderDrawerEntry | null> = computed((): OrderDrawerEntry | null => {
+  return drawerStack.topEntry?.kind === 'order' ? drawerStack.topEntry : null
+})
+
+/** Top entry narrowed to the sale finalization drawer. */
+const finalizeSaleEntry: ComputedRef<FinalizeSaleDrawerEntry | null> = computed((): FinalizeSaleDrawerEntry | null => {
+  return drawerStack.topEntry?.kind === 'finalize-sale' ? drawerStack.topEntry : null
+})
+
+/** Top entry narrowed to the user create/edit drawer. */
+const userFormEntry: ComputedRef<UserFormDrawerEntry | null> = computed((): UserFormDrawerEntry | null => {
+  return drawerStack.topEntry?.kind === 'user-form' ? drawerStack.topEntry : null
+})
+
+/** User saved from its drawer — refresh the list page, then leave the stack. */
+function handleUserSaved(): void {
+  drawerStack.bumpUsersRefresh()
+  if (drawerStack.hasPrevious) {
+    drawerStack.back()
+  } else {
+    drawerStack.closeAll()
+  }
+}
+
+/** Stack the sale finalization on top of the order drawer. */
+function handleFinalizeSale(): void {
+  const entry: OrderDrawerEntry | null = orderEntry.value
+  if (entry) drawerStack.push({ kind: 'finalize-sale', order: entry.order })
+}
+
+/**
+ * Order deleted from its drawer — drop it from the stack and close.
+ * @param orderId - Identifier of the deleted order.
+ */
+function handleOrderDeleted(orderId: number): void {
+  drawerStack.notifyOrderDeleted(orderId)
+  drawerStack.closeAll()
+}
+
+/** Coverage-map zone prospects entry when it is the top of the stack. */
+const coverageProspectsEntry: ComputedRef<CoverageProspectsDrawerEntry | null> = computed(
+  (): CoverageProspectsDrawerEntry | null => {
+    return drawerStack.topEntry?.kind === 'coverage-prospects' ? drawerStack.topEntry : null
+  },
+)
 
 /**
  * Prospect created from the add drawer — notify pages (list insert) and chain
@@ -202,22 +331,39 @@ function handleProspectUpdated(updated: Prospect): void {
   drawerStack.notifyProspectUpdated(updated)
 }
 
+/** Position of the open prospect in the browsed list, -1 when that list is unknown. */
+const browseIndex: ComputedRef<number> = computed((): number => {
+  const openId: number | undefined = prospectEntry.value?.prospect.id
+  if (openId === undefined) return -1
+  return drawerStack.prospectBrowseList.findIndex((candidate: Prospect): boolean => candidate.id === openId)
+})
+
+const browsePositionLabel: ComputedRef<string> = computed((): string =>
+  browseIndex.value < 0 ? '' : `${browseIndex.value + 1} / ${drawerStack.prospectBrowseList.length}`,
+)
+
+const canBrowsePrevious: ComputedRef<boolean> = computed((): boolean => browseIndex.value > 0)
+
+const canBrowseNext: ComputedRef<boolean> = computed(
+  (): boolean => browseIndex.value >= 0 && browseIndex.value < drawerStack.prospectBrowseList.length - 1,
+)
+
 /**
- * Prospect deleted from the drawer — close it and notify pages.
+ * Open the neighbouring prospect of the browsed list, keeping the drawer in place.
+ * @param direction - Which neighbour to open.
+ */
+function browseToProspect(direction: ProspectBrowseDirection): void {
+  const step: number = direction === 'previous' ? -1 : 1
+  const target: Prospect | undefined = drawerStack.prospectBrowseList[browseIndex.value + step]
+  if (target) drawerStack.push({ kind: 'prospect', prospect: target })
+}
+
+/**
+ * Prospect deleted from its drawer — drop it from the stack and notify pages.
  * @param prospectId - Identifier of the deleted prospect.
  */
 function handleProspectDeleted(prospectId: number): void {
   drawerStack.notifyProspectDeleted(prospectId)
-}
-
-/**
- * « Campagne » action — chain the prospect into the campaigns page. The
- * drawer stays open across the navigation (that's the whole point of the
- * persistent stack).
- * @param prospect - The prospect to add to a campaign.
- */
-function handleAddToCampaign(prospect: Prospect): void {
-  navigateTo(`/dashboard/campaigns?addProspect=${prospect.id}`)
 }
 
 /**
@@ -234,14 +380,14 @@ function handleSendEmail(prospect: Prospect): void {
  */
 async function handleMarkAsSold(prospect: Prospect): Promise<void> {
   try {
-    await createOrder({
+    const order: Order = await OrdersService.createOrder({
       product_type: 'website',
       prospect_id: prospect.id,
       business_name: prospect.name,
       customer_email: prospect.email ?? null,
     })
     toast.success(`Vente créée pour « ${prospect.name} »`)
-    drawerStack.closeAll()
+    drawerStack.push({ kind: 'order', order })
     navigateTo('/dashboard/orders')
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : 'Erreur lors de la création de la vente')
@@ -255,7 +401,7 @@ async function handleMarkAsSold(prospect: Prospect): Promise<void> {
 async function handleToggleContacted(prospect: Prospect): Promise<void> {
   const next: boolean = !prospect.contacted
   try {
-    const updated: Prospect = await updateProspect(prospect.id, { contacted: next })
+    const updated: Prospect = await ProspectsService.updateProspect(prospect.id, { contacted: next })
     drawerStack.notifyProspectUpdated(updated)
     toast.success(next ? `« ${prospect.name} » marqué comme contacté` : `« ${prospect.name} » remis en non contacté`)
   } catch (err: unknown) {
@@ -276,12 +422,9 @@ function htmlToPlainText(html: string | null | undefined): string {
   return (doc.body.textContent ?? '').replace(/\n{3,}/g, '\n\n').trim()
 }
 
-/**
- * « Renvoyer un email » from the log drawer — stack the composer prefilled
- * with the log's recipient, subject and body.
- */
+/** Stack email composer prefilled from the log row (resend). */
 function handleResendEmail(): void {
-  const entry = emailLogEntry.value
+  const entry: EmailLogDrawerEntry | null = emailLogEntry.value
   if (!entry) return
   drawerStack.push({
     kind: 'send-email',
@@ -295,10 +438,7 @@ function handleResendEmail(): void {
   })
 }
 
-/**
- * Email sent from the composer — refresh the logs and go back to the
- * previous drawer when one exists (e.g. the prospect), else close.
- */
+/** Refresh logs after send; back or close the stack. */
 function handleEmailSent(): void {
   drawerStack.bumpEmailLogsRefresh()
   if (drawerStack.hasPrevious) {
@@ -308,10 +448,7 @@ function handleEmailSent(): void {
   }
 }
 
-/**
- * Template saved (created or edited) — refresh the templates page and go
- * back or close.
- */
+/** Refresh templates after save; back or close the stack. */
 function handleTemplateSaved(): void {
   drawerStack.bumpEmailTemplatesRefresh()
   if (drawerStack.hasPrevious) {

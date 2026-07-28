@@ -1,13 +1,10 @@
 <template>
   <Teleport to="body">
-    <!-- Pas de backdrop : drawer non-modal (navigation possible pendant qu'il
-         est ouvert), fermeture par X / Échap. -->
     <Transition name="drawer-panel">
       <div
         v-if="open"
         class="fixed top-0 right-0 z-50 flex h-dvh w-full max-w-[480px] flex-col border-l border-[var(--app-line)] bg-[var(--app-surface)] shadow-2xl"
       >
-        <!-- ───────────────────────── Header ───────────────────────── -->
         <div class="flex items-start gap-3 border-b border-[var(--app-line)] px-5 py-4">
           <button
             v-if="showBack"
@@ -37,32 +34,44 @@
           </button>
         </div>
 
-        <!-- ───────────────────────── Body ────────────────────────── -->
         <form id="profile-form" class="flex-1 space-y-4 overflow-y-auto px-5 py-4" @submit.prevent="handleSave">
           <div>
             <label class="text-muted mb-1.5 block text-xs font-medium" for="profile-name">Nom</label>
-            <input id="profile-name" v-model="form.name" type="text" required class="input-field" />
+            <input
+              id="profile-name"
+              v-model="form.name"
+              type="text"
+              required
+              class="input-field"
+              placeholder="Jean Dupont"
+            />
           </div>
 
           <div>
             <label class="text-muted mb-1.5 block text-xs font-medium" for="profile-email"> Email de connexion </label>
-            <input id="profile-email" v-model="form.email" type="email" required class="input-field" />
+            <input
+              id="profile-email"
+              v-model="form.email"
+              type="email"
+              required
+              class="input-field"
+              placeholder="jean@exemple.fr"
+            />
             <UiCallout variant="info" class="mt-3">
               Cette adresse sert uniquement à
               <strong class="font-medium text-[var(--app-ink)]">vous connecter</strong> à DevLeadHunter. L'adresse
               d'<strong class="font-medium text-[var(--app-ink)]">envoi</strong> de vos emails de prospection se règle
               dans
               <NuxtLink
-                to="/dashboard/email-accounts"
+                to="/dashboard/settings/sending"
                 class="font-medium text-[var(--app-blue)] underline underline-offset-2 transition-opacity hover:opacity-80"
                 @click="emit('close')"
-                >Comptes email</NuxtLink
+                >Configuration d'envoi</NuxtLink
               >.
             </UiCallout>
           </div>
         </form>
 
-        <!-- ───────────────────────── Footer ─────────────────────── -->
         <div class="flex gap-2 border-t border-[var(--app-line)] px-5 py-4">
           <button type="button" class="btn-secondary flex-1" :disabled="isSaving" @click="emit('close')">
             Annuler
@@ -83,21 +92,16 @@
 </template>
 
 <script lang="ts" setup>
-import type { ComputedRef, Ref } from 'vue'
+import type { UseToastReturn } from '~/types/Composables'
+import type { ProfileForm, UiProfileDrawerEmits } from '~/types/UiProfileDrawer'
+import type { ComputedRef, EmitFn, Ref } from 'vue'
+import type { UiDrawerProps } from '~/types/UiDrawer'
 import { computed, ref, watch } from 'vue'
 import { useUserStore } from '~/stores/user'
 import { useToast } from '~/composables/useToast'
 
-/** Local shape of the profile form. */
-interface ProfileForm {
-  name: string
-  email: string
-}
-
-/**
- * Defines the component props.
- */
-const props = defineProps({
+/** User profile and password drawer. */
+const props: UiDrawerProps = defineProps({
   open: {
     type: Boolean,
     required: true,
@@ -108,22 +112,17 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits<{
-  /** Close every drawer. */
-  close: []
-  /** Go back to the previous drawer of the stack. */
-  back: []
-}>()
+const emit: EmitFn<UiProfileDrawerEmits> = defineEmits<UiProfileDrawerEmits>()
 
-const userStore = useUserStore()
+const userStore: ReturnType<typeof useUserStore> = useUserStore()
 
-const toast = useToast()
+const toast: UseToastReturn = useToast()
 
 /** Whether the save request is in flight. */
-const isSaving: Ref<boolean> = ref<boolean>(false)
+const isSaving: Ref<boolean> = ref(false)
 
 /** Editable profile form state. */
-const form: Ref<ProfileForm> = ref<ProfileForm>({ name: '', email: '' })
+const form: Ref<ProfileForm> = ref({ name: '', email: '' })
 
 /** Initials shown in the header avatar. */
 const userInitials: ComputedRef<string> = computed((): string => {

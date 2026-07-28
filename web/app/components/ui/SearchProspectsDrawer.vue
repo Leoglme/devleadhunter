@@ -5,7 +5,6 @@
         v-if="open"
         class="fixed top-0 right-0 z-50 flex h-dvh w-full max-w-[460px] flex-col border-l border-[var(--app-line)] bg-[var(--app-surface)] shadow-2xl"
       >
-        <!-- Header -->
         <div class="flex items-start gap-3 border-b border-[var(--app-line)] px-5 py-4">
           <button
             v-if="showBack"
@@ -22,7 +21,9 @@
           </span>
           <div class="min-w-0 flex-1">
             <h2 class="text-base leading-tight font-semibold text-[var(--app-ink)]">Trouver des prospects</h2>
-            <p class="mt-0.5 text-[11px] text-[var(--app-ink-soft)]">Métier + ville → artisans qui correspondent</p>
+            <p class="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--app-ink-soft)]">
+              Métier + ville <UIcon name="i-lucide-arrow-right" class="h-3 w-3 shrink-0" /> artisans qui correspondent
+            </p>
           </div>
           <button
             class="flex h-7 w-7 shrink-0 items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
@@ -32,7 +33,6 @@
           </button>
         </div>
 
-        <!-- Body -->
         <div class="flex-1 space-y-5 overflow-y-auto px-5 py-4">
           <form id="search-prospects-form" class="space-y-4" @submit.prevent="submit">
             <div>
@@ -81,6 +81,7 @@
                 type="number"
                 min="1"
                 max="100"
+                placeholder="10"
                 required
                 class="app-input w-full"
               />
@@ -113,27 +114,43 @@
             </div>
           </form>
 
-          <!-- Live status (compact) -->
           <div v-if="store.currentJob" class="rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-3.5">
             <div class="mb-1.5 flex items-center justify-between text-xs">
-              <span class="font-medium text-[var(--app-ink)]">
-                {{ store.currentJob.status === 'completed' ? 'Recherche terminée' : 'Recherche en cours…' }}
-              </span>
+              <span class="font-medium text-[var(--app-ink)]">{{ statusLabel }}</span>
               <span class="text-[var(--app-ink-soft)] tabular-nums">
                 {{ store.liveProgress.current }} / {{ store.liveProgress.total || store.currentJob.max_results }}
               </span>
             </div>
             <div class="h-2 w-full overflow-hidden rounded-full bg-[var(--app-surface-2)]">
               <div
-                class="h-full rounded-full bg-[var(--app-ink)] transition-all"
+                class="h-full rounded-full transition-all"
+                :class="store.currentJob.status === 'cancelled' ? 'bg-[var(--app-ink-soft)]' : 'bg-[var(--app-ink)]'"
                 :style="{ width: Math.min(store.liveProgress.percentage, 100) + '%' }"
               />
             </div>
-            <p v-if="store.liveProgress.current_prospect" class="mt-2 truncate text-[11px] text-[var(--app-ink-soft)]">
+            <p
+              v-if="store.isSearching && store.liveProgress.current_prospect"
+              class="mt-2 truncate text-[11px] text-[var(--app-ink-soft)]"
+            >
               {{ store.liveProgress.current_prospect }}
             </p>
+
+            <button
+              v-if="store.isSearching"
+              type="button"
+              class="mt-2.5 inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--app-red)] transition-opacity hover:opacity-80 disabled:opacity-50"
+              :disabled="store.isCancelling"
+              @click="store.cancelSearch()"
+            >
+              <UIcon
+                :name="store.isCancelling ? 'i-lucide-loader-circle' : 'i-lucide-circle-stop'"
+                :class="['h-3.5 w-3.5', store.isCancelling && 'animate-spin']"
+              />
+              {{ store.isCancelling ? 'Annulation…' : 'Annuler la recherche' }}
+            </button>
+
             <NuxtLink
-              v-if="store.currentJob.status === 'completed'"
+              v-if="store.currentJob.status === 'completed' || store.currentJob.status === 'cancelled'"
               to="/dashboard/my-prospects"
               class="mt-2.5 inline-flex items-center gap-1 text-[11px] font-medium text-[var(--app-ink)] hover:underline"
               @click="emit('close')"
@@ -142,29 +159,28 @@
             </NuxtLink>
           </div>
 
-          <!-- Comment ça marche (below the form) -->
-          <div class="rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-4">
-            <p class="app-label mb-3">Comment ça marche</p>
-            <ol class="space-y-2.5">
-              <li v-for="(text, index) in SEARCH_STEPS" :key="text" class="flex items-start gap-2.5">
-                <span
-                  class="font-label flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--app-surface-2)] text-[0.6rem] font-semibold text-[var(--app-ink)]"
-                >
-                  {{ index + 1 }}
-                </span>
-                <p class="text-[11px] leading-relaxed text-[var(--app-ink-soft)]">{{ text }}</p>
-              </li>
-            </ol>
-            <p
-              class="mt-3 flex items-center gap-2 border-t border-[var(--app-line-soft)] pt-3 text-[11px] text-[var(--app-ink-soft)]"
-            >
-              <UIcon name="i-lucide-info" class="h-3.5 w-3.5 shrink-0 text-[var(--app-accent-ink)]" />
-              Chaque prospect trouvé consomme des crédits selon vos paramètres.
-            </p>
-          </div>
+          <UiCollapsibleCard icon="i-lucide-info" title="Comment ça marche">
+            <div class="px-4 py-4">
+              <ol class="space-y-2.5">
+                <li v-for="(text, index) in SEARCH_STEPS" :key="text" class="flex items-start gap-2.5">
+                  <span
+                    class="font-label flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--app-surface-2)] text-[0.6rem] font-semibold text-[var(--app-ink)]"
+                  >
+                    {{ index + 1 }}
+                  </span>
+                  <p class="text-[11px] leading-relaxed text-[var(--app-ink-soft)]">{{ text }}</p>
+                </li>
+              </ol>
+              <p
+                class="mt-3 flex items-center gap-2 border-t border-[var(--app-line-soft)] pt-3 text-[11px] text-[var(--app-ink-soft)]"
+              >
+                <UIcon name="i-lucide-info" class="h-3.5 w-3.5 shrink-0 text-[var(--app-accent-ink)]" />
+                Chaque prospect trouvé consomme des crédits selon vos paramètres.
+              </p>
+            </div>
+          </UiCollapsibleCard>
         </div>
 
-        <!-- Footer -->
         <div class="flex gap-2 border-t border-[var(--app-line)] px-5 py-4">
           <button type="button" class="app-btn-secondary flex-1" @click="emit('close')">Fermer</button>
           <button
@@ -186,28 +202,18 @@
 </template>
 
 <script lang="ts" setup>
-import type { Ref } from 'vue'
-import { ref, watch } from 'vue'
-import type { SearchProspectsDrawerProps } from '~/types/SearchProspectsDrawer'
+import type { UiSearchProspectsDrawerEmits } from '~/types/UiSearchProspectsDrawer'
+import type { UseToastReturn } from '~/types/Composables'
+import type { SearchFormState, SearchProspectsDrawerProps, SearchProspectsPrefill } from '~/types/SearchProspectsDrawer'
+import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { PROSPECT_SOURCE_SEARCH_OPTIONS } from '~/constants/prospectSources'
 import { useProspectSearchStore } from '~/stores/prospectSearch'
 import { useToast } from '~/composables/useToast'
 
-/** Local search form state. */
-interface SearchFormState {
-  category: string
-  city: string
-  maxResults: number
-  source: string
-  skipDuplicates: boolean
-  onlyWithoutWebsite: boolean
-}
-
 const STORAGE_KEY: string = 'devleadhunter-search-form'
 
-/**
- * Defines the component props.
- */
+/** Drawer to configure and launch prospect scraping. */
 const props: SearchProspectsDrawerProps = defineProps({
   open: {
     type: Boolean,
@@ -217,20 +223,33 @@ const props: SearchProspectsDrawerProps = defineProps({
     type: Boolean,
     default: false,
   },
+  prefill: {
+    type: Object as PropType<SearchProspectsPrefill | null>,
+    default: null,
+  },
 })
 
-const emit = defineEmits<{
-  /** Close every drawer. */
-  close: []
-  /** Go back to the previous drawer of the stack. */
-  back: []
-}>()
+const emit: EmitFn<UiSearchProspectsDrawerEmits> = defineEmits<UiSearchProspectsDrawerEmits>()
 
-const store = useProspectSearchStore()
-const toast = useToast()
+const store: ReturnType<typeof useProspectSearchStore> = useProspectSearchStore()
+const toast: UseToastReturn = useToast()
+
+/** Label of the live-status card, driven by the job status. */
+const statusLabel: ComputedRef<string> = computed((): string => {
+  switch (store.currentJob?.status) {
+    case 'completed':
+      return 'Recherche terminée'
+    case 'cancelled':
+      return 'Recherche annulée'
+    case 'failed':
+      return 'Recherche échouée'
+    default:
+      return 'Recherche en cours…'
+  }
+})
 
 /** Quick-pick trades. */
-const QUICK_CATEGORIES: ReadonlyArray<string> = [
+const QUICK_CATEGORIES: string[] = [
   'Plombier',
   'Électricien',
   'Menuisier',
@@ -242,7 +261,7 @@ const QUICK_CATEGORIES: ReadonlyArray<string> = [
 ]
 
 /** "How it works" steps. */
-const SEARCH_STEPS: ReadonlyArray<string> = [
+const SEARCH_STEPS: string[] = [
   'Saisissez un métier et une ville, puis lancez la recherche.',
   'DevLeadHunter parcourt les sources et ajoute les artisans trouvés à vos prospects.',
   'Les nouveaux prospects sont disponibles dans vos listes et automatisations.',
@@ -257,7 +276,7 @@ function defaultForm(): SearchFormState {
 }
 
 /** The editable form. */
-const form: Ref<SearchFormState> = ref<SearchFormState>(defaultForm())
+const form: Ref<SearchFormState> = ref(defaultForm())
 
 /** Load the persisted form (client only). */
 function loadForm(): void {
@@ -294,13 +313,27 @@ async function submit(): Promise<void> {
   }
 }
 
-// Load the saved form each time the drawer opens.
+// Le préremplissage de l'hôte s'applique par-dessus le formulaire sauvegardé.
 watch(
   (): boolean => props.open,
   (open: boolean): void => {
-    if (open) loadForm()
+    if (!open) return
+    loadForm()
+    if (props.prefill?.category) form.value.category = props.prefill.category
+    if (props.prefill?.city) form.value.city = props.prefill.city
   },
   { immediate: true },
+)
+
+// La pile remplace l'entrée sans fermer le drawer : le watcher `open` ne se redéclenche pas.
+watch(
+  (): SearchProspectsPrefill | null => props.prefill ?? null,
+  (prefill: SearchProspectsPrefill | null): void => {
+    if (!props.open || !prefill) return
+    if (prefill.category) form.value.category = prefill.category
+    if (prefill.city) form.value.city = prefill.city
+  },
+  { deep: true },
 )
 </script>
 

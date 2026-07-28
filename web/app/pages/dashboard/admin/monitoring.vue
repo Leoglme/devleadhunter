@@ -1,9 +1,12 @@
 <template>
   <div class="space-y-6">
-    <!-- Header -->
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
       <div>
-        <h1 class="text-xl font-semibold text-[var(--app-ink)]">Monitoring</h1>
+        <p class="app-label flex items-center gap-2">
+          <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+          Administration
+        </p>
+        <h1 class="app-page-title mt-2">Monitoring</h1>
         <p class="text-muted mt-1 text-sm">
           Santé du système et des sources de scraping — capturé automatiquement lors des vraies exécutions.
         </p>
@@ -21,8 +24,7 @@
       {{ error }}
     </div>
 
-    <!-- System health -->
-    <div v-if="overview" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div v-if="overview" class="grid grid-cols-2 gap-3 @xl:grid-cols-4">
       <div class="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-3">
         <p class="text-muted text-[10px] tracking-wide uppercase">Base de données</p>
         <p class="mt-1 flex items-center gap-2 text-sm font-semibold">
@@ -54,7 +56,6 @@
       </div>
     </div>
 
-    <!-- Per-source health -->
     <section v-if="overview">
       <h2 class="mb-3 text-sm font-semibold text-[var(--app-ink)]">Santé par source</h2>
       <div
@@ -63,7 +64,7 @@
       >
         Aucune exécution de scraping ces dernières 24 h.
       </div>
-      <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div v-else class="grid grid-cols-1 gap-3 @sm:grid-cols-2 @4xl:grid-cols-4">
         <div
           v-for="s in overview.sources"
           :key="s.source"
@@ -71,7 +72,7 @@
           :style="{ borderColor: statusColor(s.latest_status) }"
         >
           <div class="flex items-center justify-between">
-            <span class="text-sm font-semibold text-[var(--app-ink)] capitalize">{{ s.source }}</span>
+            <span class="text-sm font-semibold text-[var(--app-ink)]">{{ sourceLabel(s.source) }}</span>
             <span
               class="rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
               :style="{ color: statusColor(s.latest_status), backgroundColor: statusSoft(s.latest_status) }"
@@ -92,86 +93,84 @@
             </div>
             <div class="flex justify-between">
               <dt>Dernier OK</dt>
-              <dd class="text-[var(--app-ink)] tabular-nums">{{ s.last_ok_at ? formatDate(s.last_ok_at) : '—' }}</dd>
+              <dd class="text-[var(--app-ink)] tabular-nums">
+                {{ s.last_ok_at ? formatNumericDayMonthTime(s.last_ok_at) : '—' }}
+              </dd>
             </div>
           </dl>
         </div>
       </div>
     </section>
 
-    <!-- Incidents -->
     <section>
       <h2 class="mb-3 text-sm font-semibold text-[var(--app-ink)]">Journal des exécutions</h2>
-      <div class="overflow-x-auto rounded-lg border border-[var(--app-line)]">
-        <table class="w-full min-w-[720px] text-sm">
-          <thead>
-            <tr class="border-b border-[var(--app-line)] bg-[var(--app-bg)] text-left">
-              <th class="text-muted px-3 py-2 text-[10px] font-medium tracking-wide uppercase">Date</th>
-              <th class="text-muted px-3 py-2 text-[10px] font-medium tracking-wide uppercase">Source</th>
-              <th class="text-muted px-3 py-2 text-[10px] font-medium tracking-wide uppercase">Statut</th>
-              <th class="text-muted px-3 py-2 text-[10px] font-medium tracking-wide uppercase">Recherche</th>
-              <th class="text-muted px-3 py-2 text-right text-[10px] font-medium tracking-wide uppercase">Résultats</th>
-              <th class="text-muted px-3 py-2 text-[10px] font-medium tracking-wide uppercase">Détail</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="incidents.length === 0">
-              <td colspan="6" class="text-muted px-3 py-6 text-center">Aucune exécution enregistrée.</td>
-            </tr>
-            <tr
-              v-for="incident in incidents"
-              :key="incident.id"
-              class="border-b border-[var(--app-line-soft)] last:border-b-0"
-            >
-              <td class="text-muted px-3 py-2 whitespace-nowrap tabular-nums">
-                {{ incident.created_at ? formatDate(incident.created_at) : '—' }}
-              </td>
-              <td class="px-3 py-2 font-medium text-[var(--app-ink)] capitalize">{{ incident.source }}</td>
-              <td class="px-3 py-2">
-                <span
-                  class="rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
-                  :style="{ color: statusColor(incident.status), backgroundColor: statusSoft(incident.status) }"
-                >
-                  {{ statusLabel(incident.status) }}
-                </span>
-              </td>
-              <td class="text-muted px-3 py-2">
-                <span v-if="incident.category || incident.city">{{
-                  [incident.category, incident.city].filter(Boolean).join(' · ')
-                }}</span>
-                <span v-else>—</span>
-              </td>
-              <td class="px-3 py-2 text-right text-[var(--app-ink)] tabular-nums">
-                {{ incident.results_count
-                }}<span v-if="incident.expected_count" class="text-[var(--app-faint)]">
-                  / {{ incident.expected_count }}</span
-                >
-              </td>
-              <td class="px-3 py-2">
-                <button
-                  v-if="incident.has_html"
-                  type="button"
-                  class="text-xs font-medium text-[var(--app-blue)] underline underline-offset-2 hover:opacity-80"
-                  @click="openHtml(incident)"
-                >
-                  Voir le HTML
-                </button>
-                <span
-                  v-else-if="incident.error_message"
-                  class="text-muted truncate text-xs"
-                  :title="incident.error_message"
-                >
-                  {{ incident.error_message }}
-                </span>
-                <span v-else class="text-xs text-[var(--app-faint)]">—</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="app-card overflow-hidden p-0">
+        <BaseTable>
+          <template #head>
+            <BaseTableTh>Date</BaseTableTh>
+            <BaseTableTh>Source</BaseTableTh>
+            <BaseTableTh>Statut</BaseTableTh>
+            <BaseTableTh>Recherche</BaseTableTh>
+            <BaseTableTh align="right">Résultats</BaseTableTh>
+            <BaseTableTh>Détail</BaseTableTh>
+          </template>
+
+          <BaseTableTr v-if="incidents.length === 0">
+            <BaseTableTd colspan="6" class="py-8 text-center text-sm text-[var(--app-ink-soft)]">
+              Aucune exécution enregistrée.
+            </BaseTableTd>
+          </BaseTableTr>
+
+          <BaseTableTr v-for="incident in incidents" :key="incident.id">
+            <BaseTableTd class="font-label text-xs whitespace-nowrap text-[var(--app-ink-soft)] tabular-nums">
+              {{ incident.created_at ? formatNumericDayMonthTime(incident.created_at) : '—' }}
+            </BaseTableTd>
+            <BaseTableTd class="text-sm font-semibold text-[var(--app-ink)]">{{
+              sourceLabel(incident.source)
+            }}</BaseTableTd>
+            <BaseTableTd>
+              <span
+                class="app-badge"
+                :style="{ color: statusColor(incident.status), backgroundColor: statusSoft(incident.status) }"
+              >
+                {{ statusLabel(incident.status) }}
+              </span>
+            </BaseTableTd>
+            <BaseTableTd class="text-sm text-[var(--app-ink-soft)]">
+              <span v-if="incident.category || incident.city">{{
+                [incident.category, incident.city].filter(Boolean).join(' · ')
+              }}</span>
+              <span v-else>—</span>
+            </BaseTableTd>
+            <BaseTableTd align="right" class="text-sm text-[var(--app-ink)] tabular-nums">
+              {{ incident.results_count
+              }}<span v-if="incident.expected_count" class="text-[var(--app-faint)]">
+                / {{ incident.expected_count }}</span
+              >
+            </BaseTableTd>
+            <BaseTableTd>
+              <button
+                v-if="incident.has_html"
+                type="button"
+                class="cursor-pointer text-xs font-medium text-[var(--app-accent-ink)] underline-offset-2 hover:underline"
+                @click="openHtml(incident)"
+              >
+                Voir le HTML
+              </button>
+              <span
+                v-else-if="incident.error_message"
+                class="block max-w-[200px] truncate text-xs text-[var(--app-ink-soft)]"
+                :title="incident.error_message"
+              >
+                {{ incident.error_message }}
+              </span>
+              <span v-else class="text-sm text-[var(--app-faint)]">—</span>
+            </BaseTableTd>
+          </BaseTableTr>
+        </BaseTable>
       </div>
     </section>
 
-    <!-- Captured-HTML slide-over -->
     <Teleport to="body">
       <Transition name="drawer-panel">
         <div
@@ -209,35 +208,30 @@
 </template>
 
 <script lang="ts" setup>
+import { formatNumericDayMonthTime } from '~/utils/date'
+import type { UseToastReturn } from '~/types/Composables'
+import type { HtmlPanelState } from '~/types/AdminMonitoringPage'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, onMounted, ref } from 'vue'
 import { useUserStore } from '~/stores/user'
 import { useToast } from '~/composables/useToast'
-import type { MonitoringOverview, ScraperIncident } from '~/services/adminMonitoringService'
-import { getMonitoringOverview, getScraperIncidents, getScraperIncidentHtml } from '~/services/adminMonitoringService'
+import type { MonitoringOverview, ScraperIncident, ScraperSourceHealth } from '~/services/adminMonitoringService'
+import { AdminMonitoringService } from '~/services/adminMonitoringService'
 
 definePageMeta({
   layout: 'dashboard',
   middleware: ['auth'],
 })
 
-/** State of the captured-HTML slide-over. */
-interface HtmlPanelState {
-  open: boolean
-  loading: boolean
-  source: string
-  content: string
-}
+const userStore: ReturnType<typeof useUserStore> = useUserStore()
+const toast: UseToastReturn = useToast()
+const router: ReturnType<typeof useRouter> = useRouter()
 
-const userStore = useUserStore()
-const toast = useToast()
-const router = useRouter()
-
-const isLoading: Ref<boolean> = ref<boolean>(false)
-const error: Ref<string | null> = ref<string | null>(null)
-const overview: Ref<MonitoringOverview | null> = ref<MonitoringOverview | null>(null)
-const incidents: Ref<ScraperIncident[]> = ref<ScraperIncident[]>([])
-const htmlPanel: Ref<HtmlPanelState> = ref<HtmlPanelState>({
+const isLoading: Ref<boolean> = ref(false)
+const error: Ref<string | null> = ref(null)
+const overview: Ref<MonitoringOverview | null> = ref(null)
+const incidents: Ref<ScraperIncident[]> = ref([])
+const htmlPanel: Ref<HtmlPanelState> = ref({
   open: false,
   loading: false,
   source: '',
@@ -246,7 +240,7 @@ const htmlPanel: Ref<HtmlPanelState> = ref<HtmlPanelState>({
 
 /** Total incidents across all sources over the last 24 h. */
 const totalIncidents24h: ComputedRef<number> = computed((): number =>
-  (overview.value?.sources ?? []).reduce((sum: number, s): number => sum + s.incidents_24h, 0),
+  (overview.value?.sources ?? []).reduce((sum: number, s: ScraperSourceHealth): number => sum + s.incidents_24h, 0),
 )
 
 /**
@@ -288,17 +282,22 @@ function statusLabel(status: string): string {
 }
 
 /**
- * Format an ISO timestamp for display.
- * @param iso - ISO 8601 string.
- * @returns A locale date-time string.
+ * Human label for a diagnostics source (scrapers + enrichment steps).
+ * @param source - Raw source key recorded with each run.
+ * @returns The French label (falls back to a capitalized key).
  */
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+function sourceLabel(source: string): string {
+  const labels: Record<string, string> = {
+    google: 'Google',
+    pagesjaunes: 'Pages Jaunes',
+    osm: 'OpenStreetMap',
+    brightdata: 'Bright Data',
+    auto: 'Recherche auto',
+    yelp: 'Yelp',
+    enrichment: 'Enrichissement',
+    decision_maker: 'Nom du décisionnaire',
+  }
+  return labels[source] ?? source.charAt(0).toUpperCase() + source.slice(1)
 }
 
 /**
@@ -309,7 +308,10 @@ async function load(): Promise<void> {
   isLoading.value = true
   error.value = null
   try {
-    const [overviewData, incidentsData] = await Promise.all([getMonitoringOverview(), getScraperIncidents(100)])
+    const [overviewData, incidentsData]: [MonitoringOverview, { items: ScraperIncident[] }] = await Promise.all([
+      AdminMonitoringService.getMonitoringOverview(),
+      AdminMonitoringService.getScraperIncidents(100),
+    ])
     overview.value = overviewData
     incidents.value = incidentsData.items
   } catch (err) {
@@ -327,7 +329,7 @@ async function load(): Promise<void> {
 async function openHtml(incident: ScraperIncident): Promise<void> {
   htmlPanel.value = { open: true, loading: true, source: incident.source, content: '' }
   try {
-    htmlPanel.value.content = await getScraperIncidentHtml(incident.id)
+    htmlPanel.value.content = await AdminMonitoringService.getScraperIncidentHtml(incident.id)
   } catch (err) {
     htmlPanel.value.content = err instanceof Error ? err.message : 'Impossible de charger le HTML.'
   } finally {

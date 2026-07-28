@@ -1,7 +1,6 @@
 <template>
   <div class="space-y-6">
-    <!-- Header -->
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div class="flex flex-col gap-4 @2xl:flex-row @2xl:items-end @2xl:justify-between">
       <div>
         <p class="app-label flex items-center gap-2">
           <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
@@ -18,7 +17,6 @@
       </button>
     </div>
 
-    <!-- Empty state (no job yet) -->
     <div v-if="!store.currentJob" class="app-card px-6 py-14 text-center">
       <LandingAsterisk class="text-4xl text-[var(--app-accent)]" />
       <h3 class="font-display mt-5 text-2xl font-semibold text-[var(--app-ink)]">Lancez une recherche</h3>
@@ -31,13 +29,15 @@
       </button>
     </div>
 
-    <!-- Job progress / results -->
     <div v-else class="app-card p-5 md:p-6">
       <div class="mb-6 flex items-center justify-between">
         <div>
           <h2 class="text-lg font-semibold text-[var(--app-ink)]">
             Recherche
             <span v-if="store.currentJob.status === 'completed'" class="ml-2 text-[var(--app-green)]">✓ Terminée</span>
+            <span v-else-if="store.currentJob.status === 'cancelled'" class="ml-2 text-[var(--app-ink-soft)]">
+              ⊘ Annulée
+            </span>
             <span v-else-if="store.currentJob.status === 'failed'" class="ml-2 text-[var(--app-red)]">✗ Échec</span>
           </h2>
           <p class="mt-1 text-sm text-[var(--app-ink-soft)]">
@@ -57,14 +57,29 @@
         </div>
       </div>
 
-      <!-- Running -->
       <div v-if="store.isSearching" class="space-y-4">
         <div>
           <div class="mb-2 flex items-center justify-between text-sm">
             <span class="font-medium text-[var(--app-ink-soft)]">
               {{ store.liveProgress.current }} / {{ store.liveProgress.total || store.currentJob.max_results }} ajoutés
             </span>
-            <span class="font-medium text-[var(--app-ink-soft)]">{{ Math.round(store.liveProgress.percentage) }}%</span>
+            <div class="flex items-center gap-3">
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--app-red)] transition-opacity hover:opacity-80 disabled:opacity-50"
+                :disabled="store.isCancelling"
+                @click="store.cancelSearch()"
+              >
+                <UIcon
+                  :name="store.isCancelling ? 'i-lucide-loader-circle' : 'i-lucide-circle-stop'"
+                  :class="['h-3.5 w-3.5', store.isCancelling && 'animate-spin']"
+                />
+                {{ store.isCancelling ? 'Annulation…' : 'Annuler' }}
+              </button>
+              <span class="font-medium text-[var(--app-ink-soft)]"
+                >{{ Math.round(store.liveProgress.percentage) }}%</span
+              >
+            </div>
           </div>
           <div class="h-3 w-full overflow-hidden rounded-full border border-[var(--app-line)] bg-[var(--app-bg)]">
             <div
@@ -88,9 +103,14 @@
         />
       </div>
 
-      <!-- Completed -->
-      <div v-else-if="store.currentJob.status === 'completed'" class="space-y-4">
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div
+        v-else-if="store.currentJob.status === 'completed' || store.currentJob.status === 'cancelled'"
+        class="space-y-4"
+      >
+        <p v-if="store.currentJob.status === 'cancelled'" class="text-sm text-[var(--app-ink-soft)]">
+          Recherche annulée — les {{ store.currentJob.results.length }} prospect(s) déjà trouvé(s) ont été conservés.
+        </p>
+        <div class="grid grid-cols-1 gap-4 @3xl:grid-cols-3">
           <div
             v-for="stat in completedStats"
             :key="stat.label"
@@ -119,7 +139,6 @@
         </div>
       </div>
 
-      <!-- Failed -->
       <div
         v-else-if="store.currentJob.status === 'failed'"
         class="rounded-lg border border-[var(--app-red)] bg-[var(--app-surface)] p-4 text-[var(--app-red)]"
@@ -130,7 +149,6 @@
       </div>
     </div>
 
-    <!-- Recent jobs -->
     <div v-if="store.recentJobs.length > 0" class="app-card p-5 md:p-6">
       <h2 class="mb-4 text-sm font-semibold text-[var(--app-ink)]">Recherches récentes</h2>
       <div class="divide-y divide-[var(--app-line-soft)]">
@@ -150,7 +168,9 @@
             </div>
             <p class="mt-0.5 text-xs text-[var(--app-ink-soft)]">
               {{ new Date(job.created_at).toLocaleString('fr-FR') }}
-              <span v-if="job.status === 'completed'"> · {{ job.results.length }} prospects ajoutés</span>
+              <span v-if="job.status === 'completed' || job.status === 'cancelled'">
+                · {{ job.results.length }} prospects ajoutés
+              </span>
             </p>
           </div>
           <UIcon name="i-lucide-chevron-right" class="h-4 w-4 shrink-0 text-[var(--app-ink-soft)]" />
@@ -161,31 +181,24 @@
 </template>
 
 <script lang="ts" setup>
+import type { ScrapingJob } from '~/stores/prospectSearch'
+import type { CompletedStat } from '~/types/SearchProspectsPage'
 import type { ComputedRef } from 'vue'
 import { computed, onMounted } from 'vue'
 import { useProspectSearchStore } from '~/stores/prospectSearch'
 import { useDrawerStackStore } from '~/stores/drawerStack'
-
-/** A stat tile for the completed view. */
-interface CompletedStat {
-  label: string
-  value: number
-  icon: string
-  iconBg: string
-  iconColor: string
-}
 
 definePageMeta({
   layout: 'dashboard',
   middleware: ['auth'],
 })
 
-const store = useProspectSearchStore()
-const drawerStack = useDrawerStackStore()
+const store: ReturnType<typeof useProspectSearchStore> = useProspectSearchStore()
+const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 
 /** Stat tiles for a completed job. */
 const completedStats: ComputedRef<CompletedStat[]> = computed((): CompletedStat[] => {
-  const job = store.currentJob
+  const job: ScrapingJob | null = store.currentJob
   if (job === null) return []
   return [
     {
@@ -239,6 +252,7 @@ function formatStatus(status: string): string {
     pending: 'En attente',
     running: 'En cours',
     completed: 'Terminée',
+    cancelled: 'Annulée',
     failed: 'Échec',
   }
   return map[status] ?? status

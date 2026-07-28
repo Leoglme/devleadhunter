@@ -1,0 +1,305 @@
+"""Pre-send spam scoring — SpamAssassin (free Postmark endpoint) + local checks.
+
+Two complementary layers:
+1. ``spamcheck.postmarkapp.com`` — a free public API running SpamAssassin on a
+   raw MIME message; returns the score and the per-rule diagnostics.
+2. Local heuristics tuned for our French cold emails: unsubscribe link,
+   link count, shouty subject, spammy vocabulary, HTML weight.
+
+Used by the "Tester un email" panel of the email-health page BEFORE launching
+a campaign.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import logging
+import re
+import time
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formatdate, make_msgid
+from typing import Any
+
+import httpx
+
+logger = logging.getLogger(__name__)
+
+_SPAMCHECK_URL: str = "https://spamcheck.postmarkapp.com/filter"
+
+# Template scores are recomputed at most every 6 h for unchanged content —
+# the page auto-scores every template on load, so caching is what keeps us
+# polite with the free SpamAssassin endpoint.
+_CACHE_TTL_SECONDS: float = 6 * 3600.0
+
+# Naming one of these in the SUBJECT gets the message rejected at SMTP level by
+# Apple — a hard bounce, worse than spam-foldering: the prospect never sees it
+# and the sender reputation takes the hit. Verified by bisection on a real
+# iCloud mailbox (2026-07-19): same body, « votre fiche » delivered, « votre
+# fiche google » bounced. In the BODY the same brand is harmless.
+_BRANDS_BANNED_IN_SUBJECT: tuple[str, ...] = (
+    "google",
+    "apple",
+    "microsoft",
+    "amazon",
+    "facebook",
+    "instagram",
+    "linkedin",
+    "paypal",
+    "stripe",
+    "netflix",
+    "orange",
+    "sfr",
+    "free",
+    "bouygues",
+)
+
+# French cold-email vocabulary that reliably trips content filters.
+_SPAMMY_WORDS: tuple[str, ...] = (
+    "gratuit",
+    "urgent",
+    "cliquez ici",
+    "offre exceptionnelle",
+    "promotion",
+    "gagnez",
+    "félicitations",
+    "100%",
+    "garanti",
+    "sans engagement",
+    "dernière chance",
+    "profitez",
+    "incroyable",
+    "miracle",
+    "argent facile",
+)
+
+
+def _strip_html(html: str) -> str:
+    """Plain-text version of an HTML body (rough, good enough for ratios).
+
+    Args:
+        html: HTML source.
+
+    Returns:
+        Visible text.
+    """
+    text = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.S | re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+class EmailSpamTestService:
+    """Score an email draft before sending it."""
+
+    def __init__(self) -> None:
+        self._cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+    async def test_cached(self, *, subject: str, body_html: str, from_email: str, to_email: str) -> dict[str, Any]:
+        """Same as :meth:`test`, memoized on the content hash (TTL 6 h).
+
+        Args:
+            subject: Email subject.
+            body_html: HTML body.
+            from_email: Sender address.
+            to_email: Recipient address for the envelope.
+
+        Returns:
+            The (possibly cached) verdicts.
+        """
+        key = hashlib.sha1(f"{from_email}\x00{subject}\x00{body_html}".encode()).hexdigest()
+        cached = self._cache.get(key)
+        if cached and (time.monotonic() - cached[0]) < _CACHE_TTL_SECONDS:
+            return cached[1]
+        result = await self.test(subject=subject, body_html=body_html, from_email=from_email, to_email=to_email)
+        # Only cache verdicts that actually reached the scorer (a network blip
+        # must not stick for 6 h).
+        if result.get("spamassassin", {}).get("available", False):
+            self._cache[key] = (time.monotonic(), result)
+        return result
+
+    async def test(self, *, subject: str, body_html: str, from_email: str, to_email: str) -> dict[str, Any]:
+        """Run SpamAssassin + local heuristics on a draft.
+
+        Args:
+            subject: Email subject.
+            body_html: HTML body (template variables may remain — scored as-is).
+            from_email: Sender address (used in the MIME envelope).
+            to_email: Any recipient address for the envelope.
+
+        Returns:
+            SpamAssassin verdict (or its error) + the local checklist.
+        """
+        spamassassin = await self._spamassassin(subject, body_html, from_email, to_email)
+        checks = self._local_checks(subject, body_html)
+        return {"spamassassin": spamassassin, "checks": checks}
+
+    async def _spamassassin(self, subject: str, body_html: str, from_email: str, to_email: str) -> dict[str, Any]:
+        """POST the raw MIME to Postmark SpamCheck.
+
+        Args:
+            subject: Email subject.
+            body_html: HTML body.
+            from_email: Sender.
+            to_email: Recipient.
+
+        Returns:
+            ``score``/``rules`` on success, ``error`` otherwise.
+        """
+        message = MIMEMultipart("alternative")
+        message["Subject"] = subject
+        message["From"] = from_email
+        message["To"] = to_email
+        # Real sends get these from the provider (Resend) — without them
+        # SpamAssassin adds MISSING_DATE/MISSING_MID penalties that say
+        # nothing about the content being scored.
+        message["Date"] = formatdate(localtime=False)
+        message["Message-ID"] = make_msgid(domain=from_email.split("@")[-1] or "dibodev.fr")
+        message.attach(MIMEText(_strip_html(body_html), "plain", "utf-8"))
+        message.attach(MIMEText(body_html, "html", "utf-8"))
+
+        payload: dict[str, Any] | None = None
+        # The free endpoint occasionally drops one call in a burst — one
+        # polite retry recovers nearly all of them.
+        for attempt in range(2):
+            try:
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    response = await client.post(
+                        _SPAMCHECK_URL,
+                        json={"email": message.as_string(), "options": "long"},
+                    )
+                    response.raise_for_status()
+                    payload = response.json()
+                break
+            except Exception as exc:
+                logger.warning("SpamCheck call failed (attempt %d): %s", attempt + 1, exc)
+                if attempt == 0:
+                    await asyncio.sleep(1.5)
+        if payload is None:
+            return {"available": False, "error": "Le service d'analyse ne répond pas — réessayez plus tard."}
+
+        if not payload.get("success", False):
+            return {"available": False, "error": payload.get("message", "Analyse impossible.")}
+
+        score = float(payload.get("score", 0) or 0)
+        rules = [
+            {
+                "score": rule.get("score"),
+                "description": rule.get("description"),
+            }
+            for rule in payload.get("rules", [])
+        ]
+        # SpamAssassin convention: >= 5.0 is spam; we warn from 3.0.
+        status = "ok" if score < 3.0 else ("warn" if score < 5.0 else "danger")
+        return {"available": True, "score": score, "status": status, "rules": rules}
+
+    def _local_checks(self, subject: str, body_html: str) -> list[dict[str, Any]]:
+        """French-cold-email heuristics (each check → ok/warn/danger + advice).
+
+        Args:
+            subject: Email subject.
+            body_html: HTML body.
+
+        Returns:
+            The checklist for the UI.
+        """
+        checks: list[dict[str, Any]] = []
+        text = _strip_html(body_html)
+        lowered_all = f"{subject} {text}".lower()
+
+        # 1. Unsubscribe link (RGPD + Gmail/Yahoo requirement).
+        has_unsubscribe = bool(re.search(r"d[ée]sinscri|unsubscribe|\{\{?\s*unsubscribe", body_html, flags=re.I))
+        checks.append(
+            {
+                "key": "unsubscribe",
+                "label": "Lien de désinscription",
+                "status": "ok" if has_unsubscribe else "danger",
+                "detail": "Présent." if has_unsubscribe else "Absent — obligatoire (RGPD + exigence Gmail/Yahoo 2024).",
+            }
+        )
+
+        # 2. Link count (cold emails should stay lean).
+        link_count = len(re.findall(r"<a\s", body_html, flags=re.I))
+        link_status = "ok" if link_count <= 3 else ("warn" if link_count <= 6 else "danger")
+        checks.append(
+            {
+                "key": "links",
+                "label": "Nombre de liens",
+                "status": link_status,
+                "detail": f"{link_count} lien(s) — visez 1 à 3 pour un cold email.",
+            }
+        )
+
+        # 3. Shouty subject.
+        letters = [c for c in subject if c.isalpha()]
+        caps_ratio = (sum(1 for c in letters if c.isupper()) / len(letters)) if letters else 0.0
+        exclamations = subject.count("!")
+        shouty = caps_ratio > 0.4 or exclamations >= 2
+        checks.append(
+            {
+                "key": "subject",
+                "label": "Objet",
+                "status": "warn" if shouty else "ok",
+                "detail": "MAJUSCULES/exclamations excessives — signal spam classique."
+                if shouty
+                else "Sobre, rien à signaler.",
+            }
+        )
+
+        # 3 bis. Brand name in the subject — the only check here whose failure
+        # means « ce mail n'arrivera pas du tout », so it is a danger, not a warn.
+        lowered_subject = subject.lower()
+        branded = sorted({brand for brand in _BRANDS_BANNED_IN_SUBJECT if brand in lowered_subject})
+        checks.append(
+            {
+                "key": "subject_brand",
+                "label": "Marque dans l'objet",
+                "status": "danger" if branded else "ok",
+                "detail": (
+                    f"« {branded[0].capitalize()} » dans l'objet : Apple REJETTE le message "
+                    "(il n'arrive ni en boîte de réception ni en indésirables, et le rejet "
+                    "compte comme un bounce). Retirez la marque de l'objet — dans le corps "
+                    "elle ne pose aucun problème."
+                    if branded
+                    else "Aucune marque connue dans l'objet."
+                ),
+            }
+        )
+
+        # 4. Spammy vocabulary.
+        hits = sorted({word for word in _SPAMMY_WORDS if word in lowered_all})
+        checks.append(
+            {
+                "key": "vocabulary",
+                "label": "Vocabulaire",
+                "status": "ok" if not hits else ("warn" if len(hits) <= 2 else "danger"),
+                "detail": "Aucun mot déclencheur." if not hits else f"Mots à risque : {', '.join(hits)}.",
+            }
+        )
+
+        # 5. Text volume (image-only or one-liner emails look like spam).
+        word_count = len(text.split())
+        checks.append(
+            {
+                "key": "text_volume",
+                "label": "Volume de texte",
+                "status": "ok" if word_count >= 40 else "warn",
+                "detail": f"{word_count} mots — en dessous de 40, les filtres manquent de matière.",
+            }
+        )
+
+        # 6. HTML weight (heavy markup → promo folder).
+        size_kb = len(body_html.encode("utf-8")) / 1024
+        checks.append(
+            {
+                "key": "html_weight",
+                "label": "Poids du HTML",
+                "status": "ok" if size_kb <= 60 else ("warn" if size_kb <= 100 else "danger"),
+                "detail": f"{size_kb:.0f} Ko — au-delà de 100 Ko, Gmail tronque le message.",
+            }
+        )
+
+        return checks
+
+
+email_spam_test_service = EmailSpamTestService()

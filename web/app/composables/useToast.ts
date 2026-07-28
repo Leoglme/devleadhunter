@@ -1,24 +1,20 @@
+import type { UseToastReturn } from '~/types/Composables'
 import type { Ref } from 'vue'
 
-/**
- * Toast notifications — reactive queue rendered by `UiToastHost` (mounted once
- * in app.vue), styled on the Atelier design tokens (`--app-*`) in both themes.
- * @module composables/useToast
- */
+/** Toast queue shared between `useToast` callers and `UiToastHost`. */
 
 /** Visual family of a toast. */
 export type ToastType = 'success' | 'error' | 'info' | 'warning'
 
 /** One toast in the queue. */
-export interface ToastItem {
+export type ToastItem = {
   id: number
   message: string
   type: ToastType
-  /** Auto-dismiss delay in ms. */
   duration: number
 }
 
-interface ToastOptions {
+type ToastOptions = {
   duration?: number
   type?: ToastType
 }
@@ -30,20 +26,14 @@ let nextToastId: number = 1
  * @returns The shared queue state.
  */
 function useToastQueue(): Ref<ToastItem[]> {
-  return useState<ToastItem[]>('app-toasts', (): ToastItem[] => [])
+  return useState('app-toasts', (): ToastItem[] => [])
 }
 
 /**
  * Toast notification API (kept stable: `success` / `error` / `info` / `warning`).
  * @returns Toast methods.
- * @example
- * ```typescript
- * const toast = useToast();
- * toast.success('Opération réussie');
- * toast.error('Une erreur est survenue');
- * ```
  */
-export function useToast() {
+export function useToast(): UseToastReturn {
   const queue: Ref<ToastItem[]> = useToastQueue()
 
   /**
@@ -51,11 +41,14 @@ export function useToast() {
    * @param message - Text shown to the user.
    * @param options - Type + auto-dismiss duration.
    */
-  const showToast = (message: string, options: ToastOptions = {}): void => {
+  const showToast: (message: string, options?: ToastOptions) => void = (
+    message: string,
+    options: ToastOptions = {},
+  ): void => {
     if (import.meta.server || !import.meta.client) {
       return
     }
-    const { type = 'info', duration = 3500 } = options
+    const { type = 'info', duration = 3500 }: ToastOptions = options
     queue.value = [...queue.value, { id: nextToastId++, message, type, duration }]
   }
 

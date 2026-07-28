@@ -1,12 +1,16 @@
 """Order / sales routes — available to every authenticated user."""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.database import get_db
 from models.user import User
 from schemas.order import (
+    OrderBillingResponse,
     OrderCreateRequest,
+    OrderFinalizeRequest,
     OrderListResponse,
+    OrderPaymentCheckResponse,
     OrderPaymentEmailPreview,
     OrderResponse,
     OrderStatsResponse,
@@ -121,7 +125,44 @@ async def create_order_payment_link(
         order = order_service.create_payment_link(db, order)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return OrderResponse.model_validate(order)
+
+
+@router.get("/{order_id}/billing", response_model=OrderBillingResponse)
+async def get_order_billing(
+    order_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> OrderBillingResponse:
+    """Billing details of the invoice, pre-filled from the prospect when unset."""
+    order = _get_order_or_404(db, current_user.id, order_id)
+    billing = order_service.billing_details_for_order(db, order)
+    return OrderBillingResponse(
+        **billing,
+        invoicing_provider=order_service.connected_provider(db, current_user),
+        missing_fields=order_service.missing_billing_fields(db, current_user, billing),
+    )
+
+
+@router.post("/{order_id}/finalize", response_model=OrderResponse)
+async def finalize_order(
+    order_id: int,
+    payload: OrderFinalizeRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> OrderResponse:
+    """Issue the invoice at the user's provider from the reviewed billing details."""
+    order = _get_order_or_404(db, current_user.id, order_id)
+    billing = payload.billing.model_dump()
+    if billing.get("email") is not None:
+        billing["email"] = str(billing["email"])
+    try:
+        order = await order_service.finalize_sale(db, current_user, order, billing, payload.amount_cents)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return OrderResponse.model_validate(order)
 
@@ -170,6 +211,24 @@ async def mark_order_paid(
     order = order_service.mark_paid(db, order)
     await order_service.capture_sale_event(db, order.id)
     return OrderResponse.model_validate(order)
+
+
+@router.post("/{order_id}/check-payment", response_model=OrderPaymentCheckResponse)
+async def check_order_payment(
+    order_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> OrderPaymentCheckResponse:
+    """Reconcile the order against its provider (Qonto has no paid webhook)."""
+    order = _get_order_or_404(db, current_user.id, order_id)
+    try:
+        newly_paid = await order_service.check_and_mark_paid(db, current_user, order)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    if newly_paid:
+        await order_service.capture_sale_event(db, order.id)
+    db.refresh(order)
+    return OrderPaymentCheckResponse(newly_paid=newly_paid, order=OrderResponse.model_validate(order))
 
 
 @router.post("/{order_id}/deploy", response_model=OrderResponse)

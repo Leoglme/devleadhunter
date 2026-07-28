@@ -1,7 +1,7 @@
-import { api } from './api'
+import { ApiClient } from './api'
 
 /** A commercial order (sale of a product to a client). */
-export interface Order {
+export type Order = {
   id: number
   product_type: string
   status: string
@@ -12,7 +12,17 @@ export interface Order {
   business_name: string | null
   customer_name: string | null
   customer_email: string | null
+  billing_address: string | null
+  billing_city: string | null
+  billing_zip_code: string | null
+  billing_country_code: string | null
+  billing_tax_id: string | null
+  billing_vat_number: string | null
   stripe_payment_url: string | null
+  payment_provider: string | null
+  payment_url: string | null
+  invoice_id: string | null
+  invoice_number: string | null
   domain: string | null
   notes: string | null
   payment_link_sent_at: string | null
@@ -22,14 +32,37 @@ export interface Order {
   updated_at: string | null
 }
 
+/** Billing counterpart of the invoice, reviewed before it is issued. */
+export type OrderBillingDetails = {
+  name: string | null
+  email: string | null
+  address: string | null
+  city: string | null
+  zip_code: string | null
+  country_code: string
+  tax_id: string | null
+  vat_number: string | null
+}
+
+/** Billing details pre-filled by the API, with the provider and fields still required. */
+export type OrderBillingPrefill = OrderBillingDetails & {
+  invoicing_provider: string | null
+  missing_fields: string[]
+}
+
+/** Result of reconciling an order against its payment provider. */
+export type OrderPaymentCheckResult = {
+  newly_paid: boolean
+  order: Order
+}
+
 /** Paginated list of orders. */
-export interface OrderListResponse {
+export type OrderListResponse = {
   items: Order[]
   total: number
 }
 
-/** Payload to create a manual order. */
-export interface OrderCreatePayload {
+export type OrderCreatePayload = {
   product_type?: string
   prospect_id?: number | null
   demo_site_id?: number | null
@@ -44,14 +77,13 @@ export interface OrderCreatePayload {
 /** Partial update of an order. */
 export type OrderUpdatePayload = Partial<OrderCreatePayload> & { status?: string }
 
-/** Rendered payment-link email preview. */
-export interface OrderPaymentEmailPreview {
+export type OrderPaymentEmailPreview = {
   subject: string
   body_html: string
 }
 
 /** Commercial KPIs for the current user. */
-export interface OrderStats {
+export type OrderStats = {
   total_orders: number
   won_count: number
   pending_count: number
@@ -60,90 +92,121 @@ export interface OrderStats {
   currency: string
 }
 
-/**
- * List the current user's orders.
- * @returns The order list response.
- */
-export async function listOrders(): Promise<OrderListResponse> {
-  return api.get<OrderListResponse>('/api/v1/orders')
-}
+export class OrdersService {
+  /**
+   * List the current user's orders.
+   * @returns The order list response.
+   */
+  static async listOrders(): Promise<OrderListResponse> {
+    return ApiClient.get<OrderListResponse>('/api/v1/orders')
+  }
 
-/**
- * Fetch commercial KPIs for the current user.
- * @returns Aggregated sales stats.
- */
-export async function getOrderStats(): Promise<OrderStats> {
-  return api.get<OrderStats>('/api/v1/orders/stats')
-}
+  /**
+   * Fetch commercial KPIs for the current user.
+   * @returns Aggregated sales stats.
+   */
+  static async getOrderStats(): Promise<OrderStats> {
+    return ApiClient.get<OrderStats>('/api/v1/orders/stats')
+  }
 
-/**
- * Create a manual order.
- * @param payload - Order creation fields.
- * @returns The created order.
- */
-export async function createOrder(payload: OrderCreatePayload): Promise<Order> {
-  return api.post<Order>('/api/v1/orders', payload)
-}
+  /**
+   * Create a manual order.
+   * @param payload - Order creation fields.
+   * @returns The created order.
+   */
+  static async createOrder(payload: OrderCreatePayload): Promise<Order> {
+    return ApiClient.post<Order>('/api/v1/orders', payload)
+  }
 
-/**
- * Update an order's editable fields.
- * @param orderId - Target order id.
- * @param payload - Fields to update.
- * @returns The updated order.
- */
-export async function updateOrder(orderId: number, payload: OrderUpdatePayload): Promise<Order> {
-  return api.patch<Order>(`/api/v1/orders/${orderId}`, payload)
-}
+  /**
+   * Update an order's editable fields.
+   * @param orderId - Target order id.
+   * @param payload - Fields to update.
+   * @returns The updated order.
+   */
+  static async updateOrder(orderId: number, payload: OrderUpdatePayload): Promise<Order> {
+    return ApiClient.patch<Order>(`/api/v1/orders/${orderId}`, payload)
+  }
 
-/**
- * Delete (cancel) an order.
- * @param orderId - Target order id.
- */
-export async function deleteOrder(orderId: number): Promise<void> {
-  await api.delete<unknown>(`/api/v1/orders/${orderId}`)
-}
+  /**
+   * Delete (cancel) an order.
+   * @param orderId - Target order id.
+   */
+  static async deleteOrder(orderId: number): Promise<void> {
+    await ApiClient.delete<unknown>(`/api/v1/orders/${orderId}`)
+  }
 
-/**
- * Generate (or refresh) the Stripe payment link for an order.
- * @param orderId - Target order id.
- * @returns The order with its payment URL set.
- */
-export async function createOrderPaymentLink(orderId: number): Promise<Order> {
-  return api.post<Order>(`/api/v1/orders/${orderId}/payment-link`, {})
-}
+  /**
+   * Generate (or refresh) the Stripe payment link for an order.
+   * @param orderId - Target order id.
+   * @returns The order with its payment URL set.
+   */
+  static async createOrderPaymentLink(orderId: number): Promise<Order> {
+    return ApiClient.post<Order>(`/api/v1/orders/${orderId}/payment-link`, {})
+  }
 
-/**
- * Render the payment-link email for review before sending.
- * @param orderId - Target order id.
- * @returns The rendered subject and HTML body.
- */
-export async function previewOrderPaymentEmail(orderId: number): Promise<OrderPaymentEmailPreview> {
-  return api.get<OrderPaymentEmailPreview>(`/api/v1/orders/${orderId}/payment-email/preview`)
-}
+  /**
+   * Fetch the invoice's billing details, pre-filled from the prospect when unset.
+   * @param orderId - Target order id.
+   * @returns The billing details and the fields still required.
+   */
+  static async getOrderBilling(orderId: number): Promise<OrderBillingPrefill> {
+    return ApiClient.get<OrderBillingPrefill>(`/api/v1/orders/${orderId}/billing`)
+  }
 
-/**
- * Send the payment-link email to the client.
- * @param orderId - Target order id.
- * @returns The updated order.
- */
-export async function sendOrderPaymentEmail(orderId: number): Promise<Order> {
-  return api.post<Order>(`/api/v1/orders/${orderId}/payment-email/send`, {})
-}
+  /**
+   * Issue the invoice at the user's provider from the reviewed billing details.
+   * @param orderId - Target order id.
+   * @param billing - The reviewed billing counterpart.
+   * @param amountCents - The negotiated amount, in cents.
+   * @returns The order carrying its issued invoice.
+   */
+  static async finalizeOrder(orderId: number, billing: OrderBillingDetails, amountCents: number): Promise<Order> {
+    return ApiClient.post<Order>(`/api/v1/orders/${orderId}/finalize`, { billing, amount_cents: amountCents })
+  }
 
-/**
- * Manually mark an order as paid.
- * @param orderId - Target order id.
- * @returns The updated order.
- */
-export async function markOrderPaid(orderId: number): Promise<Order> {
-  return api.post<Order>(`/api/v1/orders/${orderId}/mark-paid`, {})
-}
+  /**
+   * Render the payment-link email for review before sending.
+   * @param orderId - Target order id.
+   * @returns The rendered subject and HTML body.
+   */
+  static async previewOrderPaymentEmail(orderId: number): Promise<OrderPaymentEmailPreview> {
+    return ApiClient.get<OrderPaymentEmailPreview>(`/api/v1/orders/${orderId}/payment-email/preview`)
+  }
 
-/**
- * Put the sold site online (Vercel + domain) and hand over CMS access.
- * @param orderId - Target order id.
- * @returns The updated order.
- */
-export async function deployOrder(orderId: number): Promise<Order> {
-  return api.post<Order>(`/api/v1/orders/${orderId}/deploy`, {})
+  /**
+   * Send the payment-link email to the client.
+   * @param orderId - Target order id.
+   * @returns The updated order.
+   */
+  static async sendOrderPaymentEmail(orderId: number): Promise<Order> {
+    return ApiClient.post<Order>(`/api/v1/orders/${orderId}/payment-email/send`, {})
+  }
+
+  /**
+   * Manually mark an order as paid.
+   * @param orderId - Target order id.
+   * @returns The updated order.
+   */
+  static async markOrderPaid(orderId: number): Promise<Order> {
+    return ApiClient.post<Order>(`/api/v1/orders/${orderId}/mark-paid`, {})
+  }
+
+  /**
+   * Reconcile an order against its provider, marking it paid if the invoice is.
+   * @param orderId - Target order id.
+   * @returns Whether this call marked it paid, and the refreshed order.
+   */
+  static async checkOrderPayment(orderId: number): Promise<OrderPaymentCheckResult> {
+    return ApiClient.post<OrderPaymentCheckResult>(`/api/v1/orders/${orderId}/check-payment`, {})
+  }
+
+  /**
+   * Put the sold site online (Vercel + domain) and hand over CMS access.
+   * @param orderId - Target order id.
+   * @returns The updated order.
+   */
+  static async deployOrder(orderId: number): Promise<Order> {
+    return ApiClient.post<Order>(`/api/v1/orders/${orderId}/deploy`, {})
+  }
 }

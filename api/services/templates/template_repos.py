@@ -8,27 +8,27 @@ a ``template_id`` to the template's GitHub repo and the tag currently deployed b
 ⚠️ Keep this in sync with ``demo-host/nuxt.config.ts`` whenever a template tag is
 bumped — the export must pin the exact version that renders the live site.
 """
-from __future__ import annotations
 
-from typing import Optional
+from __future__ import annotations
 
 GITHUB_ORG = "DevLeadHunter"
 
 # template_id -> (repo name, live tag). Mirror of demo-host/nuxt.config.ts `extends`.
 TEMPLATE_REPOS: dict[str, tuple[str, str]] = {
-    "artisan-edito": ("devleadhunter-template-artisan-edito", "v1.2.0"),
-    "plumber-signature": ("devleadhunter-template-plumber-signature", "v1.2.0"),
-    "plumber-atelier": ("devleadhunter-template-plumber-atelier", "v1.3.0"),
-    "plumber-cuivre": ("devleadhunter-template-plumber-cuivre", "v1.2.0"),
-    "electrician-lumen": ("devleadhunter-template-electrician-lumen", "v1.2.0"),
-    "mechanic-pitlane": ("devleadhunter-template-mechanic-pitlane", "v1.3.0"),
-    "dental": ("devleadhunter-template-dental", "v1.1.2"),
-    "food": ("devleadhunter-template-food", "v1.0.3"),
-    "barber": ("devleadhunter-template-barber", "v1.1.1"),
+    "artisan-edito": ("devleadhunter-template-artisan-edito", "v1.2.1"),
+    "plumber-signature": ("devleadhunter-template-plumber-signature", "v1.2.1"),
+    "plumber-atelier": ("devleadhunter-template-plumber-atelier", "v1.3.1"),
+    "plumber-cuivre": ("devleadhunter-template-plumber-cuivre", "v1.2.1"),
+    "electrician-lumen": ("devleadhunter-template-electrician-lumen", "v1.2.1"),
+    "mechanic-pitlane": ("devleadhunter-template-mechanic-pitlane", "v1.3.1"),
+    "dental": ("devleadhunter-template-dental", "v1.1.4"),
+    "food": ("devleadhunter-template-food", "v1.0.6"),
+    "barber": ("devleadhunter-template-barber", "v1.1.5"),
+    "landscaper-verdure": ("devleadhunter-template-landscaper-verdure", "v1.1.2"),
 }
 
 
-def get_template_repo(template_id: str) -> Optional[tuple[str, str]]:
+def get_template_repo(template_id: str) -> tuple[str, str] | None:
     """Return ``(repo, tag)`` for a ``template_id``, or ``None`` when unknown."""
     return TEMPLATE_REPOS.get(template_id)
 

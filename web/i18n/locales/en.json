@@ -15,6 +15,54 @@
     "decline": "Decline",
     "learnMore": "Learn more"
   },
+  "auth": {
+    "backHome": "Back to site",
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "John Smith",
+      "email": "Email",
+      "emailPlaceholder": "you{'@'}example.com",
+      "password": "Password"
+    },
+    "errors": {
+      "emailFormat": "Invalid email format."
+    },
+    "login": {
+      "title": "Log in",
+      "subtitle": "Get back to your prospects, campaigns and sales.",
+      "passwordPlaceholder": "Your password",
+      "submit": "Log in",
+      "submitting": "Logging in…",
+      "switchQuestion": "No account yet?",
+      "switchCta": "Create an account",
+      "errorGeneral": "Invalid credentials. Try again.",
+      "errorEmailRequired": "Enter your email address to access your account.",
+      "errorPasswordRequired": "Enter your password."
+    },
+    "signup": {
+      "title": "Create your account",
+      "subtitle": "Find businesses without a website and turn them into clients.",
+      "passwordPlaceholder": "6 characters minimum",
+      "submit": "Create my account",
+      "submitting": "Creating…",
+      "switchQuestion": "Already have an account?",
+      "switchCta": "Log in",
+      "errorGeneral": "Account creation failed. Try again.",
+      "errorNameRequired": "Enter your name.",
+      "errorEmailRequired": "Enter your email address.",
+      "errorPasswordRequired": "Enter your password.",
+      "errorPasswordLength": "Password must be at least 6 characters."
+    },
+    "panel": {
+      "signupWord1": "Find",
+      "signupWord2": "Generate",
+      "signupWord3": "Sell",
+      "signupLine": "From search to sale, in one place.",
+      "loginWord1": "Welcome",
+      "loginWord2": "back",
+      "loginLine": "Your prospects are waiting."
+    }
+  },
   "landing": {
     "seo": {
       "title": "DevLeadHunter — Sell websites to local businesses that don't have one",

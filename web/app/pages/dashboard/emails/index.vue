@@ -1,41 +1,56 @@
 <template>
   <div class="space-y-6">
-    <!-- Header -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-3xl font-bold text-[var(--app-ink)]">Suivi des emails</h1>
-        <p class="text-muted mt-2 text-sm">Historique et statut de chaque email de prospection envoyé</p>
+    <div class="flex flex-col gap-4 @2xl:flex-row @2xl:items-end @2xl:justify-between">
+      <div class="min-w-0">
+        <p class="app-label flex items-center gap-2">
+          <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+          Campagnes
+        </p>
+        <h1 class="app-page-title mt-2">Suivi des emails</h1>
+        <p class="mt-1.5 text-sm text-[var(--app-ink-soft)]">
+          Historique et statut de chaque email de prospection envoyé
+        </p>
       </div>
-      <div class="flex items-center gap-3">
+      <div
+        class="flex w-full flex-col-reverse items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end @2xl:w-auto"
+      >
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+          <NuxtLink to="/dashboard/email-health" class="app-btn-secondary h-9 shrink-0 px-4 text-xs whitespace-nowrap">
+            <UIcon name="i-lucide-heart-pulse" class="h-3.5 w-3.5" />
+            Santé email
+          </NuxtLink>
+          <button
+            :disabled="isLoading || isSyncing"
+            class="app-btn-secondary h-9 shrink-0 px-4 text-xs whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
+            :title="'Synchronise les statuts depuis Resend (utile en local sans webhook)'"
+            @click="syncStatus"
+          >
+            <UIcon
+              :name="isSyncing ? 'i-lucide-loader-circle' : 'i-lucide-rotate-cw'"
+              :class="['h-3.5 w-3.5', isSyncing && 'animate-spin']"
+            />
+            {{ isSyncing ? 'Sync…' : 'Sync Resend' }}
+          </button>
+          <button
+            :disabled="isLoading"
+            class="app-btn-secondary h-9 shrink-0 px-4 text-xs whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
+            @click="loadLogs"
+          >
+            <UIcon name="i-lucide-rotate-cw" class="h-3.5 w-3.5" />
+            Actualiser
+          </button>
+        </div>
         <button
-          :disabled="isLoading || isSyncing"
-          class="btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
-          :title="'Synchronise les statuts depuis Resend (utile en local sans webhook)'"
-          @click="syncStatus"
+          class="app-btn-primary h-9 w-full shrink-0 px-4 text-xs sm:w-auto"
+          @click="drawerStack.push({ kind: 'send-email', prospect: null })"
         >
-          <UIcon
-            :name="isSyncing ? 'i-lucide-loader-circle' : 'i-lucide-rotate-cw'"
-            :class="['h-4 w-4', isSyncing && 'animate-spin']"
-          />
-          {{ isSyncing ? 'Sync…' : 'Sync Resend' }}
-        </button>
-        <button
-          :disabled="isLoading"
-          class="btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
-          @click="loadLogs"
-        >
-          <UIcon name="i-lucide-rotate-cw" class="h-4 w-4" />
-          Actualiser
-        </button>
-        <button class="btn-primary" @click="drawerStack.push({ kind: 'send-email', prospect: null })">
-          <UIcon name="i-lucide-send" class="h-4 w-4" />
+          <UIcon name="i-lucide-send" class="h-3.5 w-3.5" />
           Envoyer un email
         </button>
       </div>
     </div>
 
-    <!-- Stats cards -->
-    <div class="grid grid-cols-2 gap-4 md:grid-cols-6">
+    <div class="grid grid-cols-2 gap-3 @sm:grid-cols-3 @4xl:grid-cols-6">
       <div class="card text-center">
         <p class="text-muted text-xs font-medium">Envoyés</p>
         <p class="mt-1 text-2xl font-bold text-[var(--app-ink)]">{{ stats.total_sent }}</p>
@@ -62,9 +77,8 @@
       </div>
     </div>
 
-    <!-- Filters -->
     <div class="card">
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
         <div>
           <label class="text-muted mb-1.5 block text-xs font-medium">Rechercher</label>
           <input v-model="searchQuery" type="text" placeholder="Email, nom, sujet..." class="input-field" />
@@ -83,7 +97,6 @@
       </div>
     </div>
 
-    <!-- Error -->
     <div
       v-if="error"
       class="rounded-lg border border-[var(--app-red)] bg-[var(--app-surface)] p-4 text-[var(--app-red)]"
@@ -92,12 +105,10 @@
       <p class="text-muted mt-1 text-sm">{{ error }}</p>
     </div>
 
-    <!-- Loader -->
     <div v-else-if="isLoading" class="flex items-center justify-center py-12">
       <UIcon name="i-lucide-loader-circle" class="text-muted h-9 w-9 animate-spin" />
     </div>
 
-    <!-- Empty -->
     <div v-else-if="filteredLogs.length === 0" class="card px-6 py-12 text-center">
       <LandingAsterisk class="text-4xl text-[var(--app-accent)]" />
       <h3 class="font-display mt-5 text-2xl font-semibold text-[var(--app-ink)]">Aucun email trouvé</h3>
@@ -110,72 +121,79 @@
       </p>
     </div>
 
-    <!-- Table -->
     <div v-else class="card overflow-hidden">
-      <table class="w-full border-collapse">
-        <thead>
-          <tr class="bg-[var(--app-bg)]">
-            <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Destinataire</th>
-            <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Sujet</th>
-            <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Campagne</th>
-            <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Statut</th>
-            <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Activité</th>
-            <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Envoyé le</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="log in paginatedLogs"
-            :key="log.id"
-            class="border-muted cursor-pointer border-b transition-colors last:border-b-0 hover:bg-[var(--app-surface-2)]"
-            @click="openDrawer(log)"
-          >
-            <td class="px-3 py-2.5">
-              <div class="text-sm font-medium text-[var(--app-ink)]">
-                {{ log.recipient_name || log.recipient_email }}
-              </div>
-              <div class="text-muted text-xs">{{ log.recipient_email }}</div>
-            </td>
-            <td class="text-muted max-w-[200px] truncate px-3 py-2.5 text-sm">
-              {{ log.subject }}
-            </td>
-            <td class="text-muted px-3 py-2.5 text-sm">
-              {{ resolveCampaignName(log.campaign_id) ?? '—' }}
-            </td>
-            <td class="px-3 py-2.5">
-              <div class="flex flex-wrap gap-1">
-                <UiEmailStatusBadge v-for="s in getEmailBadges(log)" :key="s" :status="s" />
-              </div>
-            </td>
-            <td class="px-3 py-2.5">
-              <div class="flex items-center gap-2">
-                <span
-                  v-for="step in getEngagement(log)"
-                  :key="step.key"
-                  :title="step.ts ? `${step.label} — ${formatDate(step.ts)}` : `${step.label} : pas encore`"
-                  class="flex h-6 w-6 items-center justify-center rounded-md"
-                  :class="step.ts ? 'bg-[var(--app-surface)]' : 'bg-transparent'"
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[720px] border-collapse">
+          <thead>
+            <tr class="bg-[var(--app-bg)]">
+              <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Destinataire</th>
+              <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Sujet</th>
+              <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Campagne</th>
+              <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Statut</th>
+              <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Activité</th>
+              <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Envoyé le</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="log in paginatedLogs"
+              :key="log.id"
+              class="border-muted cursor-pointer border-b transition-colors last:border-b-0 hover:bg-[var(--app-surface-2)]"
+              @click="openDrawer(log)"
+            >
+              <td class="px-3 py-2.5">
+                <div class="text-sm font-medium text-[var(--app-ink)]">
+                  {{ log.recipient_name || log.recipient_email }}
+                </div>
+                <div class="text-muted text-xs">{{ log.recipient_email }}</div>
+              </td>
+              <td class="text-muted max-w-[200px] truncate px-3 py-2.5 text-sm">
+                {{ log.subject }}
+              </td>
+              <td class="text-muted px-3 py-2.5 text-sm">
+                {{ resolveCampaignName(log.campaign_id) ?? '—' }}
+              </td>
+              <td class="px-3 py-2.5">
+                <div class="flex flex-wrap gap-1">
+                  <UiEmailStatusBadge v-for="s in getEmailBadges(log)" :key="s" :status="s" />
+                </div>
+              </td>
+              <td class="px-3 py-2.5">
+                <div class="flex items-center gap-2">
+                  <span
+                    v-for="step in getEngagement(log)"
+                    :key="step.key"
+                    :title="
+                      step.ts ? `${step.label} — ${formatCompactDateTime(step.ts)}` : `${step.label} : pas encore`
+                    "
+                    class="flex h-6 w-6 items-center justify-center rounded-md"
+                    :class="step.ts ? 'bg-[var(--app-surface)]' : 'bg-transparent'"
+                  >
+                    <UIcon
+                      :name="step.icon"
+                      class="h-3.5 w-3.5"
+                      :class="step.ts ? step.color : 'text-[var(--app-faint)]'"
+                    />
+                  </span>
+                </div>
+              </td>
+              <td class="px-3 py-2.5 text-sm">
+                <div class="text-[var(--app-ink)]">{{ log.sent_at ? formatCompactDateTime(log.sent_at) : '—' }}</div>
+                <div
+                  v-if="lastActivityAt(log) && lastActivityAt(log) !== log.sent_at"
+                  class="text-muted mt-0.5 text-xs"
                 >
-                  <UIcon
-                    :name="step.icon"
-                    class="h-3.5 w-3.5"
-                    :class="step.ts ? step.color : 'text-[var(--app-faint)]'"
-                  />
-                </span>
-              </div>
-            </td>
-            <td class="px-3 py-2.5 text-sm">
-              <div class="text-[var(--app-ink)]">{{ log.sent_at ? formatDate(log.sent_at) : '—' }}</div>
-              <div v-if="lastActivityAt(log) && lastActivityAt(log) !== log.sent_at" class="text-muted mt-0.5 text-xs">
-                Activité : {{ formatDate(lastActivityAt(log)) }}
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+                  Activité : {{ formatCompactDateTime(lastActivityAt(log)) }}
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-      <!-- Pagination -->
-      <div class="flex items-center justify-between border-t border-[var(--app-line)] px-6 py-4">
+      <div
+        class="flex flex-col gap-3 border-t border-[var(--app-line)] px-4 py-3.5 sm:px-6 @2xl:flex-row @2xl:items-center @2xl:justify-between"
+      >
         <div class="text-muted text-sm">
           {{ (currentPage - 1) * pageSize + 1 }}–{{ Math.min(currentPage * pageSize, filteredLogs.length) }} sur
           {{ filteredLogs.length }}
@@ -202,40 +220,41 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
+import type { UseToastReturn } from '~/types/Composables'
+import type { EngagementStep } from '~/types/EmailsListPage'
+import type { SelectFieldOption } from '~/types/SelectField'
+import type { ComputedRef, Ref } from 'vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import type { EmailLog, EmailStats, EmailStatus } from '~/types'
-import { formatDate } from '~/utils/date'
-import { getEmailLogs, getEmailStats } from '~/services/emailCampaignsService'
-import { campaignService, type CampaignResponse } from '~/services/campaignService'
+import { formatCompactDateTime } from '~/utils/date'
+import { EmailCampaignsService } from '~/services/emailCampaignsService'
+import type { CampaignListResponse, CampaignResponse } from '~/services/campaignService'
+import { CampaignService } from '~/services/campaignService'
 import { useToast } from '~/composables/useToast'
 import { useDrawerStackStore } from '~/stores/drawerStack'
-import { api } from '~/services/api'
+import { ApiClient } from '~/services/api'
 
 definePageMeta({ layout: 'dashboard', middleware: ['auth'] })
 
-// ─── State ────────────────────────────────────────────────────────────────────
-
-const toast = useToast()
-const logs = ref<EmailLog[]>([])
-const campaigns = ref<CampaignResponse[]>([])
-
-// ─── Envoi manuel (drawer persistant hébergé par le layout) ──────────────────
+const toast: UseToastReturn = useToast()
+const logs: Ref<EmailLog[]> = ref([])
+const campaigns: Ref<CampaignResponse[]> = ref([])
 
 /** Persistent drawer stack (composer + email log detail live there). */
-const drawerStack = useDrawerStackStore()
+const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 
-const isSyncing = ref<boolean>(false)
-const isLoading = ref(false)
-const error = ref<string | null>(null)
-const searchQuery = ref('')
-const filterStatus = ref('all')
-const filterCampaignId = ref('all')
-const currentPage = ref(1)
-const pageSize = 50
+const isSyncing: Ref<boolean> = ref(false)
+const isLoading: Ref<boolean> = ref(false)
+const error: Ref<string | null> = ref(null)
+const searchQuery: Ref<string> = ref('')
+const filterStatus: Ref<string> = ref('all')
+const filterCampaignId: Ref<string> = ref('all')
+const currentPage: Ref<number> = ref(1)
+const pageSize: number = 50
 
 /** Full stats object — typed strictly as EmailStats so every field is present. */
-const stats = ref<EmailStats>({
+const stats: Ref<EmailStats> = ref({
   total_sent: 0,
   total_delivered: 0,
   total_opened: 0,
@@ -247,9 +266,7 @@ const stats = ref<EmailStats>({
   click_rate: 0,
 })
 
-// ─── Filter options ───────────────────────────────────────────────────────────
-
-const statusOptions = [
+const statusOptions: { value: string; label: string }[] = [
   { value: 'all', label: 'Tous' },
   { value: 'pending', label: 'En attente' },
   { value: 'sent', label: 'Envoyé' },
@@ -262,20 +279,18 @@ const statusOptions = [
   { value: 'complained', label: 'Spam' },
 ]
 
-const campaignOptions = computed(() => [
+const campaignOptions: ComputedRef<SelectFieldOption[]> = computed(() => [
   { value: 'all', label: 'Toutes les campagnes' },
-  ...campaigns.value.map((c) => ({ value: String(c.id), label: c.name })),
+  ...campaigns.value.map((campaign: CampaignResponse) => ({ value: String(campaign.id), label: campaign.name })),
 ])
 
-// ─── Computed ─────────────────────────────────────────────────────────────────
-
-const filteredLogs = computed((): EmailLog[] => {
-  let list = logs.value
+const filteredLogs: ComputedRef<EmailLog[]> = computed((): EmailLog[] => {
+  let list: EmailLog[] = logs.value
 
   if (searchQuery.value) {
-    const q = searchQuery.value.toLowerCase()
+    const q: string = searchQuery.value.toLowerCase()
     list = list.filter(
-      (l) =>
+      (l: EmailLog) =>
         l.recipient_email.toLowerCase().includes(q) ||
         l.recipient_name?.toLowerCase().includes(q) ||
         l.subject.toLowerCase().includes(q),
@@ -283,26 +298,25 @@ const filteredLogs = computed((): EmailLog[] => {
   }
 
   if (filterStatus.value !== 'all') {
-    list = list.filter((l) => l.status === filterStatus.value)
+    list = list.filter((l: EmailLog) => l.status === filterStatus.value)
   }
 
   if (filterCampaignId.value !== 'all') {
-    // campaign_id on EmailLog is ``string | null`` from the backend; compare
-    // against the filter value (also a string) to avoid Number(null) → 0 bugs.
-    list = list.filter((l) => l.campaign_id != null && String(l.campaign_id) === filterCampaignId.value)
+    // Comparaison en chaîne : Number(null) vaudrait 0 et matcherait la première campagne.
+    list = list.filter((l: EmailLog) => l.campaign_id != null && String(l.campaign_id) === filterCampaignId.value)
   }
 
   return list
 })
 
-const totalPages = computed((): number => Math.max(1, Math.ceil(filteredLogs.value.length / pageSize)))
+const totalPages: ComputedRef<number> = computed((): number =>
+  Math.max(1, Math.ceil(filteredLogs.value.length / pageSize)),
+)
 
-const paginatedLogs = computed((): EmailLog[] => {
-  const start = (currentPage.value - 1) * pageSize
+const paginatedLogs: ComputedRef<EmailLog[]> = computed((): EmailLog[] => {
+  const start: number = (currentPage.value - 1) * pageSize
   return filteredLogs.value.slice(start, start + pageSize)
 })
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
  * Resolve a campaign display name from its ID.
@@ -311,16 +325,13 @@ const paginatedLogs = computed((): EmailLog[] => {
  */
 function resolveCampaignName(id: string | number | null | undefined): string | undefined {
   if (id == null) return undefined
-  const numericId = Number(id)
+  const numericId: number = Number(id)
   if (Number.isNaN(numericId)) return undefined
-  return campaigns.value.find((c) => c.id === numericId)?.name
+  return campaigns.value.find((campaign: CampaignResponse) => campaign.id === numericId)?.name
 }
 
 /**
- * Returns the list of status badges to display for a given email log.
- *
- * Shows the best positive state reached (based on event timestamps) plus any
- * negative events as additional badges (e.g. "Ouvert" + "Spam").
+ * Status badges for an email log (best positive state plus complaint if any).
  * @param log - The email log entry to evaluate.
  * @returns Ordered array of EmailStatus values to render as badges.
  */
@@ -341,25 +352,8 @@ function getEmailBadges(log: EmailLog): EmailStatus[] {
   return badges
 }
 
-/** A single engagement signal (delivered / opened / clicked) for the table. */
-interface EngagementStep {
-  /** Stable key. */
-  key: string
-  /** French label shown in the tooltip. */
-  label: string
-  /** Lucide icon name. */
-  icon: string
-  /** Event timestamp, or null/undefined when it hasn't happened. */
-  ts: string | null | undefined
-  /** Tailwind text colour applied when the signal is reached. */
-  color: string
-}
-
 /**
- * Build the engagement signals (delivered → opened → clicked) for a log row.
- *
- * These are the Resend-tracked events most useful at a glance for cold
- * outreach.  Each step lights up in colour once reached.
+ * Engagement signals (delivered → opened → clicked) for a log row.
  * @param log - The email log entry to evaluate.
  * @returns Ordered list of engagement steps.
  */
@@ -404,11 +398,14 @@ function lastActivityAt(log: EmailLog): string | null {
     log.complained_at,
     log.failed_at,
   ]
-  const valid: number[] = stamps.filter((s): s is string => !!s).map((s: string): number => new Date(s).getTime())
+  const valid: number[] = stamps
+    .filter((s: string | null | undefined): s is string => !!s)
+    .map((s: string): number => new Date(s).getTime())
   if (valid.length === 0) return null
   return new Date(Math.max(...valid)).toISOString()
 }
 
+/** Reset filters and rewind pagination to page 1. */
 function clearFilters(): void {
   searchQuery.value = ''
   filterStatus.value = 'all'
@@ -416,21 +413,25 @@ function clearFilters(): void {
   currentPage.value = 1
 }
 
+/**
+ * Open the email log detail drawer for a row.
+ * @param log - Email log row to open.
+ */
 function openDrawer(log: EmailLog): void {
   drawerStack.push({ kind: 'email-log', log, campaignName: resolveCampaignName(log.campaign_id) })
 }
 
-// ─── Data loading ─────────────────────────────────────────────────────────────
-
+/** Fetch logs (limit 500), campaigns and stats in parallel. */
 async function loadLogs(): Promise<void> {
   isLoading.value = true
   error.value = null
   try {
-    const [logsRes, campaignsRes, statsRes] = await Promise.all([
-      getEmailLogs({ limit: 500 }),
-      campaignService.list(0, 200),
-      getEmailStats(),
-    ])
+    const [logsRes, campaignsRes, statsRes]: [{ total: number; logs: EmailLog[] }, CampaignListResponse, EmailStats] =
+      await Promise.all([
+        EmailCampaignsService.getEmailLogs({ limit: 500 }),
+        CampaignService.list(0, 200),
+        EmailCampaignsService.getEmailStats(),
+      ])
     logs.value = logsRes.logs
     campaigns.value = campaignsRes.campaigns
     stats.value = statsRes
@@ -457,10 +458,11 @@ watch(
 async function syncStatus(): Promise<void> {
   isSyncing.value = true
   try {
-    const result = await api.post<{ updated: number; checked: number; errors?: string[] }>(
-      '/api/v1/emails/sync-resend-status',
-      {},
-    )
+    const result: { updated: number; checked: number; errors?: string[] | undefined } = await ApiClient.post<{
+      updated: number
+      checked: number
+      errors?: string[]
+    }>('/api/v1/emails/sync-resend-status', {})
     if (result.updated > 0) {
       toast.success(`${result.updated} statut(s) mis à jour`)
       await loadLogs()

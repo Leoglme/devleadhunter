@@ -1,6 +1,7 @@
 """Dashboard home KPIs aggregated for the current user."""
+
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Select, func, select
@@ -8,9 +9,11 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from enums.demo_site_status import DemoSiteStatus
+from enums.order_status import WON_STATUSES
 from models.campaign import Campaign, CampaignStatus
 from models.demo_site import DemoSite
 from models.email_log import EmailLog
+from models.order import Order
 from models.organization import OrganizationMember
 from models.prospect_db import ProspectDB
 from models.user import User
@@ -18,6 +21,9 @@ from schemas.dashboard import (
     ActivityPoint,
     CoverageCity,
     CoverageMember,
+    CoverageProspectPoint,
+    CoverageProspectRow,
+    CoverageProspectsResponse,
     CoverageResponse,
     DashboardActivityResponse,
     DashboardStatsResponse,
@@ -41,40 +47,48 @@ def _count(db: Session, stmt: Select) -> int:
 
 @router.get("/stats", response_model=DashboardStatsResponse)
 async def dashboard_stats(
+    period_days: int = Query(default=0, ge=0, le=365, description="0 = depuis toujours"),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> DashboardStatsResponse:
-    """Return the headline KPIs for the dashboard home page."""
-    uid = current_user.id
+    """Return the headline KPIs for the dashboard home page.
 
-    prospects_total = _count(db, select(ProspectDB.id).where(ProspectDB.user_id == uid))
+    ``period_days`` restricts the cumulative KPIs (prospects added, emails,
+    sales) to a rolling window; current-state KPIs (active demos/campaigns)
+    always reflect right now.
+    """
+    uid = current_user.id
+    since = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=period_days) if period_days > 0 else None
+
+    prospects_stmt = select(ProspectDB.id).where(ProspectDB.user_id == uid)
+    if since is not None:
+        prospects_stmt = prospects_stmt.where(ProspectDB.created_at >= since)
+    prospects_total = _count(db, prospects_stmt)
+
     demo_sites_active = _count(
         db,
-        select(DemoSite.id).where(
-            DemoSite.user_id == uid, DemoSite.status == DemoSiteStatus.ACTIVE.value
-        ),
+        select(DemoSite.id).where(DemoSite.user_id == uid, DemoSite.status == DemoSiteStatus.ACTIVE.value),
     )
     campaigns_active = _count(
         db,
-        select(Campaign.id).where(
-            Campaign.user_id == uid, Campaign.status == CampaignStatus.ACTIVE.value
-        ),
+        select(Campaign.id).where(Campaign.user_id == uid, Campaign.status == CampaignStatus.ACTIVE.value),
     )
 
-    emails_sent = _count(
-        db, select(EmailLog.id).where(EmailLog.user_id == uid, EmailLog.sent_at.isnot(None))
-    )
-    emails_opened = _count(
-        db, select(EmailLog.id).where(EmailLog.user_id == uid, EmailLog.opened_at.isnot(None))
-    )
-    emails_clicked = _count(
-        db, select(EmailLog.id).where(EmailLog.user_id == uid, EmailLog.clicked_at.isnot(None))
-    )
+    def _email_count(column) -> int:
+        """Count logs whose ``column`` is set, restricted to the window."""
+        stmt = select(EmailLog.id).where(EmailLog.user_id == uid, column.isnot(None))
+        if since is not None:
+            stmt = stmt.where(column >= since)
+        return _count(db, stmt)
+
+    emails_sent = _email_count(EmailLog.sent_at)
+    emails_opened = _email_count(EmailLog.opened_at)
+    emails_clicked = _email_count(EmailLog.clicked_at)
 
     open_rate = round(emails_opened / emails_sent * 100, 2) if emails_sent else 0.0
     click_rate = round(emails_clicked / emails_sent * 100, 2) if emails_sent else 0.0
 
-    sales = order_service.stats_for_user(db, uid)
+    sales = order_service.stats_for_user(db, uid, since=since)
 
     return DashboardStatsResponse(
         prospects_total=prospects_total,
@@ -97,9 +111,7 @@ def _daily_counts(db: Session, uid: int, column, since: date) -> dict[str, int]:
     """Return a {YYYY-MM-DD: count} map of rows whose ``column`` day is >= ``since``."""
     day = func.date(column)
     rows = db.execute(
-        select(day, func.count())
-        .where(EmailLog.user_id == uid, column.isnot(None), day >= since)
-        .group_by(day)
+        select(day, func.count()).where(EmailLog.user_id == uid, column.isnot(None), day >= since).group_by(day)
     ).all()
     return {str(d): int(c or 0) for d, c in rows}
 
@@ -112,7 +124,7 @@ async def dashboard_activity(
 ) -> DashboardActivityResponse:
     """Return the daily email activity (sent/opened/clicked) over the last ``days`` days."""
     uid = current_user.id
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     start = today - timedelta(days=days - 1)
 
     sent = _daily_counts(db, uid, EmailLog.sent_at, start)
@@ -159,16 +171,33 @@ async def dashboard_hot_leads(
             )
             for lead in leads
         ]
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("hot-leads aggregation failed for user %s", current_user.id)
         return HotLeadsResponse(items=[])
     return HotLeadsResponse(items=items)
+
+
+def _apply_coverage_scope(stmt, scope: str, member_id, uid: int, org_id):
+    """Restrict a prospect select to the coverage scope (me / org / member).
+
+    Shared by the coverage aggregation and the zone-prospects listing so both
+    endpoints resolve visibility identically (member is org-guarded).
+    """
+    if scope == "org" and org_id is not None:
+        return stmt.where(ProspectDB.organization_id == org_id)
+    if scope == "member" and member_id is not None and org_id is not None:
+        # Guard: the member must belong to the caller's organization.
+        return stmt.where(ProspectDB.user_id == member_id, ProspectDB.organization_id == org_id)
+    return stmt.where(ProspectDB.user_id == uid)
 
 
 @router.get("/coverage", response_model=CoverageResponse)
 async def dashboard_coverage(
     scope: str = Query("me", description="me | org | member"),
     member_id: int | None = Query(None, description="User id when scope=member"),
+    categories: list[str] | None = Query(
+        None, description="Optional trade filter (repeatable). Empty/absent = all trades."
+    ),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> CoverageResponse:
@@ -181,6 +210,11 @@ async def dashboard_coverage(
       - ``member``  → one org member's prospects (``member_id``), org-scoped so a
                       user can only inspect members of their own organization.
 
+    ``categories`` filters by trade (``ProspectDB.category``, case-insensitive);
+    absent or empty → all trades. ``available_categories`` always lists the
+    distinct trades present in the SCOPE (ignoring the filter) so the frontend
+    can build its trade selector from real values only.
+
     Cities are grouped case-insensitively; empty cities are excluded. The
     ``members`` list is filled only when the user belongs to an organization, so
     the frontend can offer a scope selector.
@@ -188,28 +222,52 @@ async def dashboard_coverage(
     uid = current_user.id
     org_id = organization_service.user_org_id(db, uid)
 
+    def scope_filter(stmt):
+        """Apply the resolved scope restriction to a prospect select."""
+        return _apply_coverage_scope(stmt, scope, member_id, uid, org_id)
+
+    resolved_scope = scope
+    if not (scope == "org" and org_id is not None) and not (
+        scope == "member" and member_id is not None and org_id is not None
+    ):
+        resolved_scope = "me"
+
     city_col = func.trim(ProspectDB.city)
     stmt = select(
         func.min(city_col).label("city"),
         func.count().label("count"),
     ).where(city_col.isnot(None), city_col != "")
+    stmt = scope_filter(stmt)
 
-    resolved_scope = scope
-    if scope == "org" and org_id is not None:
-        stmt = stmt.where(ProspectDB.organization_id == org_id)
-    elif scope == "member" and member_id is not None and org_id is not None:
-        # Guard: the member must belong to the caller's organization.
-        stmt = stmt.where(
-            ProspectDB.user_id == member_id, ProspectDB.organization_id == org_id
-        )
-    else:
-        resolved_scope = "me"
-        stmt = stmt.where(ProspectDB.user_id == uid)
+    wanted = [c.strip().lower() for c in (categories or []) if c and c.strip()]
+    if wanted:
+        stmt = stmt.where(func.lower(func.trim(ProspectDB.category)).in_(wanted))
 
     stmt = stmt.group_by(func.lower(city_col)).order_by(func.count().desc())
     rows = db.execute(stmt).all()
     cities = [CoverageCity(city=str(row.city), count=int(row.count)) for row in rows]
     total = sum(c.count for c in cities)
+
+    # Les mêmes prospects, un par un : le front les géocode à l'adresse pour le zoom rue.
+    point_stmt = select(ProspectDB.id, ProspectDB.name, ProspectDB.address, city_col.label("city")).where(
+        city_col.isnot(None), city_col != ""
+    )
+    point_stmt = scope_filter(point_stmt)
+    if wanted:
+        point_stmt = point_stmt.where(func.lower(func.trim(ProspectDB.category)).in_(wanted))
+    points = [
+        CoverageProspectPoint(id=int(row.id), name=str(row.name), address=row.address, city=str(row.city))
+        for row in db.execute(point_stmt).all()
+    ]
+
+    # Distinct trades in the scope (unfiltered) — one small grouped query.
+    cat_col = func.trim(ProspectDB.category)
+    cat_stmt = scope_filter(
+        select(func.min(cat_col).label("category"))
+        .where(cat_col.isnot(None), cat_col != "")
+        .group_by(func.lower(cat_col))
+    )
+    available_categories = sorted((str(row.category) for row in db.execute(cat_stmt).all()), key=str.lower)
 
     members: list[CoverageMember] = []
     if org_id is not None:
@@ -224,5 +282,93 @@ async def dashboard_coverage(
             members = [CoverageMember(user_id=r.id, name=r.name) for r in member_rows]
 
     return CoverageResponse(
-        scope=resolved_scope, cities=cities, total_prospects=total, members=members
+        scope=resolved_scope,
+        cities=cities,
+        points=points,
+        total_prospects=total,
+        members=members,
+        available_categories=available_categories,
     )
+
+
+@router.get("/coverage/prospects", response_model=CoverageProspectsResponse)
+async def coverage_zone_prospects(
+    cities: list[str] = Query(..., description="City names of the zone (repeatable)"),
+    scope: str = Query("me", description="me | org | member"),
+    member_id: int | None = Query(None, description="User id when scope=member"),
+    categories: list[str] | None = Query(None, description="Optional trade filter (repeatable)"),
+    limit: int = Query(300, ge=1, le=500),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> CoverageProspectsResponse:
+    """
+    List the prospects of a coverage zone (one city, or a region's cities) with
+    a LIGHT recap per prospect: demo generated, email engagement, sold.
+
+    Powers the coverage-map zone drawer — same scope/trade semantics as
+    ``/coverage``. Capped at ``limit`` rows (name-ordered); ``total`` carries the
+    real count so the UI can say « 300 affichés sur 412 ».
+    """
+    uid = current_user.id
+    org_id = organization_service.user_org_id(db, uid)
+
+    wanted_cities = [c.strip().lower() for c in cities if c and c.strip()]
+    if not wanted_cities:
+        return CoverageProspectsResponse(items=[], total=0)
+
+    stmt = select(ProspectDB).where(func.lower(func.trim(ProspectDB.city)).in_(wanted_cities))
+    stmt = _apply_coverage_scope(stmt, scope, member_id, uid, org_id)
+    wanted_categories = [c.strip().lower() for c in (categories or []) if c and c.strip()]
+    if wanted_categories:
+        stmt = stmt.where(func.lower(func.trim(ProspectDB.category)).in_(wanted_categories))
+
+    total = _count(db, stmt)
+    prospects = db.execute(stmt.order_by(ProspectDB.name.asc()).limit(limit)).scalars().all()
+    ids = [p.id for p in prospects]
+    if not ids:
+        return CoverageProspectsResponse(items=[], total=total)
+
+    # Grouped flag queries (one each — no N+1).
+    demo_ids = {
+        int(row[0])
+        for row in db.execute(
+            select(DemoSite.prospect_id)
+            .where(DemoSite.prospect_id.in_(ids), DemoSite.status != DemoSiteStatus.DELETED.value)
+            .group_by(DemoSite.prospect_id)
+        ).all()
+    }
+    email_rows = db.execute(
+        select(
+            EmailLog.prospect_id,
+            func.count(EmailLog.sent_at),
+            func.count(EmailLog.opened_at),
+            func.count(EmailLog.clicked_at),
+        )
+        .where(EmailLog.prospect_id.in_(ids))
+        .group_by(EmailLog.prospect_id)
+    ).all()
+    emails = {int(r[0]): (int(r[1] or 0), int(r[2] or 0), int(r[3] or 0)) for r in email_rows if r[0] is not None}
+    sold_ids = {
+        int(row[0])
+        for row in db.execute(
+            select(Order.prospect_id)
+            .where(Order.prospect_id.in_(ids), Order.status.in_(WON_STATUSES))
+            .group_by(Order.prospect_id)
+        ).all()
+    }
+
+    items = [
+        CoverageProspectRow(
+            id=p.id,
+            name=p.name,
+            city=p.city,
+            category=p.category,
+            has_demo=p.id in demo_ids,
+            emails_sent=emails.get(p.id, (0, 0, 0))[0],
+            emails_opened=emails.get(p.id, (0, 0, 0))[1],
+            emails_clicked=emails.get(p.id, (0, 0, 0))[2],
+            is_sold=p.id in sold_ids,
+        )
+        for p in prospects
+    ]
+    return CoverageProspectsResponse(items=items, total=total)

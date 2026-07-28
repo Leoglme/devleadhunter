@@ -1,14 +1,17 @@
 """Demo site routes for the website builder tunnel."""
+
 import logging
-from typing import Any, List
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.database import get_db
 from enums.demo_site_status import DemoSiteStatus
+from enums.demo_video_status import DemoVideoStatus
 from models.prospect_db import ProspectDB
 from models.user import User
 from schemas.demo_site import (
@@ -24,6 +27,13 @@ from schemas.demo_site import (
 )
 from services.auth_service import get_current_active_user
 from services.demo_site_service import demo_site_service
+from services.demo_video_service import (
+    demo_video_service,
+    has_ready_video,
+    public_thumbnail_url,
+    public_video_file_url,
+    video_page_url,
+)
 from services.site_export_service import site_export_service
 
 logger = logging.getLogger(__name__)
@@ -53,11 +63,14 @@ def _serialize_demo_site(site) -> DemoSiteResponse:
             "secondary": str(theme_raw.get("secondary", "#0f172a")),
             "accent": str(theme_raw.get("accent", "#f59e0b")),
         }
+    if has_ready_video(site):
+        payload["video_page_url"] = video_page_url(site.slug)
+        payload["video_thumbnail_url"] = public_thumbnail_url(site.slug)
     return DemoSiteResponse(**payload)
 
 
-@router.get("/templates", response_model=List[DemoSiteTemplateResponse])
-async def list_demo_templates() -> List[DemoSiteTemplateResponse]:
+@router.get("/templates", response_model=list[DemoSiteTemplateResponse])
+async def list_demo_templates() -> list[DemoSiteTemplateResponse]:
     """List templates available in the site builder stepper."""
     return [DemoSiteTemplateResponse(**template) for template in demo_site_service.list_templates()]
 
@@ -109,7 +122,41 @@ async def get_public_demo_site(
     payload = DemoSitePublicResponse.model_validate(site).model_dump()
     if site.storyblok_preview_token:
         payload["storyblok_region"] = settings.storyblok_region
+    payload["video_available"] = has_ready_video(site)
+    if payload["video_available"]:
+        # URLs R2 : le lecteur charge la vidéo depuis Cloudflare, pas depuis l'API.
+        payload["video_url"] = public_video_file_url(site.slug)
+        payload["video_thumbnail_url"] = public_thumbnail_url(site.slug)
     return DemoSitePublicResponse(**payload)
+
+
+@router.get("/public/{slug}/video.mp4")
+async def stream_public_demo_video(
+    slug: str,
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """
+    Redirect to the prospection video on R2.
+
+    Kept as a permanent redirect target because emails already sent embed this
+    API URL — the bytes themselves are served by Cloudflare, never by the VPS.
+    """
+    site = demo_site_service.get_public_by_slug(db, slug)
+    if not site or not has_ready_video(site):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    return RedirectResponse(url=public_video_file_url(site.slug), status_code=status.HTTP_302_FOUND)
+
+
+@router.get("/public/{slug}/video-thumbnail.jpg")
+async def serve_public_demo_video_thumbnail(
+    slug: str,
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """Redirect to the personalised email thumbnail ({vignette_video} image) on R2."""
+    site = demo_site_service.get_public_by_slug(db, slug)
+    if not site or not has_ready_video(site):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thumbnail not found")
+    return RedirectResponse(url=public_thumbnail_url(site.slug), status_code=status.HTTP_302_FOUND)
 
 
 @router.get("", response_model=DemoSiteListResponse)
@@ -180,9 +227,7 @@ async def create_demo_sites_bulk(
 
     for prospect_id in payload.prospect_ids:
         prospect: ProspectDB | None = (
-            db.query(ProspectDB)
-            .filter(ProspectDB.id == prospect_id, ProspectDB.user_id == current_user.id)
-            .first()
+            db.query(ProspectDB).filter(ProspectDB.id == prospect_id, ProspectDB.user_id == current_user.id).first()
         )
         if not prospect:
             results.append({"prospect_id": prospect_id, "status": "failed", "error": "Prospect introuvable"})
@@ -206,14 +251,16 @@ async def create_demo_sites_bulk(
                 theme=theme_dict,
                 prospect_id=prospect.id,
             )
-            results.append({
-                "prospect_id": prospect_id,
-                "demo_site_id": site.id,
-                "slug": site.slug,
-                "status": site.status,
-            })
+            results.append(
+                {
+                    "prospect_id": prospect_id,
+                    "demo_site_id": site.id,
+                    "slug": site.slug,
+                    "status": site.status,
+                }
+            )
             created += 1
-        except Exception as exc:  # noqa: BLE001 — report per item, never fail the whole batch
+        except Exception as exc:
             results.append({"prospect_id": prospect_id, "status": "failed", "error": str(exc)})
             failed += 1
 
@@ -274,7 +321,7 @@ async def export_demo_site_code(
         data, filename = await site_export_service.build_export(site)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001 — network / GitHub tarball failure
+    except Exception as exc:
         logger.exception("Site code export failed for slug=%s", site.slug)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -336,6 +383,42 @@ async def regenerate_demo_site(
     """Rebuild demo site content from stored fields without changing them."""
     site = _get_editable_demo_site(db, current_user.id, demo_site_id)
     site = await demo_site_service.regenerate_demo_site(db, site)
+    return _serialize_demo_site(site)
+
+
+@router.post("/{demo_site_id}/video", response_model=DemoSiteResponse, status_code=status.HTTP_202_ACCEPTED)
+async def generate_demo_site_video(
+    demo_site_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> DemoSiteResponse:
+    """Start background generation of the prospection video for a demo site."""
+    site = demo_site_service.get_for_user(db, current_user.id, demo_site_id)
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo site not found")
+    try:
+        site = demo_video_service.request_generation(db, site, current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _serialize_demo_site(site)
+
+
+@router.delete("/{demo_site_id}/video", response_model=DemoSiteResponse)
+async def delete_demo_site_video(
+    demo_site_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> DemoSiteResponse:
+    """Delete the generated prospection video and reset the video state."""
+    site = demo_site_service.get_for_user(db, current_user.id, demo_site_id)
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo site not found")
+    if site.video_status == DemoVideoStatus.GENERATING.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Une génération est en cours — attendez qu'elle se termine.",
+        )
+    site = demo_video_service.clear_video(db, site)
     return _serialize_demo_site(site)
 
 

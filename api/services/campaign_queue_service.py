@@ -11,50 +11,37 @@ Responsibilities:
   - Skip sending to prospects who have unsubscribed or who already engaged
     (follow-ups only).
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, and_, func
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
+from enums.demo_site_status import DemoSiteStatus
+from enums.email_status import EmailStatus
 from models.campaign import Campaign, CampaignStatus
 from models.campaign_follow_up import CampaignFollowUp
-from models.email_queue import EmailQueue
-from models.email_log import EmailLog
-from models.prospect_db import ProspectDB
-from models.email_template import EmailTemplate
 from models.demo_site import DemoSite
+from models.email_log import EmailLog
+from models.email_queue import EmailQueue
+from models.email_template import EmailTemplate
+from models.prospect_db import ProspectDB
 from services.email_sending_service import EmailSendingService
+from services.email_variables import EmailVariables
 from services.unsubscribe_service import unsubscribe_service
-from enums.email_status import EmailStatus
-from enums.demo_site_status import DemoSiteStatus
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Personalisation variable keys used in cold-email templates.
-# ---------------------------------------------------------------------------
-_VAR_FIRST_NAME = "prenom"
-_VAR_COMPANY    = "entreprise"
-_VAR_CITY       = "ville"
-_VAR_EMAIL      = "email"
-_VAR_PHONE      = "phone"
-_VAR_DEMO_LINK  = "lien_demo"
-_VAR_METIER     = "metier"
-
 # Queue item status values
-_STATUS_PENDING  = "pending"
-_STATUS_SENDING  = "sending"
-_STATUS_SENT     = "sent"
-_STATUS_SKIPPED  = "skipped"
-_STATUS_FAILED   = "failed"
+_STATUS_PENDING = "pending"
+_STATUS_SENDING = "sending"
+_STATUS_SENT = "sent"
+_STATUS_SKIPPED = "skipped"
+_STATUS_FAILED = "failed"
 
 
 @dataclass
@@ -63,19 +50,23 @@ class EnqueueResult:
     Outcome of enqueuing a campaign.
 
     Attributes:
-        enqueued:        Number of J1 queue items added.
-        skipped_no_demo: Prospects skipped because their template uses
-                         ``{lien_demo}`` but they have no active demo site.
-                         Each entry is ``{"id": int, "name": str}``.
+        enqueued:         Number of J1 queue items added.
+        skipped_no_demo:  Prospects skipped because their template uses
+                          ``{lien_demo}`` but they have no active demo site.
+                          Each entry is ``{"id": int, "name": str}``.
+        skipped_no_video: Prospects skipped because their template uses
+                          ``{lien_video}``/``{vignette_video}`` but their demo
+                          has no generated prospection video.
     """
 
     enqueued: int = 0
     skipped_no_demo: list[dict[str, object]] = field(default_factory=list)
+    skipped_no_video: list[dict[str, object]] = field(default_factory=list)
 
 
 def _utcnow() -> datetime:
     """Return the current UTC time as a timezone-naive datetime (DB-compatible)."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class CampaignQueueService:
@@ -83,10 +74,6 @@ class CampaignQueueService:
 
     def __init__(self, db: Session) -> None:
         self.db = db
-
-    # -----------------------------------------------------------------------
-    # Enqueueing
-    # -----------------------------------------------------------------------
 
     def enqueue_campaign(
         self,
@@ -124,11 +111,11 @@ class CampaignQueueService:
 
         # Pre-load templates once to know whether each variant needs a demo link.
         template_a: EmailTemplate | None = self.db.get(EmailTemplate, template_id)
-        template_b: EmailTemplate | None = (
-            self.db.get(EmailTemplate, ab_template_id_b) if ab_template_id_b else None
-        )
+        template_b: EmailTemplate | None = self.db.get(EmailTemplate, ab_template_id_b) if ab_template_id_b else None
         uses_demo_a: bool = self._template_uses_demo_link(template_a)
         uses_demo_b: bool = self._template_uses_demo_link(template_b)
+        uses_video_a: bool = self._template_uses_video(template_a)
+        uses_video_b: bool = self._template_uses_video(template_b)
 
         # Append after the last pending slot so re-launching is safe.
         latest: datetime | None = self.db.execute(
@@ -164,17 +151,24 @@ class CampaignQueueService:
                 variant = "A" if idx % 2 == 0 else "B"
                 tpl_id = template_id if variant == "A" else ab_template_id_b
                 uses_demo = uses_demo_a if variant == "A" else uses_demo_b
+                uses_video = uses_video_a if variant == "A" else uses_video_b
             else:
                 variant = None
                 tpl_id = template_id
                 uses_demo = uses_demo_a
+                uses_video = uses_video_a
 
             # Guard: never enqueue an email that would ship an empty {lien_demo}.
             if uses_demo and not self._demo_link_for_prospect(prospect.id, campaign.user_id, variant):
-                logger.info(
-                    "[Queue] Skipping prospect %d — no active demo site for {lien_demo}", prospect.id
-                )
+                logger.info("[Queue] Skipping prospect %d — no active demo site for {lien_demo}", prospect.id)
                 result.skipped_no_demo.append({"id": prospect.id, "name": prospect.name or ""})
+                continue
+
+            # Guard: same rule for {lien_video}/{vignette_video} — never ship
+            # an email whose video block would be empty.
+            if uses_video and not self._video_for_prospect(prospect.id, campaign.user_id, variant)[0]:
+                logger.info("[Queue] Skipping prospect %d — no prospection video for {lien_video}", prospect.id)
+                result.skipped_no_video.append({"id": prospect.id, "name": prospect.name or ""})
                 continue
 
             to_enqueue.append((prospect.id, tpl_id, variant))
@@ -184,24 +178,29 @@ class CampaignQueueService:
 
         # --- Pass 2: create the queue rows ----------------------------------
         for (prospect_id, tpl_id, variant), slot in zip(to_enqueue, slots):
-            self.db.add(EmailQueue(
-                user_id=campaign.user_id,
-                campaign_id=campaign.id,
-                prospect_id=prospect_id,
-                template_id=tpl_id,
-                email_account_id=None,
-                queue_type="initial",
-                ab_variant=variant,
-                follow_up_index=0,
-                scheduled_at=slot,
-                status=_STATUS_PENDING,
-            ))
+            self.db.add(
+                EmailQueue(
+                    user_id=campaign.user_id,
+                    campaign_id=campaign.id,
+                    prospect_id=prospect_id,
+                    template_id=tpl_id,
+                    email_account_id=None,
+                    queue_type="initial",
+                    ab_variant=variant,
+                    follow_up_index=0,
+                    scheduled_at=slot,
+                    status=_STATUS_PENDING,
+                )
+            )
             result.enqueued += 1
 
         self.db.commit()
         logger.info(
             "[Queue] Enqueued %d J1 items for campaign %d (A/B=%s, %d skipped no-demo)",
-            result.enqueued, campaign.id, is_ab, len(result.skipped_no_demo),
+            result.enqueued,
+            campaign.id,
+            is_ab,
+            len(result.skipped_no_demo),
         )
         return result
 
@@ -237,9 +236,7 @@ class CampaignQueueService:
         if policy_row is not None:
             resolved = send_policy_service.resolve(self.db, campaign.user_id)
             start = (
-                latest + timedelta(minutes=resolved.spacing_minutes)
-                if (latest is not None and latest > now)
-                else now
+                latest + timedelta(minutes=resolved.spacing_minutes) if (latest is not None and latest > now) else now
             )
             return send_policy_service.next_send_slots(
                 resolved,
@@ -251,10 +248,6 @@ class CampaignQueueService:
         delay = timedelta(minutes=max(campaign.send_delay_minutes, 1))
         start = latest + delay if (latest is not None and latest > now) else now
         return [start + delay * i for i in range(count)]
-
-    # -----------------------------------------------------------------------
-    # Worker tick
-    # -----------------------------------------------------------------------
 
     async def process_next(self) -> bool:
         """
@@ -288,7 +281,7 @@ class CampaignQueueService:
 
         try:
             await self._dispatch(item)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error("[Queue] Unhandled error dispatching item %d: %s", item.id, exc)
             item.status = _STATUS_FAILED
             self.db.commit()
@@ -309,15 +302,22 @@ class CampaignQueueService:
         if template is None:
             return False
         haystack: str = f"{template.subject or ''} {template.body_html or ''}"
-        return f"{{{_VAR_DEMO_LINK}}}" in haystack
+        return f"{{{EmailVariables.DEMO_LINK}}}" in haystack
 
-    def _demo_link_for_prospect(self, prospect_id: int, user_id: int, variant: str | None) -> str:
+    @staticmethod
+    def _template_uses_video(template: EmailTemplate | None) -> bool:
         """
-        Resolve the ``{lien_demo}`` value: the prospect's active demo URL, with the
-        A/B variant appended (``?v=A``) so PostHog can attribute the demo visit to
-        the email variant. Returns "" when the prospect has no active demo.
+        Return True when a template references ``{lien_video}`` or
+        ``{vignette_video}`` (either one requires a generated video).
         """
-        site: DemoSite | None = self.db.execute(
+        if template is None:
+            return False
+        haystack: str = f"{template.subject or ''} {template.body_html or ''}"
+        return f"{{{EmailVariables.VIDEO_LINK}}}" in haystack or f"{{{EmailVariables.VIDEO_THUMBNAIL}}}" in haystack
+
+    def _active_demo_for_prospect(self, prospect_id: int, user_id: int) -> DemoSite | None:
+        """Latest ACTIVE demo site of a prospect (or None)."""
+        return self.db.execute(
             select(DemoSite)
             .where(
                 DemoSite.prospect_id == prospect_id,
@@ -327,12 +327,40 @@ class CampaignQueueService:
             .order_by(DemoSite.created_at.desc())
             .limit(1)
         ).scalar_one_or_none()
+
+    def _demo_link_for_prospect(self, prospect_id: int, user_id: int, variant: str | None) -> str:
+        """
+        Resolve the ``{lien_demo}`` value: the prospect's active demo URL, with the
+        A/B variant appended (``?v=A``) so PostHog can attribute the demo visit to
+        the email variant. Returns "" when the prospect has no active demo.
+        """
+        site: DemoSite | None = self._active_demo_for_prospect(prospect_id, user_id)
         if not site or not site.demo_url:
             return ""
         url: str = site.demo_url
         if variant:
             url = f"{url}{'&' if '?' in url else '?'}v={variant}"
         return url
+
+    def _video_for_prospect(self, prospect_id: int, user_id: int, variant: str | None) -> tuple[str, str]:
+        """
+        Resolve the ``{lien_video}``/``{vignette_video}`` values for a prospect.
+
+        The player-page link carries the A/B variant (``?v=A``) so PostHog can
+        attribute the video view to the email variant, like ``{lien_demo}``.
+
+        Returns:
+            ``(player page URL, thumbnail URL)`` — both "" when the prospect's active demo has no generated video.
+        """
+        from services.demo_video_service import has_ready_video, public_thumbnail_url, video_page_url
+
+        site: DemoSite | None = self._active_demo_for_prospect(prospect_id, user_id)
+        if not site or not has_ready_video(site):
+            return "", ""
+        url: str = video_page_url(site.slug)
+        if variant:
+            url = f"{url}{'&' if '?' in url else '?'}v={variant}"
+        return url, public_thumbnail_url(site.slug)
 
     async def _dispatch(self, item: EmailQueue) -> None:
         """
@@ -354,16 +382,21 @@ class CampaignQueueService:
 
         # Follow-up guard: skip if the prospect already engaged.
         if item.queue_type == "followup":
-            engaged: int = self.db.execute(
-                select(func.count()).where(
-                    EmailLog.campaign_id == item.campaign_id,
-                    EmailLog.prospect_id == str(item.prospect_id),
-                    EmailLog.status.in_([
-                        EmailStatus.OPENED.value,
-                        EmailStatus.CLICKED.value,
-                    ]),
-                )
-            ).scalar() or 0
+            engaged: int = (
+                self.db.execute(
+                    select(func.count()).where(
+                        EmailLog.campaign_id == item.campaign_id,
+                        EmailLog.prospect_id == str(item.prospect_id),
+                        EmailLog.status.in_(
+                            [
+                                EmailStatus.OPENED.value,
+                                EmailStatus.CLICKED.value,
+                            ]
+                        ),
+                    )
+                ).scalar()
+                or 0
+            )
             if engaged > 0:
                 logger.info("[Queue] Follow-up skipped — prospect %d already engaged", prospect.id)
                 item.status = _STATUS_SKIPPED
@@ -375,24 +408,25 @@ class CampaignQueueService:
         # expired between enqueue and dispatch.
         demo_link: str = self._demo_link_for_prospect(prospect.id, item.user_id, item.ab_variant)
         if self._template_uses_demo_link(template) and not demo_link:
-            logger.info(
-                "[Queue] Skipping send for prospect %d — no active demo site for {lien_demo}", prospect.id
-            )
+            logger.info("[Queue] Skipping send for prospect %d — no active demo site for {lien_demo}", prospect.id)
             item.status = _STATUS_SKIPPED
             self.db.commit()
             return
 
-        # Build personalisation variables.
-        name_parts = (prospect.name or "").split()
-        variables: dict[str, str] = {
-            _VAR_FIRST_NAME: name_parts[0] if name_parts else "",
-            _VAR_COMPANY:    prospect.name or "",
-            _VAR_CITY:       prospect.city or "",
-            _VAR_EMAIL:      prospect.email or "",
-            _VAR_PHONE:      prospect.phone or "",
-            _VAR_METIER:     prospect.category or "",
-            _VAR_DEMO_LINK:  demo_link,
-        }
+        # Same defense for {lien_video}/{vignette_video} — the video may have
+        # been deleted (or its demo expired) between enqueue and dispatch.
+        video_link, video_thumbnail_url = self._video_for_prospect(prospect.id, item.user_id, item.ab_variant)
+        if self._template_uses_video(template) and not video_link:
+            logger.info("[Queue] Skipping send for prospect %d — no prospection video for {lien_video}", prospect.id)
+            item.status = _STATUS_SKIPPED
+            self.db.commit()
+            return
+
+        # Build personalisation variables ({salutation}/{prenom}/{nom} come from
+        # the resolved decision-maker — never the company name).
+        variables: dict[str, str] = EmailVariables.build_for_prospect(
+            self.db, prospect, demo_link, video_link, video_thumbnail_url
+        )
 
         email_service = EmailSendingService(self.db)
         subject: str = email_service.replace_variables(template.subject, variables)
@@ -413,10 +447,15 @@ class CampaignQueueService:
                 )
                 subject = personalized.get("subject", subject) or subject
                 body_html = personalized.get("body_html", body_html) or body_html
-            except Exception as exc:  # noqa: BLE001 — never block a send on personalisation
+            except Exception as exc:
                 logger.warning("[Queue] Behaviour personalisation failed for prospect %d: %s", prospect.id, exc)
 
-        result: dict = await email_service.send_via_resend_config(
+        # Append the signature LAST so it survives the LLM personalisation above.
+        from services.email_signatures import render_signature_html
+
+        body_html += render_signature_html(self.db, template.signature_id, variables, user_id=item.user_id)
+
+        result: dict = await email_service.send_via_user_identity(
             user_id=item.user_id,
             recipient_email=prospect.email,
             recipient_name=prospect.name,
@@ -448,28 +487,34 @@ class CampaignQueueService:
         campaign: Campaign = j1_item.campaign
 
         # Prefer the new multi-step follow-up table.
-        follow_ups: list[CampaignFollowUp] = self.db.execute(
-            select(CampaignFollowUp)
-            .where(CampaignFollowUp.campaign_id == campaign.id)
-            .order_by(CampaignFollowUp.position.asc())
-        ).scalars().all()
+        follow_ups: list[CampaignFollowUp] = (
+            self.db.execute(
+                select(CampaignFollowUp)
+                .where(CampaignFollowUp.campaign_id == campaign.id)
+                .order_by(CampaignFollowUp.position.asc())
+            )
+            .scalars()
+            .all()
+        )
 
         if not follow_ups:
             # Legacy fallback: single follow-up fields on the campaign.
             if campaign.follow_up_template_id:
                 follow_up_at = _utcnow() + timedelta(days=campaign.follow_up_delay_days)
-                self.db.add(EmailQueue(
-                    user_id=j1_item.user_id,
-                    campaign_id=j1_item.campaign_id,
-                    prospect_id=j1_item.prospect_id,
-                    template_id=campaign.follow_up_template_id,
-                    email_account_id=None,
-                    queue_type="followup",
-                    ab_variant=j1_item.ab_variant,
-                    follow_up_index=1,
-                    scheduled_at=follow_up_at,
-                    status=_STATUS_PENDING,
-                ))
+                self.db.add(
+                    EmailQueue(
+                        user_id=j1_item.user_id,
+                        campaign_id=j1_item.campaign_id,
+                        prospect_id=j1_item.prospect_id,
+                        template_id=campaign.follow_up_template_id,
+                        email_account_id=None,
+                        queue_type="followup",
+                        ab_variant=j1_item.ab_variant,
+                        follow_up_index=1,
+                        scheduled_at=follow_up_at,
+                        status=_STATUS_PENDING,
+                    )
+                )
                 self.db.commit()
             return
 
@@ -477,28 +522,26 @@ class CampaignQueueService:
         base_time = _utcnow()
         for step in follow_ups:
             base_time += timedelta(days=step.delay_days)
-            self.db.add(EmailQueue(
-                user_id=j1_item.user_id,
-                campaign_id=j1_item.campaign_id,
-                prospect_id=j1_item.prospect_id,
-                template_id=step.template_id,
-                email_account_id=None,
-                queue_type="followup",
-                ab_variant=j1_item.ab_variant,
-                follow_up_index=step.position,
-                scheduled_at=base_time,
-                status=_STATUS_PENDING,
-            ))
+            self.db.add(
+                EmailQueue(
+                    user_id=j1_item.user_id,
+                    campaign_id=j1_item.campaign_id,
+                    prospect_id=j1_item.prospect_id,
+                    template_id=step.template_id,
+                    email_account_id=None,
+                    queue_type="followup",
+                    ab_variant=j1_item.ab_variant,
+                    follow_up_index=step.position,
+                    scheduled_at=base_time,
+                    status=_STATUS_PENDING,
+                )
+            )
         self.db.commit()
         logger.info(
             "[Queue] Scheduled %d follow-up(s) for prospect %d",
             len(follow_ups),
             j1_item.prospect_id,
         )
-
-    # -----------------------------------------------------------------------
-    # Immediate send (bypass delay)
-    # -----------------------------------------------------------------------
 
     async def send_followup_now(
         self,
@@ -508,7 +551,8 @@ class CampaignQueueService:
     ) -> dict:
         """
         Immediately dispatch a follow-up email for a specific prospect,
-        bypassing the scheduled queue.  Sends via the user's ResendConfig.
+        bypassing the scheduled queue.  Sends via the user's active identity
+        (Resend or Gmail).
 
         Args:
             campaign:    The parent campaign.
@@ -516,7 +560,7 @@ class CampaignQueueService:
             template_id: Template to use.
 
         Returns:
-            Result dict from ``EmailSendingService.send_via_resend_config``.
+            Result dict from ``EmailSendingService.send_via_user_identity``.
         """
         prospect: ProspectDB | None = self.db.get(ProspectDB, prospect_id)
         template: EmailTemplate | None = self.db.get(EmailTemplate, template_id)
@@ -526,22 +570,24 @@ class CampaignQueueService:
         if not template:
             return {"success": False, "error": "Template introuvable"}
 
-        name_parts = (prospect.name or "").split()
-        variables: dict[str, str] = {
-            _VAR_FIRST_NAME: name_parts[0] if name_parts else "",
-            _VAR_COMPANY:    prospect.name or "",
-            _VAR_CITY:       prospect.city or "",
-            _VAR_EMAIL:      prospect.email or "",
-            _VAR_PHONE:      prospect.phone or "",
-            _VAR_METIER:     prospect.category or "",
-            _VAR_DEMO_LINK:  self._demo_link_for_prospect(prospect_id, campaign.user_id, None),
-        }
+        video_link, video_thumbnail_url = self._video_for_prospect(prospect_id, campaign.user_id, None)
+        variables: dict[str, str] = EmailVariables.build_for_prospect(
+            self.db,
+            prospect,
+            self._demo_link_for_prospect(prospect_id, campaign.user_id, None),
+            video_link,
+            video_thumbnail_url,
+        )
 
         email_service = EmailSendingService(self.db)
         subject = email_service.replace_variables(template.subject, variables)
         body_html = email_service.replace_variables(template.body_html, variables)
 
-        return await email_service.send_via_resend_config(
+        from services.email_signatures import render_signature_html
+
+        body_html += render_signature_html(self.db, template.signature_id, variables, user_id=campaign.user_id)
+
+        return await email_service.send_via_user_identity(
             user_id=campaign.user_id,
             recipient_email=prospect.email,
             recipient_name=prospect.name,
@@ -551,10 +597,6 @@ class CampaignQueueService:
             campaign_id=str(campaign.id),
         )
 
-    # -----------------------------------------------------------------------
-    # Queue management helpers
-    # -----------------------------------------------------------------------
-
     def cancel_campaign_queue(self, campaign_id: int) -> int:
         """
         Cancel all pending items for a campaign (pause / cancel).
@@ -562,12 +604,16 @@ class CampaignQueueService:
         Returns:
             Number of items cancelled.
         """
-        items: list[EmailQueue] = self.db.execute(
-            select(EmailQueue).where(
-                EmailQueue.campaign_id == campaign_id,
-                EmailQueue.status == _STATUS_PENDING,
+        items: list[EmailQueue] = (
+            self.db.execute(
+                select(EmailQueue).where(
+                    EmailQueue.campaign_id == campaign_id,
+                    EmailQueue.status == _STATUS_PENDING,
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         for item in items:
             item.status = _STATUS_SKIPPED
@@ -577,12 +623,15 @@ class CampaignQueueService:
 
     def get_pending_count(self, campaign_id: int) -> int:
         """Return the number of pending items in the queue for a campaign."""
-        return self.db.execute(
-            select(func.count()).where(
-                EmailQueue.campaign_id == campaign_id,
-                EmailQueue.status == _STATUS_PENDING,
-            )
-        ).scalar() or 0
+        return (
+            self.db.execute(
+                select(func.count()).where(
+                    EmailQueue.campaign_id == campaign_id,
+                    EmailQueue.status == _STATUS_PENDING,
+                )
+            ).scalar()
+            or 0
+        )
 
     def get_queue_items(
         self,
@@ -596,8 +645,4 @@ class CampaignQueueService:
         stmt = select(EmailQueue).where(EmailQueue.campaign_id == campaign_id)
         if status is not None:
             stmt = stmt.where(EmailQueue.status == status)
-        return (
-            self.db.execute(stmt.order_by(EmailQueue.scheduled_at.asc()).limit(limit).offset(offset))
-            .scalars()
-            .all()
-        )
+        return self.db.execute(stmt.order_by(EmailQueue.scheduled_at.asc()).limit(limit).offset(offset)).scalars().all()

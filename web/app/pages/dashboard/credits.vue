@@ -1,8 +1,11 @@
 <template>
   <div>
-    <!-- Header -->
     <div class="mb-6 flex items-center justify-between">
-      <h1 class="text-xl font-semibold text-[var(--app-ink)]">Mes crédits</h1>
+      <p class="app-label flex items-center gap-2">
+        <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+        Compte
+      </p>
+      <h1 class="app-page-title mt-2">Mes crédits</h1>
       <NuxtLink
         to="/dashboard/buy-credits"
         class="flex items-center gap-1.5 text-sm text-[var(--app-ink)] transition-colors hover:text-[var(--app-ink-soft)]"
@@ -12,7 +15,6 @@
       </NuxtLink>
     </div>
 
-    <!-- Loading State -->
     <div v-if="isLoading" class="space-y-6">
       <div class="card">
         <div class="animate-pulse space-y-4">
@@ -22,9 +24,7 @@
       </div>
     </div>
 
-    <!-- Content -->
     <div v-else class="space-y-6">
-      <!-- Credit Usage Progress Bar -->
       <div class="card">
         <div class="mb-4 flex items-center justify-between">
           <h2 class="text-lg font-semibold text-[var(--app-ink)]">Consommation de crédits</h2>
@@ -35,26 +35,22 @@
 
         <p class="mb-4 text-xs text-[var(--app-ink-soft)]">Mis à jour le {{ lastUpdated }}</p>
 
-        <!-- Progress Bar Container -->
         <div ref="progressBarRef" class="relative">
           <div
             class="relative h-8 cursor-pointer overflow-hidden rounded-lg border border-[var(--app-line)] bg-[var(--app-bg)]"
             @mouseenter="handleTooltipEnter"
             @mouseleave="handleTooltipLeave"
           >
-            <!-- Credits Used -->
             <div
               :style="{ width: `${usedPercentage}%` }"
               class="absolute top-0 left-0 h-full bg-[var(--app-accent-ink)] transition-all duration-300"
             ></div>
 
-            <!-- Credits Remaining -->
             <div
               :style="{ width: `${remainingPercentage}%`, left: `${usedPercentage}%` }"
               class="absolute top-0 h-full bg-[var(--app-surface-2)] transition-all duration-300"
             ></div>
 
-            <!-- Labels on Progress Bar -->
             <div class="relative flex h-full items-center px-3 text-xs font-medium">
               <span class="text-[var(--app-ink)]">{{ creditsUsed }}</span>
               <span class="ml-auto text-[var(--app-ink)]">
@@ -63,7 +59,6 @@
             </div>
           </div>
 
-          <!-- Tooltip Qonto Style - Using Teleport to render in body -->
           <Teleport to="body">
             <div
               v-if="showProgressTooltip && usedPercentage > 0 && tooltipPosition"
@@ -76,15 +71,12 @@
               class="pointer-events-none z-[100] w-72 rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] p-4 shadow-lg"
               style="box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3)"
             >
-              <!-- Header -->
               <div class="mb-3 flex items-center justify-between border-b border-[var(--app-line)] pb-2">
                 <span class="text-sm font-medium text-[var(--app-ink)]">Consommation</span>
                 <span class="text-xs text-[var(--app-ink-soft)]">État actuel</span>
               </div>
 
-              <!-- Data Rows -->
               <div class="mb-2.5 space-y-2.5">
-                <!-- Credits Used -->
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
                     <div class="h-3 w-3 flex-shrink-0 rounded bg-[var(--app-accent-ink)]"></div>
@@ -93,7 +85,6 @@
                   <span class="text-sm font-medium text-[var(--app-ink)]">{{ creditsUsed }}</span>
                 </div>
 
-                <!-- Credits Remaining -->
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
                     <div class="h-3 w-3 flex-shrink-0 rounded bg-[var(--app-surface-2)]"></div>
@@ -103,10 +94,8 @@
                 </div>
               </div>
 
-              <!-- Separator -->
               <div class="my-2.5 border-t border-[var(--app-line)]"></div>
 
-              <!-- Total Variation -->
               <div class="flex items-center justify-between">
                 <span class="text-sm text-[var(--app-ink-soft)]">Total des crédits</span>
                 <span class="text-sm font-medium text-[var(--app-green)]">{{ totalCredits }}</span>
@@ -114,7 +103,6 @@
             </div>
           </Teleport>
 
-          <!-- Alternative tooltip when no credits used - Using Teleport -->
           <Teleport to="body">
             <div
               v-if="showProgressTooltip && usedPercentage === 0 && tooltipPosition"
@@ -127,15 +115,12 @@
               class="pointer-events-none z-[100] w-72 rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] p-4 shadow-lg"
               style="box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3)"
             >
-              <!-- Header -->
               <div class="mb-3 flex items-center justify-between border-b border-[var(--app-line)] pb-2">
                 <span class="text-sm font-medium text-[var(--app-ink)]">Consommation</span>
                 <span class="text-xs text-[var(--app-ink-soft)]">État actuel</span>
               </div>
 
-              <!-- Data Rows -->
               <div class="mb-2.5 space-y-2.5">
-                <!-- Credits Remaining -->
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
                     <div class="h-3 w-3 flex-shrink-0 rounded bg-[var(--app-surface-2)]"></div>
@@ -144,7 +129,6 @@
                   <span class="text-sm font-medium text-[var(--app-ink-soft)]">{{ creditsRemaining }}</span>
                 </div>
 
-                <!-- Credits Used -->
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
                     <div class="h-3 w-3 flex-shrink-0 rounded bg-[var(--app-accent-ink)] opacity-50"></div>
@@ -154,10 +138,8 @@
                 </div>
               </div>
 
-              <!-- Separator -->
               <div class="my-2.5 border-t border-[var(--app-line)]"></div>
 
-              <!-- Total Variation -->
               <div class="flex items-center justify-between">
                 <span class="text-sm text-[var(--app-ink-soft)]">Total des crédits</span>
                 <span class="text-sm font-medium text-[var(--app-green)]">{{ totalCredits }}</span>
@@ -167,7 +149,6 @@
         </div>
       </div>
 
-      <!-- Daily Usage Chart -->
       <div class="card">
         <h2 class="mb-4 text-lg font-semibold text-[var(--app-ink)]">Consommation quotidienne</h2>
         <div v-if="chartData && chartData.labels && chartData.labels.length > 0" class="h-64">
@@ -178,7 +159,6 @@
         </div>
       </div>
 
-      <!-- Recent Credit Usage List -->
       <div class="card">
         <h2 class="mb-4 text-lg font-semibold text-[var(--app-ink)]">Activité récente</h2>
         <div v-if="recentTransactions.length > 0" class="space-y-0">
@@ -212,9 +192,8 @@
         </div>
       </div>
 
-      <!-- CTA Section -->
       <div class="card border-[var(--app-line)] bg-gradient-to-r from-[var(--app-surface)] to-[var(--app-bg)]">
-        <div class="flex flex-col items-center justify-between gap-4 md:flex-row">
+        <div class="flex flex-col items-center justify-between gap-4 @2xl:flex-row">
           <div>
             <h3 class="mb-2 text-lg font-semibold text-[var(--app-ink)]">Besoin de plus de crédits ?</h3>
             <p class="text-sm text-[var(--app-ink-soft)]">
@@ -228,12 +207,14 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
+import { Chart } from 'chart.js'
+import type { ChartConfiguration, ChartOptions, TooltipItem } from 'chart.js'
+import type { CreditUsageChart } from '~/types/CreditsPage'
 import type { CreditTransaction } from '~/types'
-import type { Ref } from 'vue'
+import type { ComputedRef, Ref } from 'vue'
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
-import { Chart, type ChartConfiguration, type TooltipItem } from 'chart.js'
-import * as creditTransactionService from '~/services/creditTransactionService'
+import { CreditTransactionService } from '~/services/creditTransactionService'
 import { useUserStore } from '~/stores/user'
 
 /**
@@ -258,12 +239,12 @@ const progressBarRef: Ref<HTMLElement | null> = ref(null)
 /**
  * Tooltip position state
  */
-const tooltipPosition = ref<{ x: number; y: number } | null>(null)
+const tooltipPosition: Ref<{ x: number; y: number } | null> = ref(null)
 
 /**
  * User store instance
  */
-const userStore = useUserStore()
+const userStore: ReturnType<typeof useUserStore> = useUserStore()
 
 /**
  * Loading state
@@ -283,35 +264,29 @@ const showProgressTooltip: Ref<boolean> = ref(false)
 /**
  * Update tooltip position based on progress bar position
  */
-const updateTooltipPosition = (): void => {
+const updateTooltipPosition: () => void = (): void => {
   if (!progressBarRef.value || typeof window === 'undefined') {
     tooltipPosition.value = null
     return
   }
 
-  const progressBar = progressBarRef.value.querySelector('.cursor-pointer')
+  const progressBar: Element | null = progressBarRef.value.querySelector('.cursor-pointer')
   if (!progressBar) return
 
-  const progressRect = progressBar.getBoundingClientRect()
-  const tooltipWidth = 288 // w-72 = 18rem = 288px
-  const margin = 8 // mt-2 = 8px
+  const progressRect: DOMRect = progressBar.getBoundingClientRect()
+  const tooltipWidth: number = 288 // w-72 = 18rem = 288px
+  const margin: number = 8 // mt-2 = 8px
 
-  // Calculate position based on used percentage
-  // usedPercentage is 0-100, so divide by 100 to get fraction
   let tooltipX: number
 
   if (usedPercentage.value > 0) {
-    // Position at the center of the blue bar (used portion)
-    // Convert percentage to fraction (0-1) and calculate center of used portion
-    const usedFraction = usedPercentage.value / 100
+    const usedFraction: number = usedPercentage.value / 100
     tooltipX = progressRect.left + (progressRect.width * usedFraction) / 2
   } else {
     // Position at the center of the entire progress bar
     tooltipX = progressRect.left + progressRect.width / 2
   }
 
-  // Ensure tooltip doesn't go off-screen
-  // Check left boundary
   if (tooltipX - tooltipWidth / 2 < 0) {
     tooltipX = tooltipWidth / 2 + 16 // 16px padding from edge
   }
@@ -321,7 +296,7 @@ const updateTooltipPosition = (): void => {
     tooltipX = window.innerWidth - tooltipWidth / 2 - 16 // 16px padding from edge
   }
 
-  const tooltipY = progressRect.bottom + margin
+  const tooltipY: number = progressRect.bottom + margin
 
   tooltipPosition.value = { x: tooltipX, y: tooltipY }
 }
@@ -329,7 +304,7 @@ const updateTooltipPosition = (): void => {
 /**
  * Handle tooltip enter
  */
-const handleTooltipEnter = (): void => {
+const handleTooltipEnter: () => void = (): void => {
   showProgressTooltip.value = true
   nextTick(() => {
     // Use requestAnimationFrame to ensure DOM is fully updated
@@ -344,7 +319,7 @@ const handleTooltipEnter = (): void => {
 /**
  * Handle tooltip leave
  */
-const handleTooltipLeave = (): void => {
+const handleTooltipLeave: () => void = (): void => {
   showProgressTooltip.value = false
   tooltipPosition.value = null
   window.removeEventListener('scroll', updateTooltipPosition, true)
@@ -354,9 +329,9 @@ const handleTooltipLeave = (): void => {
 /**
  * Total credits (current balance + used)
  */
-const totalCredits = computed(() => {
-  const balance = creditsRemaining.value
-  const used = creditsUsed.value
+const totalCredits: ComputedRef<number> = computed(() => {
+  const balance: number = creditsRemaining.value
+  const used: number = creditsUsed.value
 
   if (balance === Infinity || balance === -1) {
     return balance
@@ -368,16 +343,20 @@ const totalCredits = computed(() => {
 /**
  * Credits used (sum of negative amounts)
  */
-const creditsUsed = computed(() => {
-  const used = Math.abs(transactions.value.filter((t) => t.amount < 0).reduce((sum, t) => sum + t.amount, 0))
+const creditsUsed: ComputedRef<number> = computed(() => {
+  const used: number = Math.abs(
+    transactions.value
+      .filter((transaction: CreditTransaction) => transaction.amount < 0)
+      .reduce((sum: number, transaction: CreditTransaction) => sum + transaction.amount, 0),
+  )
   return used
 })
 
 /**
  * Credits remaining
  */
-const creditsRemaining = computed(() => {
-  const balance = userStore.user?.credits_available ?? userStore.user?.credit_balance
+const creditsRemaining: ComputedRef<number> = computed(() => {
+  const balance: number | null | undefined = userStore.user?.credits_available ?? userStore.user?.credit_balance
   if (balance === null || balance === undefined) {
     return 0
   }
@@ -390,10 +369,10 @@ const creditsRemaining = computed(() => {
 /**
  * Used percentage
  */
-const usedPercentage = computed(() => {
-  const total = totalCredits.value
+const usedPercentage: ComputedRef<number> = computed(() => {
+  const total: number = totalCredits.value
   if (total === 0 || total === Infinity || total === -1) return 0
-  const used = creditsUsed.value
+  const used: number = creditsUsed.value
   if (used === 0) return 0
   return Math.min((used / total) * 100, 100)
 })
@@ -401,8 +380,8 @@ const usedPercentage = computed(() => {
 /**
  * Remaining percentage
  */
-const remainingPercentage = computed(() => {
-  const total = totalCredits.value
+const remainingPercentage: ComputedRef<number> = computed(() => {
+  const total: number = totalCredits.value
   if (total === Infinity || total === -1) return 100
   return Math.max(100 - usedPercentage.value, 0)
 })
@@ -410,7 +389,7 @@ const remainingPercentage = computed(() => {
 /**
  * Last updated timestamp
  */
-const lastUpdated = computed(() => {
+const lastUpdated: ComputedRef<string> = computed(() => {
   if (transactions.value.length === 0) {
     return new Date().toLocaleDateString('fr-FR', {
       year: 'numeric',
@@ -420,7 +399,8 @@ const lastUpdated = computed(() => {
       minute: '2-digit',
     })
   }
-  const lastTransaction = transactions.value[0]
+  const lastTransaction: CreditTransaction | undefined = transactions.value[0]
+  if (!lastTransaction) return ''
   return new Date(lastTransaction.created_at).toLocaleDateString('fr-FR', {
     year: 'numeric',
     month: 'short',
@@ -433,24 +413,24 @@ const lastUpdated = computed(() => {
 /**
  * Recent transactions (last 10)
  */
-const recentTransactions = computed(() => {
+const recentTransactions: ComputedRef<CreditTransaction[]> = computed(() => {
   return transactions.value.slice(0, 10)
 })
 
 /**
  * Chart data - Group transactions by day
  */
-const chartData = computed(() => {
+const chartData: ComputedRef<CreditUsageChart | null> = computed(() => {
   if (transactions.value.length === 0) return null
 
   // Group by date and sum negative amounts (usage)
   const dailyUsage: Record<string, { count: number; date: Date }> = {}
 
   transactions.value
-    .filter((t) => t.amount < 0) // Only usage transactions
-    .forEach((transaction) => {
-      const dateObj = new Date(transaction.created_at)
-      const dateKey = dateObj.toLocaleDateString('fr-FR', {
+    .filter((transaction: CreditTransaction) => transaction.amount < 0) // Only usage transactions
+    .forEach((transaction: CreditTransaction) => {
+      const dateObj: Date = new Date(transaction.created_at)
+      const dateKey: string = dateObj.toLocaleDateString('fr-FR', {
         month: 'short',
         day: 'numeric',
       })
@@ -462,12 +442,15 @@ const chartData = computed(() => {
     })
 
   // Sort by date (chronological order)
-  const sortedEntries = Object.entries(dailyUsage)
-    .sort(([, a], [, b]) => a.date.getTime() - b.date.getTime())
+  const sortedEntries: [string, { count: number; date: Date }][] = Object.entries(dailyUsage)
+    .sort(
+      ([, a]: [string, { count: number; date: Date }], [, b]: [string, { count: number; date: Date }]) =>
+        a.date.getTime() - b.date.getTime(),
+    )
     .slice(-30) // Last 30 days
 
-  const labels = sortedEntries.map(([dateKey]) => dateKey)
-  const data = sortedEntries.map(([, { count }]) => count)
+  const labels: string[] = sortedEntries.map(([dateKey]: [string, { count: number; date: Date }]) => dateKey)
+  const data: number[] = sortedEntries.map(([, { count }]: [string, { count: number; date: Date }]) => count)
 
   return {
     labels,
@@ -476,7 +459,6 @@ const chartData = computed(() => {
         label: 'Crédits utilisés',
         data,
         backgroundColor: '#8d7bb8',
-        borderRadius: 4,
         maxBarThickness: 50,
       },
     ],
@@ -486,7 +468,7 @@ const chartData = computed(() => {
 /**
  * Chart options
  */
-const chartOptions = {
+const chartOptions: ChartOptions<'bar'> = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
@@ -498,39 +480,40 @@ const chartOptions = {
       titleColor: '#f9f9f9',
       titleFont: {
         size: 13,
-        weight: '500',
+        weight: 500,
       },
       bodyColor: '#8f887b',
       bodyFont: {
         size: 12,
-        weight: '400',
+        weight: 400,
       },
       borderColor: 'rgba(140, 132, 118, 0.35)',
       borderWidth: 1,
-      borderRadius: 8,
       padding: 16,
       displayColors: true,
       boxPadding: 6,
       boxWidth: 12,
       boxHeight: 12,
       usePointStyle: true,
-      shadowOffsetX: 0,
-      shadowOffsetY: 4,
-      shadowBlur: 12,
-      shadowColor: 'rgba(0, 0, 0, 0.3)',
       callbacks: {
-        title: function (context: TooltipItem<'bar'>[]) {
+        /**
+         * Format the chart tooltip title from the hovered bar label.
+         */
+        title: function (context: TooltipItem<'bar'>[]): string {
           return context[0]?.label ?? ''
         },
-        label: function (context: TooltipItem<'bar'>) {
+        /**
+         * Format the chart tooltip value as a credits count.
+         */
+        label: function (context: TooltipItem<'bar'>): string {
           return `${context.parsed.y} crédits utilisés`
         },
       },
     },
-    interaction: {
-      intersect: false,
-      mode: 'index',
-    },
+  },
+  interaction: {
+    intersect: false,
+    mode: 'index',
   },
   scales: {
     x: {
@@ -554,7 +537,10 @@ const chartOptions = {
         font: {
           size: 11,
         },
-        callback: function (value: string | number) {
+        /**
+         * Format Y-axis tick labels for the credits chart.
+         */
+        callback: function (value: string | number): string | number {
           return value
         },
       },
@@ -566,10 +552,12 @@ const chartOptions = {
 /**
  * Format transaction description
  */
-const formatTransactionDescription = (transaction: CreditTransaction): string => {
+const formatTransactionDescription: (transaction: CreditTransaction) => string = (
+  transaction: CreditTransaction,
+): string => {
   if (transaction.transaction_type === 'USAGE') {
     // Try to extract action from description
-    const desc = transaction.description.toLowerCase()
+    const desc: string = transaction.description.toLowerCase()
     if (desc.includes('search')) return 'Recherche de prospects'
     if (desc.includes('email') || desc.includes('campaign')) return 'Campagne email'
     if (desc.includes('prospect')) return 'Prospect trouvé'
@@ -590,11 +578,11 @@ const formatTransactionDescription = (transaction: CreditTransaction): string =>
 /**
  * Format transaction date to relative time
  */
-const formatTransactionDate = (dateString: string): string => {
-  const date = new Date(dateString)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+const formatTransactionDate: (dateString: string) => string = (dateString: string): string => {
+  const date: Date = new Date(dateString)
+  const now: Date = new Date()
+  const diffMs: number = now.getTime() - date.getTime()
+  const diffDays: number = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
   if (diffDays === 0) {
     return "Aujourd'hui"
@@ -603,7 +591,7 @@ const formatTransactionDate = (dateString: string): string => {
   } else if (diffDays < 7) {
     return `il y a ${diffDays} jours`
   } else if (diffDays < 30) {
-    const weeks = Math.floor(diffDays / 7)
+    const weeks: number = Math.floor(diffDays / 7)
     return `il y a ${weeks} semaine${weeks > 1 ? 's' : ''}`
   } else {
     return date.toLocaleDateString('fr-FR', {
@@ -617,10 +605,10 @@ const formatTransactionDate = (dateString: string): string => {
 /**
  * Load credit transactions
  */
-const loadTransactions = async (): Promise<void> => {
+const loadTransactions: () => Promise<void> = async (): Promise<void> => {
   try {
     isLoading.value = true
-    const data = await creditTransactionService.getMyTransactions(0, 1000)
+    const data: CreditTransaction[] = await CreditTransactionService.getMyTransactions(0, 1000)
     transactions.value = data
   } catch (error) {
     console.error('Failed to load transactions:', error)
@@ -633,7 +621,7 @@ const loadTransactions = async (): Promise<void> => {
 /**
  * Initialize chart
  */
-const initChart = (): void => {
+const initChart: () => void = (): void => {
   if (typeof window === 'undefined' || !chartCanvasRef.value || !chartData.value) return
 
   // Destroy existing chart if it exists
@@ -649,7 +637,7 @@ const initChart = (): void => {
   const config: ChartConfiguration<'bar'> = {
     type: 'bar',
     data: chartData.value,
-    options: chartOptions,
+    options: chartOptions as ChartConfiguration<'bar'>['options'],
   }
 
   try {
@@ -678,7 +666,7 @@ onMounted(async () => {
   await loadTransactions()
   // Wait for next tick to ensure DOM is ready
   await nextTick()
-  await new Promise((resolve) => setTimeout(resolve, 100))
+  await new Promise((resolve: (value: unknown) => void) => setTimeout(resolve, 100))
   initChart()
 })
 

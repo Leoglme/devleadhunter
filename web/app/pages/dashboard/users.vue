@@ -1,534 +1,263 @@
 <template>
-  <div>
-    <!-- Header -->
-    <div class="mb-6 flex items-center justify-between">
-      <h1 class="text-xl font-semibold text-[var(--app-ink)]">Utilisateurs</h1>
-      <button class="btn-primary" @click="showCreateModal = true">
-        <UIcon name="i-lucide-plus" class="h-4 w-4" />
-        <span>Ajouter un utilisateur</span>
-      </button>
+  <div class="space-y-5">
+    <div class="flex flex-col gap-4 @2xl:flex-row @2xl:items-end @2xl:justify-between">
+      <div class="min-w-0">
+        <p class="app-label flex items-center gap-2">
+          <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+          Administration
+        </p>
+        <h1 class="app-page-title mt-2">Utilisateurs</h1>
+        <p class="mt-1.5 max-w-2xl text-sm text-[var(--app-ink-soft)]">
+          Les comptes ayant accès à l'outil, leur rôle et leur consommation de crédits.
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 sm:gap-3 @2xl:justify-end">
+        <button
+          type="button"
+          class="app-btn-secondary h-9 shrink-0 px-4 text-xs whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="isLoading"
+          @click="loadUsers"
+        >
+          <UIcon name="i-lucide-refresh-cw" :class="['h-3.5 w-3.5', isLoading && 'animate-spin']" />
+          Actualiser
+        </button>
+        <button
+          type="button"
+          class="app-btn-primary h-9 shrink-0 px-4 text-xs whitespace-nowrap"
+          @click="openUserDrawer('create', null)"
+        >
+          <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" />
+          Ajouter un utilisateur
+        </button>
+      </div>
     </div>
 
-    <!-- Search Bar -->
-    <div class="card mb-6">
+    <div class="grid grid-cols-1 gap-4 @sm:grid-cols-3">
+      <UiStatCard label="Comptes" :value="users.length" icon="i-lucide-users" accent="neutral" />
+      <UiStatCard label="Administrateurs" :value="adminCount" icon="i-lucide-shield-check" accent="sky" />
+      <UiStatCard label="Crédits consommés" :value="totalCreditsConsumed" icon="i-lucide-coins" accent="emerald" />
+    </div>
+
+    <div class="app-card p-4">
+      <label class="app-label mb-1.5 block" for="users-search">Rechercher</label>
       <div class="relative">
         <UIcon
           name="i-lucide-search"
-          class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--app-ink-soft)]"
+          class="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-[var(--app-faint)]"
         />
-        <input v-model="searchQuery" type="text" placeholder="Rechercher par nom ou email" class="input-field pl-10" />
+        <input
+          id="users-search"
+          v-model="searchQuery"
+          type="search"
+          placeholder="Nom ou email…"
+          class="app-input pl-9"
+        />
       </div>
     </div>
 
-    <!-- Users Table -->
-    <div class="card overflow-hidden p-0">
-      <div class="overflow-x-auto">
-        <table class="w-full">
-          <thead>
-            <tr class="border-b border-[var(--app-line)] bg-[var(--app-bg)]">
-              <th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-[var(--app-ink-soft)] uppercase">
-                Utilisateur
-              </th>
-              <th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-[var(--app-ink-soft)] uppercase">
-                Email
-              </th>
-              <th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-[var(--app-ink-soft)] uppercase">
-                Rôle
-              </th>
-              <th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-[var(--app-ink-soft)] uppercase">
-                Crédits disponibles
-              </th>
-              <th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-[var(--app-ink-soft)] uppercase">
-                Crédits consommés
-              </th>
-              <th class="px-4 py-3 text-right text-xs font-medium tracking-wider text-[var(--app-ink-soft)] uppercase">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="(user, index) in filteredUsers"
-              :key="user.id"
-              class="border-b border-[var(--app-line)] transition-colors last:border-b-0 hover:bg-[var(--app-surface-2)]"
-            >
-              <td class="px-4 py-3 text-sm text-[var(--app-ink)]">
-                <div class="flex items-center gap-2">
-                  <div
-                    class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-[var(--app-line)] bg-[var(--app-bg)]"
-                  >
-                    <span class="text-xs font-semibold text-[var(--app-ink)]">
-                      {{ getUserInitials(user.name) }}
-                    </span>
-                  </div>
-                  <span class="font-medium">{{ user.name }}</span>
-                </div>
-              </td>
-              <td class="px-4 py-3 text-sm text-[var(--app-ink)]">{{ user.email }}</td>
-              <td class="px-4 py-3 text-sm">
-                <span
-                  :class="[
-                    'inline-flex items-center rounded px-2.5 py-0.5 text-xs font-medium',
-                    user.role === 'ADMIN'
-                      ? 'border border-[var(--app-red)]/30 bg-[var(--app-red)]/20 text-[var(--app-red)]'
-                      : 'border border-[var(--app-green)]/30 bg-[var(--app-green)]/20 text-[var(--app-green)]',
-                  ]"
-                >
-                  {{ user.role }}
-                </span>
-              </td>
-              <td class="px-4 py-3 text-sm text-[var(--app-ink)]">
-                <span
-                  v-if="user.credits_available === -1 || user.credits_available === null"
-                  class="text-[var(--app-ink-soft)]"
-                >
-                  Illimités
-                </span>
-                <span v-else class="font-medium">
-                  {{ user.credits_available }}
-                </span>
-              </td>
-              <td class="px-4 py-3 text-sm text-[var(--app-ink)]">
-                <span class="font-medium">
-                  {{ user.credits_consumed ?? 0 }}
-                </span>
-              </td>
-              <td class="px-4 py-3 text-right">
-                <div class="user-menu-container relative inline-block">
-                  <button
-                    class="text-[var(--app-ink-soft)] transition-colors hover:text-[var(--app-ink)]"
-                    @click="toggleUserMenu(user.id, $event)"
-                  >
-                    <UIcon name="i-lucide-ellipsis-vertical" class="h-5 w-5" />
-                  </button>
-                  <!-- Dropdown Menu -->
-                  <div
-                    v-if="openMenuId === user.id"
-                    :class="[
-                      'absolute right-0 z-10 w-48 rounded border border-[var(--app-line)] bg-[var(--app-surface)] shadow-lg',
-                      index >= filteredUsers.length - 2 ? 'bottom-full mb-1' : 'top-full mt-1',
-                    ]"
-                  >
-                    <button
-                      class="w-full px-4 py-2 text-left text-sm text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
-                      @click="handleEdit(user)"
-                    >
-                      <UIcon name="i-lucide-square-pen" class="mr-2 h-4 w-4" />
-                      Modifier
-                    </button>
-                    <button
-                      class="w-full px-4 py-2 text-left text-sm text-[var(--app-red)] transition-colors hover:bg-[var(--app-red)]/20"
-                      @click="handleDelete(user)"
-                    >
-                      <UIcon name="i-lucide-trash-2" class="mr-2 h-4 w-4" />
-                      Supprimer
-                    </button>
-                  </div>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <UiLoader v-if="isLoading" label="Chargement des utilisateurs…" />
 
-    <!-- Loading State -->
-    <div v-if="isLoading" class="card">
-      <div class="animate-pulse space-y-3">
-        <div class="h-4 w-3/4 rounded bg-[var(--app-surface-2)]"></div>
-        <div class="h-4 w-full rounded bg-[var(--app-surface-2)]"></div>
-        <div class="h-4 w-5/6 rounded bg-[var(--app-surface-2)]"></div>
-      </div>
-    </div>
+    <UiEmptyState
+      v-else-if="filteredUsers.length === 0"
+      title="Aucun utilisateur trouvé"
+      :description="searchQuery ? 'Aucun compte ne correspond à votre recherche.' : undefined"
+    />
 
-    <!-- Empty State -->
-    <div v-else-if="filteredUsers.length === 0" class="card px-6 py-12 text-center">
-      <LandingAsterisk class="text-4xl text-[var(--app-accent)]" />
-      <h3 class="font-display mt-5 text-2xl font-semibold text-[var(--app-ink)]">Aucun utilisateur trouvé</h3>
-    </div>
+    <div v-else class="app-card overflow-hidden">
+      <BaseTable min-width="760px">
+        <template #head>
+          <BaseTableTh>Utilisateur</BaseTableTh>
+          <BaseTableTh>Email</BaseTableTh>
+          <BaseTableTh align="center">Rôle</BaseTableTh>
+          <BaseTableTh align="right">Crédits dispo.</BaseTableTh>
+          <BaseTableTh align="right">Crédits consommés</BaseTableTh>
+          <BaseTableTh align="center" sr-only>Actions</BaseTableTh>
+        </template>
 
-    <!-- Create User Modal -->
-    <div
-      v-if="showCreateModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-[var(--app-overlay)]"
-      @click.self="showCreateModal = false"
-    >
-      <div class="w-full max-w-md rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] p-6 shadow-lg">
-        <h2 class="mb-4 text-base font-semibold text-[var(--app-ink)]">Ajouter un utilisateur</h2>
-        <form @submit.prevent="handleCreateSubmit">
-          <!-- Name -->
-          <div class="mb-4">
-            <label for="create-name" class="mb-1.5 block text-xs font-medium text-[var(--app-ink-soft)]"> Nom </label>
-            <input
-              id="create-name"
-              v-model="createForm.name"
-              type="text"
-              required
-              placeholder="Jean Dupont"
-              class="input-field"
-            />
-          </div>
+        <BaseTableTr v-for="user in filteredUsers" :key="user.id">
+          <BaseTableTd>
+            <span class="flex items-center gap-2.5">
+              <span
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--app-line)] bg-[var(--app-bg)] text-xs font-semibold text-[var(--app-ink)]"
+              >
+                {{ initialsOf(user.name) }}
+              </span>
+              <span class="truncate text-sm font-semibold text-[var(--app-ink)]">{{ user.name }}</span>
+            </span>
+          </BaseTableTd>
 
-          <!-- Email -->
-          <div class="mb-4">
-            <label for="create-email" class="mb-1.5 block text-xs font-medium text-[var(--app-ink-soft)]">
-              Email
-            </label>
-            <input
-              id="create-email"
-              v-model="createForm.email"
-              type="email"
-              required
-              placeholder="jean@exemple.fr"
-              class="input-field"
-            />
-          </div>
+          <BaseTableTd class="font-label text-xs text-[var(--app-ink-soft)]">{{ user.email }}</BaseTableTd>
 
-          <!-- Password -->
-          <div class="mb-4">
-            <label for="create-password" class="mb-1.5 block text-xs font-medium text-[var(--app-ink-soft)]">
-              Mot de passe
-            </label>
-            <div class="relative">
-              <input
-                id="create-password"
-                v-model="createForm.password"
-                :type="showCreatePassword ? 'text' : 'password'"
-                required
-                placeholder="Saisir un mot de passe"
-                class="input-field pr-10"
-              />
+          <BaseTableTd align="center">
+            <span :class="['app-badge', user.role === 'ADMIN' ? 'app-badge--info' : '']">
+              {{ user.role === 'ADMIN' ? 'Administrateur' : 'Utilisateur' }}
+            </span>
+          </BaseTableTd>
+
+          <BaseTableTd align="right" class="text-sm text-[var(--app-ink)] tabular-nums">
+            <span v-if="hasUnlimitedCredits(user)" class="text-[var(--app-ink-soft)]">Illimités</span>
+            <span v-else class="font-semibold">{{ user.credits_available }}</span>
+          </BaseTableTd>
+
+          <BaseTableTd align="right" class="text-sm font-semibold text-[var(--app-ink)] tabular-nums">
+            {{ user.credits_consumed ?? 0 }}
+          </BaseTableTd>
+
+          <BaseTableTd align="center">
+            <span class="inline-flex items-center gap-1">
               <button
                 type="button"
-                class="absolute top-1/2 right-3 -translate-y-1/2 text-[var(--app-ink-soft)] transition-colors hover:text-[var(--app-ink)]"
-                @click="showCreatePassword = !showCreatePassword"
+                class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
+                :aria-label="`Modifier ${user.name}`"
+                title="Modifier"
+                @click="openUserDrawer('edit', user)"
               >
-                <UIcon :name="showCreatePassword ? 'i-lucide-eye-off' : 'i-lucide-eye'" class="h-4 w-4" />
+                <UIcon name="i-lucide-square-pen" class="h-3.5 w-3.5" />
               </button>
-            </div>
-          </div>
-
-          <!-- Role -->
-          <div class="mb-4">
-            <label for="create-role" class="mb-1.5 block text-xs font-medium text-[var(--app-ink-soft)]"> Rôle </label>
-            <select id="create-role" v-model="createForm.role" class="input-field">
-              <option value="USER">USER</option>
-              <option value="ADMIN">ADMIN</option>
-            </select>
-          </div>
-
-          <!-- Buttons -->
-          <div class="flex gap-3 pt-2">
-            <button type="button" class="btn-secondary flex-1" @click="showCreateModal = false">Annuler</button>
-            <button type="submit" :disabled="isCreating" class="btn-primary flex-1">
-              <span v-if="isCreating">Création…</span>
-              <span v-else>Créer l'utilisateur</span>
-            </button>
-          </div>
-        </form>
-      </div>
+              <button
+                type="button"
+                class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-red-soft)] hover:text-[var(--app-red)]"
+                :aria-label="`Supprimer ${user.name}`"
+                title="Supprimer"
+                @click="askDelete(user)"
+              >
+                <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />
+              </button>
+            </span>
+          </BaseTableTd>
+        </BaseTableTr>
+      </BaseTable>
     </div>
 
-    <!-- Edit User Modal -->
-    <div
-      v-if="showEditModal && editingUser"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-[var(--app-overlay)]"
-      @click.self="showEditModal = false"
-    >
-      <div class="w-full max-w-md rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] p-6 shadow-lg">
-        <h2 class="mb-4 text-base font-semibold text-[var(--app-ink)]">Modifier l'utilisateur</h2>
-        <form @submit.prevent="handleEditSubmit">
-          <!-- Name -->
-          <div class="mb-4">
-            <label for="edit-name" class="mb-1.5 block text-xs font-medium text-[var(--app-ink-soft)]"> Nom </label>
-            <input
-              id="edit-name"
-              v-model="editForm.name"
-              type="text"
-              required
-              placeholder="Jean Dupont"
-              class="input-field"
-            />
-          </div>
-
-          <!-- Email -->
-          <div class="mb-4">
-            <label for="edit-email" class="mb-1.5 block text-xs font-medium text-[var(--app-ink-soft)]"> Email </label>
-            <input
-              id="edit-email"
-              v-model="editForm.email"
-              type="email"
-              required
-              placeholder="jean@exemple.fr"
-              class="input-field"
-            />
-          </div>
-
-          <!-- Buttons -->
-          <div class="flex gap-3 pt-2">
-            <button type="button" class="btn-secondary flex-1" @click="showEditModal = false">Annuler</button>
-            <button type="submit" :disabled="isEditing" class="btn-primary flex-1">
-              <span v-if="isEditing">Enregistrement…</span>
-              <span v-else>Enregistrer</span>
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- Delete Confirmation Modal -->
-    <div
-      v-if="showDeleteModal && deletingUser"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-[var(--app-overlay)]"
-      @click.self="showDeleteModal = false"
-    >
-      <div class="w-full max-w-md rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] p-6 shadow-lg">
-        <h2 class="mb-4 text-base font-semibold text-[var(--app-ink)]">Supprimer l'utilisateur</h2>
-        <p class="mb-6 text-sm text-[var(--app-ink-soft)]">
-          Supprimer <strong class="text-[var(--app-ink)]">{{ deletingUser.name }}</strong> ? Cette action est
-          irréversible.
-        </p>
-        <div class="flex gap-3">
-          <button type="button" class="btn-secondary flex-1" @click="showDeleteModal = false">Annuler</button>
-          <button :disabled="isDeleting" class="btn-danger flex-1" @click="confirmDelete">
-            <span v-if="isDeleting">Suppression…</span>
-            <span v-else>Supprimer</span>
-          </button>
-        </div>
-      </div>
-    </div>
+    <UiConfirmModal
+      ref="confirmModal"
+      title="Supprimer l'utilisateur"
+      :message="deleteMessage"
+      confirm-text="Supprimer"
+      cancel-text="Annuler"
+      @confirm="confirmDelete"
+    />
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
+import type { UseToastReturn } from '~/types/Composables'
 import type { User } from '~/types'
-import type { Ref } from 'vue'
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import * as usersService from '~/services/usersService'
+import type { UserFormDrawerMode } from '~/types/DrawerStack'
+import type { ComputedRef, Ref } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { UsersService } from '~/services/usersService'
+import { useDrawerStackStore } from '~/stores/drawerStack'
 import { useToast } from '~/composables/useToast'
 
-/**
- * Dashboard users page
- */
 definePageMeta({
   layout: 'dashboard',
   middleware: ['auth', 'admin'],
 })
 
-/**
- * Users list state
- */
+const toast: UseToastReturn = useToast()
+const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
+
 const users: Ref<User[]> = ref([])
 const isLoading: Ref<boolean> = ref(false)
 const searchQuery: Ref<string> = ref('')
-
-/**
- * Modal states
- */
-const showCreateModal: Ref<boolean> = ref(false)
-const showEditModal: Ref<boolean> = ref(false)
-const showDeleteModal: Ref<boolean> = ref(false)
-const openMenuId: Ref<number | null> = ref(null)
-
-/**
- * Form states
- */
-const createForm: Ref<{ name: string; email: string; password: string; role: string }> = ref({
-  name: '',
-  email: '',
-  password: '',
-  role: 'USER',
-})
-const editForm: Ref<{ name: string; email: string }> = ref({
-  name: '',
-  email: '',
-})
-const showCreatePassword: Ref<boolean> = ref(false)
-
-/**
- * Editing/Deleting states
- */
-const editingUser: Ref<User | null> = ref(null)
 const deletingUser: Ref<User | null> = ref(null)
-const isCreating: Ref<boolean> = ref(false)
-const isEditing: Ref<boolean> = ref(false)
-const isDeleting: Ref<boolean> = ref(false)
+const confirmModal: Ref<{ open: () => void } | null> = ref(null)
 
-/**
- * Toast composable
- */
-const toast = useToast()
-
-/**
- * Filtered users based on search query
- */
-const filteredUsers = computed(() => {
-  if (!searchQuery.value) return users.value
-  const query = searchQuery.value.toLowerCase()
+const filteredUsers: ComputedRef<User[]> = computed((): User[] => {
+  const query: string = searchQuery.value.trim().toLowerCase()
+  if (!query) return users.value
   return users.value.filter(
-    (user) => user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query),
+    (user: User): boolean => user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query),
   )
 })
 
+const adminCount: ComputedRef<number> = computed(
+  (): number => users.value.filter((user: User): boolean => user.role === 'ADMIN').length,
+)
+
+const totalCreditsConsumed: ComputedRef<number> = computed((): number =>
+  users.value.reduce((total: number, user: User): number => total + (user.credits_consumed ?? 0), 0),
+)
+
+const deleteMessage: ComputedRef<string> = computed(
+  (): string => `Supprimer « ${deletingUser.value?.name ?? ''} » ? Cette action est irréversible.`,
+)
+
 /**
- * Get user initials
- * @param {string} name - User name
- * @returns {string} User initials
+ * Initials shown in a user's avatar tile.
+ * @param name - Full name of the user.
+ * @returns One or two uppercase letters.
  */
-const getUserInitials = (name: string): string => {
-  const parts = name.split(' ')
-  if (parts.length >= 2) {
-    return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
-  }
+function initialsOf(name: string): string {
+  const parts: string[] = name.trim().split(/\s+/)
+  if (parts.length >= 2) return `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}`.toUpperCase()
   return name.substring(0, 2).toUpperCase()
 }
 
 /**
- * Toggle user menu
- * @param {number} userId - User ID
- * @param {Event} event - Click event
- * @returns {void}
+ * Whether a user's credit balance is unmetered.
+ * @param user - The user to test.
+ * @returns True when credits are unlimited.
  */
-const toggleUserMenu = (userId: number, event?: Event): void => {
-  if (event) {
-    event.stopPropagation()
-  }
-  openMenuId.value = openMenuId.value === userId ? null : userId
+function hasUnlimitedCredits(user: User): boolean {
+  return user.credits_available === -1 || user.credits_available === null
 }
 
 /**
- * Close menu on outside click
- * @param {Event} event - Click event
- * @returns {void}
+ * Open the user drawer on the persistent stack.
+ * @param mode - Whether the drawer creates or edits.
+ * @param user - The user to edit, or null when creating.
  */
-const handleClickOutside = (event: Event): void => {
-  const target = event.target as HTMLElement
-  // Check if click is outside all menu buttons and dropdowns
-  const isClickInsideMenu = target.closest('.user-menu-container')
-  if (!isClickInsideMenu && openMenuId.value !== null) {
-    openMenuId.value = null
-  }
+function openUserDrawer(mode: UserFormDrawerMode, user: User | null): void {
+  drawerStack.push({ kind: 'user-form', mode, user })
 }
 
 /**
- * Load users from API
- * @returns {Promise<void>}
+ * Load every user (admin only).
+ * @returns A promise resolved once the list is refreshed.
  */
-const loadUsers = async (): Promise<void> => {
+async function loadUsers(): Promise<void> {
+  isLoading.value = true
   try {
-    isLoading.value = true
-    users.value = await usersService.getAllUsers()
-  } catch (error) {
-    toast.error(error instanceof Error ? error.message : 'Erreur lors du chargement des utilisateurs')
+    users.value = await UsersService.getAllUsers()
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Erreur lors du chargement des utilisateurs')
   } finally {
     isLoading.value = false
   }
 }
 
 /**
- * Handle create user form submission
- * @returns {Promise<void>}
+ * Ask confirmation before deleting a user.
+ * @param user - The user to delete.
  */
-const handleCreateSubmit = async (): Promise<void> => {
-  try {
-    isCreating.value = true
-    await usersService.createUser(createForm.value)
-    toast.success('Utilisateur créé')
-    showCreateModal.value = false
-    createForm.value = { name: '', email: '', password: '', role: 'USER' }
-    await loadUsers()
-  } catch (error) {
-    toast.error(error instanceof Error ? error.message : "Erreur lors de la création de l'utilisateur")
-  } finally {
-    isCreating.value = false
-  }
-}
-
-/**
- * Handle edit user
- * @param {User} user - User to edit
- * @returns {void}
- */
-const handleEdit = (user: User): void => {
-  editingUser.value = user
-  editForm.value = {
-    name: user.name,
-    email: user.email,
-  }
-  openMenuId.value = null
-  showEditModal.value = true
-}
-
-/**
- * Handle edit user form submission
- * @returns {Promise<void>}
- */
-const handleEditSubmit = async (): Promise<void> => {
-  if (!editingUser.value) return
-
-  try {
-    isEditing.value = true
-    await usersService.updateUser(editingUser.value.id, editForm.value)
-    toast.success('Utilisateur mis à jour')
-    showEditModal.value = false
-    editingUser.value = null
-    await loadUsers()
-  } catch (error) {
-    toast.error(error instanceof Error ? error.message : 'Erreur lors de la mise à jour')
-  } finally {
-    isEditing.value = false
-  }
-}
-
-/**
- * Handle delete user
- * @param {User} user - User to delete
- * @returns {void}
- */
-const handleDelete = (user: User): void => {
+function askDelete(user: User): void {
   deletingUser.value = user
-  openMenuId.value = null
-  showDeleteModal.value = true
+  confirmModal.value?.open()
 }
 
 /**
- * Confirm user deletion
- * @returns {Promise<void>}
+ * Delete the pending user once confirmed.
+ * @returns A promise resolved once the user is deleted.
  */
-const confirmDelete = async (): Promise<void> => {
-  if (!deletingUser.value) return
-
+async function confirmDelete(): Promise<void> {
+  const user: User | null = deletingUser.value
+  if (!user) return
   try {
-    isDeleting.value = true
-    await usersService.deleteUser(deletingUser.value.id)
-    toast.success('Utilisateur supprimé')
-    showDeleteModal.value = false
-    deletingUser.value = null
-    await loadUsers()
-  } catch (error) {
-    toast.error(error instanceof Error ? error.message : 'Erreur lors de la suppression')
+    await UsersService.deleteUser(user.id)
+    users.value = users.value.filter((candidate: User): boolean => candidate.id !== user.id)
+    toast.success(`« ${user.name} » supprimé`)
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression')
   } finally {
-    isDeleting.value = false
+    deletingUser.value = null
   }
 }
 
-/**
- * Initialize component
- */
-onMounted(() => {
-  loadUsers()
-  // Add event listener for outside clicks
-  if (import.meta.client) {
-    document.addEventListener('click', handleClickOutside)
-  }
-})
+watch((): number => drawerStack.usersRefreshCounter, loadUsers)
 
-/**
- * Cleanup on component unmount
- */
-onUnmounted(() => {
-  if (import.meta.client) {
-    document.removeEventListener('click', handleClickOutside)
-  }
+onMounted((): void => {
+  void loadUsers()
 })
 </script>

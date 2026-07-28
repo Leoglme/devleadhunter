@@ -7,10 +7,11 @@ engagement, computes a combined lead score + timeline, and (optionally) an AI
 summary / personalised follow-up. Read paths degrade gracefully when PostHog /
 Groq are not configured.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -34,6 +35,17 @@ _EVENT_LABELS: dict[str, str] = {
     "demo_scroll_depth": "A fait défiler la page",
     "demo_time_on_page": "Temps passé sur la page",
     "demo_engaged": "Visite qualifiée (engagé)",
+    "demo_video_play": "Lecture de la vidéo de prospection",
+    "demo_video_resume": "Reprise de la vidéo",
+    "demo_video_pause": "Vidéo mise en pause",
+    "demo_video_replay": "A revu la vidéo",
+    "demo_video_progress": "Vidéo regardée en partie",
+    "demo_video_complete": "Vidéo regardée en entier",
+    "demo_video_watch_time": "Temps de visionnage de la vidéo",
+    "demo_video_seek": "A avancé / reculé dans la vidéo",
+    "demo_video_fullscreen": "Vidéo en plein écran",
+    "demo_video_mute": "A coupé / remis le son",
+    "demo_video_cta_click": "Clic « Découvrir le site » depuis la vidéo",
     "email_sent": "Email envoyé",
     "email_opened": "Email ouvert",
     "email_clicked": "Lien de l'email cliqué",
@@ -75,11 +87,7 @@ class BehaviorService:
 
     def _email_engagement(self, db: Session, user_id: int, prospect_id: int) -> dict[str, Any]:
         """Return email engagement counts + timeline entries for a prospect."""
-        logs = (
-            db.query(EmailLog)
-            .filter(EmailLog.user_id == user_id, EmailLog.prospect_id == prospect_id)
-            .all()
-        )
+        logs = db.query(EmailLog).filter(EmailLog.user_id == user_id, EmailLog.prospect_id == prospect_id).all()
         sent = opened = clicked = 0
         timeline: list[dict[str, Any]] = []
         for log in logs:
@@ -94,9 +102,7 @@ class BehaviorService:
                 timeline.append(self._email_entry("email_clicked", log.clicked_at))
         return {"sent": sent, "opened": opened, "clicked": clicked, "timeline": timeline}
 
-    def _email_engagement_bulk(
-        self, db: Session, user_id: int, prospect_ids: list[int]
-    ) -> dict[int, dict[str, int]]:
+    def _email_engagement_bulk(self, db: Session, user_id: int, prospect_ids: list[int]) -> dict[int, dict[str, int]]:
         """Return email engagement counts per prospect (one grouped query)."""
         if not prospect_ids:
             return {}
@@ -121,7 +127,12 @@ class BehaviorService:
     def _email_entry(event_type: str, when: Any) -> dict[str, Any]:
         """Build a timeline entry for an email event."""
         ts = when.isoformat() if hasattr(when, "isoformat") else str(when)
-        return {"type": event_type, "label": _EVENT_LABELS.get(event_type, event_type), "timestamp": ts, "properties": {}}
+        return {
+            "type": event_type,
+            "label": _EVENT_LABELS.get(event_type, event_type),
+            "timestamp": ts,
+            "properties": {},
+        }
 
     # ------------------------------------------------------------------ #
     # Timeline
@@ -190,11 +201,13 @@ class BehaviorService:
         base_body_html: str,
     ) -> dict[str, str]:
         """Draft a behaviour-personalised follow-up email for a prospect."""
+        from services.email_variables import EmailVariables
+
         behavior = await self.get_behavior(db, user_id, prospect.id)
-        name_parts = (prospect.name or "").split()
+        first_name, _last, _gender = EmailVariables.resolved_contact(db, prospect.id)
         return await llm_service.draft_followup(
             business_name=prospect.name,
-            first_name=name_parts[0] if name_parts else "",
+            first_name=first_name or "",
             temperature=behavior["temperature"],
             signals=behavior["signals"],
             base_subject=base_subject,
@@ -229,11 +242,7 @@ class BehaviorService:
         prospect_ids = list(pid_to_slugs.keys())
         email_by_pid = self._email_engagement_bulk(db, user_id, prospect_ids)
 
-        prospects = (
-            db.query(ProspectDB)
-            .filter(ProspectDB.id.in_(prospect_ids), ProspectDB.user_id == user_id)
-            .all()
-        )
+        prospects = db.query(ProspectDB).filter(ProspectDB.id.in_(prospect_ids), ProspectDB.user_id == user_id).all()
         prospect_by_id = {p.id: p for p in prospects}
 
         leads: list[dict[str, Any]] = []

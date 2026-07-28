@@ -1,18 +1,25 @@
-/**
- * A selectable email template option.
- */
-export interface TemplateSelectOption {
+export type TemplateSelectOption = {
   id: number
   name: string
   subject: string
 }
 
-/**
- * Props for the UiTemplateSelect component.
- */
-export interface TemplateSelectProps {
-  /** Selected template ID (``null`` or ``0`` means none selected). */
+/** Menu entry of the searchable picker: a template flattened for USelectMenu. */
+export type TemplateSelectItem = {
+  value: number
+  label: string
+  description: string
+}
+
+export type TemplateSelectProps = {
   modelValue: number | null
-  /** Available templates to choose from. */
   templates: TemplateSelectOption[]
+  allowCreate?: boolean
+}
+
+export type TemplateSelectEmits = {
+  /** New selection; `0` means none. */
+  'update:modelValue': [value: number]
+  create: []
+  preview: [templateId: number]
 }

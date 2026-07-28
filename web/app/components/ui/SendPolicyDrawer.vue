@@ -5,7 +5,6 @@
         v-if="open"
         class="fixed top-0 right-0 z-50 flex h-dvh w-full max-w-[460px] flex-col border-l border-[var(--app-line)] bg-[var(--app-surface)] shadow-2xl"
       >
-        <!-- Header -->
         <div class="flex items-start gap-3 border-b border-[var(--app-line)] px-5 py-4">
           <button
             v-if="showBack"
@@ -32,88 +31,16 @@
           </button>
         </div>
 
-        <!-- Body -->
         <div class="flex-1 overflow-y-auto px-5 py-4">
           <div v-if="isLoading" class="flex items-center justify-center py-16">
             <UIcon name="i-lucide-loader-circle" class="h-7 w-7 animate-spin text-[var(--app-accent)]" />
           </div>
 
-          <form v-else id="send-policy-form" class="space-y-6" @submit.prevent="save">
-            <div>
-              <label class="app-label mb-1.5 block" for="sp-daily-cap">Emails maximum par jour</label>
-              <input
-                id="sp-daily-cap"
-                v-model.number="form.daily_cap"
-                type="number"
-                min="1"
-                max="500"
-                class="app-input w-32"
-              />
-            </div>
-
-            <div>
-              <p class="app-label mb-2">Jours d'envoi</p>
-              <div class="flex flex-wrap gap-1.5">
-                <button
-                  v-for="(label, index) in dayLabels"
-                  :key="label"
-                  type="button"
-                  class="rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors"
-                  :class="
-                    form.days_of_week.includes(index)
-                      ? 'border-[var(--app-ink)] bg-[var(--app-ink)] text-[var(--app-surface)]'
-                      : 'border-[var(--app-line)] text-[var(--app-ink-soft)] hover:border-[var(--app-ink-soft)]'
-                  "
-                  @click="toggleDay(index)"
-                >
-                  {{ label }}
-                </button>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-4">
-              <div>
-                <label class="app-label mb-1.5 block" for="sp-win-start">Début de journée</label>
-                <select id="sp-win-start" v-model.number="form.window_start_hour" class="app-input">
-                  <option v-for="h in 24" :key="h - 1" :value="h - 1">{{ String(h - 1).padStart(2, '0') }}:00</option>
-                </select>
-              </div>
-              <div>
-                <label class="app-label mb-1.5 block" for="sp-win-end">Fin de journée</label>
-                <select id="sp-win-end" v-model.number="form.window_end_hour" class="app-input">
-                  <option v-for="h in 24" :key="h" :value="h">{{ String(h).padStart(2, '0') }}:00</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label class="app-label mb-1.5 block" for="sp-spacing">Délai minimum entre deux envois (min)</label>
-              <input
-                id="sp-spacing"
-                v-model.number="form.spacing_minutes"
-                type="number"
-                min="1"
-                max="1440"
-                class="app-input w-32"
-              />
-            </div>
-
-            <p
-              class="flex items-start gap-2 rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-3.5 text-[11px] text-[var(--app-ink-soft)]"
-            >
-              <UIcon name="i-lucide-info" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>
-                Max <strong class="text-[var(--app-ink)]">{{ form.daily_cap }}</strong
-                >/jour, {{ selectedDaysLabel }}, de
-                <strong class="text-[var(--app-ink)]">{{ String(form.window_start_hour).padStart(2, '0') }}h</strong> à
-                <strong class="text-[var(--app-ink)]">{{ String(form.window_end_hour).padStart(2, '0') }}h</strong>, 1
-                toutes les {{ form.spacing_minutes }} min.
-              </span>
-            </p>
+          <form v-else id="send-policy-form" @submit.prevent="save">
+            <UiSendPolicyFields v-model="form" />
           </form>
         </div>
 
-        <!-- Footer -->
         <div class="flex gap-2 border-t border-[var(--app-line)] px-5 py-4">
           <button type="button" class="app-btn-secondary flex-1" @click="emit('close')">Fermer</button>
           <button
@@ -132,16 +59,16 @@
 </template>
 
 <script lang="ts" setup>
-import type { ComputedRef, Ref } from 'vue'
+import type { UiSendPolicyDrawerEmits } from '~/types/UiSendPolicyDrawer'
+import type { UseToastReturn } from '~/types/Composables'
+import type { ComputedRef, EmitFn, Ref } from 'vue'
 import { computed, ref, watch } from 'vue'
 import type { SendPolicyDrawerProps } from '~/types/SendPolicyDrawer'
 import type { SendPolicy } from '~/types/Automation'
-import { getSendPolicy, updateSendPolicy } from '~/services/sendPolicyService'
+import { SendPolicyService } from '~/services/sendPolicyService'
 import { useToast } from '~/composables/useToast'
 
-/**
- * Defines the component props.
- */
+/** Drawer to edit global sending cadence rules. */
 const props: SendPolicyDrawerProps = defineProps({
   open: {
     type: Boolean,
@@ -153,22 +80,17 @@ const props: SendPolicyDrawerProps = defineProps({
   },
 })
 
-const emit = defineEmits<{
-  /** Close every drawer. */
-  close: []
-  /** Go back to the previous drawer of the stack. */
-  back: []
-}>()
+const emit: EmitFn<UiSendPolicyDrawerEmits> = defineEmits<UiSendPolicyDrawerEmits>()
 
-const toast = useToast()
+const toast: UseToastReturn = useToast()
 
 /** Whether the policy is loading. */
-const isLoading: Ref<boolean> = ref<boolean>(true)
+const isLoading: Ref<boolean> = ref(true)
 /** Whether a save is in flight. */
-const isSaving: Ref<boolean> = ref<boolean>(false)
+const isSaving: Ref<boolean> = ref(false)
 
 /** The editable policy. */
-const form: Ref<SendPolicy> = ref<SendPolicy>({
+const form: Ref<SendPolicy> = ref({
   daily_cap: 20,
   days_of_week: [0, 1, 2, 3, 4],
   window_start_hour: 7,
@@ -176,30 +98,10 @@ const form: Ref<SendPolicy> = ref<SendPolicy>({
   spacing_minutes: 20,
 })
 
-/** Weekday labels (index 0 = Monday). */
-const dayLabels: ReadonlyArray<string> = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
-
 /** Whether the end hour is strictly after the start hour. */
 const isWindowValid: ComputedRef<boolean> = computed(
   (): boolean => form.value.window_end_hour > form.value.window_start_hour,
 )
-
-/** Human list of the selected days. */
-const selectedDaysLabel: ComputedRef<string> = computed((): string => {
-  const days: number[] = [...form.value.days_of_week].sort((a: number, b: number): number => a - b)
-  return days.length ? days.map((d: number): string => dayLabels[d] ?? '').join(', ') : 'aucun jour'
-})
-
-/**
- * Toggle a weekday in the policy.
- * @param index - Weekday index (0 = Monday).
- */
-function toggleDay(index: number): void {
-  const set: Set<number> = new Set<number>(form.value.days_of_week)
-  if (set.has(index)) set.delete(index)
-  else set.add(index)
-  form.value.days_of_week = [...set].sort((a: number, b: number): number => a - b)
-}
 
 /**
  * Load the current policy from the API.
@@ -208,7 +110,7 @@ function toggleDay(index: number): void {
 async function load(): Promise<void> {
   isLoading.value = true
   try {
-    form.value = await getSendPolicy()
+    form.value = await SendPolicyService.getSendPolicy()
   } catch {
     // Keep defaults on failure.
   } finally {
@@ -231,7 +133,7 @@ async function save(): Promise<void> {
   }
   isSaving.value = true
   try {
-    form.value = await updateSendPolicy(form.value)
+    form.value = await SendPolicyService.updateSendPolicy(form.value)
     toast.success("Réglages d'envoi enregistrés")
     emit('close')
   } catch (err: unknown) {

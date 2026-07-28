@@ -6,13 +6,13 @@
       :type="showPassword ? 'text' : 'password'"
       :required="required"
       :placeholder="placeholder"
-      :class="['input-field pr-10', hasError && 'border-[var(--app-red)]']"
+      :class="inputClasses"
       @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     />
     <button
       type="button"
-      class="absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer text-[var(--app-ink-soft)] transition-colors hover:text-[var(--app-ink)]"
-      :aria-label="showPassword ? 'Hide password' : 'Show password'"
+      :class="['absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer transition-colors', toggleClasses]"
+      :aria-label="showPassword ? 'Masquer' : 'Afficher'"
       @click="showPassword = !showPassword"
     >
       <svg
@@ -50,20 +50,61 @@
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref } from 'vue'
+<script lang="ts" setup>
+import type { ComputedRef, PropType, Ref } from 'vue'
+import { computed, ref } from 'vue'
+import type { UiPasswordInputAppearance, UiPasswordInputProps } from '~/types/UiPasswordInput'
 
-defineProps<{
-  id: string
-  modelValue: string
-  placeholder?: string
-  required?: boolean
-  hasError?: boolean
-}>()
+/** Password field with show/hide toggle; `app` or `landing` appearance. */
+const props: UiPasswordInputProps = defineProps({
+  id: {
+    type: String,
+    required: true,
+  },
+  modelValue: {
+    type: String,
+    required: true,
+  },
+  placeholder: {
+    type: String,
+    default: '',
+  },
+  required: {
+    type: Boolean,
+    default: false,
+  },
+  hasError: {
+    type: Boolean,
+    default: false,
+  },
+  appearance: {
+    type: String as PropType<UiPasswordInputAppearance>,
+    default: 'app',
+  },
+})
 
 defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
-const showPassword = ref(false)
+const showPassword: Ref<boolean> = ref(false)
+
+/**
+ * Input classes resolved from the appearance + error state.
+ */
+const inputClasses: ComputedRef<string[]> = computed((): string[] => {
+  if (props.appearance === 'landing') {
+    return ['landing-input pr-10', props.hasError ? 'landing-input--error' : '']
+  }
+  return ['input-field pr-10', props.hasError ? 'border-[var(--app-red)]' : '']
+})
+
+/**
+ * Show/hide toggle button classes resolved from the appearance.
+ */
+const toggleClasses: ComputedRef<string> = computed((): string =>
+  props.appearance === 'landing'
+    ? 'text-[#6b6355] hover:text-[#1b1813]'
+    : 'text-[var(--app-ink-soft)] hover:text-[var(--app-ink)]',
+)
 </script>

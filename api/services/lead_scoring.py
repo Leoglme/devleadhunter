@@ -5,9 +5,10 @@ No I/O — takes raw events (from PostHog) and/or aggregated counts plus email
 engagement, and returns structured signals + a hot/warm/cold temperature.
 Kept dependency-free so it is trivially testable.
 """
+
 from __future__ import annotations
 
-from typing import Any, Optional, TypedDict
+from typing import Any, TypedDict
 
 
 class BehaviorSignals(TypedDict):
@@ -22,10 +23,16 @@ class BehaviorSignals(TypedDict):
     outbound_clicks: int
     max_scroll_depth: int
     total_seconds: int
+    video_plays: int
+    video_completes: int
+    video_replays: int
+    video_fullscreen: int
+    video_watch_seconds: int
+    video_max_progress: int
     emails_sent: int
     emails_opened: int
     emails_clicked: int
-    last_seen: Optional[str]
+    last_seen: str | None
 
 
 class BehaviorScore(TypedDict):
@@ -52,6 +59,12 @@ def empty_signals() -> BehaviorSignals:
         "outbound_clicks": 0,
         "max_scroll_depth": 0,
         "total_seconds": 0,
+        "video_plays": 0,
+        "video_completes": 0,
+        "video_replays": 0,
+        "video_fullscreen": 0,
+        "video_watch_seconds": 0,
+        "video_max_progress": 0,
         "emails_sent": 0,
         "emails_opened": 0,
         "emails_clicked": 0,
@@ -71,6 +84,9 @@ def _has_any_activity(signals: BehaviorSignals) -> bool:
             signals["contact_clicks"],
             signals["outbound_clicks"],
             signals["total_seconds"],
+            signals["video_plays"],
+            signals["video_watch_seconds"],
+            signals["video_replays"],
             signals["emails_sent"],
             signals["emails_opened"],
             signals["emails_clicked"],
@@ -81,11 +97,12 @@ def _has_any_activity(signals: BehaviorSignals) -> bool:
 def score_from_signals(signals: BehaviorSignals, site_improvable: bool = False) -> BehaviorScore:
     """Compute temperature + 0–100 score from a signals structure (demo + email).
 
-    @param signals - Aggregated demo + email signals.
-    @param site_improvable - Lighthouse verdict on the prospect's EXISTING website
-        (True = weak site → redesign opportunity). Adds a score bonus once the
-        prospect shows any engagement; never creates activity by itself.
-    @returns Temperature, 0–100 score, signals and the opportunity flag.
+    Args:
+        signals: Aggregated demo + email signals.
+        site_improvable: Lighthouse verdict on the prospect's EXISTING website (True = weak site → redesign opportunity). Adds a score bonus once the prospect shows any engagement; never creates activity by itself.
+
+    Returns:
+        Temperature, 0–100 score, signals and the opportunity flag.
     """
     if not _has_any_activity(signals):
         # No engagement: the weak-website opportunity is surfaced via the flag
@@ -104,6 +121,17 @@ def score_from_signals(signals: BehaviorSignals, site_improvable: bool = False) 
     score += min(signals["total_seconds"] // 30, 6) * 4
     if signals["max_scroll_depth"] >= 75:
         score += 8
+    # Prospection video: pressing play = real curiosity; watching to the end
+    # (30-45 s of full attention) = a strong warm-up signal. Rewatching, going
+    # fullscreen and actual watched seconds are extra attention signals — capped
+    # so the video can't dominate the score, and additive with play/complete.
+    score += min(signals["video_plays"], 2) * 8
+    score += min(signals["video_completes"], 1) * 12
+    score += min(signals["video_replays"], 2) * 8  # re-watched = strong interest
+    score += min(signals["video_fullscreen"], 1) * 6  # went fullscreen = deliberate attention
+    score += min(signals["video_watch_seconds"] // 10, 3) * 2  # real seconds actually watched
+    if signals["video_max_progress"] >= 75:
+        score += 4  # watched most of the clip even without hitting 95 %
     # Email engagement
     score += min(signals["emails_opened"], 5) * 4
     score += min(signals["emails_clicked"], 5) * 12  # clicked the demo link = strong intent
@@ -113,9 +141,7 @@ def score_from_signals(signals: BehaviorSignals, site_improvable: bool = False) 
         score += 10
     score = min(score, 100)
 
-    strong_intent = (
-        signals["phone_clicks"] > 0 or signals["contact_clicks"] > 0 or signals["emails_clicked"] > 0
-    )
+    strong_intent = signals["phone_clicks"] > 0 or signals["contact_clicks"] > 0 or signals["emails_clicked"] > 0
     if strong_intent or score >= 60:
         temperature = "hot"
     elif score >= 25:
@@ -126,7 +152,7 @@ def score_from_signals(signals: BehaviorSignals, site_improvable: bool = False) 
     return {"temperature": temperature, "score": score, "signals": signals, "site_improvable": site_improvable}
 
 
-def _apply_email(signals: BehaviorSignals, email: Optional[dict[str, Any]]) -> None:
+def _apply_email(signals: BehaviorSignals, email: dict[str, Any] | None) -> None:
     """Fold email engagement counts into a signals structure."""
     if not email:
         return
@@ -137,16 +163,19 @@ def _apply_email(signals: BehaviorSignals, email: Optional[dict[str, Any]]) -> N
 
 def compute(
     events: list[dict[str, Any]],
-    email: Optional[dict[str, Any]] = None,
+    email: dict[str, Any] | None = None,
     site_improvable: bool = False,
 ) -> BehaviorScore:
     """
     Compute a lead score from raw demo events + optional email engagement.
 
-    @param events - List of ``{"event", "timestamp", "properties"}`` items.
-    @param email - Optional ``{"sent", "opened", "clicked"}`` counts.
-    @param site_improvable - Lighthouse verdict on the prospect's existing website.
-    @returns Temperature, a 0–100 score and the underlying signals.
+    Args:
+        events: List of ``{"event", "timestamp", "properties"}`` items.
+        email: Optional ``{"sent", "opened", "clicked"}`` counts.
+        site_improvable: Lighthouse verdict on the prospect's existing website.
+
+    Returns:
+        Temperature, a 0–100 score and the underlying signals.
     """
     signals = empty_signals()
     sessions: set[str] = set()
@@ -185,6 +214,32 @@ def compute(
                 signals["total_seconds"] += int(seconds)
             except (TypeError, ValueError):
                 pass
+        elif name == "demo_video_play":
+            signals["video_plays"] += 1
+        elif name == "demo_video_complete":
+            signals["video_completes"] += 1
+        elif name == "demo_video_replay":
+            signals["video_replays"] += 1
+        elif name == "demo_video_fullscreen":
+            if props.get("entered"):
+                signals["video_fullscreen"] += 1
+        elif name == "demo_video_progress":
+            percent = props.get("percent") or 0
+            try:
+                signals["video_max_progress"] = max(signals["video_max_progress"], int(percent))
+            except (TypeError, ValueError):
+                pass
+        elif name == "demo_video_watch_time":
+            seconds = props.get("seconds") or 0
+            try:
+                # Events are cumulative — keep the largest watched-seconds seen.
+                signals["video_watch_seconds"] = max(signals["video_watch_seconds"], int(seconds))
+            except (TypeError, ValueError):
+                pass
+
+    # A complete (≥95 %) implies max progress even if no progress event landed.
+    if signals["video_completes"] > 0:
+        signals["video_max_progress"] = max(signals["video_max_progress"], 95)
 
     signals["sections_viewed"] = len(section_names)
     signals["visits"] = len(sessions) if sessions else (1 if signals["pageviews"] else 0)
@@ -195,9 +250,7 @@ def compute(
     return score_from_signals(signals, site_improvable=site_improvable)
 
 
-def build_signals_from_aggregate(
-    aggregate: dict[str, Any], email: Optional[dict[str, Any]] = None
-) -> BehaviorSignals:
+def build_signals_from_aggregate(aggregate: dict[str, Any], email: dict[str, Any] | None = None) -> BehaviorSignals:
     """
     Build a signals structure from PostHog aggregate counts + email engagement.
 

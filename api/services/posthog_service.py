@@ -6,6 +6,7 @@ those events back via the PostHog query API (HogQL) to power lead scoring,
 the behaviour timeline and AI summaries. Degrades gracefully (returns an empty
 list) when PostHog is not configured.
 """
+
 from __future__ import annotations
 
 import logging
@@ -29,6 +30,17 @@ DEMO_EVENTS: tuple[str, ...] = (
     "demo_scroll_depth",
     "demo_time_on_page",
     "demo_engaged",
+    "demo_video_play",
+    "demo_video_resume",
+    "demo_video_pause",
+    "demo_video_replay",
+    "demo_video_progress",
+    "demo_video_complete",
+    "demo_video_watch_time",
+    "demo_video_seek",
+    "demo_video_fullscreen",
+    "demo_video_mute",
+    "demo_video_cta_click",
 )
 
 
@@ -57,8 +69,8 @@ class PostHogService:
         *,
         distinct_id: str,
         event: str,
-        properties: Optional[dict[str, Any]] = None,
-        timestamp: Optional[str] = None,
+        properties: dict[str, Any] | None = None,
+        timestamp: str | None = None,
     ) -> None:
         """
         Send a server-side event to PostHog (best-effort, never raises).
@@ -81,7 +93,7 @@ class PostHogService:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(f"{self._ingestion_host}/capture/", json=body)
                 response.raise_for_status()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("PostHog capture failed (event=%s): %s", event, exc)
 
     @staticmethod
@@ -102,7 +114,7 @@ class PostHogService:
                 )
                 response.raise_for_status()
                 payload: dict[str, Any] = response.json()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("PostHog query failed: %s", exc)
             return []
         results = payload.get("results", [])
@@ -190,7 +202,7 @@ class PostHogService:
                 )
                 response.raise_for_status()
                 payload: dict[str, Any] = response.json()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("PostHog query failed for slug=%s: %s", slug, exc)
             return []
 

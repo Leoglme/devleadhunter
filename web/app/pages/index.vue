@@ -19,11 +19,11 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 import type { CreditSettings } from '~/types'
 import type { Ref } from 'vue'
 import { ref, onMounted } from 'vue'
-import * as creditSettingsService from '~/services/creditSettingsService'
+import { CreditSettingsService } from '~/services/creditSettingsService'
 
 /**
  * Landing page — marketing presentation of DevLeadHunter.
@@ -36,17 +36,15 @@ definePageMeta({
   middleware: ['desktop-redirect'],
 })
 
-const { t } = useI18n()
-const { track } = useSiteTracking()
-
-/** i18n-aware head attributes (lang, hreflang alternates, og:locale). */
-const localeHead = useLocaleHead()
+const { t }: { t: (key: string, params?: Record<string, unknown>) => string } = useI18n()
+const { track }: { track: (event: string, properties?: Record<string, unknown> | undefined) => void } =
+  useSiteTracking()
 
 /** Credit settings fetched from the API (null while loading or on error). */
-const creditSettings: Ref<CreditSettings | null> = ref<CreditSettings | null>(null)
+const creditSettings: Ref<CreditSettings | null> = ref(null)
 
 /** Whether the credit settings request is in flight. */
-const isLoading: Ref<boolean> = ref<boolean>(true)
+const isLoading: Ref<boolean> = ref(true)
 
 /**
  * Load credit settings from the API for the pricing section.
@@ -54,7 +52,7 @@ const isLoading: Ref<boolean> = ref<boolean>(true)
 async function loadCreditSettings(): Promise<void> {
   try {
     isLoading.value = true
-    creditSettings.value = await creditSettingsService.getCreditSettings()
+    creditSettings.value = await CreditSettingsService.getCreditSettings()
   } catch (error) {
     console.error('Failed to load credit settings:', error)
   } finally {
@@ -69,7 +67,7 @@ async function loadCreditSettings(): Promise<void> {
 function scrollToSection(selector: string): void {
   const element: Element | null = document.querySelector(selector)
   if (element) {
-    const headerOffset = 80
+    const headerOffset: number = 80
     const elementPosition: number = element.getBoundingClientRect().top
     const offsetPosition: number = elementPosition + window.pageYOffset - headerOffset
     window.scrollTo({ top: offsetPosition, behavior: 'smooth' })
@@ -103,11 +101,8 @@ onMounted(async (): Promise<void> => {
   await loadCreditSettings()
 })
 
-// SEO meta — localized title/description, social cards, hreflang and JSON-LD.
 useHead(() => ({
   title: t('landing.seo.title'),
-  htmlAttrs: localeHead.value.htmlAttrs,
-  link: localeHead.value.link,
   meta: [
     { name: 'description', content: t('landing.seo.description') },
     { property: 'og:title', content: t('landing.seo.title') },
@@ -115,7 +110,6 @@ useHead(() => ({
     { property: 'og:type', content: 'website' },
     { name: 'twitter:title', content: t('landing.seo.title') },
     { name: 'twitter:description', content: t('landing.seo.description') },
-    ...(localeHead.value.meta ?? []),
   ],
   script: [
     {
@@ -137,6 +131,35 @@ useHead(() => ({
           '@type': 'Person',
           name: 'Léo Guillaume',
           url: 'https://dibodev.fr',
+        },
+      }),
+    },
+    {
+      type: 'application/ld+json',
+      innerHTML: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'Organization',
+        name: 'DevLeadHunter',
+        url: 'https://devleadhunter.dibodev.fr',
+        logo: 'https://devleadhunter.dibodev.fr/favicon.svg',
+        founder: {
+          '@type': 'Person',
+          name: 'Léo Guillaume',
+          url: 'https://dibodev.fr',
+        },
+      }),
+    },
+    {
+      type: 'application/ld+json',
+      innerHTML: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: 'DevLeadHunter',
+        url: 'https://devleadhunter.dibodev.fr',
+        inLanguage: ['en-US', 'fr-FR'],
+        publisher: {
+          '@type': 'Organization',
+          name: 'DevLeadHunter',
         },
       }),
     },

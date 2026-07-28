@@ -41,21 +41,20 @@
 </template>
 
 <script lang="ts" setup>
+import type { UseDebounceFnReturn } from '@vueuse/core'
 import type { Ref } from 'vue'
 import { ref, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import type { BusinessSearchInputExpose, BusinessSearchInputProps } from '~/types/BusinessSearchInput'
 import type { ProspectSearchSuggestion } from '~/types'
-import { searchProspectSuggestions } from '~/services/prospectsService'
+import { ProspectsService } from '~/services/prospectsService'
 
 const minQueryLength: number = 3
 const debounceDelayMs: number = 500
 const maxResults: number = 8
 const blurCloseDelayMs: number = 150
 
-/**
- * Définit les props du composant BusinessSearchInput.
- */
+/** Business name search input with Google Maps autosuggest. */
 const props: BusinessSearchInputProps = defineProps({
   city: {
     type: String,
@@ -63,14 +62,16 @@ const props: BusinessSearchInputProps = defineProps({
   },
 })
 
-const emit = defineEmits<{
+const emit: {
+  (e: 'select', suggestion: ProspectSearchSuggestion): void
+} = defineEmits<{
   (e: 'select', suggestion: ProspectSearchSuggestion): void
 }>()
 
-const searchTerm: Ref<string> = ref<string>('')
-const suggestions: Ref<ProspectSearchSuggestion[]> = ref<ProspectSearchSuggestion[]>([])
-const isSearching: Ref<boolean> = ref<boolean>(false)
-const isOpen: Ref<boolean> = ref<boolean>(false)
+const searchTerm: Ref<string> = ref('')
+const suggestions: Ref<ProspectSearchSuggestion[]> = ref([])
+const isSearching: Ref<boolean> = ref(false)
+const isOpen: Ref<boolean> = ref(false)
 let searchRequestId: number = 0
 let blurTimeoutId: ReturnType<typeof setTimeout> | null = null
 
@@ -79,41 +80,44 @@ let blurTimeoutId: ReturnType<typeof setTimeout> | null = null
  * @param query - Texte saisi par l'utilisateur.
  * @returns Une promesse résolue une fois la recherche terminée ou annulée.
  */
-const fetchSuggestions = useDebounceFn(async (query: string): Promise<void> => {
-  const trimmedQuery: string = query.trim()
-  if (trimmedQuery.length < minQueryLength) {
-    suggestions.value = []
-    isOpen.value = false
-    return
-  }
-
-  const requestId: number = ++searchRequestId
-  isSearching.value = true
-  isOpen.value = true
-
-  try {
-    const results: ProspectSearchSuggestion[] = await searchProspectSuggestions({
-      query: trimmedQuery,
-      city: props.city?.trim() || undefined,
-      max_results: maxResults,
-    })
-    if (requestId !== searchRequestId) {
+const fetchSuggestions: UseDebounceFnReturn<(query: string) => Promise<void>> = useDebounceFn(
+  async (query: string): Promise<void> => {
+    const trimmedQuery: string = query.trim()
+    if (trimmedQuery.length < minQueryLength) {
+      suggestions.value = []
+      isOpen.value = false
       return
     }
-    suggestions.value = results
+
+    const requestId: number = ++searchRequestId
+    isSearching.value = true
     isOpen.value = true
-  } catch {
-    if (requestId !== searchRequestId) {
-      return
+
+    try {
+      const results: ProspectSearchSuggestion[] = await ProspectsService.searchProspectSuggestions({
+        query: trimmedQuery,
+        city: props.city?.trim() || undefined,
+        max_results: maxResults,
+      })
+      if (requestId !== searchRequestId) {
+        return
+      }
+      suggestions.value = results
+      isOpen.value = true
+    } catch {
+      if (requestId !== searchRequestId) {
+        return
+      }
+      suggestions.value = []
+      isOpen.value = true
+    } finally {
+      if (requestId === searchRequestId) {
+        isSearching.value = false
+      }
     }
-    suggestions.value = []
-    isOpen.value = true
-  } finally {
-    if (requestId === searchRequestId) {
-      isSearching.value = false
-    }
-  }
-}, debounceDelayMs)
+  },
+  debounceDelayMs,
+)
 
 watch(searchTerm, (value: string): void => {
   const trimmedQuery: string = value.trim()

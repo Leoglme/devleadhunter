@@ -6,6 +6,7 @@ outage) the paid order would stay silently undelivered. This loop periodically
 retries such orders — bounded by ``MAX_FULFILMENT_ATTEMPTS`` and age — so a client
 who paid is not left without a site.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -21,13 +22,14 @@ async def run_order_fulfillment_recovery_loop(interval_seconds: int = 600) -> No
     """
     Periodically retry website orders that were paid but never fully delivered.
 
-    @param interval_seconds - Delay between recovery passes (default 10 min).
+    Args:
+        interval_seconds: Delay between recovery passes (default 10 min).
     """
     while True:
         db = SessionLocal()
         try:
             order_ids: list[int] = order_service.list_stuck_fulfilment_order_ids(db)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.exception("Fulfilment recovery scan failed: %s", exc)
             order_ids = []
         finally:
@@ -36,7 +38,7 @@ async def run_order_fulfillment_recovery_loop(interval_seconds: int = 600) -> No
         for order_id in order_ids:
             try:
                 await order_service.fulfill_order_async(order_id)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.exception("Fulfilment recovery retry failed for order_id=%s: %s", order_id, exc)
 
         if order_ids:

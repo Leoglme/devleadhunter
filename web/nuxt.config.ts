@@ -3,8 +3,22 @@ import { defineNuxtConfig } from 'nuxt/config'
 
 const isDesktopBuild: boolean = process.env.NUXT_DESKTOP_BUILD === '1'
 
+// Dedicated build dir for `scripts/typecheck.mjs`: the running dev server owns `.nuxt`.
+const typecheckBuildDirectory: string | undefined = process.env.NUXT_TYPECHECK_BUILD_DIR
+
+const siteUrl: string = 'https://devleadhunter.dibodev.fr'
+
 export default defineNuxtConfig({
-  modules: ['@nuxt/eslint', '@nuxt/ui', '@vueuse/nuxt', '@pinia/nuxt', '@nuxtjs/i18n'],
+  ...(typecheckBuildDirectory ? { buildDir: typecheckBuildDirectory } : {}),
+
+  modules: [
+    '@nuxt/eslint',
+    '@nuxt/ui',
+    '@vueuse/nuxt',
+    '@pinia/nuxt',
+    '@nuxtjs/i18n',
+    ...(!isDesktopBuild ? ['@nuxtjs/sitemap'] : []),
+  ],
 
   ssr: !isDesktopBuild,
 
@@ -22,9 +36,13 @@ export default defineNuxtConfig({
       prefix: 'Dashboard',
     },
     {
+      path: '~/components/core',
+      pathPrefix: false,
+    },
+    {
       path: '~/components',
       pathPrefix: false,
-      ignore: ['**/ui/**', '**/demo-sites/**', '**/dashboard/**'],
+      ignore: ['**/ui/**', '**/demo-sites/**', '**/dashboard/**', '**/core/**'],
     },
   ],
   devtools: { enabled: !isDesktopBuild },
@@ -61,7 +79,7 @@ export default defineNuxtConfig({
         { name: 'twitter:card', content: 'summary_large_image' },
         { name: 'twitter:image', content: 'https://devleadhunter.dibodev.fr/og-image.png' },
         { name: 'twitter:site', content: '@devleadhunter' },
-        { name: 'theme-color', content: '#050505' },
+        { name: 'theme-color', content: '#f4f1e9' },
       ],
       link: [
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
@@ -82,6 +100,10 @@ export default defineNuxtConfig({
           rel: 'stylesheet',
           href: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap',
         },
+        // Favicons — SVG first (modern, dark-mode aware), then PNG sizes, then .ico fallback.
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+        { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon-32x32.png' },
+        { rel: 'icon', type: 'image/png', sizes: '16x16', href: '/favicon-16x16.png' },
         { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
         { rel: 'manifest', href: '/site.webmanifest' },
         { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' },
@@ -101,6 +123,11 @@ export default defineNuxtConfig({
   },
 
   css: ['~/assets/css/main.css'],
+
+  site: {
+    url: siteUrl,
+    name: 'DevLeadHunter',
+  },
 
   colorMode: {
     preference: 'dark',
@@ -166,7 +193,7 @@ export default defineNuxtConfig({
 
   i18n: {
     // Absolute base for hreflang/og:locale alternate links (SEO).
-    baseUrl: 'https://devleadhunter.dibodev.fr',
+    baseUrl: siteUrl,
     locales: [
       { code: 'en', language: 'en-US', name: 'English', file: 'en.json' },
       { code: 'fr', language: 'fr-FR', name: 'Français', file: 'fr.json' },
@@ -181,4 +208,13 @@ export default defineNuxtConfig({
       redirectOn: 'root',
     },
   },
+
+  sitemap: !isDesktopBuild
+    ? {
+        // Per-locale sitemaps live under /sitemaps/ (not /__sitemap__/) for cleaner URLs
+        // and better compatibility with crawlers / nginx security rules.
+        sitemapsPathPrefix: '/sitemaps/',
+        exclude: ['/dashboard/**', '/login', '/profile'],
+      }
+    : undefined,
 })

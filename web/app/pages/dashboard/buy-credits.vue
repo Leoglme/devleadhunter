@@ -1,11 +1,13 @@
 <template>
   <div>
-    <!-- Header -->
     <div class="mb-6 flex items-center justify-between">
-      <h1 class="text-xl font-semibold text-[var(--app-ink)]">Acheter des crédits</h1>
+      <p class="app-label flex items-center gap-2">
+        <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+        Compte
+      </p>
+      <h1 class="app-page-title mt-2">Acheter des crédits</h1>
     </div>
 
-    <!-- Success Message -->
     <div v-if="showSuccess" class="card mb-6 border border-[var(--app-green)]/30 bg-[var(--app-green)]/10">
       <div class="flex items-center gap-2 text-[var(--app-green)]">
         <UIcon name="i-lucide-circle-check" class="h-4 w-4" />
@@ -13,7 +15,6 @@
       </div>
     </div>
 
-    <!-- Cancel Message -->
     <div v-if="showCancel" class="card mb-6 border border-[var(--app-red)]/30 bg-[var(--app-red)]/10">
       <div class="flex items-center gap-2 text-[var(--app-red)]">
         <UIcon name="i-lucide-circle-x" class="h-4 w-4" />
@@ -21,10 +22,8 @@
       </div>
     </div>
 
-    <!-- Credit Purchase Form -->
     <div v-if="!isLoading && creditSettings" class="card">
       <form @submit.prevent="handlePurchase">
-        <!-- Credits Input -->
         <div class="mb-6">
           <label for="credits" class="mb-2 block text-sm font-medium text-[var(--app-ink)]"> Nombre de crédits </label>
           <input
@@ -52,7 +51,6 @@
           </p>
         </div>
 
-        <!-- Price Display -->
         <div
           v-if="credits > 0 && creditSettings"
           class="mb-6 rounded border border-[var(--app-line)] bg-[var(--app-bg)] p-4"
@@ -73,7 +71,6 @@
           </div>
         </div>
 
-        <!-- Current Balance Info -->
         <div v-if="currentBalance !== null" class="mb-6 rounded border border-[var(--app-line)] bg-[var(--app-bg)] p-4">
           <div class="flex items-center justify-between">
             <span class="text-sm text-[var(--app-ink-soft)]">Crédits disponibles actuellement :</span>
@@ -83,7 +80,6 @@
           </div>
         </div>
 
-        <!-- Submit Button -->
         <div class="flex justify-end border-t border-[var(--app-line)] pt-4">
           <button
             type="submit"
@@ -97,7 +93,6 @@
       </form>
     </div>
 
-    <!-- Loading State -->
     <div v-if="isLoading" class="card">
       <div class="animate-pulse space-y-4">
         <div class="h-4 w-3/4 rounded bg-[var(--app-surface-2)]"></div>
@@ -106,7 +101,6 @@
       </div>
     </div>
 
-    <!-- Error State -->
     <div v-if="error && !isLoading" class="card mt-6 border border-[var(--app-red)]/30 bg-[var(--app-red)]/10">
       <div class="flex items-center gap-2 text-[var(--app-red)]">
         <UIcon name="i-lucide-triangle-alert" class="h-4 w-4" />
@@ -116,13 +110,15 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
+import type { CheckoutSessionResponse } from '~/types/index'
+import type { UseToastReturn } from '~/types/Composables'
 import type { CreditSettings } from '~/types'
-import type { Ref } from 'vue'
+import type { ComputedRef, Ref } from 'vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import * as creditSettingsService from '~/services/creditSettingsService'
-import * as paymentService from '~/services/paymentService'
+import { CreditSettingsService } from '~/services/creditSettingsService'
+import { PaymentService } from '~/services/paymentService'
 import { useUserStore } from '~/stores/user'
 import { useToast } from '~/composables/useToast'
 
@@ -137,8 +133,8 @@ definePageMeta({
 /**
  * Route and router
  */
-const route = useRoute()
-const router = useRouter()
+const route: ReturnType<typeof useRoute> = useRoute()
+const router: ReturnType<typeof useRouter> = useRouter()
 
 /**
  * Credit settings state
@@ -156,12 +152,12 @@ const credits: Ref<number> = ref(100)
 /**
  * User store
  */
-const userStore = useUserStore()
+const userStore: ReturnType<typeof useUserStore> = useUserStore()
 
 /**
  * Toast composable
  */
-const toast = useToast()
+const toast: UseToastReturn = useToast()
 
 /**
  * Success/Cancel flags from URL params
@@ -177,7 +173,7 @@ const currentBalance: Ref<number | null> = ref(null)
 /**
  * Calculate total price
  */
-const totalPrice = computed((): number => {
+const totalPrice: ComputedRef<number> = computed((): number => {
   if (!creditSettings.value || credits.value <= 0) {
     return 0
   }
@@ -188,13 +184,14 @@ const totalPrice = computed((): number => {
  * Load credit settings from API
  * @returns {Promise<void>}
  */
-const loadCreditSettings = async (): Promise<void> => {
+const loadCreditSettings: () => Promise<void> = async (): Promise<void> => {
   try {
     isLoading.value = true
     error.value = null
-    creditSettings.value = await creditSettingsService.getCreditSettings()
+    creditSettings.value = await CreditSettingsService.getCreditSettings()
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Erreur lors du chargement des paramètres de crédits'
+    const errorMessage: string =
+      err instanceof Error ? err.message : 'Erreur lors du chargement des paramètres de crédits'
     error.value = errorMessage
     toast.error(errorMessage)
   } finally {
@@ -206,7 +203,7 @@ const loadCreditSettings = async (): Promise<void> => {
  * Load current user balance
  * @returns {Promise<void>}
  */
-const loadUserBalance = async (): Promise<void> => {
+const loadUserBalance: () => Promise<void> = async (): Promise<void> => {
   try {
     if (userStore.user) {
       // Get balance from user store or API
@@ -221,13 +218,13 @@ const loadUserBalance = async (): Promise<void> => {
  * Handle purchase form submission
  * @returns {Promise<void>}
  */
-const handlePurchase = async (): Promise<void> => {
+const handlePurchase: () => Promise<void> = async (): Promise<void> => {
   if (!creditSettings.value || credits.value <= 0) {
     return
   }
 
   // Validate minimum purchase amount
-  const minimum = creditSettings.value.minimum_credits_purchase
+  const minimum: number = creditSettings.value.minimum_credits_purchase
   if (credits.value < minimum) {
     toast.error(`Le minimum d'achat est de ${minimum} crédit${minimum !== 1 ? 's' : ''}.`)
     return
@@ -238,7 +235,7 @@ const handlePurchase = async (): Promise<void> => {
     error.value = null
 
     // Create checkout session
-    const session = await paymentService.createCheckoutSession({
+    const session: CheckoutSessionResponse = await PaymentService.createCheckoutSession({
       credits: credits.value,
     })
 
@@ -254,7 +251,8 @@ const handlePurchase = async (): Promise<void> => {
       throw new Error('No checkout URL returned from server')
     }
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Erreur lors de la création de la session de paiement'
+    const errorMessage: string =
+      err instanceof Error ? err.message : 'Erreur lors de la création de la session de paiement'
     error.value = errorMessage
     toast.error(errorMessage)
     isProcessing.value = false
@@ -265,7 +263,7 @@ const handlePurchase = async (): Promise<void> => {
  * Check URL params for success/cancel
  * @returns {Promise<void>}
  */
-const checkUrlParams = async (): Promise<void> => {
+const checkUrlParams: () => Promise<void> = async (): Promise<void> => {
   if (route.query.success === 'true') {
     showSuccess.value = true
 
@@ -281,7 +279,8 @@ const checkUrlParams = async (): Promise<void> => {
     // If we have a session ID, verify the payment and ensure credits are added
     if (sessionId) {
       try {
-        const verification = await paymentService.verifyCheckoutSession(sessionId)
+        const verification: { status: string; message: string; paid: boolean; credits_added?: number | undefined } =
+          await PaymentService.verifyCheckoutSession(sessionId)
         if (verification.paid && verification.status === 'success') {
           toast.success(
             `Paiement confirmé ! ${verification.credits_added || credits.value} crédit${(verification.credits_added || credits.value) !== 1 ? 's' : ''} ajouté${(verification.credits_added || credits.value) !== 1 ? 's' : ''}.`,

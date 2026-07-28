@@ -1,0 +1,353 @@
+"""Unit tests for order invoice generation and the sale email.
+
+The provider is faked (its live calls are covered by ``test_qonto_provider``);
+here we assert the order plumbing: columns filled from the issued invoice, an
+existing invoice reused (never re-issued — a finalized invoice burns a number),
+and the email copy (no "Stripe", black button, generic payment URL).
+"""
+
+import asyncio
+from decimal import Decimal
+from types import SimpleNamespace
+
+import pytest
+
+from enums.order_status import OrderStatus
+from enums.payment_provider import PaymentProvider
+from services.order_service import OrderService, _split_postal_address
+from services.payment_providers.base import IssuedInvoice
+
+
+class _FakeLockQuery:
+    """No-op stand-in for the ``SELECT ... FOR UPDATE`` row lock chain."""
+
+    def filter(self, *_conditions: object) -> "_FakeLockQuery":
+        return self
+
+    def with_for_update(self) -> "_FakeLockQuery":
+        return self
+
+    def first(self) -> None:
+        return None
+
+
+class _FakeDB:
+    """No-op session: the service only calls query/commit/refresh on it."""
+
+    def query(self, *_entities: object) -> _FakeLockQuery:
+        return _FakeLockQuery()
+
+    def commit(self) -> None:
+        return None
+
+    def refresh(self, _obj: object) -> None:
+        return None
+
+
+class _FakeProvider:
+    """Records the invoice request and returns a canned issued invoice."""
+
+    provider = PaymentProvider.QONTO
+
+    def __init__(self) -> None:
+        self.ensure_client_called_with: object = None
+        self.create_invoice_called_with: object = None
+
+    async def ensure_client(self, billing: object) -> str:
+        self.ensure_client_called_with = billing
+        return "cli_1"
+
+    async def create_invoice(self, client_id: str, request: object) -> IssuedInvoice:
+        self.create_invoice_called_with = request
+        return IssuedInvoice(
+            provider="qonto",
+            invoice_id="inv_1",
+            invoice_number="F-2026-006",
+            payment_url="https://pay.qonto.com/invoices/inv_1",
+        )
+
+
+def _order(**overrides: object) -> SimpleNamespace:
+    base: dict[str, object] = {
+        "id": 7,
+        "product_type": "website",
+        "business_name": "Plomberie Durand",
+        "customer_name": None,
+        "customer_email": "durand@example.fr",
+        "amount_cents": 50000,
+        "currency": "eur",
+        "status": OrderStatus.DRAFT.value,
+        "invoice_id": None,
+        "invoice_number": None,
+        "payment_provider": None,
+        "payment_url": None,
+        "stripe_payment_url": None,
+        "prospect_id": None,
+        "billing_address": "12 rue de la Paix",
+        "billing_city": "Paris",
+        "billing_zip_code": "75002",
+        "billing_country_code": "FR",
+        "billing_tax_id": None,
+        "billing_vat_number": None,
+    }
+    base.update(overrides)
+    return SimpleNamespace(**base)
+
+
+def test_ensure_invoice_fills_columns_from_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A connected provider issues the invoice and its artifacts land on the order."""
+    service = OrderService()
+    provider = _FakeProvider()
+
+    async def _fake_resolve(_db: object, _user: object) -> _FakeProvider:
+        return provider
+
+    monkeypatch.setattr(service, "_resolve_provider", _fake_resolve)
+    order = _order()
+    result = asyncio.run(service.ensure_invoice(_FakeDB(), SimpleNamespace(id=1), order))
+
+    assert result.payment_provider == "qonto"
+    assert result.invoice_id == "inv_1"
+    assert result.invoice_number == "F-2026-006"
+    assert result.payment_url == "https://pay.qonto.com/invoices/inv_1"
+    assert result.status == OrderStatus.PAYMENT_PENDING.value
+    # The line item carries the business name and the order amount.
+    assert provider.create_invoice_called_with.amount_cents == 50000
+    assert "Plomberie Durand" in provider.create_invoice_called_with.label
+
+
+def test_ensure_invoice_bills_the_reviewed_address(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The address stored on the order reaches the provider (Qonto rejects invoices without one)."""
+    service = OrderService()
+    provider = _FakeProvider()
+
+    async def _fake_resolve(_db: object, _user: object) -> _FakeProvider:
+        return provider
+
+    monkeypatch.setattr(service, "_resolve_provider", _fake_resolve)
+    asyncio.run(service.ensure_invoice(_FakeDB(), SimpleNamespace(id=1), _order()))
+
+    counterpart = provider.ensure_client_called_with
+    assert counterpart.address == "12 rue de la Paix"
+    assert counterpart.zip_code == "75002"
+    assert counterpart.city == "Paris"
+    assert counterpart.country_code == "FR"
+
+
+class _SettingsDB(_FakeDB):
+    """Fake session returning canned credit settings for the commission maths."""
+
+    def __init__(self, settings: object) -> None:
+        self._settings = settings
+
+    def query(self, _model: object) -> "_SettingsDB":
+        return self
+
+    def filter(self, *_args: object) -> "_SettingsDB":
+        return self
+
+    def first(self) -> object:
+        return self._settings
+
+
+def _commission(percent: str, fixed_cents: int, amount_cents: int) -> int | None:
+    settings = SimpleNamespace(
+        platform_commission_percent=Decimal(percent), platform_commission_fixed_cents=fixed_cents
+    )
+    return OrderService().platform_commission_cents(_SettingsDB(settings), amount_cents)
+
+
+def test_platform_commission_adds_the_percentage_and_the_fixed_part() -> None:
+    """10 % + 1 € on a 10 € sale is 2 € — the fixed part is what makes it worth invoicing."""
+    assert _commission("10", 100, 1000) == 200
+    assert _commission("10", 100, 50000) == 5100
+
+
+def test_platform_commission_is_none_when_nothing_is_configured() -> None:
+    """Both terms at zero means no application fee at all."""
+    assert _commission("0", 0, 50000) is None
+
+
+def test_platform_commission_never_exceeds_the_sale() -> None:
+    """Stripe rejects an application fee larger than the amount charged."""
+    assert _commission("0", 500, 300) == 300
+
+
+def test_stripe_invoice_carries_the_platform_commission(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A configured rate becomes the Stripe application fee, in cents."""
+    service = OrderService()
+    provider = _FakeProvider()
+    provider.provider = PaymentProvider.STRIPE
+
+    async def _fake_resolve(_db: object, _user: object) -> _FakeProvider:
+        return provider
+
+    monkeypatch.setattr(service, "_resolve_provider", _fake_resolve)
+    monkeypatch.setattr(service, "platform_commission_cents", lambda _db, amount: amount // 10)
+    asyncio.run(service.ensure_invoice(_FakeDB(), SimpleNamespace(id=1), _order()))
+
+    assert provider.create_invoice_called_with.application_fee_amount == 5000
+
+
+def test_qonto_invoice_never_carries_a_commission(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Léo invoices his own clients through Qonto — the platform takes nothing."""
+    service = OrderService()
+    provider = _FakeProvider()
+    provider.provider = PaymentProvider.QONTO
+
+    async def _fake_resolve(_db: object, _user: object) -> _FakeProvider:
+        return provider
+
+    monkeypatch.setattr(service, "_resolve_provider", _fake_resolve)
+    monkeypatch.setattr(service, "platform_commission_cents", lambda _db, _amount: 5000)
+    asyncio.run(service.ensure_invoice(_FakeDB(), SimpleNamespace(id=1), _order()))
+
+    assert provider.create_invoice_called_with.application_fee_amount is None
+
+
+def test_finalize_sale_refuses_incomplete_billing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An incomplete address stops the sale before an invoice number is burned."""
+    service = OrderService()
+
+    async def _must_not_run(_db: object, _user: object) -> None:
+        raise AssertionError("the provider must not be called with incomplete billing")
+
+    monkeypatch.setattr(service, "_resolve_provider", _must_not_run)
+    monkeypatch.setattr(service, "connected_provider", lambda _db, _user: "qonto")
+    billing = {"name": "Plomberie Durand", "email": "durand@example.fr", "address": "", "zip_code": "", "city": ""}
+
+    with pytest.raises(ValueError, match="Facturation incomplète"):
+        asyncio.run(service.finalize_sale(_FakeDB(), SimpleNamespace(id=1), _order(), billing, 50000))
+
+
+def test_split_postal_address_extracts_zip_and_city() -> None:
+    """A one-line scraped address is split into the parts the providers expect."""
+    assert _split_postal_address("12 rue de la Paix, 75002 Paris", None) == ("12 rue de la Paix", "75002", "Paris")
+    # A street number is not mistaken for a zip code, and the prospect's city wins.
+    assert _split_postal_address("8 avenue des Ternes", "Paris") == ("8 avenue des Ternes", None, "Paris")
+
+
+def test_missing_billing_fields_lists_every_gap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every provider-required field missing is reported at once, not one by one."""
+    service = OrderService()
+    monkeypatch.setattr(service, "connected_provider", lambda _db, _user: "stripe")
+    billing = {"name": "Durand", "email": "durand@example.fr"}
+    assert service.missing_billing_fields(_FakeDB(), SimpleNamespace(id=1), billing) == [
+        "l'adresse",
+        "le code postal",
+        "la ville",
+    ]
+
+
+def test_missing_billing_fields_requires_tax_id_on_qonto(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Qonto rejects an invoice whose client has no TIN, so the SIREN is required."""
+    service = OrderService()
+    monkeypatch.setattr(service, "connected_provider", lambda _db, _user: "qonto")
+    billing = {
+        "name": "Durand",
+        "email": "durand@example.fr",
+        "address": "12 rue de la Paix",
+        "zip_code": "75002",
+        "city": "Paris",
+    }
+    assert service.missing_billing_fields(_FakeDB(), SimpleNamespace(id=1), billing) == ["le SIREN / SIRET"]
+
+
+def test_missing_billing_fields_skips_address_without_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A fully manual sale (cash, transfer) is not blocked on a postal address."""
+    service = OrderService()
+    monkeypatch.setattr(service, "connected_provider", lambda _db, _user: None)
+    billing = {"name": "Durand", "email": "durand@example.fr"}
+    assert service.missing_billing_fields(_FakeDB(), SimpleNamespace(id=1), billing) == []
+
+
+def test_ensure_invoice_reuses_existing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An order that already has an invoice is never re-issued."""
+    service = OrderService()
+
+    async def _must_not_run(_db: object, _user: object) -> None:
+        raise AssertionError("provider must not be resolved when an invoice already exists")
+
+    monkeypatch.setattr(service, "_resolve_provider", _must_not_run)
+    order = _order(invoice_id="inv_existing", invoice_number="F-2026-005")
+    result = asyncio.run(service.ensure_invoice(_FakeDB(), SimpleNamespace(id=1), order))
+    assert result.invoice_id == "inv_existing"
+
+
+def test_build_payment_email_has_no_stripe_black_button_and_generic_url() -> None:
+    """The sale email drops the Stripe mention, uses a black button and the generic URL."""
+    order = _order(invoice_id="inv_1", payment_url="https://pay.qonto.com/invoices/inv_1")
+    rendered = OrderService().build_payment_email(order, sender_name="Léo")
+
+    body = rendered["body_html"]
+    assert "Stripe" not in body
+    assert "#111111" in body
+    assert "https://pay.qonto.com/invoices/inv_1" in body
+    assert "pièce jointe" in body  # an invoice exists → the attachment is announced
+    # No centred block: a one-to-one email, not a campaign.
+    assert "text-align:center" not in body
+    # Card and 3D Secure are only true once the payment-links provider is connected.
+    assert "3D Secure" not in body
+
+
+def test_build_payment_email_names_the_invoice_and_repeats_the_url() -> None:
+    """The button names the invoice, and the raw link survives a stripped button."""
+    order = _order(invoice_id="inv_1", invoice_number="F-2026-006", payment_url="https://pay.qonto.com/invoices/inv_1")
+    body = OrderService().build_payment_email(order, sender_name="Léo")["body_html"]
+
+    assert "Régler la facture F-2026-006" in body
+    assert "Si le bouton ne s'ouvre pas" in body
+    assert body.count("https://pay.qonto.com/invoices/inv_1") >= 2
+
+
+def test_build_payment_email_falls_back_to_a_neutral_action_without_an_invoice() -> None:
+    """With no invoice number to name, the button stays generic rather than lying."""
+    order = _order(payment_url="https://buy.stripe.com/x")
+    body = OrderService().build_payment_email(order, sender_name="Léo")["body_html"]
+    assert "Procéder au paiement" in body
+
+
+def test_build_payment_email_omits_attachment_note_without_invoice() -> None:
+    """Without an issued invoice, the email doesn't promise an attachment."""
+    order = _order(payment_url="https://buy.stripe.com/x")
+    body = OrderService().build_payment_email(order, sender_name="Léo")["body_html"]
+    assert "pièce jointe" not in body
+
+
+def test_check_and_mark_paid_marks_when_provider_reports_paid(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A provider-confirmed payment transitions the order to paid."""
+    service = OrderService()
+    order = _order(invoice_id="inv_1", payment_provider="qonto", paid_at=None)
+
+    async def _fake_resolve(_db: object, _user: object) -> SimpleNamespace:
+        async def _check_paid(_invoice_id: str) -> SimpleNamespace:
+            return SimpleNamespace(is_paid=True, raw_status="paid")
+
+        return SimpleNamespace(check_paid=_check_paid)
+
+    marked: dict[str, bool] = {"done": False}
+
+    def _fake_mark_paid(_db: object, target: SimpleNamespace) -> SimpleNamespace:
+        marked["done"] = True
+        target.paid_at = "now"
+        return target
+
+    monkeypatch.setattr(service, "_resolve_provider", _fake_resolve)
+    monkeypatch.setattr(service, "mark_paid", _fake_mark_paid)
+    assert asyncio.run(service.check_and_mark_paid(_FakeDB(), SimpleNamespace(id=1), order)) is True
+    assert marked["done"] is True
+
+
+def test_check_and_mark_paid_noop_when_unpaid(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An unpaid invoice leaves the order untouched."""
+    service = OrderService()
+    order = _order(invoice_id="inv_1", payment_provider="qonto", paid_at=None)
+
+    async def _fake_resolve(_db: object, _user: object) -> SimpleNamespace:
+        async def _check_paid(_invoice_id: str) -> SimpleNamespace:
+            return SimpleNamespace(is_paid=False, raw_status="unpaid")
+
+        return SimpleNamespace(check_paid=_check_paid)
+
+    monkeypatch.setattr(service, "_resolve_provider", _fake_resolve)
+    assert asyncio.run(service.check_and_mark_paid(_FakeDB(), SimpleNamespace(id=1), order)) is False

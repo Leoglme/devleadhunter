@@ -1,11 +1,24 @@
 import type { Order } from '~/services/ordersService'
 
-/**
- * Props du composant UiOrderDrawer.
- */
-export interface UiOrderDrawerProps {
-  /** Indique si le drawer est visible. */
+export type UiOrderDrawerProps = {
   open: boolean
-  /** Commande à afficher — `null` masque le contenu. */
   order: Order | null
+  showBack: boolean
+}
+
+export type OrderEditForm = {
+  amount_euros: number
+  business_name: string
+  customer_email: string
+  domain: string
+  status: string
+  notes: string
+}
+
+export type UiOrderDrawerEmits = {
+  close: []
+  back: []
+  finalize: []
+  updated: [order: Order]
+  deleted: [orderId: number]
 }

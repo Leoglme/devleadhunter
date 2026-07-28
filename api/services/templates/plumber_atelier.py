@@ -10,9 +10,10 @@ Exposes the stable names consumed by the shared services (see ``registry``):
 
 Rendering component (Nuxt): demo-host/app/components/templates/plumber-atelier/.
 """
+
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from services.templates._base import build_base_page
 
@@ -28,6 +29,7 @@ TEMPLATE_META: dict[str, object] = {
     ),
     "preview_image_url": None,
     "category": "artisan",
+    "trades": ["plombier", "plumber", "chauffagiste", "plomberie"],
     "default_theme": {
         "primary": "#B8732E",
         "secondary": "#1C1B19",
@@ -43,9 +45,9 @@ COMPONENT_SCHEMAS: list[dict[str, Any]] = []
 def build_content(
     *,
     business_name: str,
-    phone: Optional[str],
-    email: Optional[str],
-    city: Optional[str],
+    phone: str | None,
+    email: str | None,
+    city: str | None,
     area: str,
     subtitle: str,
     palette: dict[str, str],
@@ -145,13 +147,13 @@ _EDITORIAL_DEFAULTS: dict[str, Any] = {
 def build_site_content(
     *,
     business_name: str,
-    phone: Optional[str],
-    email: Optional[str],
-    city: Optional[str],
+    phone: str | None,
+    email: str | None,
+    city: str | None,
     area: str,
     subtitle: str,
     palette: dict[str, str],
-    enrichment: Optional[dict[str, Any]] = None,
+    enrichment: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the flat ``SiteContent`` for this template (Phase 4b).
 

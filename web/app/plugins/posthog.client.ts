@@ -1,3 +1,4 @@
+import type { RouteLocationNormalized } from 'vue-router'
 import type { PostHog } from 'posthog-js'
 import { watch } from 'vue'
 
@@ -14,8 +15,10 @@ import { watch } from 'vue'
  * cookies (see ``useCookieConsent``). Cookieless Umami runs independently. Empty
  * key → no-op.
  */
+// defineNuxtPlugin fournit déjà le type de `nuxtApp` ; le réécrire boucle sur lui-même.
+// eslint-disable-next-line @typescript-eslint/typedef
 export default defineNuxtPlugin((nuxtApp): void => {
-  const config = useRuntimeConfig()
+  const config: ReturnType<typeof useRuntimeConfig> = useRuntimeConfig()
   const key: string = String(config.public.posthogProjectApiKey ?? '')
   const host: string = String(config.public.posthogIngestionHost ?? '')
 
@@ -25,14 +28,22 @@ export default defineNuxtPlugin((nuxtApp): void => {
     return
   }
 
-  const router = useRouter()
-  const { hasAnalyticsConsent } = useCookieConsent()
+  const router: ReturnType<typeof useRouter> = useRouter()
+  const {
+    hasAnalyticsConsent,
+  }: {
+    consent: Ref<CookieConsent, CookieConsent>
+    hasAnalyticsConsent: ComputedRef<boolean>
+    needsChoice: ComputedRef<boolean>
+    accept: () => void
+    refuse: () => void
+  } = useCookieConsent()
   let instance: PostHog | null = null
 
   /**
    * Whether a route belongs to the public marketing surface (everything except the app).
-   * @param {string} path - Route path to test.
-   * @returns {boolean} True when the path is a marketing route.
+   * @param path - Route path to test.
+   * @returns True when the path is a marketing route.
    */
   function isMarketingRoute(path: string): boolean {
     return !path.startsWith('/dashboard')
@@ -40,8 +51,8 @@ export default defineNuxtPlugin((nuxtApp): void => {
 
   /**
    * Whether tracking may run right now (marketing route + granted consent).
-   * @param {string} path - Route path to test.
-   * @returns {boolean} True when an event may be captured.
+   * @param path - Route path to test.
+   * @returns True when an event may be captured.
    */
   function canTrack(path: string): boolean {
     return isMarketingRoute(path) && hasAnalyticsConsent.value
@@ -49,11 +60,14 @@ export default defineNuxtPlugin((nuxtApp): void => {
 
   /**
    * Lazily initialise PostHog on the first tracked interaction.
-   * @returns {Promise<PostHog>} The initialised PostHog instance.
+   * @returns The initialised PostHog instance.
    */
   async function ensureInstance(): Promise<PostHog> {
     if (instance) return instance
-    const { default: posthog } = await import('posthog-js')
+    const {
+      default: posthog,
+    }: typeof import('C:/Users/leogu/Desktop/Projects/devleadhunter/web/node_modules/posthog-js/dist/module') =
+      await import('posthog-js')
     posthog.init(key, {
       api_host: host,
       capture_pageview: false,
@@ -67,8 +81,8 @@ export default defineNuxtPlugin((nuxtApp): void => {
 
   /**
    * Capture a manual ``$pageview`` when tracking is allowed for the given route.
-   * @param {string} path - The route path being viewed.
-   * @returns {Promise<void>} Resolves once the pageview has been captured (or skipped).
+   * @param path - The route path being viewed.
+   * @returns Resolves once the pageview has been captured (or skipped).
    */
   async function trackPageview(path: string): Promise<void> {
     if (!canTrack(path)) return
@@ -79,7 +93,7 @@ export default defineNuxtPlugin((nuxtApp): void => {
   nuxtApp.hook('app:mounted', (): void => {
     void trackPageview(router.currentRoute.value.path)
   })
-  router.afterEach((to): void => {
+  router.afterEach((to: RouteLocationNormalized): void => {
     void trackPageview(to.path)
   })
 
@@ -90,11 +104,13 @@ export default defineNuxtPlugin((nuxtApp): void => {
 
   /**
    * Capture a marketing event (no-op on the app surface or without consent).
-   * @param {string} event - Event name (``site_*``).
-   * @param {Record<string, unknown>} [properties] - Optional event properties.
-   * @returns {void}
+   * @param event - Event name (``site_*``).
+   * @param [properties] - Optional event properties.
    */
-  const siteTrack = (event: string, properties?: Record<string, unknown>): void => {
+  const siteTrack: (event: string, properties?: Record<string, unknown>) => void = (
+    event: string,
+    properties?: Record<string, unknown>,
+  ): void => {
     if (!canTrack(router.currentRoute.value.path)) return
     void ensureInstance().then((posthog: PostHog): void => {
       posthog.capture(event, properties)

@@ -1,12 +1,10 @@
 <template>
   <div class="space-y-6">
-    <!-- Loading -->
     <div v-if="isLoading" class="flex items-center justify-center py-20">
       <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin text-[var(--app-ink-soft)]" />
     </div>
 
     <template v-else-if="campaign">
-      <!-- ─── Header ──────────────────────────────────────────────────────── -->
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="flex min-w-0 items-center gap-3">
           <button
@@ -17,7 +15,7 @@
           </button>
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
-              <h1 class="truncate text-xl font-semibold text-[var(--app-ink)]">{{ campaign.name }}</h1>
+              <h1 class="app-page-title truncate">{{ campaign.name }}</h1>
               <span
                 :class="[
                   'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
@@ -62,7 +60,7 @@
           <button
             class="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--app-line)] text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface)] hover:text-[var(--app-ink)]"
             title="Modifier"
-            @click="openEditModal"
+            @click="openEditDrawer"
           >
             <UIcon name="i-lucide-pencil" class="h-4 w-4" />
           </button>
@@ -76,8 +74,7 @@
         </div>
       </div>
 
-      <!-- ─── Stats strip ─────────────────────────────────────────────────── -->
-      <div v-if="stats" class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div v-if="stats" class="grid grid-cols-2 gap-3 @xl:grid-cols-3 @5xl:grid-cols-6">
         <div
           v-for="m in metricCards"
           :key="m.label"
@@ -91,7 +88,6 @@
         </div>
       </div>
 
-      <!-- ─── Tabs ────────────────────────────────────────────────────────── -->
       <div class="border-b border-[var(--app-line)]">
         <nav class="flex gap-1">
           <button
@@ -117,31 +113,46 @@
         </nav>
       </div>
 
-      <!-- ═══ Tab: Configuration ══════════════════════════════════════════ -->
       <div v-if="activeTab === 'config'" class="space-y-4">
-        <!-- Cadence -->
         <section class="rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-5">
           <div class="mb-4 flex items-center gap-2">
             <UIcon name="i-lucide-timer" class="h-4 w-4 text-[var(--app-accent-ink)]" />
             <h3 class="text-sm font-semibold text-[var(--app-ink)]">Cadence d'envoi</h3>
           </div>
-          <div class="flex items-center gap-2 text-sm text-[var(--app-ink)]">
-            <span>1 email toutes les</span>
-            <input
-              v-model.number="settingsForm.send_delay_minutes"
-              type="number"
-              min="1"
-              max="1440"
-              class="input-field h-9 w-20 text-center"
-            />
-            <span>minutes</span>
-          </div>
-          <p class="text-muted mt-2 text-xs">
-            Rate limiting strict pour préserver ta délivrabilité. 20 min = ~72 emails/jour.
+
+          <p class="text-sm text-[var(--app-ink)]">
+            Cette campagne suit vos réglages d'envoi :
+            <strong class="font-semibold">{{ sendPolicySummary }}</strong>
           </p>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <button type="button" class="app-btn-secondary h-8 px-3 text-xs" @click="openSendPolicyDrawer">
+              <UIcon name="i-lucide-sliders-horizontal" class="h-3.5 w-3.5" />
+              Réglages d'envoi
+            </button>
+          </div>
+
+          <UiCollapsibleCard icon="i-lucide-wrench" title="Espacement (avancé)" class="mt-4">
+            <div class="space-y-2 px-4 py-4">
+              <div class="flex items-center gap-2 text-sm text-[var(--app-ink)]">
+                <span>1 email toutes les</span>
+                <input
+                  v-model.number="settingsForm.send_delay_minutes"
+                  type="number"
+                  min="1"
+                  max="1440"
+                  class="input-field h-9 w-20 text-center"
+                  placeholder="20"
+                />
+                <span>minutes</span>
+              </div>
+              <p class="text-xs leading-relaxed text-[var(--app-ink-soft)]">
+                Écart minimum entre deux envois. Le plafond journalier et la fenêtre horaire de vos réglages priment :
+                ils s'appliquent en plus de cet espacement.
+              </p>
+            </div>
+          </UiCollapsibleCard>
         </section>
 
-        <!-- Templates -->
         <section class="rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-5">
           <div class="mb-4 flex items-center justify-between">
             <div class="flex items-center gap-2">
@@ -171,7 +182,7 @@
             </button>
           </div>
 
-          <div :class="settingsForm.enable_ab ? 'grid gap-4 md:grid-cols-2' : ''">
+          <div :class="settingsForm.enable_ab ? 'grid gap-4 @2xl:grid-cols-2' : ''">
             <div>
               <label
                 v-if="settingsForm.enable_ab"
@@ -179,13 +190,25 @@
               >
                 <span class="rounded bg-[var(--app-accent-soft)] px-1.5 py-0.5 font-bold">A</span> Variante A
               </label>
-              <UiTemplateSelect v-model="settingsForm.template_id" :templates="templates" />
+              <UiTemplateSelect
+                v-model="settingsForm.template_id"
+                :templates="templates"
+                allow-create
+                @create="openCreate((id) => (settingsForm.template_id = id))"
+                @preview="openPreview"
+              />
             </div>
             <div v-if="settingsForm.enable_ab">
               <label class="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-[var(--app-violet)]">
                 <span class="rounded bg-[var(--app-violet-soft)] px-1.5 py-0.5 font-bold">B</span> Variante B
               </label>
-              <UiTemplateSelect v-model="settingsForm.ab_template_id_b" :templates="templates" />
+              <UiTemplateSelect
+                v-model="settingsForm.ab_template_id_b"
+                :templates="templates"
+                allow-create
+                @create="openCreate((id) => (settingsForm.ab_template_id_b = id))"
+                @preview="openPreview"
+              />
             </div>
           </div>
 
@@ -200,7 +223,6 @@
           </div>
         </section>
 
-        <!-- Follow-ups -->
         <section class="rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-5">
           <div class="mb-4 flex items-center justify-between">
             <div class="flex items-center gap-2">
@@ -245,10 +267,17 @@
                     min="1"
                     max="365"
                     class="input-field h-7 w-14 px-2 text-center text-xs"
+                    placeholder="5"
                   />
                   <span>après l'envoi précédent</span>
                 </div>
-                <UiTemplateSelect v-model="fu.template_id" :templates="templates" />
+                <UiTemplateSelect
+                  v-model="fu.template_id"
+                  :templates="templates"
+                  allow-create
+                  @create="openCreate((id) => (fu.template_id = id))"
+                  @preview="openPreview"
+                />
               </div>
               <button
                 class="absolute top-2 right-2 text-[var(--app-ink-soft)] transition-colors hover:text-[var(--app-red)]"
@@ -259,7 +288,6 @@
             </div>
           </div>
 
-          <!-- Behaviour-personalised follow-ups (additive) -->
           <label
             class="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] p-3"
           >
@@ -288,7 +316,6 @@
         </div>
       </div>
 
-      <!-- ═══ Tab: A/B ════════════════════════════════════════════════════ -->
       <div v-if="activeTab === 'ab'" class="space-y-4">
         <div
           v-if="!campaign.ab_template_id_b"
@@ -305,7 +332,7 @@
         </div>
 
         <template v-else-if="stats?.ab_stats">
-          <div class="grid gap-4 md:grid-cols-2">
+          <div class="grid gap-4 @2xl:grid-cols-2">
             <div
               v-for="v in stats.ab_stats"
               :key="v.variant"
@@ -395,7 +422,6 @@
         </template>
       </div>
 
-      <!-- ═══ Tab: Prospects ══════════════════════════════════════════════ -->
       <div v-if="activeTab === 'prospects'" class="space-y-4">
         <div class="flex items-center justify-between">
           <p class="text-muted text-sm">
@@ -415,59 +441,21 @@
           <button class="btn-secondary mt-4" @click="showAddProspectsModal = true">Ajouter des prospects</button>
         </div>
 
-        <div v-else class="overflow-hidden rounded-xl border border-[var(--app-line)]">
-          <table class="w-full border-collapse">
-            <thead>
-              <tr class="bg-[var(--app-bg)]">
-                <th class="text-muted px-3 py-2.5 text-left text-xs font-semibold">Prospect</th>
-                <th class="text-muted px-3 py-2.5 text-left text-xs font-semibold">Ville</th>
-                <th class="text-muted px-3 py-2.5 text-left text-xs font-semibold">Catégorie</th>
-                <th v-if="campaign.ab_template_id_b" class="text-muted px-3 py-2.5 text-center text-xs font-semibold">
-                  Variante
-                </th>
-                <th class="text-muted px-3 py-2.5 text-right text-xs font-semibold">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="prospect in campaign.prospects"
-                :key="prospect.id"
-                class="border-t border-[var(--app-line)] transition-colors hover:bg-[var(--app-surface)]"
-              >
-                <td class="px-3 py-2.5">
-                  <div class="text-sm font-medium text-[var(--app-ink)]">{{ prospect.name }}</div>
-                  <div class="text-muted text-xs">{{ prospect.email || '—' }}</div>
-                </td>
-                <td class="text-muted px-3 py-2.5 text-sm">{{ prospect.city || '—' }}</td>
-                <td class="text-muted px-3 py-2.5 text-sm">{{ prospect.category }}</td>
-                <td v-if="campaign.ab_template_id_b" class="px-3 py-2.5 text-center">
-                  <span
-                    v-if="prospect.ab_variant"
-                    :class="[
-                      'rounded px-1.5 py-0.5 text-xs font-bold',
-                      prospect.ab_variant === 'A'
-                        ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]'
-                        : 'bg-[var(--app-violet-soft)] text-[var(--app-violet)]',
-                    ]"
-                    >{{ prospect.ab_variant }}</span
-                  >
-                  <span v-else class="text-muted text-xs">—</span>
-                </td>
-                <td class="px-3 py-2.5 text-right">
-                  <button
-                    class="inline-flex items-center gap-1 rounded-lg border border-[var(--app-red)]/30 px-2 py-1 text-xs text-[var(--app-red)] transition-colors hover:bg-[var(--app-red)]/10"
-                    @click="startRemoveProspect(prospect.id)"
-                  >
-                    <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />Retirer
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div v-else class="app-card overflow-hidden">
+          <UiProspectTable
+            :prospects="campaignProspectRows"
+            :selected-prospects="campaignSelectedProspects"
+            :show-ab-variant="!!campaign.ab_template_id_b"
+            :ab-variants="campaignAbVariants"
+            row-action="remove"
+            @view-prospect="openProspectDrawer"
+            @remove-prospect="startRemoveProspectFromRow"
+            @toggle-select="toggleCampaignProspectSelect"
+            @toggle-select-all="toggleCampaignProspectSelectAll"
+          />
         </div>
       </div>
 
-      <!-- ═══ Tab: Queue ══════════════════════════════════════════════════ -->
       <div v-if="activeTab === 'queue'" class="space-y-4">
         <div class="flex items-center justify-between">
           <p class="text-muted text-sm">
@@ -489,91 +477,61 @@
           <p class="text-muted text-sm">Aucun élément en file d'attente</p>
         </div>
 
-        <div v-else class="overflow-hidden rounded-xl border border-[var(--app-line)]">
-          <table class="w-full border-collapse">
-            <thead>
-              <tr class="bg-[var(--app-bg)]">
-                <th class="text-muted px-3 py-2.5 text-left text-xs font-semibold">Prospect</th>
-                <th class="text-muted px-3 py-2.5 text-left text-xs font-semibold">Type</th>
-                <th class="text-muted px-3 py-2.5 text-left text-xs font-semibold">Planifié</th>
-                <th class="text-muted px-3 py-2.5 text-left text-xs font-semibold">Statut</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="item in queueData.items"
-                :key="item.id"
-                class="border-t border-[var(--app-line)] transition-colors hover:bg-[var(--app-surface)]"
-              >
-                <td class="px-3 py-2.5">
-                  <div class="text-sm text-[var(--app-ink)]">{{ item.prospect_name || `#${item.prospect_id}` }}</div>
-                  <div class="text-muted text-xs">{{ item.prospect_email || '' }}</div>
-                </td>
-                <td class="px-3 py-2.5">
+        <div v-else class="app-card overflow-hidden">
+          <BaseTable min-width="640px">
+            <template #head>
+              <BaseTableTh>Prospect</BaseTableTh>
+              <BaseTableTh>Type</BaseTableTh>
+              <BaseTableTh>Planifié</BaseTableTh>
+              <BaseTableTh align="center">Statut</BaseTableTh>
+            </template>
+
+            <BaseTableTr v-for="item in queueData.items" :key="item.id">
+              <BaseTableTd>
+                <span class="block text-sm font-semibold text-[var(--app-ink)]">
+                  {{ item.prospect_name || `#${item.prospect_id}` }}
+                </span>
+                <span v-if="item.prospect_email" class="font-label text-xs text-[var(--app-ink-soft)]">
+                  {{ item.prospect_email }}
+                </span>
+              </BaseTableTd>
+
+              <BaseTableTd>
+                <span class="flex items-center gap-1.5">
                   <span
-                    :class="[
-                      'rounded px-1.5 py-0.5 text-xs font-medium',
-                      item.queue_type === 'initial'
-                        ? 'bg-[var(--app-blue-soft)] text-[var(--app-blue)]'
-                        : 'bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]',
-                    ]"
+                    :class="['app-badge', item.queue_type === 'initial' ? 'app-badge--info' : 'app-badge--progress']"
                   >
                     {{ item.queue_type === 'initial' ? 'J1' : `Relance ${item.follow_up_index}` }}
                   </span>
                   <span
                     v-if="item.ab_variant"
                     :class="[
-                      'ml-1 text-[10px] font-bold',
-                      item.ab_variant === 'A' ? 'text-[var(--app-accent-ink)]' : 'text-[var(--app-violet)]',
+                      'rounded px-1.5 py-0.5 text-xs font-bold',
+                      item.ab_variant === 'A'
+                        ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]'
+                        : 'bg-[var(--app-violet-soft)] text-[var(--app-violet)]',
                     ]"
-                    >{{ item.ab_variant }}</span
                   >
-                </td>
-                <td class="text-muted px-3 py-2.5 text-sm">{{ formatDate(item.scheduled_at) }}</td>
-                <td class="px-3 py-2.5">
-                  <span
-                    :class="[
-                      'rounded px-1.5 py-0.5 text-xs font-medium',
-                      QUEUE_STATUS_STYLE[item.status] ?? 'bg-[var(--app-surface-2)] text-[var(--app-ink-soft)]',
-                    ]"
-                    >{{ QUEUE_STATUS_LABELS[item.status] ?? item.status }}</span
-                  >
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                    {{ item.ab_variant }}
+                  </span>
+                </span>
+              </BaseTableTd>
+
+              <BaseTableTd class="font-label text-xs text-[var(--app-ink-soft)]">
+                {{ formatCompactDateTime(item.scheduled_at) }}
+              </BaseTableTd>
+
+              <BaseTableTd align="center">
+                <span :class="['app-badge', QUEUE_STATUS_BADGE_CLASS[item.status] ?? '']">
+                  {{ QUEUE_STATUS_LABELS[item.status] ?? item.status }}
+                </span>
+              </BaseTableTd>
+            </BaseTableTr>
+          </BaseTable>
         </div>
       </div>
     </template>
 
-    <!-- ─── Modals ──────────────────────────────────────────────────────── -->
-
-    <!-- Edit -->
-    <div
-      v-if="showEditModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-[var(--app-overlay)] backdrop-blur-sm"
-      @click.self="showEditModal = false"
-    >
-      <div class="w-full max-w-md rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-6">
-        <h2 class="mb-4 text-base font-semibold text-[var(--app-ink)]">Modifier la campagne</h2>
-        <form class="space-y-3" @submit.prevent="handleUpdateCampaign">
-          <div>
-            <label class="text-muted mb-1.5 block text-xs font-medium">Nom</label>
-            <input v-model="editForm.name" type="text" required class="input-field" />
-          </div>
-          <div>
-            <label class="text-muted mb-1.5 block text-xs font-medium">Description</label>
-            <textarea v-model="editForm.description" class="input-field" rows="3" />
-          </div>
-          <div class="flex gap-3 pt-2">
-            <button type="button" class="btn-secondary flex-1" @click="showEditModal = false">Annuler</button>
-            <button type="submit" class="btn-primary flex-1">Enregistrer</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- Add prospects -->
     <div
       v-if="showAddProspectsModal"
       class="fixed inset-0 z-50 flex items-center justify-center bg-[var(--app-overlay)] backdrop-blur-sm"
@@ -638,41 +596,36 @@
 </template>
 
 <script lang="ts" setup>
+import type { UseToastReturn } from '~/types/Composables'
+import type { TemplateOption } from '~/types/CampaignDetailPage'
 import { computed, onMounted, ref, watch } from 'vue'
 import type { ComputedRef, Ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import {
-  campaignService,
-  type CampaignDetailResponse,
-  type CampaignQueueResponse,
-  type CampaignStats,
+import type {
+  CampaignDetailResponse,
+  CampaignProspect,
+  CampaignQueueResponse,
+  CampaignStats,
+  LaunchCampaignResponse,
 } from '~/services/campaignService'
-import { listProspects } from '~/services/prospectsService'
-import { api } from '~/services/api'
-import type { Prospect, CampaignVariantStats } from '~/types'
-import { formatDate } from '~/utils/date'
+import { CampaignService } from '~/services/campaignService'
+import { ProspectsService } from '~/services/prospectsService'
+import { ApiClient } from '~/services/api'
+import type { CampaignFollowUp, CampaignVariantStats, Prospect, ProspectSource } from '~/types'
+import { formatCompactDateTime } from '~/utils/date'
 import { useToast } from '~/composables/useToast'
+import { useDrawerStackStore } from '~/stores/drawerStack'
+import type { SendPolicy } from '~/types/Automation'
+import { SendPolicyService } from '~/services/sendPolicyService'
+import { formatSendPolicySummary } from '~/utils/sendPolicy'
 
 definePageMeta({ layout: 'dashboard', middleware: 'auth' })
 
-// ─── Types ──────────────────────────────────────────────────────────────────
+const router: ReturnType<typeof useRouter> = useRouter()
+const route: ReturnType<typeof useRoute> = useRoute()
+const toast: UseToastReturn = useToast()
 
-/** Lightweight template shape used by the selects. */
-interface TemplateOption {
-  id: number
-  name: string
-  subject: string
-}
-
-// ─── Composables ──────────────────────────────────────────────────────────────
-
-const router = useRouter()
-const route = useRoute()
-const toast = useToast()
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const TABS: ReadonlyArray<{ key: string; label: string; icon: string }> = [
+const TABS: { key: string; label: string; icon: string }[] = [
   { key: 'config', label: 'Configuration', icon: 'i-lucide-settings-2' },
   { key: 'ab', label: 'A/B Test', icon: 'i-lucide-flask-conical' },
   { key: 'prospects', label: 'Prospects', icon: 'i-lucide-users' },
@@ -707,32 +660,28 @@ const QUEUE_STATUS_LABELS: Record<string, string> = {
   skipped: 'Ignoré',
   failed: 'Échoué',
 }
-const QUEUE_STATUS_STYLE: Record<string, string> = {
-  pending: 'bg-[var(--app-blue-soft)] text-[var(--app-blue)]',
-  sending: 'bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]',
-  sent: 'bg-[var(--app-green-soft)] text-[var(--app-green)]',
-  skipped: 'bg-[var(--app-surface-2)] text-[var(--app-ink-soft)]',
-  failed: 'bg-[var(--app-red-soft)] text-[var(--app-red)]',
+const QUEUE_STATUS_BADGE_CLASS: Record<string, string> = {
+  pending: 'app-badge--info',
+  sending: 'app-badge--progress',
+  sent: 'app-badge--success',
+  skipped: '',
+  failed: 'app-badge--danger',
 }
 
-// ─── State ────────────────────────────────────────────────────────────────────
-
-const campaign: Ref<CampaignDetailResponse | null> = ref<CampaignDetailResponse | null>(null)
-const stats: Ref<CampaignStats | null> = ref<CampaignStats | null>(null)
-const queueData: Ref<CampaignQueueResponse | null> = ref<CampaignQueueResponse | null>(null)
-const allProspects: Ref<Prospect[]> = ref<Prospect[]>([])
-const templates: Ref<TemplateOption[]> = ref<TemplateOption[]>([])
-const isLoading: Ref<boolean> = ref<boolean>(false)
-const isSavingSettings: Ref<boolean> = ref<boolean>(false)
-const activeTab: Ref<string> = ref<string>('config')
-const showEditModal: Ref<boolean> = ref<boolean>(false)
-const showAddProspectsModal: Ref<boolean> = ref<boolean>(false)
-const selectedProspectIds: Ref<number[]> = ref<number[]>([])
-const prospectToRemoveId: Ref<number | null> = ref<number | null>(null)
+const campaign: Ref<CampaignDetailResponse | null> = ref(null)
+const stats: Ref<CampaignStats | null> = ref(null)
+const queueData: Ref<CampaignQueueResponse | null> = ref(null)
+const allProspects: Ref<Prospect[]> = ref([])
+const templates: Ref<TemplateOption[]> = ref([])
+const isLoading: Ref<boolean> = ref(false)
+const isSavingSettings: Ref<boolean> = ref(false)
+const activeTab: Ref<string> = ref('config')
+const showAddProspectsModal: Ref<boolean> = ref(false)
+const selectedProspectIds: Ref<number[]> = ref([])
+const campaignSelectedProspects: Ref<string[]> = ref([])
+const prospectToRemoveId: Ref<number | null> = ref(null)
 const removeProspectModal: Ref<{ open: () => void } | null> = ref(null)
 const confirmDeleteModal: Ref<{ open: () => void } | null> = ref(null)
-
-const editForm: Ref<{ name: string; description: string }> = ref({ name: '', description: '' })
 
 const settingsForm: Ref<{
   template_id: number
@@ -750,13 +699,55 @@ const settingsForm: Ref<{
   follow_ups: [],
 })
 
+const { openCreate, openPreview }: EmailTemplateCreator = useEmailTemplateCreator(templates, reloadTemplates)
+
+/** The user's effective sending cadence — it governs this campaign, not the raw spacing. */
+const sendPolicy: Ref<SendPolicy | null> = ref(null)
+
+const sendPolicySummary: ComputedRef<string> = computed((): string => formatSendPolicySummary(sendPolicy.value))
+
+/** Persistent drawer stack (prospect detail lives in the layout). */
+const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
+
 const campaignId: ComputedRef<number> = computed((): number => Number(route.params.id))
 
-// ─── Computed ─────────────────────────────────────────────────────────────────
+/** Campaign prospects enriched with full list data when available. */
+const campaignProspectRows: ComputedRef<Prospect[]> = computed((): Prospect[] => {
+  if (!campaign.value) return []
+  const byId: Map<number, Prospect> = new Map(allProspects.value.map((prospect: Prospect) => [prospect.id, prospect]))
+  return campaign.value.prospects.map((cp: CampaignProspect): Prospect => {
+    const full: Prospect | undefined = byId.get(cp.id)
+    if (full) return full
+    return {
+      id: cp.id,
+      user_id: 0,
+      name: cp.name,
+      city: cp.city ?? undefined,
+      phone: cp.phone ?? undefined,
+      email: cp.email ?? undefined,
+      category: cp.category,
+      source: cp.source as ProspectSource,
+      confidence: cp.confidence,
+      contacted: false,
+    }
+  })
+})
+
+/** A/B variant labels keyed by prospect id (campaign tab only). */
+const campaignAbVariants: ComputedRef<Record<number, string | null | undefined>> = computed(
+  (): Record<number, string | null | undefined> => {
+    if (!campaign.value?.ab_template_id_b) return {}
+    const variants: Record<number, string | null | undefined> = {}
+    for (const prospect of campaign.value.prospects) {
+      variants[prospect.id] = prospect.ab_variant
+    }
+    return variants
+  },
+)
 
 const availableProspects: ComputedRef<Prospect[]> = computed((): Prospect[] => {
   if (!campaign.value) return []
-  const existingIds: Set<number> = new Set(campaign.value.prospects.map((p) => p.id))
+  const existingIds: Set<number> = new Set(campaign.value.prospects.map((prospect: CampaignProspect) => prospect.id))
   return allProspects.value.filter((p: Prospect): boolean => !existingIds.has(p.id))
 })
 
@@ -765,7 +756,7 @@ const canLaunch: ComputedRef<boolean> = computed((): boolean => settingsForm.val
 /** Metric cards for the stats strip. */
 const metricCards: ComputedRef<Array<{ label: string; value: number | string; icon: string; color: string }>> =
   computed(() => {
-    const s = stats.value
+    const s: CampaignStats | null = stats.value
     if (!s) return []
     return [
       { label: 'Envoyés', value: s.total_emails_sent, icon: 'i-lucide-send', color: 'text-[var(--app-ink)]' },
@@ -783,23 +774,30 @@ const metricCards: ComputedRef<Array<{ label: string; value: number | string; ic
   })
 
 const hasSignificantDiff: ComputedRef<boolean> = computed((): boolean => {
-  const ab = stats.value?.ab_stats
-  if (!ab || ab.length < 2) return false
-  return Math.abs(ab[0].open_rate - ab[1].open_rate) >= 10
+  const [first, second]: CampaignVariantStats[] = stats.value?.ab_stats ?? []
+  if (!first || !second) return false
+  return Math.abs(first.open_rate - second.open_rate) >= 10
 })
 
 const winnerMessage: ComputedRef<string> = computed((): string => {
-  const ab = stats.value?.ab_stats
-  if (!ab || ab.length < 2) return ''
-  const winner = ab[0].open_rate > ab[1].open_rate ? ab[0] : ab[1]
+  const [first, second]: CampaignVariantStats[] = stats.value?.ab_stats ?? []
+  if (!first || !second) return ''
+  const winner: CampaignVariantStats = first.open_rate > second.open_rate ? first : second
   return `Variante ${winner.variant} en tête avec ${winner.open_rate}% d'ouverture.`
 })
 
 /** Detects whether the settings form differs from the persisted campaign. */
 const settingsDirty: ComputedRef<boolean> = computed((): boolean => {
   if (!campaign.value) return false
-  const c = campaign.value
-  const f = settingsForm.value
+  const c: CampaignDetailResponse = campaign.value
+  const f: {
+    template_id: number
+    ab_template_id_b: number
+    send_delay_minutes: number
+    enable_ab: boolean
+    behavior_personalized_followups: boolean
+    follow_ups: { template_id: number; delay_days: number }[]
+  } = settingsForm.value
   if (f.template_id !== (c.template_id ?? 0)) return true
   if (f.send_delay_minutes !== c.send_delay_minutes) return true
   if (f.behavior_personalized_followups !== c.behavior_personalized_followups) return true
@@ -807,25 +805,22 @@ const settingsDirty: ComputedRef<boolean> = computed((): boolean => {
   if (f.enable_ab && f.ab_template_id_b !== (c.ab_template_id_b ?? 0)) return true
   if (f.follow_ups.length !== c.follow_ups.length) return true
   return f.follow_ups.some(
-    (fu, i) => fu.template_id !== c.follow_ups[i]?.template_id || fu.delay_days !== c.follow_ups[i]?.delay_days,
+    (fu: { template_id: number; delay_days: number }, i: number) =>
+      fu.template_id !== c.follow_ups[i]?.template_id || fu.delay_days !== c.follow_ups[i]?.delay_days,
   )
 })
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
  * Determine if a variant is the open-rate winner (>= 10pp lead).
  * @param v - Variant stats to evaluate.
  */
 function isWinner(v: CampaignVariantStats): boolean {
-  const ab = stats.value?.ab_stats
+  const ab: CampaignVariantStats[] | null | undefined = stats.value?.ab_stats
   if (!ab || ab.length < 2 || !hasSignificantDiff.value) return false
   return ab.every(
     (other: CampaignVariantStats): boolean => other.variant === v.variant || v.open_rate > other.open_rate,
   )
 }
-
-// ─── Data loading ─────────────────────────────────────────────────────────────
 
 /**
  * Load campaign, stats, queue, prospects and templates in parallel.
@@ -833,18 +828,25 @@ function isWinner(v: CampaignVariantStats): boolean {
 async function loadAll(): Promise<void> {
   isLoading.value = true
   try {
-    const [c, s, q, prospects, tpls] = await Promise.all([
-      campaignService.get(campaignId.value),
-      campaignService.getStats(campaignId.value).catch((): null => null),
-      campaignService.getQueue(campaignId.value, { limit: 100 }).catch((): null => null),
-      listProspects(),
-      api.get<TemplateOption[]>('/api/v1/email-templates').catch((): TemplateOption[] => []),
+    const [c, s, q, prospects, tpls]: [
+      CampaignDetailResponse,
+      CampaignStats | null,
+      CampaignQueueResponse | null,
+      Prospect[],
+      TemplateOption[],
+    ] = await Promise.all([
+      CampaignService.get(campaignId.value),
+      CampaignService.getStats(campaignId.value).catch((): null => null),
+      CampaignService.getQueue(campaignId.value, { limit: 100 }).catch((): null => null),
+      ProspectsService.listProspects(),
+      ApiClient.get<TemplateOption[]>('/api/v1/email-templates').catch((): TemplateOption[] => []),
     ])
     campaign.value = c
     stats.value = s
     queueData.value = q
     allProspects.value = prospects
     templates.value = Array.isArray(tpls) ? tpls : []
+    sendPolicy.value = await SendPolicyService.getSendPolicy().catch((): null => null)
     syncSettingsForm(c)
   } catch {
     toast.error('Campagne introuvable')
@@ -852,6 +854,17 @@ async function loadAll(): Promise<void> {
   } finally {
     isLoading.value = false
   }
+}
+
+/**
+ * Reload only the email templates feeding the config/follow-up selects.
+ * @returns A promise resolved once the templates are reloaded.
+ */
+async function reloadTemplates(): Promise<void> {
+  const tpls: TemplateOption[] = await ApiClient.get<TemplateOption[]>('/api/v1/email-templates').catch(
+    (): TemplateOption[] => [],
+  )
+  templates.value = Array.isArray(tpls) ? tpls : []
 }
 
 /**
@@ -865,7 +878,10 @@ function syncSettingsForm(c: CampaignDetailResponse): void {
     send_delay_minutes: c.send_delay_minutes,
     enable_ab: !!c.ab_template_id_b,
     behavior_personalized_followups: c.behavior_personalized_followups,
-    follow_ups: c.follow_ups.map((fu) => ({ template_id: fu.template_id, delay_days: fu.delay_days })),
+    follow_ups: c.follow_ups.map((fu: CampaignFollowUp) => ({
+      template_id: fu.template_id,
+      delay_days: fu.delay_days,
+    })),
   }
 }
 
@@ -873,10 +889,8 @@ function syncSettingsForm(c: CampaignDetailResponse): void {
  * Reload only the queue (used by the refresh button and tab switch).
  */
 async function loadQueue(): Promise<void> {
-  queueData.value = await campaignService.getQueue(campaignId.value, { limit: 100 })
+  queueData.value = await CampaignService.getQueue(campaignId.value, { limit: 100 })
 }
-
-// ─── Handlers ─────────────────────────────────────────────────────────────────
 
 /**
  * Persist the settings form to the backend.
@@ -884,16 +898,27 @@ async function loadQueue(): Promise<void> {
 async function saveSettings(): Promise<void> {
   isSavingSettings.value = true
   try {
-    const f = settingsForm.value
-    const updated = await campaignService.updateSettings(campaignId.value, {
+    const f: {
+      template_id: number
+      ab_template_id_b: number
+      send_delay_minutes: number
+      enable_ab: boolean
+      behavior_personalized_followups: boolean
+      follow_ups: { template_id: number; delay_days: number }[]
+    } = settingsForm.value
+    const updated: CampaignDetailResponse = await CampaignService.updateSettings(campaignId.value, {
       template_id: f.template_id > 0 ? f.template_id : undefined,
       ab_template_id_b: f.enable_ab && f.ab_template_id_b > 0 ? f.ab_template_id_b : undefined,
       disable_ab: !f.enable_ab,
       send_delay_minutes: f.send_delay_minutes,
       behavior_personalized_followups: f.behavior_personalized_followups,
       follow_ups: f.follow_ups
-        .filter((fu) => fu.template_id > 0)
-        .map((fu, i) => ({ template_id: fu.template_id, delay_days: fu.delay_days, position: i + 1 })),
+        .filter((fu: { template_id: number; delay_days: number }) => fu.template_id > 0)
+        .map((fu: { template_id: number; delay_days: number }, i: number) => ({
+          template_id: fu.template_id,
+          delay_days: fu.delay_days,
+          position: i + 1,
+        })),
     })
     campaign.value = updated
     syncSettingsForm(updated)
@@ -911,7 +936,7 @@ async function saveSettings(): Promise<void> {
 async function handleLaunch(): Promise<void> {
   try {
     if (settingsDirty.value) await saveSettings()
-    const result = await campaignService.launch(campaignId.value)
+    const result: LaunchCampaignResponse = await CampaignService.launch(campaignId.value)
     toast.success(result.message)
     await loadAll()
   } catch (err: unknown) {
@@ -924,7 +949,7 @@ async function handleLaunch(): Promise<void> {
  */
 async function handlePause(): Promise<void> {
   try {
-    const result = await campaignService.pause(campaignId.value)
+    const result: { success: boolean; cancelled: number } = await CampaignService.pause(campaignId.value)
     toast.success(`Campagne en pause — ${result.cancelled} email(s) annulé(s)`)
     await loadAll()
   } catch {
@@ -937,7 +962,7 @@ async function handlePause(): Promise<void> {
  */
 async function handleResume(): Promise<void> {
   try {
-    const result = await campaignService.resume(campaignId.value)
+    const result: { success: boolean; enqueued: number } = await CampaignService.resume(campaignId.value)
     toast.success(`Campagne reprise — ${result.enqueued} email(s) planifié(s)`)
     await loadAll()
   } catch (err: unknown) {
@@ -948,26 +973,12 @@ async function handleResume(): Promise<void> {
 /**
  * Update campaign name/description.
  */
-async function handleUpdateCampaign(): Promise<void> {
-  try {
-    const updated = await campaignService.update(campaignId.value, {
-      name: editForm.value.name,
-      description: editForm.value.description,
-    })
-    if (campaign.value) campaign.value = { ...campaign.value, ...updated }
-    showEditModal.value = false
-    toast.success('Campagne mise à jour')
-  } catch {
-    toast.error('Erreur lors de la mise à jour')
-  }
-}
-
 /**
  * Permanently delete the campaign.
  */
 async function handleDeleteCampaign(): Promise<void> {
   try {
-    await campaignService.delete(campaignId.value)
+    await CampaignService.delete(campaignId.value)
     toast.success('Campagne supprimée')
     router.push('/dashboard/campaigns')
   } catch {
@@ -981,12 +992,51 @@ async function handleDeleteCampaign(): Promise<void> {
 async function handleAddProspects(): Promise<void> {
   if (selectedProspectIds.value.length === 0) return
   try {
-    campaign.value = await campaignService.addProspects(campaignId.value, selectedProspectIds.value)
+    campaign.value = await CampaignService.addProspects(campaignId.value, selectedProspectIds.value)
     toast.success(`${selectedProspectIds.value.length} prospect(s) ajouté(s)`)
     selectedProspectIds.value = []
     showAddProspectsModal.value = false
   } catch {
     toast.error("Erreur lors de l'ajout")
+  }
+}
+
+/**
+ * Open the prospect detail drawer from the campaign prospects tab.
+ * @param prospect - Prospect row that was clicked.
+ */
+function openProspectDrawer(prospect: Prospect): void {
+  drawerStack.push({ kind: 'prospect', prospect })
+}
+
+/**
+ * Relay a table row removal to the existing confirm flow.
+ * @param prospect - Prospect to remove from the campaign.
+ */
+function startRemoveProspectFromRow(prospect: Prospect): void {
+  startRemoveProspect(prospect.id)
+}
+
+/**
+ * Toggle a single prospect in the campaign tab selection.
+ * @param prospect - The prospect whose checkbox was toggled.
+ */
+function toggleCampaignProspectSelect(prospect: Prospect): void {
+  const id: string = String(prospect.id)
+  const index: number = campaignSelectedProspects.value.indexOf(id)
+  if (index === -1) campaignSelectedProspects.value.push(id)
+  else campaignSelectedProspects.value.splice(index, 1)
+}
+
+/**
+ * Select or clear every prospect in the campaign tab table.
+ * @param checked - True to select all visible rows, false to clear them.
+ */
+function toggleCampaignProspectSelectAll(checked: boolean): void {
+  if (checked) {
+    campaignSelectedProspects.value = campaignProspectRows.value.map((prospect: Prospect) => String(prospect.id))
+  } else {
+    campaignSelectedProspects.value = []
   }
 }
 
@@ -1005,7 +1055,7 @@ function startRemoveProspect(prospectId: number): void {
 async function handleRemoveProspect(): Promise<void> {
   if (!prospectToRemoveId.value) return
   try {
-    campaign.value = await campaignService.removeProspect(campaignId.value, prospectToRemoveId.value)
+    campaign.value = await CampaignService.removeProspect(campaignId.value, prospectToRemoveId.value)
     toast.success('Prospect retiré')
   } catch {
     toast.error('Erreur lors du retrait')
@@ -1019,18 +1069,20 @@ async function handleRemoveProspect(): Promise<void> {
  * @param id - Prospect ID.
  */
 function toggleProspect(id: number): void {
-  const idx = selectedProspectIds.value.indexOf(id)
+  const idx: number = selectedProspectIds.value.indexOf(id)
   if (idx > -1) selectedProspectIds.value.splice(idx, 1)
   else selectedProspectIds.value.push(id)
 }
 
-/**
- * Open the edit modal pre-filled with current values.
- */
-function openEditModal(): void {
+/** Open the send-policy drawer, where the effective cadence is set. */
+function openSendPolicyDrawer(): void {
+  drawerStack.push({ kind: 'send-policy' })
+}
+
+/** Open the campaign drawer in edit mode, on the persistent stack. */
+function openEditDrawer(): void {
   if (!campaign.value) return
-  editForm.value = { name: campaign.value.name, description: campaign.value.description ?? '' }
-  showEditModal.value = true
+  drawerStack.push({ kind: 'campaign-form', mode: 'edit', campaign: campaign.value })
 }
 
 /** Append an empty follow-up slot. */
@@ -1046,8 +1098,6 @@ function removeFollowUp(idx: number): void {
   settingsForm.value.follow_ups.splice(idx, 1)
 }
 
-// ─── Lifecycle ────────────────────────────────────────────────────────────────
-
 onMounted((): void => {
   loadAll()
 })
@@ -1055,4 +1105,7 @@ onMounted((): void => {
 watch(activeTab, (tab: string): void => {
   if (tab === 'queue') loadQueue()
 })
+
+// La campagne vient d'être renommée depuis son drawer.
+watch((): number => drawerStack.campaignsRefreshCounter, loadAll)
 </script>

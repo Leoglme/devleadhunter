@@ -1,18 +1,36 @@
 <template>
   <div>
-    <div class="relative">
-      <select :value="modelValue ?? 0" class="input-field appearance-none pr-9" @change="onChange">
-        <option :value="0">— Sélectionner un template —</option>
-        <option v-for="tpl in templates" :key="tpl.id" :value="tpl.id">
-          {{ tpl.name }}
-        </option>
-      </select>
-      <UIcon
-        name="i-lucide-chevron-down"
-        class="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-[var(--app-ink-soft)]"
+    <div class="flex items-center gap-2">
+      <USelectMenu
+        :model-value="selectedItem"
+        :items="items"
+        :search-input="{ placeholder: 'Rechercher un modèle…' }"
+        placeholder="— Sélectionner un modèle —"
+        class="min-w-0 flex-1"
+        @update:model-value="onSelect"
       />
+      <button
+        v-if="selected"
+        type="button"
+        class="app-btn-secondary h-9 shrink-0 px-3 text-xs"
+        title="Aperçu du modèle"
+        aria-label="Aperçu du modèle"
+        @click="emit('preview', selected.id)"
+      >
+        <UIcon name="i-lucide-eye" class="h-3.5 w-3.5" />
+      </button>
+      <button
+        v-if="allowCreate"
+        type="button"
+        class="app-btn-primary h-9 shrink-0 px-3 text-xs whitespace-nowrap"
+        @click="emit('create')"
+      >
+        <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" />
+        Nouveau
+      </button>
     </div>
-    <p v-if="selected" class="text-muted mt-1.5 flex items-center gap-1.5 text-xs">
+
+    <p v-if="selected" class="mt-1.5 flex items-center gap-1.5 text-xs text-[var(--app-ink-soft)]">
       <UIcon name="i-lucide-mail" class="h-3 w-3 shrink-0" />
       <span class="truncate italic">Objet : {{ selected.subject }}</span>
     </p>
@@ -20,14 +38,16 @@
 </template>
 
 <script lang="ts" setup>
-import type { ComputedRef, PropType } from 'vue'
-import type { TemplateSelectOption, TemplateSelectProps } from '~/types/TemplateSelect'
+import type { ComputedRef, EmitFn, PropType } from 'vue'
+import { computed } from 'vue'
+import type {
+  TemplateSelectEmits,
+  TemplateSelectItem,
+  TemplateSelectOption,
+  TemplateSelectProps,
+} from '~/types/TemplateSelect'
 
-// ─── Props & emits ────────────────────────────────────────────────────────────
-
-/**
- * Defines the component props.
- */
+/** Searchable email template picker, with inline preview and create actions. */
 const props: TemplateSelectProps = defineProps({
   modelValue: {
     type: Number as PropType<number | null>,
@@ -37,30 +57,38 @@ const props: TemplateSelectProps = defineProps({
     type: Array as PropType<TemplateSelectOption[]>,
     required: true,
   },
+  allowCreate: {
+    type: Boolean,
+    default: false,
+  },
 })
 
-const emit = defineEmits<{
-  /** Fired when the selection changes. ``0`` means "none". */
-  (e: 'update:modelValue', value: number): void
-}>()
+const emit: EmitFn<TemplateSelectEmits> = defineEmits<TemplateSelectEmits>()
 
-// ─── Computed ─────────────────────────────────────────────────────────────────
-
-/**
- * The currently-selected template object, or undefined when none is chosen.
- */
-const selected: ComputedRef<TemplateSelectOption | undefined> = computed((): TemplateSelectOption | undefined =>
-  props.templates.find((t: TemplateSelectOption): boolean => t.id === props.modelValue),
+/** Menu entries; the subject rides along as the secondary line. */
+const items: ComputedRef<TemplateSelectItem[]> = computed((): TemplateSelectItem[] =>
+  props.templates.map(
+    (template: TemplateSelectOption): TemplateSelectItem => ({
+      value: template.id,
+      label: template.name,
+      description: template.subject,
+    }),
+  ),
 )
 
-// ─── Methods ──────────────────────────────────────────────────────────────────
+const selected: ComputedRef<TemplateSelectOption | undefined> = computed((): TemplateSelectOption | undefined =>
+  props.templates.find((template: TemplateSelectOption): boolean => template.id === props.modelValue),
+)
+
+const selectedItem: ComputedRef<TemplateSelectItem | undefined> = computed((): TemplateSelectItem | undefined =>
+  items.value.find((item: TemplateSelectItem): boolean => item.value === props.modelValue),
+)
 
 /**
- * Emit the new numeric template ID on change.
- * @param event - The native select change event.
+ * Relay the picked menu entry as its numeric template id.
+ * @param item - Entry chosen in the menu, undefined when cleared.
  */
-function onChange(event: Event): void {
-  const value: number = Number((event.target as HTMLSelectElement).value)
-  emit('update:modelValue', value)
+function onSelect(item: TemplateSelectItem | undefined): void {
+  emit('update:modelValue', item?.value ?? 0)
 }
 </script>

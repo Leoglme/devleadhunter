@@ -4,19 +4,16 @@
 
     <div class="card">
       <form class="space-y-4" @submit.prevent="handleSubmit">
-        <!-- Name -->
         <div>
           <label for="name" class="text-muted mb-1.5 block text-xs font-medium"> Nom </label>
-          <input id="name" v-model="name" type="text" required class="input-field" />
+          <input id="name" v-model="name" type="text" required class="input-field" placeholder="Jean Dupont" />
         </div>
 
-        <!-- Email -->
         <div>
           <label for="email" class="text-muted mb-1.5 block text-xs font-medium"> Email </label>
-          <input id="email" v-model="email" type="email" required class="input-field" />
+          <input id="email" v-model="email" type="email" required class="input-field" placeholder="jean@exemple.fr" />
         </div>
 
-        <!-- Save Button -->
         <div class="flex justify-end gap-3 pt-2">
           <NuxtLink to="/dashboard" class="btn-secondary">
             <span> Annuler </span>
@@ -31,7 +28,8 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
+import type { UseToastReturn } from '~/types/Composables'
 import type { Ref } from 'vue'
 import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '~/stores/user'
@@ -48,12 +46,12 @@ definePageMeta({
 /**
  * User store
  */
-const userStore = useUserStore()
+const userStore: ReturnType<typeof useUserStore> = useUserStore()
 
 /**
  * Toast composable
  */
-const toast = useToast()
+const toast: UseToastReturn = useToast()
 
 /**
  * Form state
@@ -80,7 +78,7 @@ onMounted(() => {
  * Handle form submission
  * @returns {Promise<void>}
  */
-const handleSubmit = async (): Promise<void> => {
+const handleSubmit: () => Promise<void> = async (): Promise<void> => {
   try {
     await userStore.updateProfile({
       name: name.value,

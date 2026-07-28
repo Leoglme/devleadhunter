@@ -13,13 +13,16 @@
 <script lang="ts" setup>
 import type { DemoSitePublic } from '~/types/demoSite'
 
-// Production serving by custom domain: resolve the incoming host → sold site.
-// On demo.dibodev.fr root this simply 404s (the demo host root is not a site).
-const config = useRuntimeConfig()
-const url = useRequestURL()
+// Sert un site vendu par son domaine client ; la racine demo.dibodev.fr n'est pas un site et 404.
+const config: ReturnType<typeof useRuntimeConfig> = useRuntimeConfig()
+const url: URL = useRequestURL()
 const host: string = url.host
 
-const { data: site, pending, error } = await useAsyncData(
+const {
+  data: site,
+  pending,
+  error,
+}: Awaited<ReturnType<typeof useAsyncData<DemoSitePublic | undefined>>> = await useAsyncData<DemoSitePublic>(
   () => `demo-site-domain-${host}`,
   async (): Promise<DemoSitePublic> => {
     return await $fetch<DemoSitePublic>(`${config.public.apiBase}/api/v1/demo-sites/public/by-domain`, {

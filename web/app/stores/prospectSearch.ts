@@ -1,8 +1,5 @@
-/**
- * Shared prospect-search store — owns a scraping job's lifecycle so the search
- * form (a drawer) and the results (the search page or the automatisation tunnel)
- * all read the same state.
- */
+import type { UseScrapingJobStreamReturn } from '~/types/Composables'
+/** Shared prospect-search store — one scraping job lifecycle for drawer + results page. */
 import type { ComputedRef, Ref } from 'vue'
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
@@ -13,10 +10,10 @@ import type { ScrapingJobProgressState } from '~/composables/useScrapingJobStrea
 import type { Prospect } from '~/types'
 
 /** A scraping job as returned by the API. */
-export interface ScrapingJob {
+export type ScrapingJob = {
   id: string
   user_id: number
-  status: 'pending' | 'running' | 'completed' | 'failed'
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
   category: string | null
   city: string | null
   max_results: number
@@ -34,7 +31,7 @@ export interface ScrapingJob {
 }
 
 /** Parameters for starting a search. */
-export interface ProspectSearchParams {
+export type ProspectSearchParams = {
   category: string
   city: string
   maxResults: number
@@ -43,25 +40,22 @@ export interface ProspectSearchParams {
   onlyWithoutWebsite: boolean
 }
 
+// Pinia ne fournit pas de type nommé pour un store : TypeScript l'élide, il est inécrivable.
+// eslint-disable-next-line @typescript-eslint/typedef
 export const useProspectSearchStore = defineStore('prospectSearch', () => {
-  const config = useRuntimeConfig()
-  const userStore = useUserStore()
-  const stream = useScrapingJobStream()
+  const config: ReturnType<typeof useRuntimeConfig> = useRuntimeConfig()
+  const userStore: ReturnType<typeof useUserStore> = useUserStore()
+  const stream: UseScrapingJobStreamReturn = useScrapingJobStream()
 
-  /** The job currently displayed (running or last finished). */
-  const currentJob: Ref<ScrapingJob | null> = ref<ScrapingJob | null>(null)
-  /** The user's recent jobs. */
-  const recentJobs: Ref<ScrapingJob[]> = ref<ScrapingJob[]>([])
-  /** Whether a job is being started. */
-  const isStarting: Ref<boolean> = ref<boolean>(false)
-  /** Whether a manual refresh is in flight. */
-  const isRefreshing: Ref<boolean> = ref<boolean>(false)
-  /** Bumped each time a job completes — watch it to react (e.g. refresh a list). */
-  const completedSignal: Ref<number> = ref<number>(0)
+  const currentJob: Ref<ScrapingJob | null> = ref(null)
+  const recentJobs: Ref<ScrapingJob[]> = ref([])
+  const isStarting: Ref<boolean> = ref(false)
+  const isCancelling: Ref<boolean> = ref(false)
+  const isRefreshing: Ref<boolean> = ref(false)
+  const completedSignal: Ref<number> = ref(0)
 
   let pollInterval: ReturnType<typeof setInterval> | null = null
 
-  /** Live progress (stream first, then the job snapshot). */
   const liveProgress: ComputedRef<ScrapingJobProgressState> = computed((): ScrapingJobProgressState => {
     if (stream.progress.value.total > 0 || stream.progress.value.current > 0) return stream.progress.value
     return currentJob.value?.progress ?? stream.progress.value
@@ -71,7 +65,6 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
   const streamConnected: ComputedRef<boolean> = computed((): boolean => stream.isConnected.value)
   const streamSkipped: ComputedRef<number> = computed((): number => stream.skippedDuplicates.value)
 
-  /** Whether a search is currently running. */
   const isSearching: ComputedRef<boolean> = computed(
     (): boolean => currentJob.value?.status === 'running' || currentJob.value?.status === 'pending',
   )
@@ -123,9 +116,17 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
         }
         completedSignal.value += 1
       },
+      onCancelled: async (): Promise<void> => {
+        stopPolling()
+        stream.disconnect()
+        await refreshJobStatus()
+        if (currentJob.value) currentJob.value.status = 'cancelled'
+        isCancelling.value = false
+      },
       onError: async (): Promise<void> => {
         stopPolling()
         await refreshJobStatus()
+        isCancelling.value = false
       },
     })
   }
@@ -138,14 +139,15 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
     if (!currentJob.value) return
     try {
       isRefreshing.value = true
-      const response = await $fetch<ScrapingJob>(
+      const response: ScrapingJob = await $fetch<ScrapingJob>(
         `${config.public.apiBase}/api/v1/scraping-jobs/${currentJob.value.id}`,
         { method: 'GET', headers: authHeaders() },
       )
       const wasDone: boolean = currentJob.value.status === 'completed'
       currentJob.value = response
-      if (response.status === 'completed' || response.status === 'failed') {
+      if (response.status === 'completed' || response.status === 'failed' || response.status === 'cancelled') {
         stopPolling()
+        isCancelling.value = false
         await loadRecent()
         if (response.status === 'completed' && !wasDone) completedSignal.value += 1
       }
@@ -164,7 +166,7 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
   async function startSearch(params: ProspectSearchParams): Promise<void> {
     isStarting.value = true
     try {
-      const response = await $fetch<ScrapingJob>(`${config.public.apiBase}/api/v1/scraping-jobs`, {
+      const response: ScrapingJob = await $fetch<ScrapingJob>(`${config.public.apiBase}/api/v1/scraping-jobs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: {
@@ -186,12 +188,32 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
   }
 
   /**
+   * Cancel the current running search (e.g. launched by mistake).
+   * The scrape stops gracefully; prospects already found are kept.
+   * @returns A promise resolved once the cancel request is acknowledged.
+   */
+  async function cancelSearch(): Promise<void> {
+    const job: ScrapingJob | null = currentJob.value
+    if (!job || (job.status !== 'running' && job.status !== 'pending')) return
+    isCancelling.value = true
+    try {
+      await $fetch(`${config.public.apiBase}/api/v1/scraping-jobs/${job.id}/cancel`, {
+        method: 'POST',
+        headers: authHeaders(),
+      })
+      // The job flips to 'cancelled' via the stream ('cancelled') or the poll.
+    } catch {
+      isCancelling.value = false
+    }
+  }
+
+  /**
    * Load a specific job by id and stream it.
    * @param jobId - The job id.
    * @returns A promise resolved once loaded.
    */
   async function loadJob(jobId: string): Promise<void> {
-    const response = await $fetch<ScrapingJob>(`${config.public.apiBase}/api/v1/scraping-jobs/${jobId}`, {
+    const response: ScrapingJob = await $fetch<ScrapingJob>(`${config.public.apiBase}/api/v1/scraping-jobs/${jobId}`, {
       method: 'GET',
       headers: authHeaders(),
     })
@@ -207,7 +229,7 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
    */
   async function loadRecent(): Promise<void> {
     try {
-      const response = await $fetch<ScrapingJob[]>(`${config.public.apiBase}/api/v1/scraping-jobs`, {
+      const response: ScrapingJob[] = await $fetch<ScrapingJob[]>(`${config.public.apiBase}/api/v1/scraping-jobs`, {
         method: 'GET',
         headers: authHeaders(),
       })
@@ -245,6 +267,7 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
     currentJob,
     recentJobs,
     isStarting,
+    isCancelling,
     isRefreshing,
     completedSignal,
     liveProgress,
@@ -254,6 +277,7 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
     streamSkipped,
     isSearching,
     startSearch,
+    cancelSearch,
     refreshJobStatus,
     loadJob,
     loadRecent,

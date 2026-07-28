@@ -1,10 +1,10 @@
 """
 Support ticket API endpoints.
 """
+
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Dict, Literal, Optional, List
+from typing import Literal
 
 from fastapi import (
     APIRouter,
@@ -18,23 +18,20 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
-from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from core.config import settings
 from core.database import SessionLocal, get_db
 from enums.support_status import SupportTicketStatus
 from enums.support_topic import SupportTicketTopic
-from models.support_ticket import SupportTicket
 from models.user import User
 from schemas.support import (
     SupportMessageResponse,
     SupportTicketDetailResponse,
-    SupportTicketSummaryResponse,
     SupportTicketStatusUpdate,
+    SupportTicketSummaryResponse,
     SupportTopicOption,
 )
-from services.auth_service import require_admin, require_auth, resolve_user_from_token
+from services.auth_service import AuthService, require_admin, require_auth
 from services.support_service import support_service
 from services.support_storage_service import support_storage_service
 
@@ -47,7 +44,7 @@ class SupportConnectionManager:
     """
 
     def __init__(self) -> None:
-        self._connections: Dict[int, set[WebSocket]] = {}
+        self._connections: dict[int, set[WebSocket]] = {}
 
     async def connect(self, ticket_id: int, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -109,6 +106,8 @@ class GlobalTicketConnectionManager:
 
 connection_manager = SupportConnectionManager()
 global_connection_manager = GlobalTicketConnectionManager()
+
+
 @router.get("/topics", response_model=list[SupportTopicOption])
 async def list_topics() -> list[SupportTopicOption]:
     """
@@ -120,7 +119,7 @@ async def list_topics() -> list[SupportTopicOption]:
 @router.get("/tickets", response_model=list[SupportTicketSummaryResponse])
 async def list_tickets(
     scope: Literal["mine", "all"] = Query("mine"),
-    status_filter: Optional[SupportTicketStatus] = Query(default=None, alias="status"),
+    status_filter: SupportTicketStatus | None = Query(default=None, alias="status"),
     include_closed: bool = Query(default=False),
     current_user: User = Depends(require_auth),
     db: Session = Depends(get_db),
@@ -147,7 +146,7 @@ async def create_ticket(
     subject: str = Form(..., min_length=4, max_length=255),
     topic: SupportTicketTopic = Form(...),
     message: str = Form(..., min_length=10, max_length=5000),
-    attachments: List[UploadFile] = File(default=[]),
+    attachments: list[UploadFile] = File(default=[]),
     current_user: User = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> SupportTicketDetailResponse:
@@ -199,7 +198,7 @@ async def get_ticket(
 async def post_message(
     ticket_id: int,
     message: str = Form(..., max_length=5000),
-    attachments: List[UploadFile] = File(default=[]),
+    attachments: list[UploadFile] = File(default=[]),
     current_user: User = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> SupportMessageResponse:
@@ -207,10 +206,7 @@ async def post_message(
     Post a message in a ticket conversation.
     """
     if not message.strip() and not attachments:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Message or attachments are required."
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message or attachments are required.")
     ticket = support_service.get_ticket(db, ticket_id, current_user)
     stored_attachments = await support_storage_service.store_many(attachments)
     support_message = support_service.add_message(
@@ -267,26 +263,6 @@ async def update_ticket_status(
     return response
 
 
-@router.get("/attachments/{object_key:path}")
-async def get_local_attachment(object_key: str) -> FileResponse:
-    """
-    Serve locally stored attachments (non-production).
-    """
-    if settings.is_production and settings.support_ftp_public_base_url:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found.")
-
-    base_dir = Path(settings.support_local_upload_dir).resolve()
-    file_path = (base_dir / object_key).resolve()
-
-    if not str(file_path).startswith(str(base_dir)):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid path.")
-
-    if not file_path.exists():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found.")
-
-    return FileResponse(file_path)
-
-
 @router.websocket("/tickets/{ticket_id}/ws")
 async def ticket_websocket(
     websocket: WebSocket,
@@ -302,7 +278,7 @@ async def ticket_websocket(
 
     db: Session = SessionLocal()
     try:
-        user = resolve_user_from_token(token, db)
+        user = AuthService.resolve_user_from_token(token, db)
         ticket = support_service.get_ticket(db, ticket_id, user)
 
         await connection_manager.connect(ticket.id, websocket)
@@ -334,8 +310,8 @@ async def global_tickets_websocket(
     db: Session = SessionLocal()
     try:
         # Verify user authentication
-        user = resolve_user_from_token(token, db)
-        
+        user = AuthService.resolve_user_from_token(token, db)
+
         await global_connection_manager.connect(websocket)
         try:
             while True:
@@ -348,5 +324,3 @@ async def global_tickets_websocket(
             await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
     finally:
         db.close()
-
-

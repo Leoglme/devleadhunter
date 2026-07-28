@@ -18,9 +18,10 @@ produces a flat ``SiteContent`` (stored in ``content_json``) and its native
 
 Adding a new template = create the module + append it to ``TEMPLATE_MODULES``.
 """
+
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from services.templates import (
     artisan_edito,
@@ -28,6 +29,7 @@ from services.templates import (
     dental,
     electrician_lumen,
     food,
+    landscaper_verdure,
     mechanic_pitlane,
     plumber_atelier,
     plumber_cuivre,
@@ -45,6 +47,7 @@ TEMPLATE_MODULES = [
     dental,
     food,
     barber,
+    landscaper_verdure,
 ]
 
 TEMPLATES_BY_ID: dict[str, Any] = {module.TEMPLATE_ID: module for module in TEMPLATE_MODULES}
@@ -93,9 +96,9 @@ def build_content(
     *,
     template_id: str,
     business_name: str,
-    phone: Optional[str],
-    email: Optional[str],
-    city: Optional[str],
+    phone: str | None,
+    email: str | None,
+    city: str | None,
     area: str,
     subtitle: str,
     palette: dict[str, str],
@@ -125,13 +128,13 @@ def build_site_content(
     *,
     template_id: str,
     business_name: str,
-    phone: Optional[str],
-    email: Optional[str],
-    city: Optional[str],
+    phone: str | None,
+    email: str | None,
+    city: str | None,
     area: str,
     subtitle: str,
     palette: dict[str, str],
-    enrichment: Optional[dict[str, Any]] = None,
+    enrichment: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Dispatch flat ``SiteContent`` building to a template that opts in.
 

@@ -8,11 +8,12 @@ the prospect (``lighthouse_json`` / ``lighthouse_at``).
 
 The PSI API is free; ``PAGESPEED_API_KEY`` is optional (higher quota when set).
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 
@@ -44,11 +45,14 @@ class LighthouseService:
     async def audit_website(self, website: str) -> dict[str, Any]:
         """Audit a website (mobile strategy, 4 categories) and return the stored shape.
 
-        @param website - The prospect's website URL (scheme optional).
-        @returns ``{scores: {performance, accessibility, bestPractices, seo},
-            is_improvable, strategy, final_url, fetched_at}`` — scores are 0-100
-            integers, ``None`` when PSI could not compute a category.
-        @throws LighthouseAuditError - When PSI fails or returns no Lighthouse result.
+        Args:
+            website: The prospect's website URL (scheme optional).
+
+        Returns:
+            ``{scores: {performance, accessibility, bestPractices, seo}, is_improvable, strategy, final_url, fetched_at}`` — scores are 0-100 integers, ``None`` when PSI could not compute a category.
+
+        Raises:
+            LighthouseAuditError: When PSI fails or returns no Lighthouse result.
         """
         url = _normalize_url(website)
         params: list[tuple[str, str]] = [
@@ -56,7 +60,7 @@ class LighthouseService:
             ("strategy", "mobile"),
             *[("category", category) for category in _CATEGORIES],
         ]
-        api_key: Optional[str] = getattr(settings, "pagespeed_api_key", None)
+        api_key: str | None = getattr(settings, "pagespeed_api_key", None)
         if api_key:
             params.append(("key", api_key))
 
@@ -85,11 +89,11 @@ class LighthouseService:
         if not categories:
             raise LighthouseAuditError("Résultat Lighthouse vide — le site n'a pas pu être analysé.")
 
-        def score_of(key: str) -> Optional[int]:
+        def score_of(key: str) -> int | None:
             raw = (categories.get(key) or {}).get("score")
             return round(raw * 100) if isinstance(raw, (int, float)) else None
 
-        scores: dict[str, Optional[int]] = {
+        scores: dict[str, int | None] = {
             "performance": score_of("performance"),
             "accessibility": score_of("accessibility"),
             "bestPractices": score_of("best-practices"),
@@ -103,7 +107,7 @@ class LighthouseService:
             "is_improvable": is_improvable,
             "strategy": "mobile",
             "final_url": lighthouse.get("finalDisplayedUrl") or url,
-            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "fetched_at": datetime.now(UTC).isoformat(),
         }
 
 

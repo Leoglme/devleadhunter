@@ -51,6 +51,18 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_scraper_diagnostics", "migrations.add_scraper_diagnostics"),
     ("add_acquisition_tables", "migrations.add_acquisition_tables"),
     ("add_automation_columns", "migrations.add_automation_columns"),
+    ("add_email_template_sort_order", "migrations.add_email_template_sort_order"),
+    ("add_enrichment_contact_fields", "migrations.add_enrichment_contact_fields"),
+    ("update_templates_salutation", "migrations.update_templates_salutation"),
+    ("add_demo_video", "migrations.add_demo_video"),
+    ("add_presenter_auto_generate", "migrations.add_presenter_auto_generate"),
+    ("add_user_sending_provider", "migrations.add_user_sending_provider"),
+    ("add_user_onboarding_completed", "migrations.add_user_onboarding_completed"),
+    ("add_presenter_video_source", "migrations.add_presenter_video_source"),
+    ("add_email_signatures", "migrations.add_email_signatures"),
+    ("add_order_payment_provider_columns", "migrations.add_order_payment_provider_columns"),
+    ("add_order_billing_details", "migrations.add_order_billing_details"),
+    ("add_platform_commission_percent", "migrations.add_platform_commission_percent"),
 ]
 
 

@@ -6,9 +6,8 @@ métier + ville + objectif en jours) and runs enrich → generate → (review) �
 campaign, with pause/resume/cancel, a human review gate, and per-prospect
 corrections. All endpoints are scoped to the authenticated user.
 """
-from __future__ import annotations
 
-from typing import List, Optional
+from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -46,11 +45,7 @@ from services.organization_service import organization_service
 router = APIRouter(prefix="/automations", tags=["automations"])
 
 
-# ---------------------------------------------------------------------------
-# Response builders
-# ---------------------------------------------------------------------------
-
-def _run_note(run: AcquisitionRun) -> Optional[str]:
+def _run_note(run: AcquisitionRun) -> str | None:
     """Surface the most relevant note from the run's stats (seed/campaign/pause)."""
     stats: dict = run.stats or {}
     for key in ("pause_reason", "seed_note", "campaign_note"):
@@ -92,15 +87,13 @@ def _detail_response(db: Session, run: AcquisitionRun) -> SequenceDetailResponse
     """Build a full response including per-prospect items (no N+1 queries)."""
     base = _summary_response(db, run)
 
-    prospect_ids: List[int] = [item.prospect_id for item in run.items]
+    prospect_ids: list[int] = [item.prospect_id for item in run.items]
     prospects: dict[int, ProspectDB] = {}
     demo_by_id: dict[int, DemoSite] = {}
     won_ids: set[int] = set()
 
     if prospect_ids:
-        for prospect in (
-            db.execute(select(ProspectDB).where(ProspectDB.id.in_(prospect_ids))).scalars().all()
-        ):
+        for prospect in db.execute(select(ProspectDB).where(ProspectDB.id.in_(prospect_ids))).scalars().all():
             prospects[prospect.id] = prospect
         won_ids = {
             row[0]
@@ -114,15 +107,15 @@ def _detail_response(db: Session, run: AcquisitionRun) -> SequenceDetailResponse
             if row[0] is not None
         }
 
-    demo_ids: List[int] = [item.demo_site_id for item in run.items if item.demo_site_id]
+    demo_ids: list[int] = [item.demo_site_id for item in run.items if item.demo_site_id]
     if demo_ids:
         for site in db.execute(select(DemoSite).where(DemoSite.id.in_(demo_ids))).scalars().all():
             demo_by_id[site.id] = site
 
-    items: List[SequenceItemResponse] = []
+    items: list[SequenceItemResponse] = []
     for item in run.items:
-        prospect: Optional[ProspectDB] = prospects.get(item.prospect_id)
-        site: Optional[DemoSite] = demo_by_id.get(item.demo_site_id) if item.demo_site_id else None
+        prospect: ProspectDB | None = prospects.get(item.prospect_id)
+        site: DemoSite | None = demo_by_id.get(item.demo_site_id) if item.demo_site_id else None
         items.append(
             SequenceItemResponse(
                 id=item.id,
@@ -156,10 +149,6 @@ def _get_or_404(db: Session, run_id: int, user_id: int) -> AcquisitionRun:
     return run
 
 
-# ---------------------------------------------------------------------------
-# CRUD
-# ---------------------------------------------------------------------------
-
 @router.post("", response_model=SequenceDetailResponse, status_code=status.HTTP_201_CREATED)
 async def create_automation(
     payload: SequenceCreateRequest,
@@ -174,7 +163,7 @@ async def create_automation(
             detail="Fournis une sélection de prospects, ou un métier + une ville + un objectif en jours.",
         )
 
-    org_id: Optional[int] = organization_service.user_org_id(db, current_user.id)
+    org_id: int | None = organization_service.user_org_id(db, current_user.id)
     run = acquisition_service.create_from_prospects(
         db,
         current_user.id,
@@ -191,8 +180,7 @@ async def create_automation(
             email_template_id_b=payload.email_template_id_b,
             send_delay_minutes=payload.send_delay_minutes,
             follow_ups=[
-                SequenceFollowUp(template_id=fu.template_id, delay_days=fu.delay_days)
-                for fu in payload.follow_ups
+                SequenceFollowUp(template_id=fu.template_id, delay_days=fu.delay_days) for fu in payload.follow_ups
             ],
             search_metiers=payload.search_metiers,
             search_villes=payload.search_villes,
@@ -227,9 +215,7 @@ async def used_prospects(
     db: Session = Depends(get_db),
 ) -> UsedProspectsResponse:
     """Prospect ids already claimed by an automatisation (for the picker)."""
-    return UsedProspectsResponse(
-        prospect_ids=sorted(acquisition_service.used_prospect_ids(db, current_user.id))
-    )
+    return UsedProspectsResponse(prospect_ids=sorted(acquisition_service.used_prospect_ids(db, current_user.id)))
 
 
 @router.get("/{run_id}", response_model=SequenceDetailResponse)
@@ -253,10 +239,6 @@ async def delete_automation(
     run = _get_or_404(db, run_id, current_user.id)
     acquisition_service.delete(db, run)
 
-
-# ---------------------------------------------------------------------------
-# Lifecycle
-# ---------------------------------------------------------------------------
 
 @router.post("/{run_id}/pause", response_model=SequenceDetailResponse)
 async def pause_automation(
@@ -310,10 +292,6 @@ async def approve_automation(
     acquisition_service.approve_review(db, run)
     return _detail_response(db, run)
 
-
-# ---------------------------------------------------------------------------
-# Per-prospect corrections
-# ---------------------------------------------------------------------------
 
 @router.post("/{run_id}/assign-templates", response_model=SequenceDetailResponse)
 async def assign_templates(

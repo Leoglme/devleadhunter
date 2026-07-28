@@ -2,7 +2,7 @@
   <LandingLegalArticle title-key="legal.privacy.title" intro-key="legal.privacy.intro" :section-keys="sectionKeys" />
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
 /**
  * Privacy policy page — light editorial layout on the marketing theme.
  */
@@ -10,7 +10,7 @@ definePageMeta({
   layout: 'marketing',
 })
 
-const { t } = useI18n()
+const { t }: { t: (key: string, params?: Record<string, unknown>) => string } = useI18n()
 
 /** Base i18n keys of the privacy policy sections. */
 const sectionKeys: string[] = Array.from(

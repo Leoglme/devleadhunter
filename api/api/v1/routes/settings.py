@@ -1,32 +1,41 @@
 """
 Settings routes — per-user application settings.
 
-Currently exposes Resend email configuration (GET + PUT).
-The API key and webhook secret are encrypted at rest and never returned
-in plain text to the frontend.
+Exposes the Resend email configuration (GET + PUT) and the presenter
+(webcam) clip used by prospection videos (GET/PUT/PATCH/DELETE + preview).
+The Resend API key and webhook secret are encrypted at rest and never
+returned in plain text to the frontend.
 """
+
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.database import get_db
+from enums.sending_provider import SendingProvider
+from models.presenter_video import PresenterVideo
 from models.resend_config import ResendConfig
 from models.user import User
 from services.auth_service import get_current_user
 from services.encryption_service import encryption_service
+from services.presenter_video_service import presenter_video_service
+from services.r2_storage_service import r2_storage
+from services.sending_identity import (
+    SendingNotConfiguredError,
+    describe_sending_config,
+    set_active_provider,
+)
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Pydantic schemas (local — only used by this module)
-# ---------------------------------------------------------------------------
 
 
 class ResendConfigUpdate(BaseModel):
@@ -56,24 +65,12 @@ class ResendConfigResponse(BaseModel):
     from_email: str | None
     from_name: str | None
 
-    model_config = {"from_attributes": True}
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+    model_config = ConfigDict(from_attributes=True)
 
 
 def _get_or_none(db: Session, user_id: int) -> ResendConfig | None:
     """Return the ResendConfig row for *user_id*, or ``None`` if absent."""
-    return db.execute(
-        select(ResendConfig).where(ResendConfig.user_id == user_id)
-    ).scalar_one_or_none()
-
-
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
+    return db.execute(select(ResendConfig).where(ResendConfig.user_id == user_id)).scalar_one_or_none()
 
 
 @router.get("/resend", response_model=ResendConfigResponse)
@@ -89,10 +86,10 @@ async def get_resend_config(
     """
     config: ResendConfig | None = _get_or_none(db, current_user.id)
     return {
-        "has_api_key":        config is not None and bool(config.api_key),
+        "has_api_key": config is not None and bool(config.api_key),
         "has_webhook_secret": config is not None and bool(config.webhook_secret),
-        "from_email":         config.from_email if config else None,
-        "from_name":          config.from_name if config else None,
+        "from_email": config.from_email if config else None,
+        "from_name": config.from_name if config else None,
     }
 
 
@@ -110,9 +107,7 @@ async def upsert_resend_config(
     """
     encrypted_api_key: str = encryption_service.encrypt(payload.api_key)
     encrypted_secret: str | None = (
-        encryption_service.encrypt(payload.webhook_secret)
-        if payload.webhook_secret
-        else None
+        encryption_service.encrypt(payload.webhook_secret) if payload.webhook_secret else None
     )
 
     config: ResendConfig | None = _get_or_none(db, current_user.id)
@@ -120,17 +115,197 @@ async def upsert_resend_config(
         config = ResendConfig(user_id=current_user.id)
         db.add(config)
 
-    config.api_key        = encrypted_api_key
+    config.api_key = encrypted_api_key
     config.webhook_secret = encrypted_secret
-    config.from_email     = payload.from_email
-    config.from_name      = payload.from_name
+    config.from_email = payload.from_email
+    config.from_name = payload.from_name
     db.commit()
 
     logger.info("[Settings] ResendConfig upserted for user %d", current_user.id)
 
     return {
-        "has_api_key":        True,
+        "has_api_key": True,
         "has_webhook_secret": encrypted_secret is not None,
-        "from_email":         config.from_email,
-        "from_name":          config.from_name,
+        "from_email": config.from_email,
+        "from_name": config.from_name,
     }
+
+
+class SendingIdentityResponse(BaseModel):
+    """The user's active sending provider + per-provider readiness (no secrets)."""
+
+    provider: str
+    resend_configured: bool
+    resend_from_email: str | None
+    gmail_configured: bool
+    gmail_email: str | None
+
+
+class SendingProviderUpdate(BaseModel):
+    """Payload to switch the user's active sending provider."""
+
+    provider: SendingProvider
+
+
+@router.get("/sending-identity", response_model=SendingIdentityResponse)
+async def get_sending_identity(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Return the user's active sending provider and each provider's readiness."""
+    return describe_sending_config(db, current_user.id)
+
+
+@router.put("/sending-identity", response_model=SendingIdentityResponse)
+async def update_sending_identity(
+    payload: SendingProviderUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Switch the user's active sending provider (Resend or Gmail).
+
+    Rejects a switch onto a provider that is not configured yet (422) so the
+    account can never point at an unusable transport.
+    """
+    try:
+        set_active_provider(db, current_user.id, payload.provider.value)
+    except SendingNotConfiguredError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    logger.info("[Settings] Sending provider set to %s for user %d", payload.provider.value, current_user.id)
+    return describe_sending_config(db, current_user.id)
+
+
+class PresenterVideoResponse(BaseModel):
+    """Presenter clip state returned to the frontend (no file content)."""
+
+    has_video: bool
+    original_filename: str | None = None
+    duration_seconds: float = 0.0
+    intro_seconds: float = 4.0
+    outro_seconds: float = 5.0
+    auto_generate: bool = True
+    # « upload » (fichier importé) ou « recorded » (filmé dans l'app).
+    source: str = "upload"
+    updated_at: str | None = None
+
+
+class PresenterVideoSettingsUpdate(BaseModel):
+    """Payload to adjust the intro/outro segments + auto-generation toggle."""
+
+    intro_seconds: float = Field(..., ge=0, le=30)
+    outro_seconds: float = Field(..., ge=0, le=30)
+    auto_generate: bool = True
+
+
+def _serialize_presenter(record: PresenterVideo | None) -> dict[str, Any]:
+    """Build the presenter clip response payload."""
+    if record is None:
+        return {"has_video": False}
+    timestamp = record.updated_at or record.created_at
+    return {
+        "has_video": True,
+        "original_filename": record.original_filename,
+        "duration_seconds": record.duration_seconds,
+        "intro_seconds": record.intro_seconds,
+        "outro_seconds": record.outro_seconds,
+        "auto_generate": record.auto_generate,
+        "source": record.source or "upload",
+        "updated_at": timestamp.isoformat() if timestamp else None,
+    }
+
+
+@router.get("/presenter-video", response_model=PresenterVideoResponse)
+async def get_presenter_video(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Return the current user's presenter clip metadata."""
+    return _serialize_presenter(presenter_video_service.get_for_user(db, current_user.id))
+
+
+@router.put("/presenter-video", response_model=PresenterVideoResponse)
+async def upload_presenter_video(
+    file: UploadFile = File(...),
+    intro_seconds: float = Form(default=4.0, ge=0, le=30),
+    outro_seconds: float = Form(default=5.0, ge=0, le=30),
+    auto_generate: bool = Form(default=True),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Upload (or replace) the presenter clip used by prospection videos."""
+    record = await presenter_video_service.store_upload(
+        db, current_user.id, file, intro_seconds, outro_seconds, auto_generate
+    )
+    logger.info("[Settings] Presenter clip uploaded for user %d (%.1fs)", current_user.id, record.duration_seconds)
+    return _serialize_presenter(record)
+
+
+@router.put("/presenter-video/segments", response_model=PresenterVideoResponse)
+async def upload_presenter_video_segments(
+    intro: UploadFile = File(...),
+    middle: UploadFile = File(...),
+    outro: UploadFile = File(...),
+    auto_generate: bool = Form(default=True),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Assemble the three takes recorded in-app into the presenter clip."""
+    record = await presenter_video_service.store_recorded_segments(
+        db, current_user.id, intro, middle, outro, auto_generate
+    )
+    logger.info(
+        "[Settings] Presenter clip recorded in-app for user %d (%.1fs — intro %.1fs / outro %.1fs)",
+        current_user.id,
+        record.duration_seconds,
+        record.intro_seconds,
+        record.outro_seconds,
+    )
+    return _serialize_presenter(record)
+
+
+@router.patch("/presenter-video", response_model=PresenterVideoResponse)
+async def update_presenter_video_settings(
+    payload: PresenterVideoSettingsUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Adjust intro/outro segments + auto-generation of the existing clip."""
+    record = presenter_video_service.get_for_user(db, current_user.id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aucun clip de présentation.")
+    record = presenter_video_service.update_settings(
+        db, record, payload.intro_seconds, payload.outro_seconds, payload.auto_generate
+    )
+    return _serialize_presenter(record)
+
+
+@router.delete("/presenter-video", response_model=PresenterVideoResponse)
+async def delete_presenter_video(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Delete the presenter clip (file + record)."""
+    presenter_video_service.delete_for_user(db, current_user.id)
+    return {"has_video": False}
+
+
+@router.get("/presenter-video/file")
+async def stream_presenter_video_file(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Stream the user's own presenter clip from R2 (in-app preview player)."""
+    record = presenter_video_service.get_for_user(db, current_user.id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aucun clip de présentation.")
+    try:
+        body, content_type, size = await asyncio.to_thread(r2_storage.open_stream, record.file_path)
+    # L'objet peut avoir disparu du bucket, ou R2 ne pas être configuré.
+    except Exception as error:
+        logger.warning("[Presenter] clip introuvable sur R2 pour user=%s: %s", current_user.id, error)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Le fichier du clip est introuvable."
+        ) from error
+    headers = {"Content-Length": str(size)} if size else None
+    return StreamingResponse(body.iter_chunks(), media_type=content_type, headers=headers)

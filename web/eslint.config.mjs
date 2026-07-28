@@ -18,10 +18,36 @@ export default withNuxt(
       prettier: eslintPluginPrettier,
       '@typescript-eslint': eslintPluginTypeScript,
     },
+    settings: {
+      jsdoc: {
+        mode: 'typescript',
+      },
+    },
     rules: {
+      // Types are carried by TypeScript, never by JSDoc tags — these would ask for `@param {string}`.
+      'jsdoc/require-param-type': 'off',
+      'jsdoc/require-returns-type': 'off',
+      'jsdoc/require-throws-type': 'off',
+      'jsdoc/no-undefined-types': 'off',
+      'jsdoc/reject-any-type': 'off',
+      'jsdoc/tag-lines': 'off',
       '@typescript-eslint/no-explicit-any': 'error',
-      '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/typedef': 'off',
+      // A class of static methods is the house style for a cohesive helper set (see the standards).
+      '@typescript-eslint/no-extraneous-class': 'off',
+      '@typescript-eslint/explicit-function-return-type': ['error'],
+      '@typescript-eslint/typedef': [
+        'error',
+        {
+          arrayDestructuring: true,
+          arrowParameter: true,
+          memberVariableDeclaration: true,
+          objectDestructuring: true,
+          parameter: true,
+          propertyDeclaration: true,
+          variableDeclaration: true,
+          variableDeclarationIgnoreFunction: false,
+        },
+      ],
       '@typescript-eslint/no-unused-vars': 'off',
       'unused-imports/no-unused-imports': 'error',
       'unused-imports/no-unused-vars': [
@@ -55,44 +81,20 @@ export default withNuxt(
   },
   {
     files: ['**/*.vue'],
-    settings: {
-      jsdoc: {
-        mode: 'typescript',
-      },
-    },
     rules: {
-      'jsdoc/require-jsdoc': 'off',
       'jsdoc/require-param': 'off',
       'jsdoc/require-returns': 'off',
       'jsdoc/require-param-description': 'off',
       'jsdoc/require-returns-description': 'off',
-      'jsdoc/require-param-type': 'off',
-      'jsdoc/require-returns-type': 'off',
-      '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/typedef': 'off',
     },
   },
   {
     files: ['app/composables/**/*.ts', 'app/services/**/*.ts', 'app/stores/**/*.ts'],
-    settings: {
-      jsdoc: {
-        mode: 'typescript',
-      },
-    },
     rules: {
-      /**
-       * Match GoupixDex policy: English prose + `@param` / `@returns`, types from TypeScript.
-       */
-      'jsdoc/require-param-type': 'off',
-      'jsdoc/require-returns-type': 'off',
-      'jsdoc/require-param-description': 'off',
-      'jsdoc/require-returns': 'off',
-      'jsdoc/no-undefined-types': 'off',
-      'jsdoc/reject-any-type': 'off',
-      'jsdoc/require-throws-type': 'off',
-      'jsdoc/tag-lines': 'off',
-      'jsdoc/check-param-names': 'off',
       'jsdoc/require-param': 'off',
+      'jsdoc/require-returns': 'off',
+      'jsdoc/require-param-description': 'off',
+      'jsdoc/check-param-names': 'off',
     },
   },
   {
@@ -103,8 +105,14 @@ export default withNuxt(
       'jsdoc/require-returns': 'off',
       'jsdoc/require-param-description': 'off',
       'jsdoc/require-returns-description': 'off',
-      'jsdoc/require-param-type': 'off',
-      'jsdoc/require-returns-type': 'off',
+    },
+  },
+  {
+    // Scripts d'outillage en JavaScript : une annotation de type y est un péché de syntaxe.
+    files: ['**/*.mjs', '**/*.js'],
+    rules: {
+      '@typescript-eslint/typedef': 'off',
+      '@typescript-eslint/explicit-function-return-type': 'off',
     },
   },
   eslintConfigPrettier,

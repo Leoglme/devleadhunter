@@ -1,9 +1,12 @@
 <template>
   <div class="space-y-5">
-    <!-- Header -->
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="text-xl font-semibold text-[var(--app-ink)]">Campagnes</h1>
+        <p class="app-label flex items-center gap-2">
+          <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+          Prospection
+        </p>
+        <h1 class="app-page-title mt-2">Campagnes</h1>
         <p class="text-muted mt-1 text-sm">Vos séquences de cold email, de l'envoi initial aux relances.</p>
       </div>
       <button class="btn-primary" @click="openCreateDrawer">
@@ -12,7 +15,6 @@
       </button>
     </div>
 
-    <!-- Chargement -->
     <div v-if="campaignsStore.isLoading" class="card">
       <div class="animate-pulse space-y-3">
         <div class="h-4 w-3/4 rounded bg-[var(--app-surface-2)]"></div>
@@ -21,8 +23,7 @@
     </div>
 
     <template v-else-if="campaignsStore.campaignsCount > 0">
-      <!-- Vue d'ensemble -->
-      <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div class="grid grid-cols-2 gap-3 @4xl:grid-cols-4">
         <div class="card p-3.5">
           <p class="app-label">Actives</p>
           <p class="mt-1 text-2xl font-bold text-[var(--app-green)] tabular-nums">{{ activeCampaignsCount }}</p>
@@ -43,8 +44,7 @@
         </div>
       </div>
 
-      <!-- Liste des campagnes — grille de cartes -->
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+      <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @6xl:grid-cols-3">
         <button
           v-for="campaign in campaignsStore.campaigns"
           :key="campaign.id"
@@ -52,7 +52,6 @@
           class="group card flex cursor-pointer flex-col gap-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--app-ink-soft)]"
           @click="router.push(`/dashboard/campaigns/${campaign.id}`)"
         >
-          <!-- Header -->
           <div class="flex items-start justify-between gap-3">
             <div class="flex min-w-0 items-center gap-2">
               <span class="h-2 w-2 shrink-0 rounded-full" :class="STATUS_DOT[campaign.status]"></span>
@@ -74,10 +73,9 @@
           </div>
 
           <p class="text-muted -mt-2 truncate text-xs">
-            {{ campaign.description || `Créée le ${formatDate(campaign.created_at)}` }}
+            {{ campaign.description || `Créée le ${formatLongMonthDate(campaign.created_at)}` }}
           </p>
 
-          <!-- Metrics -->
           <div class="grid grid-cols-3 gap-3 rounded-lg bg-[var(--app-bg)] p-3">
             <div>
               <p class="font-label text-[9px] text-[var(--app-faint)] uppercase">Envoyés</p>
@@ -111,7 +109,6 @@
             </div>
           </div>
 
-          <!-- Footer meta -->
           <div class="flex items-center justify-between border-t border-[var(--app-line-soft)] pt-3">
             <div class="text-muted flex items-center gap-4 text-xs">
               <span class="flex items-center gap-1.5" title="Prospects dans la campagne">
@@ -134,7 +131,6 @@
       </div>
     </template>
 
-    <!-- État vide -->
     <div v-else class="card px-6 py-12 text-center">
       <LandingAsterisk class="text-4xl text-[var(--app-accent)]" />
       <h3 class="font-display mt-5 text-2xl font-semibold text-[var(--app-ink)]">Aucune campagne</h3>
@@ -149,12 +145,13 @@
 </template>
 
 <script lang="ts" setup>
+import { formatLongMonthDate } from '~/utils/date'
 import { computed, onMounted, ref, watch } from 'vue'
 import type { ComputedRef, Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCampaignsStore } from '~/stores/campaigns'
 import { useDrawerStackStore } from '~/stores/drawerStack'
-import { campaignService } from '~/services/campaignService'
+import { CampaignService } from '~/services/campaignService'
 import type { CampaignResponse, CampaignStats, CampaignStatus } from '~/services/campaignService'
 
 definePageMeta({
@@ -162,12 +159,8 @@ definePageMeta({
   middleware: 'auth',
 })
 
-// ─── Composables ──────────────────────────────────────────────────────────────
-
-const campaignsStore = useCampaignsStore()
-const router = useRouter()
-
-// ─── Constants ────────────────────────────────────────────────────────────────
+const campaignsStore: ReturnType<typeof useCampaignsStore> = useCampaignsStore()
+const router: ReturnType<typeof useRouter> = useRouter()
 
 /** French labels for each campaign status value. */
 const CAMPAIGN_STATUS_LABELS: Record<CampaignStatus, string> = {
@@ -196,22 +189,18 @@ const STATUS_DOT: Record<CampaignStatus, string> = {
   cancelled: 'bg-[var(--app-red)]',
 }
 
-// ─── State ────────────────────────────────────────────────────────────────────
-
 /** Persistent drawer stack — campaign creation opens as a drawer, not a modal. */
-const drawerStack = useDrawerStackStore()
+const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 
 /**
  * Open the campaign creation drawer.
  */
 function openCreateDrawer(): void {
-  drawerStack.push({ kind: 'create-campaign' })
+  drawerStack.push({ kind: 'campaign-form', mode: 'create', campaign: null })
 }
 
 /** Per-campaign stats (null while loading or when the fetch failed). */
-const statsById: Ref<Record<number, CampaignStats | null>> = ref<Record<number, CampaignStats | null>>({})
-
-// ─── Computed ─────────────────────────────────────────────────────────────────
+const statsById: Ref<Record<number, CampaignStats | null>> = ref({})
 
 /** Number of currently active campaigns. */
 const activeCampaignsCount: ComputedRef<number> = computed((): number => {
@@ -241,8 +230,6 @@ const averageOpenRate: ComputedRef<number | null> = computed((): number | null =
   return Math.round(total / relevant.length)
 })
 
-// ─── Data loading ─────────────────────────────────────────────────────────────
-
 /**
  * Fetch the stats of every listed campaign in parallel (failures are ignored
  * so a single broken campaign never blanks the whole page).
@@ -254,7 +241,7 @@ async function loadStats(): Promise<void> {
     campaigns.map(
       async (campaign: CampaignResponse): Promise<{ id: number; stats: CampaignStats | null }> => ({
         id: campaign.id,
-        stats: await campaignService.getStats(campaign.id).catch((): null => null),
+        stats: await CampaignService.getStats(campaign.id).catch((): null => null),
       }),
     ),
   )
@@ -263,19 +250,6 @@ async function loadStats(): Promise<void> {
   statsById.value = map
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * Format an ISO date string to a short French date.
- * @param dateStr - ISO date string from the API.
- * @returns Human-readable date (e.g. "1 juin 2026").
- */
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-// ─── Watchers ─────────────────────────────────────────────────────────────────
-
 // Recharger les stats quand la liste change (création, fetch initial…).
 watch(
   (): number => campaignsStore.campaignsCount,
@@ -283,8 +257,6 @@ watch(
     void loadStats()
   },
 )
-
-// ─── Lifecycle ────────────────────────────────────────────────────────────────
 
 onMounted(async (): Promise<void> => {
   await campaignsStore.fetchCampaigns()

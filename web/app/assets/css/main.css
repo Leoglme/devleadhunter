@@ -9,8 +9,10 @@
     scroll-behavior: smooth;
   }
 
+  html,
   body {
-    @apply bg-[#050505] font-sans text-[#f9f9f9];
+    background-color: var(--app-bg);
+    color: var(--app-ink);
     font-family: 'Inter', sans-serif;
   }
 
@@ -306,6 +308,13 @@ html.dark {
   font-family: var(--app-font-ui);
 }
 
+/* Les wizards posent une barre d'action sticky au bas du viewport : réserver
+   cette hauteur dans le scrollport pour qu'un champ amené au bord bas (focus,
+   scrollIntoView « end »/« nearest ») ne se retrouve pas caché derrière elle. */
+html {
+  scroll-padding-bottom: 7rem;
+}
+
 /* Dans l'app, les familles héritées de la landing basculent sur les
    polices logiciel (les composants balayés utilisent ces classes). */
 .app-theme .font-display,
@@ -339,7 +348,7 @@ html.dark {
       transform 0.2s ease;
   }
 
-  .app-btn-primary:hover {
+  .app-btn-primary:not(:disabled):hover {
     opacity: 0.88;
   }
 
@@ -353,7 +362,7 @@ html.dark {
       background-color 0.2s ease;
   }
 
-  .app-btn-secondary:hover {
+  .app-btn-secondary:not(:disabled):hover {
     border-color: var(--app-ink-soft);
     background-color: var(--app-surface-2);
   }
@@ -365,8 +374,14 @@ html.dark {
     transition: opacity 0.2s ease;
   }
 
-  .app-btn-danger:hover {
+  .app-btn-danger:not(:disabled):hover {
     opacity: 0.88;
+  }
+
+  .app-btn-primary:disabled,
+  .app-btn-secondary:disabled,
+  .app-btn-danger:disabled {
+    @apply cursor-not-allowed opacity-50;
   }
 
   .app-input {
@@ -395,8 +410,9 @@ html.dark {
   }
 
   /* Page title — software scale, UI family */
+  /* text-balance : à conteneur étroit (drawer ouvert), le titre casse en 2 lignes équilibrées, pas en 3. */
   .app-page-title {
-    @apply text-lg font-semibold tracking-[-0.01em] sm:text-xl;
+    @apply text-lg font-semibold tracking-[-0.01em] text-balance sm:text-xl;
     font-family: var(--app-font-ui);
     color: var(--app-ink);
   }
@@ -437,6 +453,62 @@ html.dark {
   .app-badge--strong {
     background-color: var(--app-ink);
     color: var(--app-bg);
+  }
+
+  /* CTA de fin de tunnel : halo qui respire + balayage lumineux périodique.
+     La teinte du reflet vient de --app-btn-text pour rester visible sur les
+     deux thèmes (bouton encre en clair, bouton papier en sombre). */
+  .app-btn-celebrate {
+    position: relative;
+    overflow: hidden;
+    animation: app-btn-celebrate-pulse 2.6s ease-out 1.4s infinite;
+  }
+
+  .app-btn-celebrate::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 38%;
+    background: linear-gradient(
+      105deg,
+      transparent,
+      color-mix(in srgb, var(--app-btn-text) 32%, transparent),
+      transparent
+    );
+    transform: skewX(-18deg) translateX(-160%);
+    animation: app-btn-celebrate-shine 2.6s ease-in-out 1.6s infinite;
+    pointer-events: none;
+  }
+
+  @keyframes app-btn-celebrate-pulse {
+    0% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-btn-bg) 40%, transparent);
+    }
+    55%,
+    100% {
+      box-shadow: 0 0 0 9px transparent;
+    }
+  }
+
+  @keyframes app-btn-celebrate-shine {
+    0% {
+      transform: skewX(-18deg) translateX(-160%);
+    }
+    42%,
+    100% {
+      transform: skewX(-18deg) translateX(440%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .app-btn-celebrate {
+      animation: none;
+    }
+    .app-btn-celebrate::after {
+      display: none;
+    }
   }
 }
 
@@ -588,6 +660,80 @@ html.dark {
   border-color: var(--dlh-line);
   background-color: var(--dlh-paper-raised);
   box-shadow: 0 24px 48px -32px rgba(27, 24, 19, 0.25);
+}
+
+/* Form input on paper surfaces (auth pages) — ink focus, B&W DA */
+.landing-input {
+  @apply w-full rounded-xl border px-3.5 py-2.5 text-sm;
+  border-color: var(--dlh-line);
+  background-color: var(--dlh-paper-raised);
+  color: var(--dlh-ink);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.landing-input::placeholder {
+  color: color-mix(in srgb, var(--dlh-ink-soft) 55%, transparent);
+}
+
+.landing-input:hover {
+  border-color: #cfc6b4;
+}
+
+.landing-input:focus {
+  outline: none;
+  border-color: var(--dlh-ink);
+  box-shadow: 0 0 0 3px rgba(27, 24, 19, 0.08);
+}
+
+.landing-input--error {
+  border-color: #b3462e;
+}
+
+/* Auth pages — staggered rise-in entrance (mirrors the landing hero) */
+.auth-rise {
+  opacity: 0;
+  transform: translateY(18px);
+  animation: auth-rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes auth-rise {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Ceremonial slow spin for the oversized asterisk on the auth poster panel */
+.auth-spin-slow {
+  animation: auth-spin 90s linear infinite;
+}
+
+@keyframes auth-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-rise {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .auth-spin-slow {
+    animation: none;
+  }
+}
+
+/* Loader variable overrides so UiLoader blends with the paper DA
+   (the auth pages render outside the .app-theme scope). */
+.landing-loader-vars {
+  --app-bg: #f6f3ec;
+  --app-line: #e3dccd;
+  --app-accent: #e8a33c;
 }
 
 /* Playful lift + tilt on hover (collage feel, B&W-safe) */

@@ -9,14 +9,17 @@ Resend is the primary provider for cold outreach because:
 
 Docs: https://resend.com/docs/api-reference/emails/send-email
 """
+
 from __future__ import annotations
 
+import base64
 import logging
 from typing import Any
 
 import aiohttp
 
 from core.config import settings
+from services.email_attachment import EmailAttachment
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +43,8 @@ class ResendService:
         tags: list[dict[str, str]] | None = None,
         api_key_override: str | None = None,
         extra_headers: dict[str, str] | None = None,
+        bcc: list[str] | None = None,
+        attachments: list[EmailAttachment] | None = None,
     ) -> dict[str, Any]:
         """
         Send a single email via Resend.
@@ -78,15 +83,22 @@ class ResendService:
         to_field: str = f"{to_name} <{to_email}>" if to_name else to_email
 
         payload: dict[str, Any] = {
-            "from":    from_field,
-            "to":      [to_field],
+            "from": from_field,
+            "to": [to_field],
             "subject": subject,
-            "html":    html_body,
+            "html": html_body,
         }
         if text_body:
             payload["text"] = text_body
         if extra_headers:
             payload["headers"] = extra_headers
+        if bcc:
+            payload["bcc"] = bcc
+        if attachments:
+            payload["attachments"] = [
+                {"filename": attachment.filename, "content": base64.b64encode(attachment.content).decode()}
+                for attachment in attachments
+            ]
 
         # Build the tags list — always include email_log_id for webhook lookup.
         all_tags: list[dict[str, str]] = []
@@ -97,8 +109,9 @@ class ResendService:
         if all_tags:
             payload["tags"] = all_tags
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
+        async with (
+            aiohttp.ClientSession() as session,
+            session.post(
                 _RESEND_SEND_URL,
                 json=payload,
                 headers={
@@ -106,12 +119,13 @@ class ResendService:
                     "Content-Type": "application/json",
                 },
                 timeout=aiohttp.ClientTimeout(total=30),
-            ) as resp:
-                body: dict[str, Any] = await resp.json()
-                if resp.status not in (200, 201):
-                    error_msg: str = body.get("message") or body.get("error") or str(body)
-                    raise RuntimeError(f"Resend API error {resp.status}: {error_msg}")
+            ) as resp,
+        ):
+            body: dict[str, Any] = await resp.json()
+            if resp.status not in (200, 201):
+                error_msg: str = body.get("message") or body.get("error") or str(body)
+                raise RuntimeError(f"Resend API error {resp.status}: {error_msg}")
 
-                message_id: str = body.get("id", "")
-                logger.info("[Resend] Sent to %s — id=%s", to_email, message_id)
-                return {"message_id": message_id, "provider": "resend"}
+            message_id: str = body.get("id", "")
+            logger.info("[Resend] Sent to %s — id=%s", to_email, message_id)
+            return {"message_id": message_id, "provider": "resend"}

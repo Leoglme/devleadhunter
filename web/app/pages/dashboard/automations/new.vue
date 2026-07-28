@@ -1,62 +1,21 @@
 <template>
   <div>
-    <!-- Header -->
     <div class="mb-5">
-      <NuxtLink
-        to="/dashboard/automations"
-        class="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--app-ink-soft)] transition-colors hover:text-[var(--app-ink)]"
+      <button
+        type="button"
+        class="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-[var(--app-ink-soft)] transition-colors hover:text-[var(--app-ink)]"
+        @click="leaveTunnel"
       >
         <UIcon name="i-lucide-arrow-left" class="h-3.5 w-3.5" />
-        Automatisations
-      </NuxtLink>
-      <h1 class="app-page-title mt-3">Créer une automatisation</h1>
+        {{ originLink.label }}
+      </button>
+      <h1 class="app-page-title mt-3">{{ isSiteMode ? 'Créer des sites démo' : 'Créer une automatisation' }}</h1>
     </div>
 
-    <!-- Timeline (top, full width) -->
-    <div class="mb-6 overflow-x-auto rounded-2xl border border-[var(--app-line)] bg-[var(--app-surface)] p-1.5">
-      <ol class="flex min-w-max items-stretch sm:min-w-0">
-        <li v-for="(s, index) in steps" :key="s.id" class="flex flex-1 items-center">
-          <button
-            type="button"
-            :disabled="s.id >= currentStep"
-            class="flex flex-1 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors"
-            :class="
-              s.id === currentStep
-                ? 'bg-[var(--app-surface-2)]'
-                : s.id < currentStep
-                  ? 'cursor-pointer hover:bg-[var(--app-surface-2)]/60'
-                  : 'cursor-default'
-            "
-            @click="handleStepNavigate(s.id)"
-          >
-            <span
-              class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition-colors"
-              :class="stepNodeClass(s.id)"
-            >
-              <UIcon v-if="s.id < currentStep" name="i-lucide-check" class="h-4 w-4" />
-              <template v-else>{{ s.id }}</template>
-            </span>
-            <span class="min-w-0">
-              <span
-                class="block text-sm font-semibold"
-                :class="s.id === currentStep ? 'text-[var(--app-ink)]' : 'text-[var(--app-ink-soft)]'"
-                >{{ s.label }}</span
-              >
-              <span class="hidden truncate text-[11px] text-[var(--app-faint)] sm:block">{{ s.hint }}</span>
-            </span>
-          </button>
-          <UIcon
-            v-if="index < steps.length - 1"
-            name="i-lucide-chevron-right"
-            class="mx-0.5 h-4 w-4 shrink-0 text-[var(--app-faint)]"
-          />
-        </li>
-      </ol>
-    </div>
+    <UiWizardStepper :model-value="currentStep" :steps="steps" class="mb-6" @update:model-value="goToStep" />
 
     <div class="min-w-0">
-      <!-- ══════════ Step 1 · Cible ══════════ -->
-      <div v-if="currentStep === 1" key="step-1" class="wizard-step space-y-5">
+      <div v-if="activeStepKey === 'target'" key="step-target" class="wizard-step space-y-5 pb-20">
         <div class="app-card space-y-5 p-5 md:p-6">
           <div>
             <label class="app-label mb-1.5 block">Nom de l'automatisation</label>
@@ -80,10 +39,9 @@
           </div>
         </div>
 
-        <!-- Semi-auto: prospect selection -->
         <template v-if="form.mode === 'semi_auto'">
           <div class="app-card p-4">
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @5xl:grid-cols-5">
               <div>
                 <label class="app-label mb-1.5 block">Rechercher</label>
                 <input v-model="searchQuery" type="text" placeholder="Nom, ville, email…" class="app-input" />
@@ -137,6 +95,7 @@
               :prospects="paginatedProspects"
               :selected-prospects="selectedProspectIds"
               @view-prospect="openProspectDrawer"
+              @edit-prospect="openProspectEditDrawer"
               @delete-prospect="handleDeleteProspect"
               @toggle-select="toggleSelect"
               @toggle-select-all="toggleSelectAll"
@@ -168,9 +127,8 @@
           </div>
         </template>
 
-        <!-- Full-auto: query -->
         <div v-else class="app-card space-y-5 p-5 md:p-6">
-          <div class="grid gap-5 md:grid-cols-2">
+          <div class="grid gap-5 @2xl:grid-cols-2">
             <div>
               <label class="app-label mb-1.5 block">Métier(s) *</label>
               <input v-model="form.metiers" type="text" class="app-input w-full" placeholder="plombier, électricien" />
@@ -181,7 +139,14 @@
             </div>
             <div>
               <label class="app-label mb-1.5 block">Objectif — jours de démarchage *</label>
-              <input v-model.number="form.targetDays" type="number" min="1" max="90" class="app-input w-full" />
+              <input
+                v-model.number="form.targetDays"
+                type="number"
+                min="1"
+                max="90"
+                class="app-input w-full"
+                placeholder="15"
+              />
             </div>
             <label class="flex items-center gap-2 self-end pb-2.5 text-sm text-[var(--app-ink-soft)]">
               <input v-model="form.onlyWithoutWebsite" type="checkbox" class="h-4 w-4 accent-(--app-accent)" />
@@ -198,8 +163,7 @@
         </div>
       </div>
 
-      <!-- ══════════ Step 2 · Site ══════════ -->
-      <div v-else-if="currentStep === 2" key="step-2" class="wizard-step space-y-6">
+      <div v-else-if="activeStepKey === 'site'" key="step-site" class="wizard-step space-y-6 pb-20">
         <div>
           <h2 class="text-base font-semibold text-[var(--app-ink)]">Template de site</h2>
           <p class="mt-1 text-sm text-[var(--app-ink-soft)]">
@@ -207,44 +171,52 @@
           </p>
         </div>
         <DemoSitesTemplatePicker
-          v-model="form.templateId"
+          :model-value="form.templateId"
           :templates="templates"
           :theme="form.theme"
+          :recommended-trade="recommendedTrade"
+          @update:model-value="selectTemplate"
           @update:theme="form.theme = $event"
         />
       </div>
 
-      <!-- ══════════ Step 3 · Emails ══════════ -->
-      <div v-else-if="currentStep === 3" key="step-3" class="wizard-step app-card space-y-5 p-5 md:p-6">
+      <div
+        v-else-if="activeStepKey === 'emails'"
+        key="step-emails"
+        class="wizard-step app-card space-y-5 p-5 pb-20 md:p-6"
+      >
         <div>
           <h2 class="text-base font-semibold text-[var(--app-ink)]">Démarchage</h2>
           <p class="mt-1 text-sm text-[var(--app-ink-soft)]">Le cold email envoyé avec le lien de démo.</p>
         </div>
 
-        <label
-          class="flex cursor-pointer items-start gap-3.5 rounded-xl border p-4 transition-colors"
-          :class="
-            form.autoCampaign
-              ? 'border-[var(--app-ink)] bg-[var(--app-surface-2)]/60'
-              : 'border-[var(--app-line)] bg-[var(--app-bg)] hover:border-[var(--app-ink-soft)]'
-          "
+        <div
+          class="flex items-center justify-between gap-4 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-3.5"
         >
-          <input v-model="form.autoCampaign" type="checkbox" class="mt-0.5 h-4 w-4 accent-(--app-accent)" />
-          <span>
-            <span class="text-sm font-medium text-[var(--app-ink)]">Démarcher les prospects par email</span>
-            <span class="mt-1 block text-xs leading-relaxed text-[var(--app-ink-soft)]">
-              Décoche pour seulement générer les sites (sans envoi).
-            </span>
-          </span>
-        </label>
+          <div class="flex min-w-0 items-start gap-3">
+            <UIcon name="i-lucide-send" class="mt-0.5 h-4 w-4 shrink-0 text-[var(--app-ink)]" />
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-[var(--app-ink)]">Démarcher les prospects par email</p>
+              <p class="text-xs leading-relaxed text-[var(--app-ink-soft)]">
+                Désactivez pour seulement générer les sites, sans aucun envoi.
+              </p>
+            </div>
+          </div>
+          <UiSwitch id="automation-auto-campaign" v-model="form.autoCampaign" />
+        </div>
 
-        <div v-if="form.autoCampaign" class="grid gap-5 md:grid-cols-2">
+        <div v-if="form.autoCampaign" class="space-y-5">
           <div>
-            <label class="app-label mb-1.5 block">Modèle A — envoi initial *</label>
+            <label class="app-label mb-1.5 block">
+              Modèle A — envoi initial <span class="text-[var(--app-accent)]">*</span>
+            </label>
             <UiTemplateSelect
               :model-value="form.emailA"
               :templates="emailTemplates"
+              allow-create
               @update:model-value="form.emailA = $event"
+              @create="openCreate((id) => (form.emailA = id))"
+              @preview="openPreview"
             />
           </div>
           <div>
@@ -252,10 +224,18 @@
             <UiTemplateSelect
               :model-value="form.emailB"
               :templates="emailTemplates"
+              allow-create
               @update:model-value="form.emailB = $event"
+              @create="openCreate((id) => (form.emailB = id))"
+              @preview="openPreview"
             />
           </div>
         </div>
+
+        <UiCallout v-if="form.autoCampaign && !form.emailA" variant="warning">
+          Choisissez un modèle A pour continuer — c'est l'email qui porte le lien de démo. Sans lui, l'automatisation
+          n'a rien à envoyer.
+        </UiCallout>
 
         <div
           v-if="form.autoCampaign"
@@ -276,32 +256,47 @@
         </div>
       </div>
 
-      <!-- ══════════ Step 4 · Lancer ══════════ -->
-      <div v-else key="step-4" class="wizard-step app-card space-y-5 p-5 md:p-6">
-        <div>
-          <h2 class="text-base font-semibold text-[var(--app-ink)]">Récapitulatif</h2>
-          <p class="mt-1 text-sm text-[var(--app-ink-soft)]">Vérifie puis lance l'automatisation.</p>
-        </div>
-        <dl class="grid gap-3 sm:grid-cols-2">
+      <div v-else key="step-launch" class="wizard-step app-card space-y-5 p-5 pb-20 md:p-6">
+        <UiCelebrationHero
+          class="pt-2"
+          icon="i-lucide-rocket"
+          title="Tout est prêt"
+          :subtitle="
+            isSiteMode
+              ? 'Un dernier coup d’œil, puis la machine génère les sites.'
+              : 'Un dernier coup d’œil, puis la machine prend le relais.'
+          "
+        />
+
+        <dl class="grid gap-3 @sm:grid-cols-2">
           <div
-            v-for="entry in recapItems"
+            v-for="(entry, index) in recapItems"
             :key="entry.label"
-            class="rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-3.5"
+            class="recap-reveal rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-3.5"
+            :style="{ '--recap-order': index + 1 }"
           >
-            <dt class="app-label">{{ entry.label }}</dt>
-            <dd class="mt-1 text-sm font-medium text-[var(--app-ink)]">{{ entry.value || '—' }}</dd>
+            <dt class="app-label flex items-center gap-1.5">
+              <UIcon :name="entry.icon" class="h-3 w-3 text-[var(--app-accent-ink)]" />
+              {{ entry.label }}
+            </dt>
+            <dd class="mt-1.5 text-sm font-medium text-[var(--app-ink)]">{{ entry.value }}</dd>
+            <dd v-if="entry.detail" class="mt-1 text-xs leading-relaxed text-[var(--app-ink-soft)]">
+              {{ entry.detail }}
+            </dd>
           </div>
         </dl>
+
         <p
           v-if="form.mode === 'semi_auto'"
-          class="flex items-start gap-2 rounded-xl border border-[var(--app-blue)] bg-[var(--app-blue-soft)] p-3.5 text-xs text-[var(--app-ink)]"
+          class="recap-reveal flex items-start gap-2 rounded-xl border border-[var(--app-blue)] bg-[var(--app-blue-soft)] p-3.5 text-xs text-[var(--app-ink)]"
+          :style="{ '--recap-order': recapItems.length + 1 }"
         >
           <UIcon name="i-lucide-clipboard-check" class="mt-0.5 h-4 w-4 shrink-0 text-[var(--app-blue)]" />
-          La machine génère les sites puis <strong class="mx-1">s'arrête pour ta validation</strong> avant tout envoi.
+          La machine génère les sites puis <strong class="mx-1">s'arrête pour votre validation</strong> avant tout
+          envoi.
         </p>
       </div>
 
-      <!-- Unified sticky nav — always reachable, even on a long prospect list -->
       <div
         class="sticky bottom-4 z-10 mt-5 flex items-center justify-between gap-3 rounded-full border border-[var(--app-line)] bg-[var(--app-surface)]/90 px-3 py-2 shadow-lg backdrop-blur"
       >
@@ -324,113 +319,128 @@
         >
           Continuer<UIcon name="i-lucide-arrow-right" class="h-3.5 w-3.5" />
         </button>
-        <button v-else type="button" class="app-btn-primary" :disabled="isCreating || !canLaunch" @click="launch">
+        <button
+          v-else
+          type="button"
+          :class="['app-btn-primary', canLaunch && !isCreating && 'app-btn-celebrate']"
+          :disabled="isCreating || !canLaunch"
+          @click="launch"
+        >
           <UIcon
             :name="isCreating ? 'i-lucide-loader-circle' : 'i-lucide-rocket'"
             :class="['h-3.5 w-3.5', isCreating && 'animate-spin']"
           />
-          {{ isCreating ? 'Lancement…' : "Lancer l'automatisation" }}
+          {{ launchLabel }}
         </button>
       </div>
     </div>
+
+    <UiConfirmModal
+      ref="leaveConfirmModal"
+      title="Quitter le tunnel ?"
+      message="Votre configuration est enregistrée : vous la retrouverez en revenant. Quitter maintenant ?"
+      confirm-text="Quitter"
+      cancel-text="Rester"
+      @confirm="discardDraftAndLeave"
+    />
   </div>
 </template>
 
 <script lang="ts" setup>
+import type { LocationQueryValue } from 'vue-router'
+import type { EmailTemplate } from '~/types/index'
+import type { AutomationDetail, SendPolicy } from '~/types/Automation'
+import type { UseDashboardScrollReturn, UseToastReturn } from '~/types/Composables'
+import type {
+  AutomationDraft,
+  AutomationOriginLink,
+  AutomationRecapRow,
+  AutomationStepDefinition,
+  AutomationStepKey,
+  TunnelForm,
+} from '~/types/AutomationCreatePage'
+import { formatSendPolicySummary } from '~/utils/sendPolicy'
+import { SendPolicyService } from '~/services/sendPolicyService'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, onMounted, ref, watch } from 'vue'
-import type { AutomationMode } from '~/types/Automation'
 import type { Prospect } from '~/types'
 import type { TemplateSelectOption } from '~/types/TemplateSelect'
+import type { UiWizardStep } from '~/types/UiWizardStepper'
 import type { DemoSiteTemplate, DemoSiteTheme } from '~/services/demoSiteService'
-import { createAutomation, getUsedProspectIds } from '~/services/automationsService'
-import { deleteProspect as deleteProspectApi, listProspects } from '~/services/prospectsService'
-import { getEmailTemplates } from '~/services/emailTemplatesService'
-import { listDemoSiteTemplates } from '~/services/demoSiteService'
+import { AutomationsService } from '~/services/automationsService'
+import { ProspectsService } from '~/services/prospectsService'
+import { EmailTemplatesService } from '~/services/emailTemplatesService'
+import { DemoSiteService } from '~/services/demoSiteService'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import { useProspectSearchStore } from '~/stores/prospectSearch'
+import { useDashboardScroll } from '~/composables/useDashboardScroll'
 import { useToast } from '~/composables/useToast'
-
-/** A wizard step. */
-interface WizardStep {
-  id: number
-  label: string
-  hint: string
-}
-
-/** A recap row. */
-interface RecapItem {
-  label: string
-  value: string
-}
-
-/** Local wizard form. */
-interface TunnelForm {
-  name: string
-  mode: AutomationMode
-  templateId: string
-  theme: DemoSiteTheme
-  autoCampaign: boolean
-  emailA: number
-  emailB: number
-  metiers: string
-  villes: string
-  targetDays: number
-  onlyWithoutWebsite: boolean
-}
+import { sortTemplatesByRecommendation } from '~/utils/templateRecommendation'
 
 definePageMeta({
   layout: 'dashboard',
   middleware: 'auth',
 })
 
-const toast = useToast()
-const route = useRoute()
-const drawerStack = useDrawerStackStore()
-const searchStore = useProspectSearchStore()
+const toast: UseToastReturn = useToast()
+const route: ReturnType<typeof useRoute> = useRoute()
+const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
+const searchStore: ReturnType<typeof useProspectSearchStore> = useProspectSearchStore()
+const { scrollToTop }: UseDashboardScrollReturn = useDashboardScroll()
 
 const defaultTheme: DemoSiteTheme = { primary: '#0284c7', secondary: '#0f172a', accent: '#f59e0b' }
 
-/** Wizard steps. */
-const steps: WizardStep[] = [
-  { id: 1, label: 'Cible', hint: 'Prospects ou métier + ville' },
-  { id: 2, label: 'Site', hint: 'Template des sites' },
-  { id: 3, label: 'Emails', hint: 'Cold email A/B' },
-  { id: 4, label: 'Lancer', hint: 'Vérifier & démarrer' },
+/** Every wizard step, in order; the emails one is dropped when the tunnel targets sites only. */
+const ALL_STEPS: AutomationStepDefinition[] = [
+  { key: 'target', label: 'Cible', hint: 'Prospects ou métier + ville' },
+  { key: 'site', label: 'Site', hint: 'Template des sites' },
+  { key: 'emails', label: 'Emails', hint: 'Cold email A/B' },
+  { key: 'launch', label: 'Lancer', hint: 'Vérifier & démarrer' },
 ]
 
-/** Current step (1-based). */
-const currentStep: Ref<number> = ref<number>(1)
+/** sessionStorage key holding the tunnel draft, so leaving the page loses nothing. */
+const TUNNEL_DRAFT_STORAGE_KEY: string = 'dlh-automation-draft'
+
+/** How many prospects are named in the recap before it falls back to a count. */
+const NAMED_PROSPECTS_IN_RECAP: number = 3
+
+/** Current step (1-based position among the visible steps). */
+const currentStep: Ref<number> = ref(1)
+/** Whether the user picked a template himself — stops the recommended default from overriding him. */
+const hasPickedTemplate: Ref<boolean> = ref(false)
+/** The user's effective sending cadence, shown in the recap. */
+const sendPolicy: Ref<SendPolicy | null> = ref(null)
+const leaveConfirmModal: Ref<{ open: () => void } | null> = ref(null)
 /** Whether the create request is in flight. */
-const isCreating: Ref<boolean> = ref<boolean>(false)
+const isCreating: Ref<boolean> = ref(false)
 /** Whether prospects are loading. */
-const isLoadingProspects: Ref<boolean> = ref<boolean>(false)
+const isLoadingProspects: Ref<boolean> = ref(false)
 /** Selectable prospects (unused only). */
-const prospects: Ref<Prospect[]> = ref<Prospect[]>([])
+const prospects: Ref<Prospect[]> = ref([])
 /** Email templates for the A/B selectors. */
-const emailTemplates: Ref<TemplateSelectOption[]> = ref<TemplateSelectOption[]>([])
+const emailTemplates: Ref<TemplateSelectOption[]> = ref([])
 /** Demo-site templates. */
-const templates: Ref<DemoSiteTemplate[]> = ref<DemoSiteTemplate[]>([])
+const templates: Ref<DemoSiteTemplate[]> = ref([])
 /** Selected prospect ids (as strings, matching UiProspectTable). */
-const selectedProspectIds: Ref<string[]> = ref<string[]>([])
+const selectedProspectIds: Ref<string[]> = ref([])
 
 // Filters
-const searchQuery: Ref<string> = ref<string>('')
-const filterWebsite: Ref<'all' | 'yes' | 'no'> = ref<'all' | 'yes' | 'no'>('no')
-const filterCity: Ref<string> = ref<string>('')
-const filterCategory: Ref<string> = ref<string>('')
-const currentPage: Ref<number> = ref<number>(1)
+const searchQuery: Ref<string> = ref('')
+const filterWebsite: Ref<'all' | 'yes' | 'no'> = ref('no')
+const filterCity: Ref<string> = ref('')
+const filterCategory: Ref<string> = ref('')
+const currentPage: Ref<number> = ref(1)
 const pageSize: number = 25
 
 /** Website filter options. */
-const websiteFilterOptions: ReadonlyArray<{ value: string; label: string }> = [
+const websiteFilterOptions: { value: string; label: string }[] = [
   { value: 'all', label: 'Tous' },
   { value: 'yes', label: 'Avec site' },
   { value: 'no', label: 'Sans site' },
 ]
 
 /** Wizard state. */
-const form: Ref<TunnelForm> = ref<TunnelForm>({
+const form: Ref<TunnelForm> = ref({
   name: '',
   mode: 'semi_auto',
   templateId: '',
@@ -442,6 +452,42 @@ const form: Ref<TunnelForm> = ref<TunnelForm>({
   villes: '',
   targetDays: 10,
   onlyWithoutWebsite: true,
+})
+
+const { openCreate, openPreview }: EmailTemplateCreator = useEmailTemplateCreator(emailTemplates, reloadEmailTemplates)
+
+/** Entered from « Sites démo » : the tunnel generates sites, so the cold-email step is dropped. */
+const isSiteMode: ComputedRef<boolean> = computed((): boolean => route.query.from === 'sites')
+
+/** Steps actually shown, renumbered so the stepper stays 1..n. */
+const steps: ComputedRef<UiWizardStep[]> = computed((): UiWizardStep[] =>
+  ALL_STEPS.filter((step: AutomationStepDefinition): boolean => !isSiteMode.value || step.key !== 'emails').map(
+    (step: AutomationStepDefinition, index: number): UiWizardStep => ({
+      id: index + 1,
+      label: step.label,
+      hint: step.hint,
+    }),
+  ),
+)
+
+/** Which step the current position stands for. */
+const activeStepKey: ComputedRef<AutomationStepKey> = computed((): AutomationStepKey => {
+  const visible: AutomationStepDefinition[] = ALL_STEPS.filter(
+    (step: AutomationStepDefinition): boolean => !isSiteMode.value || step.key !== 'emails',
+  )
+  return visible[currentStep.value - 1]?.key ?? 'target'
+})
+
+const originLink: ComputedRef<AutomationOriginLink> = computed(
+  (): AutomationOriginLink =>
+    isSiteMode.value
+      ? { to: '/dashboard/demo-sites', label: 'Sites démo' }
+      : { to: '/dashboard/automations', label: 'Automatisations' },
+)
+
+const launchLabel: ComputedRef<string> = computed((): string => {
+  if (isCreating.value) return 'Lancement…'
+  return isSiteMode.value ? 'Générer les sites' : "Lancer l'automatisation"
 })
 
 /** Prospects matching every filter. */
@@ -469,6 +515,20 @@ const filteredProspects: ComputedRef<Prospect[]> = computed((): Prospect[] => {
   return list
 })
 
+/** Trade guiding the template recommendation: targeted métier, or the first selected prospect's category. */
+const recommendedTrade: ComputedRef<string | null> = computed((): string | null => {
+  if (form.value.mode === 'full_auto') {
+    const firstTrade: string = (form.value.metiers.split(',')[0] ?? '').trim()
+    return firstTrade || null
+  }
+  const firstSelectedId: string | undefined = selectedProspectIds.value[0]
+  if (!firstSelectedId) return null
+  const prospect: Prospect | undefined = prospects.value.find(
+    (candidate: Prospect): boolean => String(candidate.id) === firstSelectedId,
+  )
+  return prospect?.category ?? null
+})
+
 /** Total filtered pages. */
 const totalPages: ComputedRef<number> = computed((): number =>
   Math.max(1, Math.ceil(filteredProspects.value.length / pageSize)),
@@ -486,30 +546,110 @@ const selectedTemplateName: ComputedRef<string> = computed(
     templates.value.find((t: DemoSiteTemplate): boolean => t.id === form.value.templateId)?.name ?? 'Par défaut',
 )
 
-/** Recap rows. */
-const recapItems: ComputedRef<RecapItem[]> = computed((): RecapItem[] => {
-  const target: string =
-    form.value.mode === 'full_auto'
-      ? `${form.value.metiers || '—'} · ${form.value.villes || '—'} · ${form.value.targetDays} j`
-      : `${selectedProspectIds.value.length} prospect(s)`
-  return [
-    { label: 'Nom', value: form.value.name },
-    { label: 'Mode', value: form.value.mode === 'full_auto' ? 'Full-auto' : 'Semi-auto' },
-    { label: 'Cible', value: target },
-    { label: 'Template', value: selectedTemplateName.value },
-    { label: 'Démarchage', value: form.value.autoCampaign ? (form.value.emailB ? 'A/B' : 'Modèle A') : 'Sites seuls' },
+/** The cadence that will actually apply, read from the user's send policy. */
+const sendPolicySummary: ComputedRef<string> = computed((): string => formatSendPolicySummary(sendPolicy.value))
+
+/** Prospects picked in step 1, resolved to their full record. */
+const selectedProspects: ComputedRef<Prospect[]> = computed((): Prospect[] => {
+  const picked: Set<string> = new Set<string>(selectedProspectIds.value)
+  return prospects.value.filter((prospect: Prospect): boolean => picked.has(String(prospect.id)))
+})
+
+/** The targeted prospects, named — truncated once the list gets long. */
+const targetDetail: ComputedRef<string> = computed((): string => {
+  if (form.value.mode === 'full_auto') return 'La machine pioche elle-même dans vos prospects non-utilisés.'
+  const names: string[] = selectedProspects.value.map((prospect: Prospect): string => prospect.name)
+  if (names.length === 0) return ''
+  if (names.length <= NAMED_PROSPECTS_IN_RECAP) return names.join(', ')
+  const shown: string[] = names.slice(0, NAMED_PROSPECTS_IN_RECAP)
+  return `${shown.join(', ')} et ${names.length - shown.length} autre(s)`
+})
+
+/**
+ * Name of an email template picked in step 3.
+ * @param templateId - Identifier held by the form, 0 when none is picked.
+ * @returns The template name, or an empty string.
+ */
+function emailTemplateName(templateId: number): string {
+  return emailTemplates.value.find((template: TemplateSelectOption): boolean => template.id === templateId)?.name ?? ''
+}
+
+/** The A/B templates actually chosen, spelled out. */
+const outreachDetail: ComputedRef<string> = computed((): string => {
+  if (!form.value.autoCampaign) return 'Aucun email ne partira — les sites sont générés puis la machine s’arrête.'
+  const names: string[] = [emailTemplateName(form.value.emailA), emailTemplateName(form.value.emailB)].filter(Boolean)
+  return names.length > 1 ? `A : ${names[0]} · B : ${names[1]}` : (names[0] ?? '')
+})
+
+const recapItems: ComputedRef<AutomationRecapRow[]> = computed((): AutomationRecapRow[] => {
+  const rows: AutomationRecapRow[] = [
+    {
+      label: 'Nom',
+      value: resolvedName(),
+      icon: 'i-lucide-tag',
+      detail: form.value.name.trim() ? undefined : 'Nom généré automatiquement.',
+    },
+    {
+      label: 'Cible',
+      value:
+        form.value.mode === 'full_auto'
+          ? `${form.value.metiers || '—'} · ${form.value.villes || '—'}`
+          : `${selectedProspectIds.value.length} prospect(s)`,
+      icon: 'i-lucide-users',
+      detail: targetDetail.value,
+    },
+    {
+      label: 'Mode',
+      value: form.value.mode === 'full_auto' ? 'Full-auto' : 'Semi-auto',
+      icon: form.value.mode === 'full_auto' ? 'i-lucide-bot' : 'i-lucide-hand',
+      detail:
+        form.value.mode === 'full_auto'
+          ? `Objectif de ${form.value.targetDays} jours de démarchage.`
+          : 'Vous validez avant tout envoi.',
+    },
+    {
+      label: 'Site',
+      value: selectedTemplateName.value,
+      icon: 'i-lucide-app-window',
+      detail: 'Modifiable prospect par prospect à la validation.',
+    },
   ]
+
+  if (!isSiteMode.value) {
+    rows.push({
+      label: 'Démarchage',
+      value: form.value.autoCampaign ? (form.value.emailB ? 'Test A/B' : 'Modèle unique') : 'Sites seuls',
+      icon: 'i-lucide-send',
+      detail: outreachDetail.value,
+    })
+    rows.push({
+      label: 'Cadence',
+      value: sendPolicySummary.value,
+      icon: 'i-lucide-timer',
+      detail: 'Réglable dans vos paramètres d’envoi.',
+    })
+  }
+
+  return rows
 })
 
 /** Whether the current step can advance. */
 const canContinue: ComputedRef<boolean> = computed((): boolean => {
-  if (currentStep.value === 1) {
+  if (activeStepKey.value === 'target') {
     if (form.value.mode === 'semi_auto') return selectedProspectIds.value.length > 0
     return Boolean(form.value.metiers.trim() && form.value.villes.trim() && form.value.targetDays > 0)
   }
-  if (currentStep.value === 3 && form.value.autoCampaign) return form.value.emailA > 0
+  if (activeStepKey.value === 'emails' && form.value.autoCampaign) return form.value.emailA > 0
   return true
 })
+
+/** Whether the tunnel holds enough choices to be worth warning about before leaving. */
+const hasMeaningfulDraft: ComputedRef<boolean> = computed(
+  (): boolean =>
+    currentStep.value > 1 ||
+    selectedProspectIds.value.length > 0 ||
+    Boolean(form.value.name.trim() || form.value.metiers.trim() || form.value.villes.trim()),
+)
 
 /** Whether the automatisation can be launched. */
 const canLaunch: ComputedRef<boolean> = computed((): boolean => {
@@ -531,33 +671,84 @@ function segmentClass(active: boolean): string {
 }
 
 /**
- * Classes for a timeline step node based on its state.
- * @param stepId - The step id (1-based).
- * @returns Border/background/text classes.
- */
-function stepNodeClass(stepId: number): string {
-  if (stepId < currentStep.value) {
-    return 'border-[var(--app-ink)] bg-[var(--app-ink)] text-[var(--app-surface)] cursor-pointer'
-  }
-  if (stepId === currentStep.value) return 'border-[var(--app-ink)] text-[var(--app-ink)]'
-  return 'border-[var(--app-line)] text-[var(--app-ink-soft)] cursor-default'
-}
-
-/**
  * Navigate to a step and scroll to top.
  * @param step - Target step (1-based).
  */
 function goToStep(step: number): void {
   currentStep.value = step
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+  scrollToTop()
+}
+
+/** Persist the tunnel state so leaving the page never loses the configuration. */
+function saveDraft(): void {
+  if (!import.meta.client) return
+  const draft: AutomationDraft = {
+    form: form.value,
+    selectedProspectIds: selectedProspectIds.value,
+    currentStep: currentStep.value,
+    hasPickedTemplate: hasPickedTemplate.value,
+  }
+  try {
+    sessionStorage.setItem(TUNNEL_DRAFT_STORAGE_KEY, JSON.stringify(draft))
+  } catch {
+    // Quota plein ou storage indisponible : la sauvegarde est best-effort.
+  }
+}
+
+/** Restore a draft left by a previous visit, if any. */
+function restoreDraft(): void {
+  if (!import.meta.client) return
+  try {
+    const raw: string | null = sessionStorage.getItem(TUNNEL_DRAFT_STORAGE_KEY)
+    if (!raw) return
+    const draft: AutomationDraft = JSON.parse(raw) as AutomationDraft
+    form.value = draft.form
+    selectedProspectIds.value = draft.selectedProspectIds
+    currentStep.value = draft.currentStep
+    hasPickedTemplate.value = draft.hasPickedTemplate
+  } catch {
+    // Brouillon illisible : on repart d'un tunnel vierge.
+  }
+}
+
+/** Drop the saved draft — the tunnel was launched, or explicitly abandoned. */
+function clearDraft(): void {
+  if (import.meta.client) sessionStorage.removeItem(TUNNEL_DRAFT_STORAGE_KEY)
+}
+
+/** Leave the tunnel, asking first once the configuration holds real choices. */
+function leaveTunnel(): void {
+  if (hasMeaningfulDraft.value) {
+    leaveConfirmModal.value?.open()
+    return
+  }
+  void navigateTo(originLink.value.to)
+}
+
+/** Confirmed exit: forget the draft and go back to the origin section. */
+function discardDraftAndLeave(): void {
+  clearDraft()
+  void navigateTo(originLink.value.to)
 }
 
 /**
- * Stepper node clicked — only allow going back.
- * @param stepId - Target step id.
+ * Apply the user's template choice and stop defaulting to the recommended one.
+ * @param templateId - Identifier of the template picked in the list.
  */
-function handleStepNavigate(stepId: number): void {
-  if (stepId < currentStep.value) goToStep(stepId)
+function selectTemplate(templateId: string): void {
+  hasPickedTemplate.value = true
+  form.value.templateId = templateId
+}
+
+/**
+ * Preselect the first template recommended for the targeted trade, until the user picks one.
+ */
+function applyRecommendedTemplate(): void {
+  if (hasPickedTemplate.value || templates.value.length === 0) return
+  const best: DemoSiteTemplate | undefined = sortTemplatesByRecommendation(templates.value, recommendedTrade.value)[0]
+  if (!best || best.id === form.value.templateId) return
+  form.value.templateId = best.id
+  form.value.theme = { ...best.default_theme }
 }
 
 /** Reset the filters. */
@@ -609,13 +800,21 @@ function openProspectDrawer(prospect: Prospect): void {
 }
 
 /**
+ * Open the prospect drawer straight on its edit form.
+ * @param prospect - The prospect to edit.
+ */
+function openProspectEditDrawer(prospect: Prospect): void {
+  drawerStack.push({ kind: 'prospect', prospect, startInEdit: true })
+}
+
+/**
  * Delete a prospect from the pool.
  * @param prospect - The prospect to delete.
  * @returns A promise resolved once deleted.
  */
 async function handleDeleteProspect(prospect: Prospect): Promise<void> {
   try {
-    await deleteProspectApi(prospect.id)
+    await ProspectsService.deleteProspect(prospect.id)
     prospects.value = prospects.value.filter((p: Prospect): boolean => p.id !== prospect.id)
     selectedProspectIds.value = selectedProspectIds.value.filter((id: string): boolean => id !== String(prospect.id))
     toast.success(`Prospect « ${prospect.name} » supprimé`)
@@ -658,7 +857,7 @@ function resolvedName(): string {
 async function launch(): Promise<void> {
   isCreating.value = true
   try {
-    const detail = await createAutomation({
+    const detail: AutomationDetail = await AutomationsService.createAutomation({
       name: resolvedName(),
       mode: form.value.mode,
       prospect_ids:
@@ -677,6 +876,7 @@ async function launch(): Promise<void> {
       send_delay_minutes: 20,
       follow_ups: [],
     })
+    clearDraft()
     toast.success('Automatisation lancée')
     await navigateTo(`/dashboard/automations/${detail.id}`)
   } catch (err: unknown) {
@@ -702,13 +902,27 @@ function openSendPolicyDrawer(): void {
 }
 
 /**
+ * Reload the email templates feeding the A/B selectors.
+ * @returns A promise resolved once the templates are reloaded.
+ */
+async function reloadEmailTemplates(): Promise<void> {
+  const emailList: EmailTemplate[] = await EmailTemplatesService.getEmailTemplates()
+  emailTemplates.value = emailList.map(
+    (t: EmailTemplate): TemplateSelectOption => ({ id: t.id, name: t.name, subject: t.subject }),
+  )
+}
+
+/**
  * Reload the selectable prospects (unused only), preserving the selection.
  * @returns A promise resolved once reloaded.
  */
 async function reloadProspects(): Promise<void> {
   isLoadingProspects.value = true
   try {
-    const [prospectList, usedIds] = await Promise.all([listProspects(), getUsedProspectIds()])
+    const [prospectList, usedIds]: [Prospect[], number[]] = await Promise.all([
+      ProspectsService.listProspects(),
+      AutomationsService.getUsedProspectIds(),
+    ])
     const used: Set<number> = new Set<number>(usedIds)
     prospects.value = prospectList.filter((p: Prospect): boolean => !used.has(p.id))
   } catch {
@@ -726,23 +940,38 @@ watch(
   },
 )
 
+// The trade is only known once prospects load, well after the templates.
+watch([templates, recommendedTrade], applyRecommendedTemplate)
+
+watch([form, selectedProspectIds, currentStep], saveDraft, { deep: true })
+
 onMounted(async (): Promise<void> => {
+  restoreDraft()
+  // Après restauration : le brouillon peut venir de l'autre mode, qui a un email et une étape de plus.
+  if (isSiteMode.value) form.value.autoCampaign = false
+  currentStep.value = Math.min(currentStep.value, steps.value.length)
+
   try {
-    const [emailList, demoList] = await Promise.all([getEmailTemplates(), listDemoSiteTemplates()])
-    emailTemplates.value = emailList.map((t): TemplateSelectOption => ({ id: t.id, name: t.name, subject: t.subject }))
+    const [, demoList]: [unknown, DemoSiteTemplate[]] = await Promise.all([
+      reloadEmailTemplates(),
+      DemoSiteService.listDemoSiteTemplates(),
+    ])
     templates.value = demoList
-    const first: DemoSiteTemplate | undefined = demoList[0]
-    if (first) {
-      form.value.templateId = first.id
-      form.value.theme = { ...first.default_theme }
-    }
   } catch {
     // Non-critical — the wizard still works with what loaded.
+  }
+  try {
+    sendPolicy.value = await SendPolicyService.getSendPolicy()
+  } catch {
+    // Non-critical — the recap falls back to a generic cadence label.
   }
   await reloadProspects()
 
   // Pre-select a prospect passed via ?prospect= (single-site shortcut).
-  const raw: string | undefined = Array.isArray(route.query.prospect) ? route.query.prospect[0] : route.query.prospect
+  const rawQuery: LocationQueryValue | undefined = Array.isArray(route.query.prospect)
+    ? route.query.prospect[0]
+    : route.query.prospect
+  const raw: string | undefined = typeof rawQuery === 'string' ? rawQuery : undefined
   if (raw && !Number.isNaN(Number(raw))) {
     selectedProspectIds.value = [raw]
   }
@@ -763,8 +992,25 @@ onMounted(async (): Promise<void> => {
     transform: translateX(0);
   }
 }
+/* Révélation en cascade du récapitulatif, calée après l'éclat du hero. */
+.recap-reveal {
+  animation: recap-reveal-in 0.34s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation-delay: calc(0.72s + var(--recap-order) * 70ms);
+}
+@keyframes recap-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .wizard-step {
+  .wizard-step,
+  .recap-reveal {
     animation: none;
   }
 }

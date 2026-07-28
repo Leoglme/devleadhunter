@@ -1,16 +1,16 @@
 <template>
   <div>
-    <!-- Header -->
     <div class="mb-6 flex items-center justify-between">
-      <h1 class="text-xl font-semibold text-[var(--app-ink)]">Paramètres des crédits</h1>
+      <p class="app-label flex items-center gap-2">
+        <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+        Administration
+      </p>
+      <h1 class="app-page-title mt-2">Paramètres des crédits</h1>
     </div>
 
-    <!-- Credit Settings Form -->
     <div v-if="!isLoading && creditSettings" class="card">
       <form @submit.prevent="handleSubmit">
-        <!-- Grid Layout: 2 columns on desktop, 1 on mobile -->
-        <div class="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-          <!-- Price per Credit -->
+        <div class="mb-6 grid grid-cols-1 gap-6 @2xl:grid-cols-2">
           <div>
             <label for="price-per-credit" class="mb-2 block text-sm font-medium text-[var(--app-ink)]">
               Prix par crédit (EUR)
@@ -31,7 +31,6 @@
             <p class="mt-1.5 text-xs text-[var(--app-ink-soft)]">Prix unitaire d'un crédit en euros</p>
           </div>
 
-          <!-- Credits per Search -->
           <div>
             <label for="credits-per-search" class="mb-2 block text-sm font-medium text-[var(--app-ink)]">
               Crédits par recherche
@@ -50,7 +49,6 @@
             </p>
           </div>
 
-          <!-- Credits per Result -->
           <div>
             <label for="credits-per-result" class="mb-2 block text-sm font-medium text-[var(--app-ink)]">
               Crédits par résultat
@@ -67,7 +65,6 @@
             <p class="mt-1.5 text-xs text-[var(--app-ink-soft)]">Nombre de crédits requis par prospect trouvé</p>
           </div>
 
-          <!-- Credits per Email -->
           <div>
             <label for="credits-per-email" class="mb-2 block text-sm font-medium text-[var(--app-ink)]">
               Crédits par email
@@ -84,7 +81,6 @@
             <p class="mt-1.5 text-xs text-[var(--app-ink-soft)]">Nombre de crédits requis pour envoyer un email</p>
           </div>
 
-          <!-- Free Credits on Signup -->
           <div>
             <label for="free-credits" class="mb-2 block text-sm font-medium text-[var(--app-ink)]">
               Crédits offerts à l'inscription
@@ -101,7 +97,6 @@
             <p class="mt-1.5 text-xs text-[var(--app-ink-soft)]">Nombre de crédits offerts à chaque nouvel inscrit</p>
           </div>
 
-          <!-- Minimum Credits Purchase -->
           <div>
             <label for="minimum-credits-purchase" class="mb-2 block text-sm font-medium text-[var(--app-ink)]">
               Achat minimum de crédits
@@ -119,8 +114,7 @@
           </div>
         </div>
 
-        <!-- Form Actions -->
-        <div class="flex flex-col gap-3 border-t border-[var(--app-line)] pt-4 sm:flex-row sm:justify-end">
+        <div class="flex flex-col gap-3 border-t border-[var(--app-line)] pt-4 @2xl:flex-row @2xl:justify-end">
           <button type="button" class="btn-secondary flex-1 sm:flex-none" :disabled="isSaving" @click="resetForm">
             Réinitialiser
           </button>
@@ -136,7 +130,64 @@
       </form>
     </div>
 
-    <!-- Loading State -->
+    <div v-if="!isLoading" class="card mt-6">
+      <h2 class="text-base font-semibold text-[var(--app-ink)]">Commission plateforme</h2>
+      <p class="mt-1 text-xs text-[var(--app-ink-soft)]">
+        Prélevée sur les ventes facturées via le compte Stripe Connect d'un utilisateur, au moment de l'émission de la
+        facture. Sans effet sur vos propres ventes, encaissées par Qonto.
+      </p>
+      <form class="mt-4 flex flex-col gap-3 @2xl:flex-row @2xl:items-end" @submit.prevent="handleCommissionSubmit">
+        <div class="sm:w-40">
+          <label for="platform-commission" class="mb-2 block text-sm font-medium text-[var(--app-ink)]">
+            Pourcentage
+          </label>
+          <div class="relative">
+            <input
+              id="platform-commission"
+              v-model.number="commissionPercent"
+              type="number"
+              step="0.1"
+              min="0"
+              max="100"
+              class="input-field pr-8"
+              placeholder="10"
+            />
+            <span class="absolute top-1/2 right-3 -translate-y-1/2 text-[var(--app-ink-soft)]">%</span>
+          </div>
+        </div>
+        <div class="sm:w-40">
+          <label for="platform-commission-fixed" class="mb-2 block text-sm font-medium text-[var(--app-ink)]">
+            Montant fixe
+          </label>
+          <div class="relative">
+            <span class="absolute top-1/2 left-3 -translate-y-1/2 text-[var(--app-ink-soft)]">€</span>
+            <input
+              id="platform-commission-fixed"
+              v-model.number="commissionFixedEuros"
+              type="number"
+              step="0.5"
+              min="0"
+              class="input-field pl-8"
+              placeholder="2"
+            />
+          </div>
+        </div>
+        <div class="sm:pb-1">
+          <p class="text-xs text-[var(--app-ink-soft)]">
+            {{ commissionExample }}
+          </p>
+        </div>
+        <button
+          type="submit"
+          class="btn-primary cursor-pointer sm:ml-auto"
+          :disabled="isSavingCommission || !hasCommissionChanges"
+        >
+          <span v-if="isSavingCommission">Enregistrement…</span>
+          <span v-else>Enregistrer</span>
+        </button>
+      </form>
+    </div>
+
     <div v-if="isLoading" class="card">
       <div class="animate-pulse space-y-4">
         <div class="h-4 w-3/4 rounded bg-[var(--app-surface-2)]"></div>
@@ -146,7 +197,6 @@
       </div>
     </div>
 
-    <!-- Error State -->
     <div v-if="error && !isLoading" class="card mt-6 border border-[var(--app-red)]/30 bg-[var(--app-red)]/10">
       <div class="flex items-center gap-2 text-[var(--app-red)]">
         <UIcon name="i-lucide-circle-alert" class="h-4 w-4 shrink-0" />
@@ -156,11 +206,14 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script lang="ts" setup>
+import type { UseToastReturn } from '~/types/Composables'
 import type { CreditSettings } from '~/types'
-import type { Ref } from 'vue'
+import type { CreditSettingsForm } from '~/types/CreditSettingsPage'
+import type { ComputedRef, Ref } from 'vue'
 import { ref, computed, onMounted } from 'vue'
-import * as creditSettingsService from '~/services/creditSettingsService'
+import type { PlatformCommission } from '~/services/creditSettingsService'
+import { CreditSettingsService } from '~/services/creditSettingsService'
 import { useToast } from '~/composables/useToast'
 
 /**
@@ -182,14 +235,7 @@ const error: Ref<string | null> = ref(null)
 /**
  * Form state
  */
-const form: Ref<{
-  price_per_credit: number
-  credits_per_search: number
-  credits_per_result: number
-  credits_per_email: number
-  free_credits_on_signup: number
-  minimum_credits_purchase: number
-}> = ref({
+const form: Ref<CreditSettingsForm> = ref({
   price_per_credit: 0.1,
   credits_per_search: 5,
   credits_per_result: 1,
@@ -201,14 +247,7 @@ const form: Ref<{
 /**
  * Original form values for comparison
  */
-const originalForm: Ref<{
-  price_per_credit: number
-  credits_per_search: number
-  credits_per_result: number
-  credits_per_email: number
-  free_credits_on_signup: number
-  minimum_credits_purchase: number
-}> = ref({
+const originalForm: Ref<CreditSettingsForm> = ref({
   price_per_credit: 0.1,
   credits_per_search: 5,
   credits_per_result: 1,
@@ -218,14 +257,42 @@ const originalForm: Ref<{
 })
 
 /**
+ * Platform commission on Stripe Connect sales (separate from credit pricing:
+ * it is admin-only, where the credit settings above are read publicly).
+ */
+const commissionPercent: Ref<number> = ref(0)
+const commissionFixedEuros: Ref<number> = ref(0)
+const originalCommissionPercent: Ref<number> = ref(0)
+const originalCommissionFixedEuros: Ref<number> = ref(0)
+const isSavingCommission: Ref<boolean> = ref(false)
+
+/**
  * Toast composable
  */
-const toast = useToast()
+const toast: UseToastReturn = useToast()
+
+/** Whether either commission field differs from what is stored. */
+const hasCommissionChanges: ComputedRef<boolean> = computed((): boolean => {
+  return (
+    commissionPercent.value !== originalCommissionPercent.value ||
+    commissionFixedEuros.value !== originalCommissionFixedEuros.value
+  )
+})
+
+/** What the configured commission takes on a standard 500 € sale and on a small one. */
+const commissionExample: ComputedRef<string> = computed((): string => {
+  if (!commissionPercent.value && !commissionFixedEuros.value) return 'Aucune commission prélevée.'
+  const cutOn: (saleEuros: number) => string = (saleEuros: number): string => {
+    const cut: number = (saleEuros * commissionPercent.value) / 100 + commissionFixedEuros.value
+    return Math.min(cut, saleEuros).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  }
+  return `Soit ${cutOn(500)} € sur une vente de 500 €, et ${cutOn(10)} € sur une vente de 10 €.`
+})
 
 /**
  * Check if form has changes
  */
-const hasChanges = computed((): boolean => {
+const hasChanges: ComputedRef<boolean> = computed((): boolean => {
   return (
     form.value.price_per_credit !== originalForm.value.price_per_credit ||
     form.value.credits_per_search !== originalForm.value.credits_per_search ||
@@ -240,11 +307,11 @@ const hasChanges = computed((): boolean => {
  * Load credit settings from API
  * @returns {Promise<void>}
  */
-const loadCreditSettings = async (): Promise<void> => {
+const loadCreditSettings: () => Promise<void> = async (): Promise<void> => {
   try {
     isLoading.value = true
     error.value = null
-    creditSettings.value = await creditSettingsService.getCreditSettings()
+    creditSettings.value = await CreditSettingsService.getCreditSettings()
 
     // Update form with loaded values
     form.value = {
@@ -259,7 +326,8 @@ const loadCreditSettings = async (): Promise<void> => {
     // Update original form for comparison
     originalForm.value = { ...form.value }
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Erreur lors du chargement des paramètres de crédits'
+    const errorMessage: string =
+      err instanceof Error ? err.message : 'Erreur lors du chargement des paramètres de crédits'
     error.value = errorMessage
     toast.error(errorMessage)
   } finally {
@@ -268,10 +336,46 @@ const loadCreditSettings = async (): Promise<void> => {
 }
 
 /**
- * Reset form to original values
- * @returns {void}
+ * Load the platform commission rate.
+ * @returns {Promise<void>}
  */
-const resetForm = (): void => {
+const loadPlatformCommission: () => Promise<void> = async (): Promise<void> => {
+  try {
+    const commission: PlatformCommission = await CreditSettingsService.getPlatformCommission()
+    commissionPercent.value = commission.percent
+    commissionFixedEuros.value = commission.fixed_cents / 100
+    originalCommissionPercent.value = commissionPercent.value
+    originalCommissionFixedEuros.value = commissionFixedEuros.value
+  } catch {
+    // Non-blocking: the credit settings above stay usable.
+  }
+}
+
+/**
+ * Save the platform commission rate.
+ * @returns {Promise<void>}
+ */
+const handleCommissionSubmit: () => Promise<void> = async (): Promise<void> => {
+  try {
+    isSavingCommission.value = true
+    await CreditSettingsService.updatePlatformCommission(
+      commissionPercent.value,
+      Math.round(commissionFixedEuros.value * 100),
+    )
+    originalCommissionPercent.value = commissionPercent.value
+    originalCommissionFixedEuros.value = commissionFixedEuros.value
+    toast.success('Commission plateforme mise à jour')
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Erreur lors de la mise à jour de la commission')
+  } finally {
+    isSavingCommission.value = false
+  }
+}
+
+/**
+ * Reset form to original values
+ */
+const resetForm: () => void = (): void => {
   if (originalForm.value) {
     form.value = { ...originalForm.value }
   }
@@ -281,7 +385,7 @@ const resetForm = (): void => {
  * Handle form submission
  * @returns {Promise<void>}
  */
-const handleSubmit = async (): Promise<void> => {
+const handleSubmit: () => Promise<void> = async (): Promise<void> => {
   if (!creditSettings.value) return
 
   try {
@@ -310,7 +414,7 @@ const handleSubmit = async (): Promise<void> => {
     }
 
     // Update credit settings
-    const updated = await creditSettingsService.updateCreditSettings(updateData)
+    const updated: CreditSettings = await CreditSettingsService.updateCreditSettings(updateData)
 
     // Update local state
     creditSettings.value = updated
@@ -326,7 +430,7 @@ const handleSubmit = async (): Promise<void> => {
 
     toast.success('Paramètres des crédits mis à jour')
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Erreur lors de la mise à jour des paramètres'
+    const errorMessage: string = err instanceof Error ? err.message : 'Erreur lors de la mise à jour des paramètres'
     error.value = errorMessage
     toast.error(errorMessage)
   } finally {
@@ -339,5 +443,6 @@ const handleSubmit = async (): Promise<void> => {
  */
 onMounted(() => {
   loadCreditSettings()
+  loadPlatformCommission()
 })
 </script>
