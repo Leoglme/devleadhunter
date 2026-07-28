@@ -149,29 +149,38 @@
       </div>
 
       <div v-else key="step-5" class="wizard-step mx-auto mt-8 max-w-2xl space-y-8">
-        <div class="text-center">
-          <span
-            class="inline-flex h-14 w-14 items-center justify-center rounded-full border border-[var(--app-green)] bg-[var(--app-green-soft)]"
-          >
-            <UiStepCheck class="h-7 w-7 text-[var(--app-green)]" />
-          </span>
-          <h1 class="mt-5 text-3xl font-bold text-[var(--app-ink)]">Votre espace est prêt</h1>
-          <p class="text-muted mx-auto mt-3 max-w-md text-sm leading-relaxed">
-            Tout est en place pour trouver vos premiers prospects, leur générer un site et les démarcher.
-          </p>
-        </div>
+        <UiCelebrationHero
+          heading-tag="h1"
+          title="Votre espace est prêt"
+          subtitle="Tout est en place pour trouver vos premiers prospects, leur générer un site et les démarcher."
+          :celebrate="hasJustCompletedSteps"
+        />
 
         <dl class="space-y-2.5">
           <div
-            v-for="entry in recapItems"
+            v-for="(entry, index) in recapItems"
             :key="entry.label"
-            class="flex items-center gap-3.5 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-3.5"
+            class="recap-reveal flex items-center gap-3.5 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-3.5"
+            :style="{ '--recap-order': index + 1 }"
           >
-            <UIcon
-              :name="entry.done ? 'i-lucide-check' : 'i-lucide-minus'"
-              class="h-4 w-4 shrink-0"
-              :class="entry.done ? 'text-[var(--app-green)]' : 'text-[var(--app-faint)]'"
-            />
+            <svg
+              v-if="entry.done"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4 shrink-0 text-[var(--app-green)]"
+              aria-hidden="true"
+            >
+              <path
+                class="recap-check-path"
+                d="M4.5 12.5l4.6 4.7L19.5 6.8"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <UIcon v-else name="i-lucide-minus" class="h-4 w-4 shrink-0 text-[var(--app-faint)]" />
             <div class="min-w-0 flex-1">
               <dt class="app-label">{{ entry.label }}</dt>
               <dd class="mt-0.5 text-sm font-medium break-words text-[var(--app-ink)]">{{ entry.value }}</dd>
@@ -179,8 +188,13 @@
           </div>
         </dl>
 
-        <div class="flex flex-col items-center gap-4">
-          <button type="button" class="app-btn-primary px-6" :disabled="isFinishing" @click="finish(true)">
+        <div class="recap-reveal flex flex-col items-center gap-4" :style="{ '--recap-order': recapItems.length + 1 }">
+          <button
+            type="button"
+            :class="['app-btn-primary px-6', !isFinishing && 'app-btn-celebrate']"
+            :disabled="isFinishing"
+            @click="finish(true)"
+          >
             <UIcon
               :name="isFinishing ? 'i-lucide-loader-circle' : 'i-lucide-rocket'"
               :class="['h-3.5 w-3.5', isFinishing && 'animate-spin']"
@@ -344,6 +358,8 @@ const hasPaymentProvider: Ref<boolean> = ref(false)
 const isSavingStep: Ref<boolean> = ref(false)
 /** Whether the wizard is being marked as completed. */
 const isFinishing: Ref<boolean> = ref(false)
+/** True when the user just walked the steps to the end — a direct revisit of the recap stays calm. */
+const hasJustCompletedSteps: Ref<boolean> = ref(false)
 /** Handle of the sending-readiness poller. */
 const sendingPollHandle: Ref<ReturnType<typeof setInterval> | null> = ref(null)
 
@@ -443,10 +459,12 @@ function syncSendingPoller(): void {
 }
 
 /**
- * Navigate to a step and scroll back to the top.
+ * Navigate to a step and scroll back to the top. Reaching the last step this
+ * way (vs. landing on it at mount) arms the celebration confetti.
  * @param step - Target step (1-based).
  */
 function goToStep(step: number): void {
+  if (step === STEPS.length) hasJustCompletedSteps.value = true
   currentStep.value = step
   if (import.meta.client) window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -596,8 +614,40 @@ onBeforeUnmount((): void => {
     transform: translateX(0);
   }
 }
+
+/* Révélation en cascade du récapitulatif final, calée après l'éclat du hero. */
+.recap-reveal {
+  animation: recap-reveal-in 0.34s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation-delay: calc(0.72s + var(--recap-order) * 70ms);
+}
+@keyframes recap-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Chaque check se trace juste après l'arrivée de sa ligne. */
+.recap-check-path {
+  stroke-dasharray: 26;
+  stroke-dashoffset: 0;
+  animation: recap-check-draw 0.3s ease-out backwards;
+  animation-delay: calc(0.86s + var(--recap-order) * 70ms);
+}
+@keyframes recap-check-draw {
+  from {
+    stroke-dashoffset: 26;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .wizard-step {
+  .wizard-step,
+  .recap-reveal,
+  .recap-check-path {
     animation: none;
   }
 }

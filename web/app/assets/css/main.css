@@ -454,6 +454,62 @@ html {
     background-color: var(--app-ink);
     color: var(--app-bg);
   }
+
+  /* CTA de fin de tunnel : halo qui respire + balayage lumineux périodique.
+     La teinte du reflet vient de --app-btn-text pour rester visible sur les
+     deux thèmes (bouton encre en clair, bouton papier en sombre). */
+  .app-btn-celebrate {
+    position: relative;
+    overflow: hidden;
+    animation: app-btn-celebrate-pulse 2.6s ease-out 1.4s infinite;
+  }
+
+  .app-btn-celebrate::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 38%;
+    background: linear-gradient(
+      105deg,
+      transparent,
+      color-mix(in srgb, var(--app-btn-text) 32%, transparent),
+      transparent
+    );
+    transform: skewX(-18deg) translateX(-160%);
+    animation: app-btn-celebrate-shine 2.6s ease-in-out 1.6s infinite;
+    pointer-events: none;
+  }
+
+  @keyframes app-btn-celebrate-pulse {
+    0% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-btn-bg) 40%, transparent);
+    }
+    55%,
+    100% {
+      box-shadow: 0 0 0 9px transparent;
+    }
+  }
+
+  @keyframes app-btn-celebrate-shine {
+    0% {
+      transform: skewX(-18deg) translateX(-160%);
+    }
+    42%,
+    100% {
+      transform: skewX(-18deg) translateX(440%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .app-btn-celebrate {
+      animation: none;
+    }
+    .app-btn-celebrate::after {
+      display: none;
+    }
+  }
 }
 
 /* Les classes legacy (.card / .btn-* / .input-field / .text-muted / h1) sont

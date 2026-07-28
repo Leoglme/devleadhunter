@@ -257,40 +257,23 @@
       </div>
 
       <div v-else key="step-launch" class="wizard-step app-card space-y-5 p-5 pb-20 md:p-6">
-        <div class="flex flex-col items-center pt-2 text-center">
-          <span class="relative flex h-16 w-16 items-center justify-center">
-            <span class="recap-halo absolute inset-0 rounded-full bg-[var(--app-accent-soft)]" aria-hidden="true" />
-            <span
-              v-for="spark in RECAP_SPARK_COUNT"
-              :key="spark"
-              class="recap-spark absolute h-1.5 w-1.5 rounded-full bg-[var(--app-accent)]"
-              :style="{ '--spark-angle': `${(360 / RECAP_SPARK_COUNT) * spark}deg` }"
-              aria-hidden="true"
-            />
-            <span
-              class="recap-badge relative flex h-14 w-14 items-center justify-center rounded-full bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]"
-            >
-              <UIcon name="i-lucide-rocket" class="h-6 w-6" />
-            </span>
-          </span>
-          <h2 class="recap-reveal font-display mt-4 text-xl font-semibold text-[var(--app-ink)] [--recap-order:1]">
-            Tout est prêt
-          </h2>
-          <p class="recap-reveal mt-1.5 max-w-sm text-sm leading-relaxed text-[var(--app-ink-soft)] [--recap-order:2]">
-            {{
-              isSiteMode
-                ? 'Un dernier coup d’œil, puis la machine génère les sites.'
-                : 'Un dernier coup d’œil, puis la machine prend le relais.'
-            }}
-          </p>
-        </div>
+        <UiCelebrationHero
+          class="pt-2"
+          icon="i-lucide-rocket"
+          title="Tout est prêt"
+          :subtitle="
+            isSiteMode
+              ? 'Un dernier coup d’œil, puis la machine génère les sites.'
+              : 'Un dernier coup d’œil, puis la machine prend le relais.'
+          "
+        />
 
         <dl class="grid gap-3 @sm:grid-cols-2">
           <div
             v-for="(entry, index) in recapItems"
             :key="entry.label"
             class="recap-reveal rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-3.5"
-            :style="{ '--recap-order': index + 3 }"
+            :style="{ '--recap-order': index + 1 }"
           >
             <dt class="app-label flex items-center gap-1.5">
               <UIcon :name="entry.icon" class="h-3 w-3 text-[var(--app-accent-ink)]" />
@@ -306,7 +289,7 @@
         <p
           v-if="form.mode === 'semi_auto'"
           class="recap-reveal flex items-start gap-2 rounded-xl border border-[var(--app-blue)] bg-[var(--app-blue-soft)] p-3.5 text-xs text-[var(--app-ink)]"
-          :style="{ '--recap-order': recapItems.length + 3 }"
+          :style="{ '--recap-order': recapItems.length + 1 }"
         >
           <UIcon name="i-lucide-clipboard-check" class="mt-0.5 h-4 w-4 shrink-0 text-[var(--app-blue)]" />
           La machine génère les sites puis <strong class="mx-1">s'arrête pour votre validation</strong> avant tout
@@ -336,7 +319,13 @@
         >
           Continuer<UIcon name="i-lucide-arrow-right" class="h-3.5 w-3.5" />
         </button>
-        <button v-else type="button" class="app-btn-primary" :disabled="isCreating || !canLaunch" @click="launch">
+        <button
+          v-else
+          type="button"
+          :class="['app-btn-primary', canLaunch && !isCreating && 'app-btn-celebrate']"
+          :disabled="isCreating || !canLaunch"
+          @click="launch"
+        >
           <UIcon
             :name="isCreating ? 'i-lucide-loader-circle' : 'i-lucide-rocket'"
             :class="['h-3.5 w-3.5', isCreating && 'animate-spin']"
@@ -414,9 +403,6 @@ const TUNNEL_DRAFT_STORAGE_KEY: string = 'dlh-automation-draft'
 
 /** How many prospects are named in the recap before it falls back to a count. */
 const NAMED_PROSPECTS_IN_RECAP: number = 3
-
-/** Sparks projected around the rocket badge on the final step. */
-const RECAP_SPARK_COUNT: number = 8
 
 /** Current step (1-based position among the visible steps). */
 const currentStep: Ref<number> = ref(1)
@@ -1006,10 +992,10 @@ onMounted(async (): Promise<void> => {
     transform: translateX(0);
   }
 }
-/* Révélation en cascade du récapitulatif : chaque bloc entre après le précédent. */
+/* Révélation en cascade du récapitulatif, calée après l'éclat du hero. */
 .recap-reveal {
   animation: recap-reveal-in 0.34s cubic-bezier(0.16, 1, 0.3, 1) backwards;
-  animation-delay: calc(var(--recap-order) * 60ms);
+  animation-delay: calc(0.72s + var(--recap-order) * 70ms);
 }
 @keyframes recap-reveal-in {
   from {
@@ -1022,68 +1008,10 @@ onMounted(async (): Promise<void> => {
   }
 }
 
-/* Pastille : arrivée rebondie, une seule fois. */
-.recap-badge {
-  animation: recap-badge-in 0.46s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
-}
-@keyframes recap-badge-in {
-  from {
-    opacity: 0;
-    transform: scale(0.4);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* Onde qui s'échappe de la pastille au montage. */
-.recap-halo {
-  animation: recap-halo-out 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.12s backwards;
-}
-@keyframes recap-halo-out {
-  from {
-    opacity: 0.85;
-    transform: scale(0.5);
-  }
-  to {
-    opacity: 0;
-    transform: scale(2.1);
-  }
-}
-
-/* Étincelles projetées en étoile, chacune sur son axe. */
-.recap-spark {
-  top: 50%;
-  left: 50%;
-  margin: -3px 0 0 -3px;
-  animation: recap-spark-out 0.62s cubic-bezier(0.16, 1, 0.3, 1) 0.18s backwards;
-}
-@keyframes recap-spark-out {
-  from {
-    opacity: 0;
-    transform: rotate(var(--spark-angle)) translateY(0) scale(0.4);
-  }
-  35% {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-    transform: rotate(var(--spark-angle)) translateY(-42px) scale(0.9);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .wizard-step,
-  .recap-reveal,
-  .recap-badge,
-  .recap-halo,
-  .recap-spark {
+  .recap-reveal {
     animation: none;
-  }
-  .recap-halo,
-  .recap-spark {
-    display: none;
   }
 }
 </style>
