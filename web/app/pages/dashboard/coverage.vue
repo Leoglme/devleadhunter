@@ -2,7 +2,11 @@
   <div class="flex min-h-full flex-col gap-5">
     <div class="flex flex-col gap-3 @3xl:flex-row @3xl:items-end @3xl:justify-between">
       <div>
-        <h1 class="text-xl font-semibold text-[var(--app-ink)]">Carte de prospection</h1>
+        <p class="app-label flex items-center gap-2">
+          <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+          Prospection
+        </p>
+        <h1 class="app-page-title mt-2">Carte de prospection</h1>
         <p class="text-muted mt-1 max-w-2xl text-sm leading-relaxed">
           Cliquez une ville ou une région : zone couverte
           <UIcon name="i-lucide-arrow-right" class="inline-block h-3.5 w-3.5 align-[-2px]" /> ses prospects, zone vierge

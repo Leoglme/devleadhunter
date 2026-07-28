@@ -2,7 +2,11 @@
   <div class="space-y-5">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="text-xl font-semibold text-[var(--app-ink)]">Modèles d'email</h1>
+        <p class="app-label flex items-center gap-2">
+          <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+          Prospection
+        </p>
+        <h1 class="app-page-title mt-2">Modèles d'email</h1>
         <p class="text-muted mt-1 text-sm">Les contenus réutilisés par vos campagnes et relances.</p>
       </div>
       <button class="btn-primary" @click="openCreateDrawer">
@@ -82,42 +86,73 @@
               </p>
             </button>
 
-            <div class="flex shrink-0 items-center gap-1.5">
+            <div class="flex shrink-0 items-center gap-1">
               <button
-                class="btn-secondary h-8 min-h-8 px-2.5 text-xs"
+                type="button"
+                class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
                 title="Aperçu avec des données d'exemple"
+                :aria-label="`Aperçu de ${template.name}`"
                 @click="openPreviewDrawer(template)"
               >
                 <UIcon name="i-lucide-eye" class="h-3.5 w-3.5" />
               </button>
               <button
-                class="btn-secondary h-8 min-h-8 px-2.5 text-xs"
+                type="button"
+                class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
                 title="Modifier"
+                :aria-label="`Modifier ${template.name}`"
                 @click="openEditDrawer(template)"
               >
                 <UIcon name="i-lucide-square-pen" class="h-3.5 w-3.5" />
               </button>
-              <button
-                class="btn-secondary h-8 min-h-8 px-2.5 text-xs"
-                title="Dupliquer"
-                @click="duplicateTemplate(template)"
-              >
-                <UIcon name="i-lucide-copy" class="h-3.5 w-3.5" />
-              </button>
-              <button
-                class="btn-secondary h-8 min-h-8 px-2.5 text-xs"
-                :title="template.is_active ? 'Désactiver' : 'Activer'"
-                @click="toggleTemplateActive(template)"
-              >
-                <UIcon :name="template.is_active ? 'i-lucide-pause' : 'i-lucide-play'" class="h-3.5 w-3.5" />
-              </button>
-              <button
-                class="btn-danger flex h-8 min-h-8 items-center justify-center px-2.5 text-xs"
-                title="Supprimer"
-                @click="confirmDelete(template)"
-              >
-                <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />
-              </button>
+
+              <div class="relative">
+                <button
+                  type="button"
+                  class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
+                  title="Plus d'actions"
+                  :aria-label="`Plus d'actions pour ${template.name}`"
+                  :aria-expanded="openMenuTemplateId === template.id"
+                  @click.stop="toggleActionsMenu(template.id)"
+                >
+                  <UIcon name="i-lucide-ellipsis-vertical" class="h-3.5 w-3.5" />
+                </button>
+
+                <template v-if="openMenuTemplateId === template.id">
+                  <div class="fixed inset-0 z-40" @click="openMenuTemplateId = null"></div>
+                  <div
+                    class="absolute right-0 z-50 mt-1.5 w-48 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-1 shadow-lg shadow-black/5"
+                  >
+                    <button
+                      type="button"
+                      class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
+                      @click="runRowAction(template, duplicateTemplate)"
+                    >
+                      <UIcon name="i-lucide-copy" class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
+                      Dupliquer
+                    </button>
+                    <button
+                      type="button"
+                      class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
+                      @click="runRowAction(template, toggleTemplateActive)"
+                    >
+                      <UIcon
+                        :name="template.is_active ? 'i-lucide-pause' : 'i-lucide-play'"
+                        class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]"
+                      />
+                      {{ template.is_active ? 'Désactiver' : 'Activer' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="mt-1 flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-t border-[var(--app-line-soft)] px-2.5 py-2 text-left text-xs font-medium text-[var(--app-red)] transition-colors hover:bg-[var(--app-red-soft)]"
+                      @click="runRowAction(template, confirmDelete)"
+                    >
+                      <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5 shrink-0" />
+                      Supprimer
+                    </button>
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
         </div>
@@ -159,6 +194,8 @@ const emailTemplates: Ref<EmailTemplate[]> = ref([])
 const isLoading: Ref<boolean> = ref(false)
 const searchQuery: Ref<string> = ref('')
 const templateToDelete: Ref<EmailTemplate | null> = ref(null)
+/** Template whose overflow menu is open, if any. */
+const openMenuTemplateId: Ref<number | null> = ref(null)
 const confirmModal: Ref<{ open: () => void; close: () => void } | null> = ref(null)
 
 /** Templates matching the search query (name or subject). */
@@ -276,6 +313,28 @@ async function toggleTemplateActive(template: EmailTemplate): Promise<void> {
 /**
  * Ask for confirmation before deleting a template.
  * @param template - Template to delete.
+ */
+/**
+ * Open or close the overflow menu of a row.
+ * @param templateId - Identifier of the row's template.
+ */
+function toggleActionsMenu(templateId: number): void {
+  openMenuTemplateId.value = openMenuTemplateId.value === templateId ? null : templateId
+}
+
+/**
+ * Run an overflow-menu action, then close the menu.
+ * @param template - Template the action applies to.
+ * @param action - Handler to run on that template.
+ */
+function runRowAction(template: EmailTemplate, action: (template: EmailTemplate) => void): void {
+  openMenuTemplateId.value = null
+  action(template)
+}
+
+/**
+ * Ask confirmation before deleting a template.
+ * @param template - Template about to be deleted.
  */
 function confirmDelete(template: EmailTemplate): void {
   templateToDelete.value = template

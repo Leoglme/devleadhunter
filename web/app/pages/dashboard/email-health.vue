@@ -4,7 +4,7 @@
       <div>
         <p class="app-label flex items-center gap-2">
           <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
-          Campagnes
+          Prospection
         </p>
         <h1 class="app-page-title mt-2">Santé email</h1>
         <p class="mt-1.5 max-w-xl text-sm text-[var(--app-ink-soft)]">

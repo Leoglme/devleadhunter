@@ -10,7 +10,7 @@
       </NuxtLink>
 
       <div class="flex flex-wrap items-start justify-between gap-3">
-        <h1 class="min-w-0 text-2xl font-bold break-words text-[var(--app-ink)]">
+        <h1 class="app-page-title min-w-0 break-words">
           {{ ticket?.subject || 'Chargement…' }}
         </h1>
         <span

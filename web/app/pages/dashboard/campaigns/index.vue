@@ -2,7 +2,11 @@
   <div class="space-y-5">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="text-xl font-semibold text-[var(--app-ink)]">Campagnes</h1>
+        <p class="app-label flex items-center gap-2">
+          <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+          Prospection
+        </p>
+        <h1 class="app-page-title mt-2">Campagnes</h1>
         <p class="text-muted mt-1 text-sm">Vos séquences de cold email, de l'envoi initial aux relances.</p>
       </div>
       <button class="btn-primary" @click="openCreateDrawer">

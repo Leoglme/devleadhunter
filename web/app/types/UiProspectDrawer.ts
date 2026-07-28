@@ -4,6 +4,7 @@ export type UiProspectDrawerProps = {
   open: boolean
   prospect: Prospect | null
   showBack?: boolean
+  startInEdit?: boolean
 }
 
 export type LighthouseGauge = {

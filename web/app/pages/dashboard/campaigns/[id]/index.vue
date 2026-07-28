@@ -15,7 +15,7 @@
           </button>
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
-              <h1 class="truncate text-xl font-semibold text-[var(--app-ink)]">{{ campaign.name }}</h1>
+              <h1 class="app-page-title truncate">{{ campaign.name }}</h1>
               <span
                 :class="[
                   'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',

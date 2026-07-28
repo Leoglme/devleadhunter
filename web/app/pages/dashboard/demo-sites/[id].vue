@@ -35,7 +35,7 @@
     <template v-else-if="site">
       <header class="space-y-2">
         <p class="text-xs font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">Site démo</p>
-        <h1 class="text-[28px] leading-tight font-semibold text-[var(--app-ink)]">{{ site.business_name }}</h1>
+        <h1 class="app-page-title">{{ site.business_name }}</h1>
         <p class="text-sm text-[var(--app-ink-soft)]">{{ site.slug }} · {{ templateLabel }}</p>
       </header>
 

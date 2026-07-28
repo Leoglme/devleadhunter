@@ -2,7 +2,11 @@
   <div class="space-y-6">
     <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
       <div>
-        <h1 class="text-xl font-semibold text-[var(--app-ink)]">Monitoring</h1>
+        <p class="app-label flex items-center gap-2">
+          <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+          Administration
+        </p>
+        <h1 class="app-page-title mt-2">Monitoring</h1>
         <p class="text-muted mt-1 text-sm">
           Santé du système et des sources de scraping — capturé automatiquement lors des vraies exécutions.
         </p>

@@ -15,7 +15,7 @@
     <UiWizardStepper :model-value="currentStep" :steps="steps" class="mb-6" @update:model-value="goToStep" />
 
     <div class="min-w-0">
-      <div v-if="activeStepKey === 'target'" key="step-target" class="wizard-step space-y-5">
+      <div v-if="activeStepKey === 'target'" key="step-target" class="wizard-step space-y-5 pb-20">
         <div class="app-card space-y-5 p-5 md:p-6">
           <div>
             <label class="app-label mb-1.5 block">Nom de l'automatisation</label>
@@ -95,6 +95,7 @@
               :prospects="paginatedProspects"
               :selected-prospects="selectedProspectIds"
               @view-prospect="openProspectDrawer"
+              @edit-prospect="openProspectEditDrawer"
               @delete-prospect="handleDeleteProspect"
               @toggle-select="toggleSelect"
               @toggle-select-all="toggleSelectAll"
@@ -162,7 +163,7 @@
         </div>
       </div>
 
-      <div v-else-if="activeStepKey === 'site'" key="step-site" class="wizard-step space-y-6">
+      <div v-else-if="activeStepKey === 'site'" key="step-site" class="wizard-step space-y-6 pb-20">
         <div>
           <h2 class="text-base font-semibold text-[var(--app-ink)]">Template de site</h2>
           <p class="mt-1 text-sm text-[var(--app-ink-soft)]">
@@ -179,7 +180,11 @@
         />
       </div>
 
-      <div v-else-if="activeStepKey === 'emails'" key="step-emails" class="wizard-step app-card space-y-5 p-5 md:p-6">
+      <div
+        v-else-if="activeStepKey === 'emails'"
+        key="step-emails"
+        class="wizard-step app-card space-y-5 p-5 pb-20 md:p-6"
+      >
         <div>
           <h2 class="text-base font-semibold text-[var(--app-ink)]">Démarchage</h2>
           <p class="mt-1 text-sm text-[var(--app-ink-soft)]">Le cold email envoyé avec le lien de démo.</p>
@@ -200,7 +205,7 @@
           <UiSwitch id="automation-auto-campaign" v-model="form.autoCampaign" />
         </div>
 
-        <div v-if="form.autoCampaign" class="grid gap-5 @2xl:grid-cols-2">
+        <div v-if="form.autoCampaign" class="space-y-5">
           <div>
             <label class="app-label mb-1.5 block">
               Modèle A — envoi initial <span class="text-[var(--app-accent)]">*</span>
@@ -251,15 +256,27 @@
         </div>
       </div>
 
-      <div v-else key="step-launch" class="wizard-step app-card space-y-5 p-5 md:p-6">
-        <div class="recap-reveal flex flex-col items-center pt-2 text-center" style="--recap-order: 0">
-          <span
-            class="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]"
-          >
-            <UIcon name="i-lucide-rocket" class="h-6 w-6" />
+      <div v-else key="step-launch" class="wizard-step app-card space-y-5 p-5 pb-20 md:p-6">
+        <div class="flex flex-col items-center pt-2 text-center">
+          <span class="relative flex h-16 w-16 items-center justify-center">
+            <span class="recap-halo absolute inset-0 rounded-full bg-[var(--app-accent-soft)]" aria-hidden="true" />
+            <span
+              v-for="spark in RECAP_SPARK_COUNT"
+              :key="spark"
+              class="recap-spark absolute h-1.5 w-1.5 rounded-full bg-[var(--app-accent)]"
+              :style="{ '--spark-angle': `${(360 / RECAP_SPARK_COUNT) * spark}deg` }"
+              aria-hidden="true"
+            />
+            <span
+              class="recap-badge relative flex h-14 w-14 items-center justify-center rounded-full bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]"
+            >
+              <UIcon name="i-lucide-rocket" class="h-6 w-6" />
+            </span>
           </span>
-          <h2 class="font-display mt-4 text-xl font-semibold text-[var(--app-ink)]">Tout est prêt</h2>
-          <p class="mt-1.5 max-w-sm text-sm leading-relaxed text-[var(--app-ink-soft)]">
+          <h2 class="recap-reveal font-display mt-4 text-xl font-semibold text-[var(--app-ink)] [--recap-order:1]">
+            Tout est prêt
+          </h2>
+          <p class="recap-reveal mt-1.5 max-w-sm text-sm leading-relaxed text-[var(--app-ink-soft)] [--recap-order:2]">
             {{
               isSiteMode
                 ? 'Un dernier coup d’œil, puis la machine génère les sites.'
@@ -273,7 +290,7 @@
             v-for="(entry, index) in recapItems"
             :key="entry.label"
             class="recap-reveal rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-3.5"
-            :style="{ '--recap-order': index + 1 }"
+            :style="{ '--recap-order': index + 3 }"
           >
             <dt class="app-label flex items-center gap-1.5">
               <UIcon :name="entry.icon" class="h-3 w-3 text-[var(--app-accent-ink)]" />
@@ -289,7 +306,7 @@
         <p
           v-if="form.mode === 'semi_auto'"
           class="recap-reveal flex items-start gap-2 rounded-xl border border-[var(--app-blue)] bg-[var(--app-blue-soft)] p-3.5 text-xs text-[var(--app-ink)]"
-          :style="{ '--recap-order': recapItems.length + 1 }"
+          :style="{ '--recap-order': recapItems.length + 3 }"
         >
           <UIcon name="i-lucide-clipboard-check" class="mt-0.5 h-4 w-4 shrink-0 text-[var(--app-blue)]" />
           La machine génère les sites puis <strong class="mx-1">s'arrête pour votre validation</strong> avant tout
@@ -397,6 +414,9 @@ const TUNNEL_DRAFT_STORAGE_KEY: string = 'dlh-automation-draft'
 
 /** How many prospects are named in the recap before it falls back to a count. */
 const NAMED_PROSPECTS_IN_RECAP: number = 3
+
+/** Sparks projected around the rocket badge on the final step. */
+const RECAP_SPARK_COUNT: number = 8
 
 /** Current step (1-based position among the visible steps). */
 const currentStep: Ref<number> = ref(1)
@@ -794,6 +814,14 @@ function openProspectDrawer(prospect: Prospect): void {
 }
 
 /**
+ * Open the prospect drawer straight on its edit form.
+ * @param prospect - The prospect to edit.
+ */
+function openProspectEditDrawer(prospect: Prospect): void {
+  drawerStack.push({ kind: 'prospect', prospect, startInEdit: true })
+}
+
+/**
  * Delete a prospect from the pool.
  * @param prospect - The prospect to delete.
  * @returns A promise resolved once deleted.
@@ -994,10 +1022,68 @@ onMounted(async (): Promise<void> => {
   }
 }
 
+/* Pastille : arrivée rebondie, une seule fois. */
+.recap-badge {
+  animation: recap-badge-in 0.46s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+@keyframes recap-badge-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Onde qui s'échappe de la pastille au montage. */
+.recap-halo {
+  animation: recap-halo-out 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.12s backwards;
+}
+@keyframes recap-halo-out {
+  from {
+    opacity: 0.85;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.1);
+  }
+}
+
+/* Étincelles projetées en étoile, chacune sur son axe. */
+.recap-spark {
+  top: 50%;
+  left: 50%;
+  margin: -3px 0 0 -3px;
+  animation: recap-spark-out 0.62s cubic-bezier(0.16, 1, 0.3, 1) 0.18s backwards;
+}
+@keyframes recap-spark-out {
+  from {
+    opacity: 0;
+    transform: rotate(var(--spark-angle)) translateY(0) scale(0.4);
+  }
+  35% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: rotate(var(--spark-angle)) translateY(-42px) scale(0.9);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .wizard-step,
-  .recap-reveal {
+  .recap-reveal,
+  .recap-badge,
+  .recap-halo,
+  .recap-spark {
     animation: none;
+  }
+  .recap-halo,
+  .recap-spark {
+    display: none;
   }
 }
 </style>

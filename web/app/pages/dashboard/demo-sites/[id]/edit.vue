@@ -8,7 +8,7 @@
         <UIcon name="i-lucide-arrow-left" class="h-3.5 w-3.5" />
         Retour à la fiche
       </NuxtLink>
-      <h1 class="mt-4 text-2xl font-semibold text-[var(--app-ink)]">Modifier le site démo</h1>
+      <h1 class="app-page-title mt-4">Modifier le site démo</h1>
       <p v-if="site" class="mt-1 text-sm text-[var(--app-ink-soft)]">{{ site.business_name }} · {{ site.slug }}</p>
     </div>
 

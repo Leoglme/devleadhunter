@@ -410,8 +410,9 @@ html {
   }
 
   /* Page title — software scale, UI family */
+  /* text-balance : à conteneur étroit (drawer ouvert), le titre casse en 2 lignes équilibrées, pas en 3. */
   .app-page-title {
-    @apply text-lg font-semibold tracking-[-0.01em] sm:text-xl;
+    @apply text-lg font-semibold tracking-[-0.01em] text-balance sm:text-xl;
     font-family: var(--app-font-ui);
     color: var(--app-ink);
   }

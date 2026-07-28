@@ -17,6 +17,7 @@ export type UiProspectTableProps = {
 
 export type UiProspectTableEmits = {
   viewProspect: [prospect: Prospect]
+  editProspect: [prospect: Prospect]
   deleteProspect: [prospect: Prospect]
   removeProspect: [prospect: Prospect]
   toggleSelect: [prospect: Prospect]

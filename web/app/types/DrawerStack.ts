@@ -16,6 +16,8 @@ import type { CampaignDetailResponse } from '~/services/campaignService'
 export type ProspectDrawerEntry = {
   kind: 'prospect'
   prospect: Prospect
+  /** Open straight on the edit form (pencil action of the prospect table). */
+  startInEdit?: boolean
 }
 
 /** Prefilled values of the email composer (e.g. « Renvoyer » from a log). */

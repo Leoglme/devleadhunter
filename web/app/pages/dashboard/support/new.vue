@@ -8,7 +8,7 @@
         <UIcon name="i-lucide-arrow-left" class="h-3.5 w-3.5" />
         Support
       </NuxtLink>
-      <h1 class="text-3xl font-bold text-[var(--app-ink)]">Nouveau ticket</h1>
+      <h1 class="app-page-title">Nouveau ticket</h1>
       <p class="text-muted mt-2 text-sm leading-relaxed">
         Décrivez votre problème. On vous répond directement dans le fil de conversation.
       </p>

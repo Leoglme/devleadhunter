@@ -1,7 +1,11 @@
 <template>
   <div>
     <div class="mb-6 flex items-center justify-between">
-      <h1 class="text-xl font-semibold text-[var(--app-ink)]">Acheter des crédits</h1>
+      <p class="app-label flex items-center gap-2">
+        <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+        Compte
+      </p>
+      <h1 class="app-page-title mt-2">Acheter des crédits</h1>
     </div>
 
     <div v-if="showSuccess" class="card mb-6 border border-[var(--app-green)]/30 bg-[var(--app-green)]/10">

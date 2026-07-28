@@ -134,7 +134,10 @@
                 </div>
                 <div class="min-w-0 flex-1">
                   <p class="text-[10px] text-[var(--app-ink-soft)]">Téléphone</p>
-                  <p v-if="prospect.phone" class="text-sm font-medium text-[var(--app-ink)]">
+                  <p
+                    v-if="prospect.phone"
+                    class="text-sm font-medium whitespace-nowrap text-[var(--app-ink)] tabular-nums"
+                  >
                     {{ prospect.phone }}
                   </p>
                   <p v-else class="text-sm text-[var(--app-faint)]">—</p>
@@ -173,7 +176,7 @@
               <div class="flex items-center gap-3">
                 <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--app-surface-2)]">
                   <UIcon
-                    :name="prospect.contacted ? 'i-lucide-circle-check-big' : 'i-lucide-circle-dashed'"
+                    :name="prospect.contacted ? 'i-lucide-mail-check' : 'i-lucide-mail-question'"
                     :class="['h-4 w-4', prospect.contacted ? 'text-[var(--app-green)]' : 'text-[var(--app-ink-soft)]']"
                   />
                 </div>
@@ -404,11 +407,20 @@
         <div class="border-t border-[var(--app-line)] px-5 py-4">
           <div v-if="!editMode" class="space-y-2">
             <div class="flex gap-2">
-              <button v-if="prospect.email" class="btn-secondary flex-1" @click="$emit('sendEmail', prospect)">
-                <UIcon name="i-lucide-mail" class="mr-1.5 h-4 w-4" />Email
+              <button
+                v-if="prospect.email"
+                class="btn-secondary min-w-0 flex-1 px-3 whitespace-nowrap"
+                @click="$emit('sendEmail', prospect)"
+              >
+                <UIcon name="i-lucide-mail" class="h-4 w-4 shrink-0" />Email
               </button>
-              <button class="btn-secondary flex-1" @click="$emit('markAsSold', prospect)">
-                <UIcon name="i-lucide-shopping-cart" class="mr-1.5 h-4 w-4" />Marquer comme vendu
+              <button
+                class="btn-secondary min-w-0 flex-1 px-3 whitespace-nowrap"
+                title="Marquer ce prospect comme vendu"
+                @click="$emit('markAsSold', prospect)"
+              >
+                <UIcon name="i-lucide-shopping-cart" class="h-4 w-4 shrink-0" />
+                <span class="truncate">Vendu</span>
               </button>
             </div>
             <a
@@ -476,6 +488,10 @@ const props: UiProspectDrawerProps = defineProps({
     required: true,
   },
   showBack: {
+    type: Boolean,
+    default: false,
+  },
+  startInEdit: {
     type: Boolean,
     default: false,
   },
@@ -649,6 +665,7 @@ watch(
       }, 250)
       return
     }
+    if (props.startInEdit) startEdit()
     void loadDemoSite()
   },
   { immediate: true },

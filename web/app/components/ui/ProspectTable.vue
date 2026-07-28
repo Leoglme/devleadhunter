@@ -80,7 +80,7 @@
         <BaseTableTd class="text-sm text-[var(--app-ink-soft)]">{{ prospect.city || '—' }}</BaseTableTd>
 
         <BaseTableTd
-          class="font-label text-xs text-[var(--app-ink-soft)]"
+          class="font-label text-xs whitespace-nowrap text-[var(--app-ink-soft)] tabular-nums"
           :class="isLockedForMe(prospect) && 'blur-[3px] select-none'"
         >
           {{ prospect.phone || '—' }}
@@ -139,15 +139,26 @@
             <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />
             Retirer
           </button>
-          <button
-            v-else-if="rowAction === 'delete' && !isLockedForMe(prospect)"
-            type="button"
-            class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] opacity-0 transition-all group-hover:opacity-100 hover:bg-[var(--app-red-soft)] hover:text-[var(--app-red)] focus-visible:opacity-100"
-            title="Supprimer ce prospect"
-            @click="emit('deleteProspect', prospect)"
-          >
-            <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />
-          </button>
+          <span v-else-if="rowAction === 'delete' && !isLockedForMe(prospect)" class="inline-flex items-center gap-1">
+            <button
+              type="button"
+              class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
+              :aria-label="`Modifier ${prospect.name}`"
+              title="Modifier"
+              @click="emit('editProspect', prospect)"
+            >
+              <UIcon name="i-lucide-square-pen" class="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-red-soft)] hover:text-[var(--app-red)]"
+              :aria-label="`Supprimer ${prospect.name}`"
+              title="Supprimer"
+              @click="emit('deleteProspect', prospect)"
+            >
+              <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />
+            </button>
+          </span>
         </BaseTableTd>
       </BaseTableTr>
     </BaseTable>

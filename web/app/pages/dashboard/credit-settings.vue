@@ -1,7 +1,11 @@
 <template>
   <div>
     <div class="mb-6 flex items-center justify-between">
-      <h1 class="text-xl font-semibold text-[var(--app-ink)]">Paramètres des crédits</h1>
+      <p class="app-label flex items-center gap-2">
+        <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+        Administration
+      </p>
+      <h1 class="app-page-title mt-2">Paramètres des crédits</h1>
     </div>
 
     <div v-if="!isLoading && creditSettings" class="card">

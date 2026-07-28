@@ -1,7 +1,11 @@
 <template>
   <div class="space-y-6">
     <div>
-      <h1 class="text-3xl font-bold text-[var(--app-ink)]">Configuration d'envoi</h1>
+      <p class="app-label flex items-center gap-2">
+        <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+        Prospection
+      </p>
+      <h1 class="app-page-title mt-2">Configuration d'envoi</h1>
       <p class="text-muted mt-2 text-sm">
         Choisissez et configurez la méthode d'envoi de vos emails de prospection : votre domaine (via Resend) ou Gmail.
       </p>

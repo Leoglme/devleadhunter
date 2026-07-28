@@ -9,9 +9,11 @@
         <h1 class="app-page-title mt-2">Mes prospects</h1>
         <p class="mt-1.5 text-sm text-[var(--app-ink-soft)]">Tous vos prospects sauvegardés depuis vos recherches</p>
       </div>
-      <div
-        class="flex w-full flex-col-reverse items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end @2xl:w-auto"
-      >
+      <div class="flex w-full flex-wrap items-center gap-2 sm:gap-3 @2xl:w-auto @2xl:justify-end">
+        <NuxtLink to="/dashboard/search-prospects" class="app-btn-primary h-9 shrink-0 px-4 text-xs whitespace-nowrap">
+          <UIcon name="i-lucide-search" class="h-3.5 w-3.5" />
+          Nouvelle recherche
+        </NuxtLink>
         <div class="flex flex-wrap items-center gap-2 sm:gap-3">
           <button
             :disabled="isLoading"
@@ -79,10 +81,6 @@
             Ajouter manuellement
           </button>
         </div>
-        <NuxtLink to="/dashboard/search-prospects" class="app-btn-primary h-9 w-full shrink-0 px-4 text-xs sm:w-auto">
-          <UIcon name="i-lucide-search" class="h-3.5 w-3.5" />
-          Nouvelle recherche
-        </NuxtLink>
       </div>
     </div>
 
@@ -117,7 +115,7 @@
       </div>
     </div>
 
-    <div class="flex items-center gap-1 border-b border-[var(--app-line)]">
+    <div class="flex flex-wrap items-center gap-1 border-b border-[var(--app-line)]">
       <button
         type="button"
         class="relative cursor-pointer px-4 py-2.5 text-sm font-medium transition-colors"
@@ -154,6 +152,18 @@
           class="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-[var(--app-accent)]"
         ></span>
       </button>
+
+      <p v-if="hasNarrowingFilters" class="ml-auto flex items-center gap-2 pr-1 text-xs text-[var(--app-ink-soft)]">
+        <UIcon name="i-lucide-filter" class="h-3 w-3" />
+        {{ baseFiltered.length }} sur {{ totalProspects }} prospects
+        <button
+          type="button"
+          class="cursor-pointer font-medium underline underline-offset-2 hover:text-[var(--app-ink)]"
+          @click="clearFilters"
+        >
+          Tout afficher
+        </button>
+      </p>
     </div>
 
     <div v-if="isLoading" class="flex items-center justify-center py-16">
@@ -185,6 +195,7 @@
         :prospects="paginatedProspects"
         :selected-prospects="selectedProspects"
         @view-prospect="openDrawer"
+        @edit-prospect="openProspectEditDrawer"
         @delete-prospect="handleDeleteProspect"
         @toggle-select="toggleSelect"
         @toggle-select-all="toggleSelectAll"
@@ -428,6 +439,11 @@ const baseFiltered: ComputedRef<Prospect[]> = computed(() => {
   return filtered
 })
 
+/** Whether the filters hide part of the prospects — the tab counters only cover what is left. */
+const hasNarrowingFilters: ComputedRef<boolean> = computed(
+  (): boolean => baseFiltered.value.length !== prospects.value.length,
+)
+
 const notContactedCount: ComputedRef<number> = computed(
   () => baseFiltered.value.filter((prospect: Prospect) => !prospect.contacted).length,
 )
@@ -562,6 +578,14 @@ async function bulkEnrich(): Promise<void> {
 /** Open the detail drawer for a given prospect. */
 function openDrawer(prospect: Prospect): void {
   drawerStack.push({ kind: 'prospect', prospect })
+}
+
+/**
+ * Open the prospect drawer straight on its edit form.
+ * @param prospect - The prospect to edit.
+ */
+function openProspectEditDrawer(prospect: Prospect): void {
+  drawerStack.push({ kind: 'prospect', prospect, startInEdit: true })
 }
 
 /** Drawer notified 'updated' — patch the local list, or insert a freshly created prospect. */

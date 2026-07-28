@@ -22,7 +22,7 @@
       <button
         v-if="allowCreate"
         type="button"
-        class="app-btn-secondary h-9 shrink-0 px-3 text-xs whitespace-nowrap"
+        class="app-btn-primary h-9 shrink-0 px-3 text-xs whitespace-nowrap"
         @click="emit('create')"
       >
         <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" />

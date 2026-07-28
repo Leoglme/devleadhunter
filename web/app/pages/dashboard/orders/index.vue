@@ -89,10 +89,10 @@
         >
           <BaseTableTd>
             <span class="block text-sm font-semibold text-[var(--app-ink)]">
-              {{ order.business_name || order.customer_email || `#${order.id}` }}
+              {{ order.business_name || order.customer_email || `Commande #${order.id}` }}
             </span>
-            <span v-if="order.customer_email" class="font-label text-xs text-[var(--app-ink-soft)]">
-              {{ order.customer_email }}
+            <span class="font-label text-xs text-[var(--app-ink-soft)]">
+              {{ order.customer_email || 'Sans contact' }}
             </span>
           </BaseTableTd>
 

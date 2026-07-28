@@ -3,6 +3,7 @@
     <UiProspectDrawer
       :open="prospectEntry !== null"
       :prospect="prospectEntry?.prospect ?? null"
+      :start-in-edit="prospectEntry?.startInEdit ?? false"
       :show-back="hasPrevious"
       @close="drawerStack.closeAll()"
       @back="drawerStack.back()"

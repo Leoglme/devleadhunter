@@ -3,7 +3,7 @@
     <div class="mb-8 flex flex-col gap-4 @2xl:flex-row @2xl:items-end @2xl:justify-between">
       <div>
         <p class="text-xs font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">Prospection</p>
-        <h1 class="mt-1 text-2xl font-semibold text-[var(--app-ink)]">Sites démo</h1>
+        <h1 class="app-page-title mt-1">Sites démo</h1>
         <p class="mt-2 max-w-xl text-sm text-[var(--app-ink-soft)]">
           Générez des sites vitrines pour vos prospects — hébergés 14 jours sur demo.dibodev.fr
         </p>
