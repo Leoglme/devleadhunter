@@ -200,7 +200,7 @@ const visibleGroups: ComputedRef<CommandPaletteGroup[]> = computed((): CommandPa
       icon: 'i-lucide-megaphone',
       keywords: 'créer cold email',
       run: (): void => {
-        drawerStack.push({ kind: 'create-campaign' })
+        drawerStack.push({ kind: 'campaign-form', mode: 'create', campaign: null })
       },
     },
     {

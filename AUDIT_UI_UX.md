@@ -39,8 +39,6 @@ Deux causes qui se cumulent : les compteurs comptent le **statut courant** (un e
 
 **11. La cadence affichée ment.** La page campagne montre « 1 email toutes les 20 min → **~72 emails/jour** » alors que ta SendPolicy plafonne à 20/jour, Lun-Ven, 7h-18h. Le chemin legacy `send_delay_minutes` est mis en avant avec un calcul théorique faux en pratique. Afficher la policy effective (« Suit tes réglages d'envoi : max 20/j… ») et reléguer l'espacement en avancé.
 
-**12. « Reprendre » vs « Relancer » côte à côte** en tête de campagne : reprendre la campagne / envoyer une relance ? Les deux verbes sont trop proches. Renommer (« Reprendre l'envoi » / « Relancer les non-répondants ») ou tooltip.
-
 **13. Mise en route : stepper non cliquable, pas de « Passer ».** Pour revoir l'étape Encaissement, il faut réenregistrer les étapes 1-2-3. Rendre cliquables les étapes complétées (elles ont déjà l'état ✓). Le tile 5 « C'est prêt » est aussi visuellement collé au 4 à largeur moyenne.
 
 **14. Choix d'un modèle d'email à l'aveugle.** Dans le wizard comme en campagne : un `<select>` natif de 18 options, et une fois choisi, seul l'objet s'affiche (« Objet : votre fiche »). Le corps n'est visible nulle part au moment du choix. Un bouton « aperçu » à côté du select (réutilisant le drawer de preview existant) suffirait.

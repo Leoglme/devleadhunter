@@ -22,9 +22,15 @@
           </span>
 
           <div class="min-w-0 flex-1">
-            <h2 class="text-base leading-tight font-semibold text-[var(--app-ink)]">Nouvelle campagne</h2>
+            <h2 class="text-base leading-tight font-semibold text-[var(--app-ink)]">
+              {{ isEditing ? 'Modifier la campagne' : 'Nouvelle campagne' }}
+            </h2>
             <p class="mt-0.5 truncate text-[11px] text-[var(--app-ink-soft)]">
-              Séquence de cold email : envoi initial A/B puis relances
+              {{
+                isEditing
+                  ? 'Nom et description — les modèles se règlent dans la configuration'
+                  : 'Séquence de cold email : envoi initial A/B puis relances'
+              }}
             </p>
           </div>
 
@@ -36,11 +42,7 @@
           </button>
         </div>
 
-        <form
-          id="create-campaign-form"
-          class="flex-1 space-y-5 overflow-y-auto px-5 py-4"
-          @submit.prevent="handleCreate"
-        >
+        <form id="campaign-form" class="flex-1 space-y-5 overflow-y-auto px-5 py-4" @submit.prevent="handleSubmit">
           <div>
             <label class="text-muted mb-1.5 block text-xs font-medium" for="campaign-name">Nom de la campagne</label>
             <input
@@ -67,7 +69,7 @@
             ></textarea>
           </div>
 
-          <div class="space-y-3">
+          <div v-if="!isEditing" class="space-y-3">
             <p class="text-muted text-[11px] font-medium tracking-wide uppercase">Modèles d'email</p>
 
             <div>
@@ -111,17 +113,12 @@
         </form>
 
         <div class="flex gap-2 border-t border-[var(--app-line)] px-5 py-4">
-          <button type="button" class="btn-secondary flex-1" :disabled="isCreating" @click="emit('close')">
+          <button type="button" class="btn-secondary flex-1" :disabled="isSaving" @click="emit('close')">
             Annuler
           </button>
-          <button
-            type="submit"
-            form="create-campaign-form"
-            class="btn-primary flex-1 disabled:cursor-not-allowed disabled:opacity-50"
-            :disabled="isCreating"
-          >
-            <UIcon v-if="isCreating" name="i-lucide-loader-circle" class="mr-1.5 h-4 w-4 animate-spin" />
-            {{ isCreating ? 'Création…' : 'Créer la campagne' }}
+          <button type="submit" form="campaign-form" class="btn-primary flex-1" :disabled="isSaving">
+            <UIcon v-if="isSaving" name="i-lucide-loader-circle" class="mr-1.5 h-4 w-4 animate-spin" />
+            {{ submitLabel }}
           </button>
         </div>
       </div>
@@ -131,18 +128,20 @@
 
 <script lang="ts" setup>
 import type { UseToastReturn } from '~/types/Composables'
-import type { CreateCampaignForm, UiCreateCampaignDrawerEmits } from '~/types/UiCreateCampaignDrawer'
-import type { EmitFn, Ref } from 'vue'
-import { ref, watch } from 'vue'
+import type { CampaignForm, UiCampaignDrawerEmits, UiCampaignDrawerProps } from '~/types/UiCampaignDrawer'
+import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { EmailTemplate } from '~/types'
-import type { UiDrawerProps } from '~/types/UiDrawer'
+import type { CampaignDetailResponse } from '~/services/campaignService'
+import type { CampaignFormDrawerMode } from '~/types/DrawerStack'
 import { useCampaignsStore } from '~/stores/campaigns'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import { useToast } from '~/composables/useToast'
+import { CampaignService } from '~/services/campaignService'
 import { EmailTemplatesService } from '~/services/emailTemplatesService'
 
-/** Drawer to create an email campaign. */
-const props: UiDrawerProps = defineProps({
+/** Drawer to create an email campaign, or rename an existing one. */
+const props: UiCampaignDrawerProps = defineProps({
   open: {
     type: Boolean,
     required: true,
@@ -151,16 +150,31 @@ const props: UiDrawerProps = defineProps({
     type: Boolean,
     default: false,
   },
+  mode: {
+    type: String as PropType<CampaignFormDrawerMode>,
+    default: 'create',
+  },
+  campaign: {
+    type: Object as PropType<CampaignDetailResponse | null>,
+    default: null,
+  },
 })
 
-const emit: EmitFn<UiCreateCampaignDrawerEmits> = defineEmits<UiCreateCampaignDrawerEmits>()
+const emit: EmitFn<UiCampaignDrawerEmits> = defineEmits<UiCampaignDrawerEmits>()
 
 const campaignsStore: ReturnType<typeof useCampaignsStore> = useCampaignsStore()
 const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 const toast: UseToastReturn = useToast()
 
-/** Whether the create request is in flight. */
-const isCreating: Ref<boolean> = ref(false)
+/** Whether the create or update request is in flight. */
+const isSaving: Ref<boolean> = ref(false)
+
+const isEditing: ComputedRef<boolean> = computed((): boolean => props.mode === 'edit')
+
+const submitLabel: ComputedRef<string> = computed((): string => {
+  if (isSaving.value) return isEditing.value ? 'Enregistrement…' : 'Création…'
+  return isEditing.value ? 'Enregistrer' : 'Créer la campagne'
+})
 
 /** Whether the template list is being fetched. */
 const isLoadingTemplates: Ref<boolean> = ref(false)
@@ -171,8 +185,8 @@ const templates: Ref<EmailTemplate[]> = ref([])
 /** Which template slot triggered the last "Créer un modèle" click. */
 const pendingTemplateSlot: Ref<'a' | 'b' | null> = ref(null)
 
-/** Campaign creation form state. */
-const form: Ref<CreateCampaignForm> = ref({
+/** Campaign form state. */
+const form: Ref<CampaignForm> = ref({
   name: '',
   description: '',
   templateIdA: 0,
@@ -212,12 +226,21 @@ function openCreateTemplate(slot: 'a' | 'b'): void {
 }
 
 /**
- * Create the campaign then close the drawer (the store prepends it to the list).
- * @returns A promise resolved once the campaign is created.
+ * Create or rename the campaign, then hand back to the host.
+ * @returns A promise resolved once the campaign is saved.
  */
-async function handleCreate(): Promise<void> {
-  isCreating.value = true
+async function handleSubmit(): Promise<void> {
+  isSaving.value = true
   try {
+    if (isEditing.value && props.campaign) {
+      await CampaignService.update(props.campaign.id, {
+        name: form.value.name.trim(),
+        description: form.value.description.trim() || undefined,
+      })
+      toast.success('Campagne mise à jour')
+      emit('saved')
+      return
+    }
     await campaignsStore.createCampaign({
       name: form.value.name.trim(),
       description: form.value.description.trim() || undefined,
@@ -228,9 +251,9 @@ async function handleCreate(): Promise<void> {
     toast.success('Campagne créée avec succès')
     emit('close')
   } catch {
-    toast.error('Erreur lors de la création de la campagne')
+    toast.error(isEditing.value ? 'Erreur lors de la mise à jour' : 'Erreur lors de la création de la campagne')
   } finally {
-    isCreating.value = false
+    isSaving.value = false
   }
 }
 
@@ -242,11 +265,15 @@ watch(
       stackLengthWhenHidden = drawerStack.stack.length
       return
     }
-    if (stackLengthWhenHidden === 0) {
-      form.value = { name: '', description: '', templateIdA: 0, templateIdB: 0 }
-      pendingTemplateSlot.value = null
-      void loadTemplates()
+    if (stackLengthWhenHidden !== 0) return
+    form.value = {
+      name: props.campaign?.name ?? '',
+      description: props.campaign?.description ?? '',
+      templateIdA: 0,
+      templateIdB: 0,
     }
+    pendingTemplateSlot.value = null
+    if (!isEditing.value) void loadTemplates()
   },
 )
 

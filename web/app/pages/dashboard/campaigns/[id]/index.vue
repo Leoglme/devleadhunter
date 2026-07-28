@@ -60,7 +60,7 @@
           <button
             class="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--app-line)] text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface)] hover:text-[var(--app-ink)]"
             title="Modifier"
-            @click="openEditModal"
+            @click="openEditDrawer"
           >
             <UIcon name="i-lucide-pencil" class="h-4 w-4" />
           </button>
@@ -513,41 +513,6 @@
     </template>
 
     <div
-      v-if="showEditModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-[var(--app-overlay)] backdrop-blur-sm"
-      @click.self="showEditModal = false"
-    >
-      <div class="w-full max-w-md rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-6">
-        <h2 class="mb-4 text-base font-semibold text-[var(--app-ink)]">Modifier la campagne</h2>
-        <form class="space-y-3" @submit.prevent="handleUpdateCampaign">
-          <div>
-            <label class="text-muted mb-1.5 block text-xs font-medium">Nom</label>
-            <input
-              v-model="editForm.name"
-              type="text"
-              required
-              class="input-field"
-              placeholder="Plombiers Rennes — vague de juillet"
-            />
-          </div>
-          <div>
-            <label class="text-muted mb-1.5 block text-xs font-medium">Description</label>
-            <textarea
-              v-model="editForm.description"
-              class="input-field"
-              rows="3"
-              placeholder="Objectif, angle des emails, notes internes…"
-            />
-          </div>
-          <div class="flex gap-3 pt-2">
-            <button type="button" class="btn-secondary flex-1" @click="showEditModal = false">Annuler</button>
-            <button type="submit" class="btn-primary flex-1">Enregistrer</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <div
       v-if="showAddProspectsModal"
       class="fixed inset-0 z-50 flex items-center justify-center bg-[var(--app-overlay)] backdrop-blur-sm"
       @click.self="showAddProspectsModal = false"
@@ -688,15 +653,12 @@ const templates: Ref<TemplateOption[]> = ref([])
 const isLoading: Ref<boolean> = ref(false)
 const isSavingSettings: Ref<boolean> = ref(false)
 const activeTab: Ref<string> = ref('config')
-const showEditModal: Ref<boolean> = ref(false)
 const showAddProspectsModal: Ref<boolean> = ref(false)
 const selectedProspectIds: Ref<number[]> = ref([])
 const campaignSelectedProspects: Ref<string[]> = ref([])
 const prospectToRemoveId: Ref<number | null> = ref(null)
 const removeProspectModal: Ref<{ open: () => void } | null> = ref(null)
 const confirmDeleteModal: Ref<{ open: () => void } | null> = ref(null)
-
-const editForm: Ref<{ name: string; description: string }> = ref({ name: '', description: '' })
 
 const settingsForm: Ref<{
   template_id: number
@@ -982,20 +944,6 @@ async function handleResume(): Promise<void> {
 /**
  * Update campaign name/description.
  */
-async function handleUpdateCampaign(): Promise<void> {
-  try {
-    const updated: CampaignDetailResponse = await CampaignService.update(campaignId.value, {
-      name: editForm.value.name,
-      description: editForm.value.description,
-    })
-    if (campaign.value) campaign.value = { ...campaign.value, ...updated }
-    showEditModal.value = false
-    toast.success('Campagne mise à jour')
-  } catch {
-    toast.error('Erreur lors de la mise à jour')
-  }
-}
-
 /**
  * Permanently delete the campaign.
  */
@@ -1097,13 +1045,10 @@ function toggleProspect(id: number): void {
   else selectedProspectIds.value.push(id)
 }
 
-/**
- * Open the edit modal pre-filled with current values.
- */
-function openEditModal(): void {
+/** Open the campaign drawer in edit mode, on the persistent stack. */
+function openEditDrawer(): void {
   if (!campaign.value) return
-  editForm.value = { name: campaign.value.name, description: campaign.value.description ?? '' }
-  showEditModal.value = true
+  drawerStack.push({ kind: 'campaign-form', mode: 'edit', campaign: campaign.value })
 }
 
 /** Append an empty follow-up slot. */
@@ -1126,4 +1071,7 @@ onMounted((): void => {
 watch(activeTab, (tab: string): void => {
   if (tab === 'queue') loadQueue()
 })
+
+// La campagne vient d'être renommée depuis son drawer.
+watch((): number => drawerStack.campaignsRefreshCounter, loadAll)
 </script>

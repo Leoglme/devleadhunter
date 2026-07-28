@@ -686,7 +686,12 @@ watch(
   (): number => drawerStack.prospectMutationCounter,
   (): void => {
     const mutation: ProspectMutationNotice | null = drawerStack.lastProspectMutation
-    if (mutation) handleProspectUpdated(mutation.prospect)
+    if (!mutation) return
+    if (mutation.type === 'deleted') {
+      handleProspectDeleted(mutation.prospectId)
+      return
+    }
+    handleProspectUpdated(mutation.prospect)
   },
 )
 

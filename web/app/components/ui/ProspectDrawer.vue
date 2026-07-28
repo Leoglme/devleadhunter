@@ -48,12 +48,33 @@
             </div>
           </div>
 
-          <button
-            class="flex h-7 w-7 shrink-0 items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
-            @click="$emit('close')"
-          >
-            <UIcon name="i-lucide-x" class="h-4 w-4" />
-          </button>
+          <div class="flex shrink-0 items-center gap-0.5">
+            <button
+              v-if="!editMode"
+              class="flex h-7 w-7 items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
+              title="Modifier ce prospect"
+              aria-label="Modifier ce prospect"
+              @click="startEdit"
+            >
+              <UIcon name="i-lucide-square-pen" class="h-4 w-4" />
+            </button>
+            <button
+              v-if="!editMode"
+              class="flex h-7 w-7 items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-red-soft)] hover:text-[var(--app-red)]"
+              title="Supprimer ce prospect"
+              aria-label="Supprimer ce prospect"
+              @click="deleteConfirmModal?.open()"
+            >
+              <UIcon name="i-lucide-trash-2" class="h-4 w-4" />
+            </button>
+            <button
+              class="flex h-7 w-7 items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
+              aria-label="Fermer"
+              @click="$emit('close')"
+            >
+              <UIcon name="i-lucide-x" class="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         <div class="flex-1 overflow-y-auto">
@@ -147,6 +168,26 @@
                 >
                   <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5" />
                 </a>
+              </div>
+
+              <div class="flex items-center gap-3">
+                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--app-surface-2)]">
+                  <UIcon
+                    :name="prospect.contacted ? 'i-lucide-circle-check-big' : 'i-lucide-circle-dashed'"
+                    :class="['h-4 w-4', prospect.contacted ? 'text-[var(--app-green)]' : 'text-[var(--app-ink-soft)]']"
+                  />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-[10px] text-[var(--app-ink-soft)]">Contacté</p>
+                  <p class="text-sm font-medium text-[var(--app-ink)]">
+                    {{ prospect.contacted ? 'Oui' : 'Pas encore' }}
+                  </p>
+                </div>
+                <UiSwitch
+                  id="prospect-contacted"
+                  :model-value="prospect.contacted"
+                  @update:model-value="$emit('toggleContacted', prospect)"
+                />
               </div>
 
               <div class="flex items-center gap-3">
@@ -289,7 +330,16 @@
 
             <div class="border-t border-[var(--app-surface-2)]"></div>
 
+            <div v-if="!isLoadingDemoSite && !demoSite" class="space-y-2 px-5 py-4">
+              <p class="text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">
+                Comportement démo
+              </p>
+              <p class="text-xs leading-relaxed text-[var(--app-ink-soft)]">
+                Aucun site démo pour ce prospect — générez-en un pour suivre ses visites et préparer une relance.
+              </p>
+            </div>
             <UiProspectBehavior
+              v-else
               :prospect-id="prospect.id"
               :prospect-email="prospect.email ?? null"
               :prospect-name="prospect.name"
@@ -353,28 +403,25 @@
 
         <div class="border-t border-[var(--app-line)] px-5 py-4">
           <div v-if="!editMode" class="space-y-2">
-            <button
-              class="btn-secondary w-full"
-              :class="prospect.contacted ? 'text-[var(--app-green)]' : ''"
-              :title="prospect.contacted ? 'Marquer comme pas contacté' : 'Marquer comme contacté'"
-              @click="$emit('toggleContacted', prospect)"
-            >
-              <UIcon
-                :name="prospect.contacted ? 'i-lucide-circle-check-big' : 'i-lucide-circle'"
-                class="mr-1.5 h-4 w-4"
-              />
-              {{ prospect.contacted ? 'Contacté' : 'Marquer comme contacté' }}
-            </button>
             <div class="flex gap-2">
               <button v-if="prospect.email" class="btn-secondary flex-1" @click="$emit('sendEmail', prospect)">
                 <UIcon name="i-lucide-mail" class="mr-1.5 h-4 w-4" />Email
               </button>
-              <button class="btn-secondary flex-1" @click="startEdit">
-                <UIcon name="i-lucide-square-pen" class="mr-1.5 h-4 w-4" />Modifier
+              <button class="btn-secondary flex-1" @click="$emit('markAsSold', prospect)">
+                <UIcon name="i-lucide-shopping-cart" class="mr-1.5 h-4 w-4" />Marquer comme vendu
               </button>
             </div>
-            <button class="btn-primary w-full" @click="$emit('markAsSold', prospect)">
-              <UIcon name="i-lucide-shopping-cart" class="mr-1.5 h-4 w-4" />Marquer comme vendu
+            <a
+              v-if="demoSite?.demo_url"
+              :href="demoSite.demo_url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn-primary w-full"
+            >
+              <UIcon name="i-lucide-external-link" class="mr-1.5 h-4 w-4" />Ouvrir la démo
+            </a>
+            <button v-else class="btn-primary w-full" :disabled="isLoadingDemoSite" @click="generateDemoSite">
+              <UIcon name="i-lucide-wand-sparkles" class="mr-1.5 h-4 w-4" />Générer un site démo
             </button>
           </div>
 
@@ -388,6 +435,15 @@
         </div>
       </div>
     </Transition>
+
+    <UiConfirmModal
+      ref="deleteConfirmModal"
+      title="Supprimer le prospect"
+      :message="deleteMessage"
+      confirm-text="Supprimer"
+      cancel-text="Annuler"
+      @confirm="handleDelete"
+    />
   </Teleport>
 </template>
 
@@ -403,6 +459,8 @@ import type {
 import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
 import { ref, computed, watch } from 'vue'
 import type { Prospect, ProspectUpdatePayload } from '~/types'
+import type { DemoSite, DemoSiteListResponse } from '~/services/demoSiteService'
+import { DemoSiteService } from '~/services/demoSiteService'
 import { ProspectsService } from '~/services/prospectsService'
 import { useToast } from '~/composables/useToast'
 import { useUserStore } from '~/stores/user'
@@ -432,6 +490,13 @@ const editMode: Ref<boolean> = ref(false)
 const isSaving: Ref<boolean> = ref(false)
 const isReserving: Ref<boolean> = ref(false)
 const isAuditing: Ref<boolean> = ref(false)
+const isLoadingDemoSite: Ref<boolean> = ref(false)
+const demoSite: Ref<DemoSite | null> = ref(null)
+const deleteConfirmModal: Ref<{ open: () => void } | null> = ref(null)
+
+const deleteMessage: ComputedRef<string> = computed(
+  (): string => `Supprimer « ${props.prospect?.name ?? ''} » ? Cette action est irréversible.`,
+)
 
 /** Current user id (0 while the store hydrates). */
 const currentUserId: ComputedRef<number> = computed((): number => userStore.user?.id ?? 0)
@@ -469,6 +534,46 @@ const lighthouseGauges: ComputedRef<LighthouseGauge[]> = computed((): Lighthouse
     return { label, score, color: colorOf(score) }
   })
 })
+
+/**
+ * Find the demo site already generated for this prospect, if any.
+ * @returns A promise resolved once the lookup completes.
+ */
+async function loadDemoSite(): Promise<void> {
+  if (!props.prospect) return
+  isLoadingDemoSite.value = true
+  demoSite.value = null
+  try {
+    const response: DemoSiteListResponse = await DemoSiteService.listDemoSites()
+    demoSite.value = response.items.find((site: DemoSite): boolean => site.prospect_id === props.prospect?.id) ?? null
+  } catch {
+    // Non-critical — the footer falls back to the generation call to action.
+  } finally {
+    isLoadingDemoSite.value = false
+  }
+}
+
+/** Open the creation tunnel in site mode, prefilled with this prospect. */
+function generateDemoSite(): void {
+  if (!props.prospect) return
+  void navigateTo({ path: '/dashboard/demo-sites/create', query: { prospect: String(props.prospect.id) } })
+}
+
+/**
+ * Delete the prospect once confirmed, then let the host close the stack.
+ * @returns A promise resolved once deleted.
+ */
+async function handleDelete(): Promise<void> {
+  if (!props.prospect) return
+  const { id, name }: Prospect = props.prospect
+  try {
+    await ProspectsService.deleteProspect(id)
+    toast.success(`« ${name} » supprimé`)
+    emit('deleted', id)
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression')
+  }
+}
 
 /**
  * Reserve the prospect for the current user (locks it for other members).
@@ -542,8 +647,11 @@ watch(
       setTimeout(() => {
         editMode.value = false
       }, 250)
+      return
     }
+    void loadDemoSite()
   },
+  { immediate: true },
 )
 
 /** Confidence indicator dot colour */

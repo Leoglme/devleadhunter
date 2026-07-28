@@ -1,6 +1,7 @@
 import type { EmailLog, EmailTemplate, Prospect, User } from '~/types'
 import type { Order } from '~/services/ordersService'
 import type { SearchProspectsPrefill } from '~/types/SearchProspectsDrawer'
+import type { CampaignDetailResponse } from '~/services/campaignService'
 
 /**
  * Entries of the persistent right-side drawer stack.
@@ -57,8 +58,12 @@ export type OrganizationDrawerEntry = {
   kind: 'organization'
 }
 
-export type CreateCampaignDrawerEntry = {
-  kind: 'create-campaign'
+export type CampaignFormDrawerMode = 'create' | 'edit'
+
+export type CampaignFormDrawerEntry = {
+  kind: 'campaign-form'
+  mode: CampaignFormDrawerMode
+  campaign: CampaignDetailResponse | null
 }
 
 export type AddProspectDrawerEntry = {
@@ -120,7 +125,7 @@ export type DrawerStackEntry =
   | EmailSignaturesDrawerEntry
   | ProfileDrawerEntry
   | OrganizationDrawerEntry
-  | CreateCampaignDrawerEntry
+  | CampaignFormDrawerEntry
   | AddProspectDrawerEntry
   | SearchProspectsDrawerEntry
   | SendPolicyDrawerEntry
@@ -131,7 +136,7 @@ export type DrawerStackEntry =
   | UserFormDrawerEntry
 
 /** Cross-page notice describing the latest prospect mutation done from a drawer. */
-export type ProspectMutationNotice = { type: 'updated'; prospect: Prospect }
+export type ProspectMutationNotice = { type: 'updated'; prospect: Prospect } | { type: 'deleted'; prospectId: number }
 
 /** Cross-page notice describing the latest order mutation done from a drawer. */
 export type OrderMutationNotice = { type: 'updated'; order: Order } | { type: 'deleted'; orderId: number }

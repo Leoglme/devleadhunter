@@ -58,6 +58,7 @@ export type DemoSiteUpdatePayload = {
 export type DemoSite = {
   id: number
   slug: string
+  prospect_id?: number | null
   template_id: string
   business_name: string
   phone?: string | null

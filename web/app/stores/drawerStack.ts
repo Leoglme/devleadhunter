@@ -29,6 +29,7 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
   const emailLogsRefreshCounter: Ref<number> = ref(0)
   const emailTemplatesRefreshCounter: Ref<number> = ref(0)
   const usersRefreshCounter: Ref<number> = ref(0)
+  const campaignsRefreshCounter: Ref<number> = ref(0)
 
   // Getters
   const topEntry: ComputedRef<DrawerStackEntry | null> = computed(
@@ -125,9 +126,30 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     emailTemplatesRefreshCounter.value++
   }
 
+  /**
+   * Broadcast a prospect deletion: drop matching stacked entries and notify
+   * pages watching `prospectMutationCounter`.
+   * @param prospectId - Identifier of the deleted prospect.
+   */
+  function notifyProspectDeleted(prospectId: number): void {
+    stack.value = stack.value.filter((entry: DrawerStackEntry): boolean => {
+      const isSameProspect: boolean =
+        (entry.kind === 'prospect' && entry.prospect.id === prospectId) ||
+        (entry.kind === 'send-email' && entry.prospect?.id === prospectId)
+      return !isSameProspect
+    })
+    lastProspectMutation.value = { type: 'deleted', prospectId }
+    prospectMutationCounter.value++
+  }
+
   /** Signal that users changed (created or edited from a drawer). */
   function bumpUsersRefresh(): void {
     usersRefreshCounter.value++
+  }
+
+  /** Signal that campaigns changed (created or edited from a drawer). */
+  function bumpCampaignsRefresh(): void {
+    campaignsRefreshCounter.value++
   }
 
   // Persister chaque mutation de la pile (F5 ne ferme plus les drawers).
@@ -154,16 +176,19 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     emailLogsRefreshCounter,
     emailTemplatesRefreshCounter,
     usersRefreshCounter,
+    campaignsRefreshCounter,
     topEntry,
     hasPrevious,
     push,
     back,
     closeAll,
     notifyProspectUpdated,
+    notifyProspectDeleted,
     notifyOrderUpdated,
     notifyOrderDeleted,
     bumpEmailLogsRefresh,
     bumpEmailTemplatesRefresh,
     bumpUsersRefresh,
+    bumpCampaignsRefresh,
   }
 })

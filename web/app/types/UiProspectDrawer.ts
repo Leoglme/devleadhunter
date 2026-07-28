@@ -26,6 +26,7 @@ export type UiProspectDrawerEmits = {
   close: []
   back: []
   updated: [prospect: Prospect]
+  deleted: [prospectId: number]
   sendEmail: [prospect: Prospect]
   markAsSold: [prospect: Prospect]
   toggleContacted: [prospect: Prospect]

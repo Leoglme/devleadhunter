@@ -7,6 +7,7 @@
       @close="drawerStack.closeAll()"
       @back="drawerStack.back()"
       @updated="handleProspectUpdated"
+      @deleted="handleProspectDeleted"
       @send-email="handleSendEmail"
       @mark-as-sold="handleMarkAsSold"
       @toggle-contacted="handleToggleContacted"
@@ -64,11 +65,14 @@
       @back="drawerStack.back()"
     />
 
-    <UiCreateCampaignDrawer
-      :open="createCampaignEntry !== null"
+    <UiCampaignDrawer
+      :open="campaignFormEntry !== null"
+      :mode="campaignFormEntry?.mode ?? 'create'"
+      :campaign="campaignFormEntry?.campaign ?? null"
       :show-back="hasPrevious"
       @close="drawerStack.closeAll()"
       @back="drawerStack.back()"
+      @saved="handleCampaignSaved"
     />
 
     <UiAddProspectDrawer
@@ -148,7 +152,7 @@ import type {
   AddProspectDrawerEntry,
   CoverageFiltersDrawerEntry,
   CoverageProspectsDrawerEntry,
-  CreateCampaignDrawerEntry,
+  CampaignFormDrawerEntry,
   EmailLogDrawerEntry,
   EmailSignaturesDrawerEntry,
   EmailTemplateDrawerEntry,
@@ -213,12 +217,20 @@ const organizationEntry: ComputedRef<OrganizationDrawerEntry | null> = computed(
   return drawerStack.topEntry?.kind === 'organization' ? drawerStack.topEntry : null
 })
 
-/** Top entry narrowed to the campaign creation drawer. */
-const createCampaignEntry: ComputedRef<CreateCampaignDrawerEntry | null> = computed(
-  (): CreateCampaignDrawerEntry | null => {
-    return drawerStack.topEntry?.kind === 'create-campaign' ? drawerStack.topEntry : null
-  },
-)
+/** Top entry narrowed to the campaign create/edit drawer. */
+const campaignFormEntry: ComputedRef<CampaignFormDrawerEntry | null> = computed((): CampaignFormDrawerEntry | null => {
+  return drawerStack.topEntry?.kind === 'campaign-form' ? drawerStack.topEntry : null
+})
+
+/** Campaign renamed from its drawer — refresh the page behind, then leave the stack. */
+function handleCampaignSaved(): void {
+  drawerStack.bumpCampaignsRefresh()
+  if (drawerStack.hasPrevious) {
+    drawerStack.back()
+  } else {
+    drawerStack.closeAll()
+  }
+}
 
 /** Top entry narrowed to the manual prospect creation drawer. */
 const addProspectEntry: ComputedRef<AddProspectDrawerEntry | null> = computed((): AddProspectDrawerEntry | null => {
@@ -310,6 +322,14 @@ const hasPrevious: ComputedRef<boolean> = computed((): boolean => drawerStack.ha
  */
 function handleProspectUpdated(updated: Prospect): void {
   drawerStack.notifyProspectUpdated(updated)
+}
+
+/**
+ * Prospect deleted from its drawer — drop it from the stack and notify pages.
+ * @param prospectId - Identifier of the deleted prospect.
+ */
+function handleProspectDeleted(prospectId: number): void {
+  drawerStack.notifyProspectDeleted(prospectId)
 }
 
 /**

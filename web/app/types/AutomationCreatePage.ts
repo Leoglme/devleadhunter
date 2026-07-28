@@ -19,6 +19,16 @@ export type AutomationOriginLink = {
 export type AutomationRecapRow = {
   label: string
   value: string
+  icon: string
+  detail?: string
+}
+
+/** Tunnel state persisted in sessionStorage so leaving the page loses nothing. */
+export type AutomationDraft = {
+  form: TunnelForm
+  selectedProspectIds: string[]
+  currentStep: number
+  hasPickedTemplate: boolean
 }
 
 export type TunnelForm = {

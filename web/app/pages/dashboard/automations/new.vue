@@ -1,13 +1,14 @@
 <template>
   <div>
     <div class="mb-5">
-      <NuxtLink
-        :to="originLink.to"
-        class="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--app-ink-soft)] transition-colors hover:text-[var(--app-ink)]"
+      <button
+        type="button"
+        class="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-[var(--app-ink-soft)] transition-colors hover:text-[var(--app-ink)]"
+        @click="leaveTunnel"
       >
         <UIcon name="i-lucide-arrow-left" class="h-3.5 w-3.5" />
         {{ originLink.label }}
-      </NuxtLink>
+      </button>
       <h1 class="app-page-title mt-3">{{ isSiteMode ? 'Créer des sites démo' : 'Créer une automatisation' }}</h1>
     </div>
 
@@ -249,28 +250,48 @@
       </div>
 
       <div v-else key="step-launch" class="wizard-step app-card space-y-5 p-5 md:p-6">
-        <div>
-          <h2 class="text-base font-semibold text-[var(--app-ink)]">Récapitulatif</h2>
-          <p class="mt-1 text-sm text-[var(--app-ink-soft)]">
-            {{ isSiteMode ? 'Vérifiez puis lancez la génération.' : "Vérifiez puis lancez l'automatisation." }}
+        <div class="recap-reveal flex flex-col items-center pt-2 text-center" style="--recap-order: 0">
+          <span
+            class="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]"
+          >
+            <UIcon name="i-lucide-rocket" class="h-6 w-6" />
+          </span>
+          <h2 class="font-display mt-4 text-xl font-semibold text-[var(--app-ink)]">Tout est prêt</h2>
+          <p class="mt-1.5 max-w-sm text-sm leading-relaxed text-[var(--app-ink-soft)]">
+            {{
+              isSiteMode
+                ? 'Un dernier coup d’œil, puis la machine génère les sites.'
+                : 'Un dernier coup d’œil, puis la machine prend le relais.'
+            }}
           </p>
         </div>
+
         <dl class="grid gap-3 @sm:grid-cols-2">
           <div
-            v-for="entry in recapItems"
+            v-for="(entry, index) in recapItems"
             :key="entry.label"
-            class="rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-3.5"
+            class="recap-reveal rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-3.5"
+            :style="{ '--recap-order': index + 1 }"
           >
-            <dt class="app-label">{{ entry.label }}</dt>
-            <dd class="mt-1 text-sm font-medium text-[var(--app-ink)]">{{ entry.value || '—' }}</dd>
+            <dt class="app-label flex items-center gap-1.5">
+              <UIcon :name="entry.icon" class="h-3 w-3 text-[var(--app-accent-ink)]" />
+              {{ entry.label }}
+            </dt>
+            <dd class="mt-1.5 text-sm font-medium text-[var(--app-ink)]">{{ entry.value }}</dd>
+            <dd v-if="entry.detail" class="mt-1 text-xs leading-relaxed text-[var(--app-ink-soft)]">
+              {{ entry.detail }}
+            </dd>
           </div>
         </dl>
+
         <p
           v-if="form.mode === 'semi_auto'"
-          class="flex items-start gap-2 rounded-xl border border-[var(--app-blue)] bg-[var(--app-blue-soft)] p-3.5 text-xs text-[var(--app-ink)]"
+          class="recap-reveal flex items-start gap-2 rounded-xl border border-[var(--app-blue)] bg-[var(--app-blue-soft)] p-3.5 text-xs text-[var(--app-ink)]"
+          :style="{ '--recap-order': recapItems.length + 1 }"
         >
           <UIcon name="i-lucide-clipboard-check" class="mt-0.5 h-4 w-4 shrink-0 text-[var(--app-blue)]" />
-          La machine génère les sites puis <strong class="mx-1">s'arrête pour ta validation</strong> avant tout envoi.
+          La machine génère les sites puis <strong class="mx-1">s'arrête pour votre validation</strong> avant tout
+          envoi.
         </p>
       </div>
 
@@ -305,21 +326,33 @@
         </button>
       </div>
     </div>
+
+    <UiConfirmModal
+      ref="leaveConfirmModal"
+      title="Quitter le tunnel ?"
+      message="Votre configuration est enregistrée : vous la retrouverez en revenant. Quitter maintenant ?"
+      confirm-text="Quitter"
+      cancel-text="Rester"
+      @confirm="discardDraftAndLeave"
+    />
   </div>
 </template>
 
 <script lang="ts" setup>
 import type { LocationQueryValue } from 'vue-router'
 import type { EmailTemplate } from '~/types/index'
-import type { AutomationDetail } from '~/types/Automation'
+import type { AutomationDetail, SendPolicy } from '~/types/Automation'
 import type { UseDashboardScrollReturn, UseToastReturn } from '~/types/Composables'
 import type {
+  AutomationDraft,
   AutomationOriginLink,
   AutomationRecapRow,
   AutomationStepDefinition,
   AutomationStepKey,
   TunnelForm,
 } from '~/types/AutomationCreatePage'
+import { SEND_POLICY_DAY_LABELS } from '~/constants/sendPolicyDayLabels'
+import { SendPolicyService } from '~/services/sendPolicyService'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import type { Prospect } from '~/types'
@@ -357,10 +390,19 @@ const ALL_STEPS: AutomationStepDefinition[] = [
   { key: 'launch', label: 'Lancer', hint: 'Vérifier & démarrer' },
 ]
 
+/** sessionStorage key holding the tunnel draft, so leaving the page loses nothing. */
+const TUNNEL_DRAFT_STORAGE_KEY: string = 'dlh-automation-draft'
+
+/** How many prospects are named in the recap before it falls back to a count. */
+const NAMED_PROSPECTS_IN_RECAP: number = 3
+
 /** Current step (1-based position among the visible steps). */
 const currentStep: Ref<number> = ref(1)
 /** Whether the user picked a template himself — stops the recommended default from overriding him. */
 const hasPickedTemplate: Ref<boolean> = ref(false)
+/** The user's effective sending cadence, shown in the recap. */
+const sendPolicy: Ref<SendPolicy | null> = ref(null)
+const leaveConfirmModal: Ref<{ open: () => void } | null> = ref(null)
 /** Whether the create request is in flight. */
 const isCreating: Ref<boolean> = ref(false)
 /** Whether prospects are loading. */
@@ -496,19 +538,99 @@ const selectedTemplateName: ComputedRef<string> = computed(
     templates.value.find((t: DemoSiteTemplate): boolean => t.id === form.value.templateId)?.name ?? 'Par défaut',
 )
 
-/** Recap rows. */
+/** The cadence that will actually apply, read from the user's send policy. */
+const sendPolicySummary: ComputedRef<string> = computed((): string => {
+  const policy: SendPolicy | null = sendPolicy.value
+  if (!policy) return 'Selon vos réglages d’envoi'
+  const days: string = policy.days_of_week
+    .map((day: number): string => SEND_POLICY_DAY_LABELS[day] ?? '')
+    .filter(Boolean)
+    .join(', ')
+  return `${policy.daily_cap}/jour · ${policy.window_start_hour}h-${policy.window_end_hour}h · ${days}`
+})
+
+/** Prospects picked in step 1, resolved to their full record. */
+const selectedProspects: ComputedRef<Prospect[]> = computed((): Prospect[] => {
+  const picked: Set<string> = new Set<string>(selectedProspectIds.value)
+  return prospects.value.filter((prospect: Prospect): boolean => picked.has(String(prospect.id)))
+})
+
+/** The targeted prospects, named — truncated once the list gets long. */
+const targetDetail: ComputedRef<string> = computed((): string => {
+  if (form.value.mode === 'full_auto') return 'La machine pioche elle-même dans vos prospects non-utilisés.'
+  const names: string[] = selectedProspects.value.map((prospect: Prospect): string => prospect.name)
+  if (names.length === 0) return ''
+  if (names.length <= NAMED_PROSPECTS_IN_RECAP) return names.join(', ')
+  const shown: string[] = names.slice(0, NAMED_PROSPECTS_IN_RECAP)
+  return `${shown.join(', ')} et ${names.length - shown.length} autre(s)`
+})
+
+/**
+ * Name of an email template picked in step 3.
+ * @param templateId - Identifier held by the form, 0 when none is picked.
+ * @returns The template name, or an empty string.
+ */
+function emailTemplateName(templateId: number): string {
+  return emailTemplates.value.find((template: TemplateSelectOption): boolean => template.id === templateId)?.name ?? ''
+}
+
+/** The A/B templates actually chosen, spelled out. */
+const outreachDetail: ComputedRef<string> = computed((): string => {
+  if (!form.value.autoCampaign) return 'Aucun email ne partira — les sites sont générés puis la machine s’arrête.'
+  const names: string[] = [emailTemplateName(form.value.emailA), emailTemplateName(form.value.emailB)].filter(Boolean)
+  return names.length > 1 ? `A : ${names[0]} · B : ${names[1]}` : (names[0] ?? '')
+})
+
 const recapItems: ComputedRef<AutomationRecapRow[]> = computed((): AutomationRecapRow[] => {
-  const target: string =
-    form.value.mode === 'full_auto'
-      ? `${form.value.metiers || '—'} · ${form.value.villes || '—'} · ${form.value.targetDays} j`
-      : `${selectedProspectIds.value.length} prospect(s)`
-  return [
-    { label: 'Nom', value: form.value.name },
-    { label: 'Mode', value: form.value.mode === 'full_auto' ? 'Full-auto' : 'Semi-auto' },
-    { label: 'Cible', value: target },
-    { label: 'Template', value: selectedTemplateName.value },
-    { label: 'Démarchage', value: form.value.autoCampaign ? (form.value.emailB ? 'A/B' : 'Modèle A') : 'Sites seuls' },
+  const rows: AutomationRecapRow[] = [
+    {
+      label: 'Nom',
+      value: resolvedName(),
+      icon: 'i-lucide-tag',
+      detail: form.value.name.trim() ? undefined : 'Nom généré automatiquement.',
+    },
+    {
+      label: 'Cible',
+      value:
+        form.value.mode === 'full_auto'
+          ? `${form.value.metiers || '—'} · ${form.value.villes || '—'}`
+          : `${selectedProspectIds.value.length} prospect(s)`,
+      icon: 'i-lucide-users',
+      detail: targetDetail.value,
+    },
+    {
+      label: 'Mode',
+      value: form.value.mode === 'full_auto' ? 'Full-auto' : 'Semi-auto',
+      icon: form.value.mode === 'full_auto' ? 'i-lucide-bot' : 'i-lucide-hand',
+      detail:
+        form.value.mode === 'full_auto'
+          ? `Objectif de ${form.value.targetDays} jours de démarchage.`
+          : 'Vous validez avant tout envoi.',
+    },
+    {
+      label: 'Site',
+      value: selectedTemplateName.value,
+      icon: 'i-lucide-app-window',
+      detail: 'Modifiable prospect par prospect à la validation.',
+    },
   ]
+
+  if (!isSiteMode.value) {
+    rows.push({
+      label: 'Démarchage',
+      value: form.value.autoCampaign ? (form.value.emailB ? 'Test A/B' : 'Modèle unique') : 'Sites seuls',
+      icon: 'i-lucide-send',
+      detail: outreachDetail.value,
+    })
+    rows.push({
+      label: 'Cadence',
+      value: sendPolicySummary.value,
+      icon: 'i-lucide-timer',
+      detail: 'Réglable dans vos paramètres d’envoi.',
+    })
+  }
+
+  return rows
 })
 
 /** Whether the current step can advance. */
@@ -520,6 +642,14 @@ const canContinue: ComputedRef<boolean> = computed((): boolean => {
   if (activeStepKey.value === 'emails' && form.value.autoCampaign) return form.value.emailA > 0
   return true
 })
+
+/** Whether the tunnel holds enough choices to be worth warning about before leaving. */
+const hasMeaningfulDraft: ComputedRef<boolean> = computed(
+  (): boolean =>
+    currentStep.value > 1 ||
+    selectedProspectIds.value.length > 0 ||
+    Boolean(form.value.name.trim() || form.value.metiers.trim() || form.value.villes.trim()),
+)
 
 /** Whether the automatisation can be launched. */
 const canLaunch: ComputedRef<boolean> = computed((): boolean => {
@@ -547,6 +677,58 @@ function segmentClass(active: boolean): string {
 function goToStep(step: number): void {
   currentStep.value = step
   scrollToTop()
+}
+
+/** Persist the tunnel state so leaving the page never loses the configuration. */
+function saveDraft(): void {
+  if (!import.meta.client) return
+  const draft: AutomationDraft = {
+    form: form.value,
+    selectedProspectIds: selectedProspectIds.value,
+    currentStep: currentStep.value,
+    hasPickedTemplate: hasPickedTemplate.value,
+  }
+  try {
+    sessionStorage.setItem(TUNNEL_DRAFT_STORAGE_KEY, JSON.stringify(draft))
+  } catch {
+    // Quota plein ou storage indisponible : la sauvegarde est best-effort.
+  }
+}
+
+/** Restore a draft left by a previous visit, if any. */
+function restoreDraft(): void {
+  if (!import.meta.client) return
+  try {
+    const raw: string | null = sessionStorage.getItem(TUNNEL_DRAFT_STORAGE_KEY)
+    if (!raw) return
+    const draft: AutomationDraft = JSON.parse(raw) as AutomationDraft
+    form.value = draft.form
+    selectedProspectIds.value = draft.selectedProspectIds
+    currentStep.value = draft.currentStep
+    hasPickedTemplate.value = draft.hasPickedTemplate
+  } catch {
+    // Brouillon illisible : on repart d'un tunnel vierge.
+  }
+}
+
+/** Drop the saved draft — the tunnel was launched, or explicitly abandoned. */
+function clearDraft(): void {
+  if (import.meta.client) sessionStorage.removeItem(TUNNEL_DRAFT_STORAGE_KEY)
+}
+
+/** Leave the tunnel, asking first once the configuration holds real choices. */
+function leaveTunnel(): void {
+  if (hasMeaningfulDraft.value) {
+    leaveConfirmModal.value?.open()
+    return
+  }
+  void navigateTo(originLink.value.to)
+}
+
+/** Confirmed exit: forget the draft and go back to the origin section. */
+function discardDraftAndLeave(): void {
+  clearDraft()
+  void navigateTo(originLink.value.to)
 }
 
 /**
@@ -686,6 +868,7 @@ async function launch(): Promise<void> {
       send_delay_minutes: 20,
       follow_ups: [],
     })
+    clearDraft()
     toast.success('Automatisation lancée')
     await navigateTo(`/dashboard/automations/${detail.id}`)
   } catch (err: unknown) {
@@ -752,8 +935,13 @@ watch(
 // The trade is only known once prospects load, well after the templates.
 watch([templates, recommendedTrade], applyRecommendedTemplate)
 
+watch([form, selectedProspectIds, currentStep], saveDraft, { deep: true })
+
 onMounted(async (): Promise<void> => {
+  restoreDraft()
+  // Après restauration : le brouillon peut venir de l'autre mode, qui a un email et une étape de plus.
   if (isSiteMode.value) form.value.autoCampaign = false
+  currentStep.value = Math.min(currentStep.value, steps.value.length)
 
   try {
     const [, demoList]: [unknown, DemoSiteTemplate[]] = await Promise.all([
@@ -763,6 +951,11 @@ onMounted(async (): Promise<void> => {
     templates.value = demoList
   } catch {
     // Non-critical — the wizard still works with what loaded.
+  }
+  try {
+    sendPolicy.value = await SendPolicyService.getSendPolicy()
+  } catch {
+    // Non-critical — the recap falls back to a generic cadence label.
   }
   await reloadProspects()
 
@@ -791,8 +984,25 @@ onMounted(async (): Promise<void> => {
     transform: translateX(0);
   }
 }
+/* Révélation en cascade du récapitulatif : chaque bloc entre après le précédent. */
+.recap-reveal {
+  animation: recap-reveal-in 0.34s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation-delay: calc(var(--recap-order) * 60ms);
+}
+@keyframes recap-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .wizard-step {
+  .wizard-step,
+  .recap-reveal {
     animation: none;
   }
 }

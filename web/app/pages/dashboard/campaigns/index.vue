@@ -192,7 +192,7 @@ const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore(
  * Open the campaign creation drawer.
  */
 function openCreateDrawer(): void {
-  drawerStack.push({ kind: 'create-campaign' })
+  drawerStack.push({ kind: 'campaign-form', mode: 'create', campaign: null })
 }
 
 /** Per-campaign stats (null while loading or when the fetch failed). */
