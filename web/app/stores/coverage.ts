@@ -4,8 +4,8 @@
 import type { ComputedRef, Ref } from 'vue'
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import type { CityGeo } from '~/composables/useFranceGeo'
-import { geocodeCities, lookupCity } from '~/composables/useFranceGeo'
+import type { AddressGeo, CityGeo } from '~/composables/useFranceGeo'
+import { geocodeAddresses, geocodeCities, lookupCity } from '~/composables/useFranceGeo'
 import type { CoverageCity, CoverageResponse } from '~/services/dashboardService'
 import { DashboardService } from '~/services/dashboardService'
 import type { FranceMajorCity } from '~/utils/franceTerritory'
@@ -27,6 +27,7 @@ export const useCoverageStore = defineStore('coverage', () => {
   const selectedCategories: Ref<string[]> = ref([])
   const coverage: Ref<CoverageResponse | null> = ref(null)
   const cityGeo: Ref<Record<string, CityGeo | null>> = ref({})
+  const addressGeo: Ref<Record<string, AddressGeo | null>> = ref({})
   const isLoading: Ref<boolean> = ref(false)
   const hasLoaded: Ref<boolean> = ref(false)
   const availableCategories: Ref<string[]> = ref([])
@@ -53,10 +54,18 @@ export const useCoverageStore = defineStore('coverage', () => {
       coverage.value = data
       if (data.available_categories.length > 0) availableCategories.value = data.available_categories
       cityGeo.value = await geocodeCities(data.cities.map((city: CoverageCity): string => city.city))
+      // Le géocodage rue n'est PAS attendu : la carte s'affiche sur les villes, puis se repeint quand
+      // les adresses arrivent. Un échec laisse simplement les points au centre-ville.
+      void geocodeAddresses(data.points, cityGeo.value)
+        .then((resolved: Record<string, AddressGeo | null>): void => {
+          addressGeo.value = { ...addressGeo.value, ...resolved }
+        })
+        .catch((): void => {})
     } catch {
       coverage.value = {
         scope: scope.value,
         cities: [],
+        points: [],
         total_prospects: 0,
         members: coverage.value?.members ?? [],
         available_categories: availableCategories.value,
@@ -132,6 +141,7 @@ export const useCoverageStore = defineStore('coverage', () => {
     selectedCategories,
     coverage,
     cityGeo,
+    addressGeo,
     isLoading,
     hasLoaded,
     availableCategories,

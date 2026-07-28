@@ -74,7 +74,7 @@
         </span>
         <span class="text-muted ml-auto hidden items-center gap-1.5 text-[11px] sm:flex">
           <UIcon name="i-lucide-mouse-pointer-click" class="h-3 w-3" />
-          Cliquez une ville ou une région pour agir
+          Cliquez une ville, une région ou un prospect pour agir
         </span>
       </div>
     </div>
@@ -97,7 +97,7 @@
 
 <script lang="ts" setup>
 import type { CoverageCity } from '~/services/dashboardService'
-import type { CityFeatureProperties, CoverageTierColors } from '~/types/DashboardCoverageMap'
+import type { CityFeatureProperties, CoverageTierColors, ProspectFeatureProperties } from '~/types/DashboardCoverageMap'
 import type { Feature, FeatureCollection, Point } from 'geojson'
 import type {
   ExpressionSpecification,
@@ -109,9 +109,11 @@ import type {
 import type { ComputedRef, Ref } from 'vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import type { CityGeo } from '~/composables/useFranceGeo'
-import { lookupCity, reverseGeocodeCommune } from '~/composables/useFranceGeo'
+import type { AddressGeo, CityGeo } from '~/composables/useFranceGeo'
+import { addressKey, lookupCity, reverseGeocodeCommune } from '~/composables/useFranceGeo'
 import { useAppTheme } from '~/composables/useAppTheme'
+import type { Prospect } from '~/types'
+import { ProspectsService } from '~/services/prospectsService'
 import { useCoverageStore } from '~/stores/coverage'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import type { AppTheme } from '~/types/AppTheme'
@@ -148,6 +150,14 @@ const CITIES_SOURCE_ID: string = 'dlh-cities'
 const REGIONS_FILL_LAYER_ID: string = 'dlh-regions-fill'
 const REGIONS_LINE_LAYER_ID: string = 'dlh-regions-line'
 const CITIES_LAYER_ID: string = 'dlh-cities-dots'
+const PROSPECTS_SOURCE_ID: string = 'dlh-prospects'
+const PROSPECTS_LAYER_ID: string = 'dlh-prospects-dots'
+
+/** Zoom at which the city aggregate hands over to the per-prospect points. */
+const PROSPECT_DETAIL_ZOOM: number = 11
+
+/** Amber of the coverage palette, marking a prospect fallen back to its city centre. */
+const APPROXIMATE_ADDRESS_DOT_COLOR: string = '#e8a33c'
 
 const { theme }: { theme: Ref<AppTheme, AppTheme>; initTheme: () => void; toggleTheme: () => void } = useAppTheme()
 const store: ReturnType<typeof useCoverageStore> = useCoverageStore()
@@ -291,6 +301,32 @@ function buildCitiesCollection(): FeatureCollection<Point, CityFeatureProperties
 }
 
 /**
+ * Build the GeoJSON collection of individual prospects, placed at their street
+ * address when the BAN could resolve it, at the city centre otherwise.
+ * @returns A point collection, one feature per prospect.
+ */
+function buildProspectsCollection(): FeatureCollection<Point, ProspectFeatureProperties> {
+  const features: Array<Feature<Point, ProspectFeatureProperties>> = []
+  for (const point of store.coverage?.points ?? []) {
+    const precise: AddressGeo | null = store.addressGeo[addressKey(point.address, point.city)] ?? null
+    const fallback: CityGeo | null = lookupCity(store.cityGeo, point.city)
+    const position: AddressGeo | CityGeo | null = precise ?? fallback
+    if (!position) continue
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [position.lng, position.lat] },
+      properties: {
+        prospectId: point.id,
+        name: point.name,
+        city: point.city,
+        isPreciseAddress: precise !== null,
+      },
+    })
+  }
+  return { type: 'FeatureCollection', features }
+}
+
+/**
  * Add the coverage overlays (region choropleth + city dots) to the current
  * basemap style. Idempotent — skipped when the sources already exist.
  */
@@ -321,10 +357,31 @@ function addMapOverlays(): void {
     id: CITIES_LAYER_ID,
     type: 'circle',
     source: CITIES_SOURCE_ID,
+    maxzoom: PROSPECT_DETAIL_ZOOM,
     paint: {
       'circle-radius': ['get', 'radius'],
       'circle-color': dark ? '#f0efeb' : '#1d1a14',
       'circle-opacity': 0.85,
+      'circle-stroke-color': dark ? '#131312' : '#fbf9f3',
+      'circle-stroke-width': 1.5,
+    },
+  })
+
+  map.addSource(PROSPECTS_SOURCE_ID, { type: 'geojson', data: buildProspectsCollection() })
+  map.addLayer({
+    id: PROSPECTS_LAYER_ID,
+    type: 'circle',
+    source: PROSPECTS_SOURCE_ID,
+    minzoom: PROSPECT_DETAIL_ZOOM,
+    paint: {
+      'circle-radius': 6,
+      'circle-color': [
+        'case',
+        ['get', 'isPreciseAddress'],
+        dark ? '#f0efeb' : '#1d1a14',
+        APPROXIMATE_ADDRESS_DOT_COLOR,
+      ],
+      'circle-opacity': 0.9,
       'circle-stroke-color': dark ? '#131312' : '#fbf9f3',
       'circle-stroke-width': 1.5,
     },
@@ -341,6 +398,8 @@ function refreshMapData(): void {
   if (!map || !isMapReady.value) return
   const source: GeoJSONSource | undefined = map.getSource(CITIES_SOURCE_ID) as GeoJSONSource | undefined
   source?.setData(buildCitiesCollection())
+  const prospectSource: GeoJSONSource | undefined = map.getSource(PROSPECTS_SOURCE_ID) as GeoJSONSource | undefined
+  prospectSource?.setData(buildProspectsCollection())
   map.setPaintProperty(REGIONS_FILL_LAYER_ID, 'fill-color', regionFillColor())
 }
 
@@ -401,6 +460,21 @@ function categoryPrefill(): { category?: string } {
 }
 
 /**
+ * Open the detail drawer of a prospect clicked on the map.
+ * @param prospectId - Identifier carried by the clicked feature.
+ * @returns A promise resolved once the drawer is pushed.
+ */
+async function openProspectFromMap(prospectId: number): Promise<void> {
+  if (!prospectId) return
+  try {
+    const prospect: Prospect = await ProspectsService.getProspect(prospectId)
+    drawerStack.push({ kind: 'prospect', prospect })
+  } catch {
+    // Prospect supprimé entre le chargement de la carte et le clic : on ignore.
+  }
+}
+
+/**
  * Route a map click to the right drawer:
  * - city dot → zone drawer listing that city's prospects;
  * - covered region → zone drawer listing the region's prospects;
@@ -413,10 +487,16 @@ async function onMapClick(event: MapMouseEvent): Promise<void> {
   const map: MaplibreMap | null = mapInstance
   if (!map || !isMapReady.value) return
   const features: MapGeoJSONFeature[] = map.queryRenderedFeatures(event.point, {
-    layers: [CITIES_LAYER_ID, REGIONS_FILL_LAYER_ID],
+    layers: [PROSPECTS_LAYER_ID, CITIES_LAYER_ID, REGIONS_FILL_LAYER_ID],
   })
   const feature: MapGeoJSONFeature | undefined = features[0]
   if (!feature) return
+
+  // ── Prospect dot: open that prospect directly ──
+  if (feature.layer.id === PROSPECTS_LAYER_ID) {
+    await openProspectFromMap(Number(feature.properties?.prospectId ?? 0))
+    return
+  }
 
   // ── City dot: prospected city → its prospect list ──
   if (feature.layer.id === CITIES_LAYER_ID) {
@@ -472,7 +552,7 @@ function onMapMouseMove(event: MapMouseEvent): void {
   const map: MaplibreMap | null = mapInstance
   if (!map || !isMapReady.value) return
   const features: MapGeoJSONFeature[] = map.queryRenderedFeatures(event.point, {
-    layers: [CITIES_LAYER_ID, REGIONS_FILL_LAYER_ID],
+    layers: [PROSPECTS_LAYER_ID, CITIES_LAYER_ID, REGIONS_FILL_LAYER_ID],
   })
   const feature: MapGeoJSONFeature | undefined = features[0]
   map.getCanvas().style.cursor = feature ? 'pointer' : ''
@@ -481,7 +561,18 @@ function onMapMouseMove(event: MapMouseEvent): void {
     return
   }
   const { x, y }: { x: number; y: number } = event.point
-  if (feature.layer.id === CITIES_LAYER_ID) {
+  if (feature.layer.id === PROSPECTS_LAYER_ID) {
+    const isPrecise: boolean = Boolean(feature.properties?.isPreciseAddress)
+    tip.value = {
+      show: true,
+      x,
+      y,
+      title: String(feature.properties?.name ?? ''),
+      sub: isPrecise
+        ? `${String(feature.properties?.city ?? '')} — cliquer pour ouvrir`
+        : `${String(feature.properties?.city ?? '')} — adresse approchée`,
+    }
+  } else if (feature.layer.id === CITIES_LAYER_ID) {
     const count: number = Number(feature.properties?.count ?? 0)
     tip.value = {
       show: true,
@@ -523,8 +614,13 @@ watch(mapContainer, (container: HTMLElement | null): void => {
 })
 
 // Repaint whenever the store data changes (scope / trade filter reloads).
+// Les adresses arrivent après les villes : sans elles ici, les points resteraient au centre-ville.
 watch(
-  (): [typeof store.coverage, Record<string, CityGeo | null>] => [store.coverage, store.cityGeo],
+  (): [typeof store.coverage, Record<string, CityGeo | null>, Record<string, AddressGeo | null>] => [
+    store.coverage,
+    store.cityGeo,
+    store.addressGeo,
+  ],
   (): void => {
     refreshMapData()
   },

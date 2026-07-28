@@ -57,10 +57,19 @@ export type CoverageMember = {
   name: string
 }
 
+/** One prospect of the coverage map, to be placed at its own address. */
+export type CoverageProspectPoint = {
+  id: number
+  name: string
+  address: string | null
+  city: string
+}
+
 /** Prospection coverage aggregated by city. */
 export type CoverageResponse = {
   scope: string
   cities: CoverageCity[]
+  points: CoverageProspectPoint[]
   total_prospects: number
   members: CoverageMember[]
   available_categories: string[]

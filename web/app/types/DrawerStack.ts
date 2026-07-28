@@ -20,6 +20,9 @@ export type ProspectDrawerEntry = {
   startInEdit?: boolean
 }
 
+/** Step taken by the prospect drawer inside the list it browses. */
+export type ProspectBrowseDirection = 'previous' | 'next'
+
 /** Prefilled values of the email composer (e.g. « Renvoyer » from a log). */
 export type SendEmailPrefill = {
   recipient_email: string

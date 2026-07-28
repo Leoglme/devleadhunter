@@ -24,6 +24,8 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
   }
   const lastProspectMutation: Ref<ProspectMutationNotice | null> = ref(null)
   const prospectMutationCounter: Ref<number> = ref(0)
+  // Volontairement hors sessionStorage : sert seulement à naviguer entre voisins pendant la session.
+  const prospectBrowseList: Ref<Prospect[]> = ref([])
   const lastOrderMutation: Ref<OrderMutationNotice | null> = ref(null)
   const orderMutationCounter: Ref<number> = ref(0)
   const emailLogsRefreshCounter: Ref<number> = ref(0)
@@ -58,9 +60,18 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     stack.value.pop()
   }
 
-  /** Close every drawer. */
+  /** Close every drawer, and forget the list the prospect drawer was browsing. */
   function closeAll(): void {
     stack.value = []
+    prospectBrowseList.value = []
+  }
+
+  /**
+   * Remember the list the prospect drawer browses, so it can step to its neighbours.
+   * @param list - Prospects in the order they are displayed by the calling page.
+   */
+  function setProspectBrowseList(list: Prospect[]): void {
+    prospectBrowseList.value = list
   }
 
   /**
@@ -171,6 +182,7 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     stack: skipHydrate(stack),
     lastProspectMutation,
     prospectMutationCounter,
+    prospectBrowseList,
     lastOrderMutation,
     orderMutationCounter,
     emailLogsRefreshCounter,
@@ -182,6 +194,7 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     push,
     back,
     closeAll,
+    setProspectBrowseList,
     notifyProspectUpdated,
     notifyProspectDeleted,
     notifyOrderUpdated,

@@ -5,6 +5,9 @@ export type UiProspectDrawerProps = {
   prospect: Prospect | null
   showBack?: boolean
   startInEdit?: boolean
+  browsePositionLabel?: string
+  canBrowsePrevious?: boolean
+  canBrowseNext?: boolean
 }
 
 export type LighthouseGauge = {
@@ -26,6 +29,8 @@ export type ProspectEditForm = {
 export type UiProspectDrawerEmits = {
   close: []
   back: []
+  browsePrevious: []
+  browseNext: []
   updated: [prospect: Prospect]
   deleted: [prospectId: number]
   sendEmail: [prospect: Prospect]

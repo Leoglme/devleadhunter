@@ -63,6 +63,15 @@ class CoverageCity(BaseModel):
     count: int
 
 
+class CoverageProspectPoint(BaseModel):
+    """One prospect of the map, placed at its own address once geocoded."""
+
+    id: int
+    name: str
+    address: str | None = None
+    city: str
+
+
 class CoverageMember(BaseModel):
     """An organization member selectable as a coverage scope."""
 
@@ -96,6 +105,8 @@ class CoverageResponse(BaseModel):
 
     scope: str
     cities: list[CoverageCity]
+    # Un point par prospect, pour l'affichage rue par rue au zoom.
+    points: list[CoverageProspectPoint] = Field(default_factory=list)
     total_prospects: int
     # Populated only when the user belongs to an organization (scope selector).
     members: list[CoverageMember] = Field(default_factory=list)

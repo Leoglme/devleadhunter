@@ -9,12 +9,12 @@ returned in plain text to the frontend.
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -27,6 +27,7 @@ from models.user import User
 from services.auth_service import get_current_user
 from services.encryption_service import encryption_service
 from services.presenter_video_service import presenter_video_service
+from services.r2_storage_service import r2_storage
 from services.sending_identity import (
     SendingNotConfiguredError,
     describe_sending_config,
@@ -293,11 +294,18 @@ async def delete_presenter_video(
 async def stream_presenter_video_file(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> FileResponse:
-    """Stream the user's own presenter clip (in-app preview player)."""
+) -> StreamingResponse:
+    """Stream the user's own presenter clip from R2 (in-app preview player)."""
     record = presenter_video_service.get_for_user(db, current_user.id)
-    if record is None or not Path(record.file_path).is_file():
+    if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aucun clip de présentation.")
-    suffix = Path(record.file_path).suffix.lower()
-    media_types = {".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime", ".mkv": "video/x-matroska"}
-    return FileResponse(record.file_path, media_type=media_types.get(suffix, "application/octet-stream"))
+    try:
+        body, content_type, size = await asyncio.to_thread(r2_storage.open_stream, record.file_path)
+    # L'objet peut avoir disparu du bucket, ou R2 ne pas être configuré.
+    except Exception as error:
+        logger.warning("[Presenter] clip introuvable sur R2 pour user=%s: %s", current_user.id, error)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Le fichier du clip est introuvable."
+        ) from error
+    headers = {"Content-Length": str(size)} if size else None
+    return StreamingResponse(body.iter_chunks(), media_type=content_type, headers=headers)

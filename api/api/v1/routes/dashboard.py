@@ -21,6 +21,7 @@ from schemas.dashboard import (
     ActivityPoint,
     CoverageCity,
     CoverageMember,
+    CoverageProspectPoint,
     CoverageProspectRow,
     CoverageProspectsResponse,
     CoverageResponse,
@@ -247,6 +248,18 @@ async def dashboard_coverage(
     cities = [CoverageCity(city=str(row.city), count=int(row.count)) for row in rows]
     total = sum(c.count for c in cities)
 
+    # Les mêmes prospects, un par un : le front les géocode à l'adresse pour le zoom rue.
+    point_stmt = select(ProspectDB.id, ProspectDB.name, ProspectDB.address, city_col.label("city")).where(
+        city_col.isnot(None), city_col != ""
+    )
+    point_stmt = scope_filter(point_stmt)
+    if wanted:
+        point_stmt = point_stmt.where(func.lower(func.trim(ProspectDB.category)).in_(wanted))
+    points = [
+        CoverageProspectPoint(id=int(row.id), name=str(row.name), address=row.address, city=str(row.city))
+        for row in db.execute(point_stmt).all()
+    ]
+
     # Distinct trades in the scope (unfiltered) — one small grouped query.
     cat_col = func.trim(ProspectDB.category)
     cat_stmt = scope_filter(
@@ -271,6 +284,7 @@ async def dashboard_coverage(
     return CoverageResponse(
         scope=resolved_scope,
         cities=cities,
+        points=points,
         total_prospects=total,
         members=members,
         available_categories=available_categories,

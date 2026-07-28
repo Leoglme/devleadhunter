@@ -575,8 +575,9 @@ async function bulkEnrich(): Promise<void> {
   }
 }
 
-/** Open the detail drawer for a given prospect. */
+/** Open the detail drawer for a given prospect, browsable across the filtered list. */
 function openDrawer(prospect: Prospect): void {
+  drawerStack.setProspectBrowseList(filteredProspects.value)
   drawerStack.push({ kind: 'prospect', prospect })
 }
 
@@ -585,6 +586,7 @@ function openDrawer(prospect: Prospect): void {
  * @param prospect - The prospect to edit.
  */
 function openProspectEditDrawer(prospect: Prospect): void {
+  drawerStack.setProspectBrowseList(filteredProspects.value)
   drawerStack.push({ kind: 'prospect', prospect, startInEdit: true })
 }
 

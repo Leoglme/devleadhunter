@@ -4,9 +4,14 @@
       :open="prospectEntry !== null"
       :prospect="prospectEntry?.prospect ?? null"
       :start-in-edit="prospectEntry?.startInEdit ?? false"
+      :browse-position-label="browsePositionLabel"
+      :can-browse-previous="canBrowsePrevious"
+      :can-browse-next="canBrowseNext"
       :show-back="hasPrevious"
       @close="drawerStack.closeAll()"
       @back="drawerStack.back()"
+      @browse-previous="browseToProspect('previous')"
+      @browse-next="browseToProspect('next')"
       @updated="handleProspectUpdated"
       @deleted="handleProspectDeleted"
       @send-email="handleSendEmail"
@@ -161,6 +166,7 @@ import type {
   OrderDrawerEntry,
   OrganizationDrawerEntry,
   ProfileDrawerEntry,
+  ProspectBrowseDirection,
   ProspectDrawerEntry,
   SearchProspectsDrawerEntry,
   SendEmailDrawerEntry,
@@ -323,6 +329,33 @@ const hasPrevious: ComputedRef<boolean> = computed((): boolean => drawerStack.ha
  */
 function handleProspectUpdated(updated: Prospect): void {
   drawerStack.notifyProspectUpdated(updated)
+}
+
+/** Position of the open prospect in the browsed list, -1 when that list is unknown. */
+const browseIndex: ComputedRef<number> = computed((): number => {
+  const openId: number | undefined = prospectEntry.value?.prospect.id
+  if (openId === undefined) return -1
+  return drawerStack.prospectBrowseList.findIndex((candidate: Prospect): boolean => candidate.id === openId)
+})
+
+const browsePositionLabel: ComputedRef<string> = computed((): string =>
+  browseIndex.value < 0 ? '' : `${browseIndex.value + 1} / ${drawerStack.prospectBrowseList.length}`,
+)
+
+const canBrowsePrevious: ComputedRef<boolean> = computed((): boolean => browseIndex.value > 0)
+
+const canBrowseNext: ComputedRef<boolean> = computed(
+  (): boolean => browseIndex.value >= 0 && browseIndex.value < drawerStack.prospectBrowseList.length - 1,
+)
+
+/**
+ * Open the neighbouring prospect of the browsed list, keeping the drawer in place.
+ * @param direction - Which neighbour to open.
+ */
+function browseToProspect(direction: ProspectBrowseDirection): void {
+  const step: number = direction === 'previous' ? -1 : 1
+  const target: Prospect | undefined = drawerStack.prospectBrowseList[browseIndex.value + step]
+  if (target) drawerStack.push({ kind: 'prospect', prospect: target })
 }
 
 /**

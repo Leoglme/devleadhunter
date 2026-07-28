@@ -257,6 +257,21 @@ class R2StorageService:
         self._client_or_fail().download_file(self.bucket_name(), key, str(path))
         return path
 
+    def open_stream(self, key: str) -> tuple[Any, str, int]:
+        """
+        Open an object for streaming, so a route can relay it without buffering it whole.
+
+        Args:
+            key: Object key.
+
+        Returns:
+            The readable body, its content type and its size in bytes.
+        """
+        response = self._client_or_fail().get_object(Bucket=self.bucket_name(), Key=key)
+        content_type: str = response.get("ContentType") or "application/octet-stream"
+        size: int = int(response.get("ContentLength") or 0)
+        return response["Body"], content_type, size
+
     def exists(self, key: str) -> bool:
         """
         Tell whether an object is present in the bucket.
