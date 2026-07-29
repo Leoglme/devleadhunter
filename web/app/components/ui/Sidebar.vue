@@ -275,7 +275,7 @@
 import type { UseAuthReturn, UseDesktopRuntimeReturn, UseToastReturn } from '~/types/Composables'
 import type { ComputedRef, Ref } from 'vue'
 import type { AppTheme } from '~/types/AppTheme'
-import type { DlhModuleEntry, UiSidebarGroup, UiSidebarProps } from '~/types/UiSidebar'
+import type { DlhModuleEntry, UiSidebarGroup, UiSidebarLink, UiSidebarProps } from '~/types/UiSidebar'
 import { ref, computed } from 'vue'
 import { useUserStore } from '~/stores/user'
 import { useAuth } from '~/composables/useAuth'
@@ -330,6 +330,9 @@ const {
   isLinkActive: isSettingsLinkActive,
 }: ReturnType<typeof useSettingsNav> = useSettingsNav()
 
+/** Current route — read once here so the highlight recomputes from a single reactive source. */
+const route: ReturnType<typeof useRoute> = useRoute()
+
 /** Whether the module switcher menu is open. */
 const showModuleMenu: Ref<boolean> = ref(false)
 
@@ -363,6 +366,29 @@ const navGroups: UiSidebarGroup[] = [
     ],
   },
 ]
+
+/** Every navigable path of the main menu, used to elect the single highlighted row. */
+const navPaths: string[] = navGroups.flatMap((group: UiSidebarGroup): string[] =>
+  group.links.map((link: UiSidebarLink): string => link.to),
+)
+
+/**
+ * The one and only menu path highlighted for the current route.
+ * Electing a single winner here makes it structurally impossible for two rows to look selected.
+ */
+const activeNavPath: ComputedRef<string | null> = computed((): string | null => {
+  // The creation tunnel is shared: `?from=sites` keeps the highlight on the section it was opened from.
+  if (route.path === '/dashboard/automations/new') {
+    return route.query.from === 'sites' ? '/dashboard/demo-sites' : '/dashboard/automations'
+  }
+  // Longest match wins, so a sub-route never lights up its parent section too.
+  return navPaths.reduce((best: string | null, candidate: string): string | null => {
+    const matches: boolean =
+      route.path === candidate || (candidate !== '/dashboard' && route.path.startsWith(candidate + '/'))
+    if (!matches) return best
+    return best === null || candidate.length > best.length ? candidate : best
+  }, null)
+})
 
 /** Label of the currently active module. */
 const activeModuleLabel: ComputedRef<string> = computed((): string => {
@@ -433,7 +459,8 @@ function navItemClass(active: boolean): string {
   if (active) {
     return `${base} bg-[var(--app-surface-2)] text-[var(--app-ink)]`
   }
-  return `${base} text-[var(--app-ink-soft)] hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]`
+  // Half-tint on hover so a merely hovered row can never be mistaken for the selected one.
+  return `${base} text-[var(--app-ink-soft)] hover:bg-[var(--app-surface-2)]/50 hover:text-[var(--app-ink)]`
 }
 
 /**
@@ -470,20 +497,12 @@ function setTheme(value: AppTheme): void {
 }
 
 /**
- * Whether a route is active (exact, or a sub-route for non-root paths).
- * @param path - Route path to check.
- * @returns True if the route is active.
+ * Whether a menu row is the elected active one.
+ * @param path - Route path of the row.
+ * @returns True when this row is the highlighted one.
  */
 function isActive(path: string): boolean {
-  const route: ReturnType<typeof useRoute> = useRoute()
-  // The creation tunnel is shared: `?from=sites` keeps the highlight on the section it was opened from.
-  if (route.path === '/dashboard/automations/new') {
-    const openedFromSites: boolean = route.query.from === 'sites'
-    return path === (openedFromSites ? '/dashboard/demo-sites' : '/dashboard/automations')
-  }
-  if (route.path === path) return true
-  if (path !== '/dashboard' && route.path.startsWith(path + '/')) return true
-  return false
+  return activeNavPath.value === path
 }
 
 /**

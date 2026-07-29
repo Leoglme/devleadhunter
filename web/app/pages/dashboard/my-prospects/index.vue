@@ -10,11 +10,14 @@
         <p class="mt-1.5 text-sm text-[var(--app-ink-soft)]">Tous vos prospects sauvegardés depuis vos recherches</p>
       </div>
       <div class="flex w-full flex-wrap items-center gap-2 sm:gap-3 @2xl:w-auto @2xl:justify-end">
-        <NuxtLink to="/dashboard/search-prospects" class="app-btn-primary h-9 shrink-0 px-4 text-xs whitespace-nowrap">
+        <NuxtLink
+          to="/dashboard/search-prospects"
+          class="app-btn-primary h-9 shrink-0 px-4 text-xs whitespace-nowrap @2xl:order-2"
+        >
           <UIcon name="i-lucide-search" class="h-3.5 w-3.5" />
           Nouvelle recherche
         </NuxtLink>
-        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3 @2xl:order-1">
           <button
             :disabled="isLoading"
             class="app-btn-secondary h-9 shrink-0 px-4 text-xs whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
