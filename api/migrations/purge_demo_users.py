@@ -10,7 +10,8 @@ administrator is never wiped by a stale ``ADMIN_EMAIL``.
 Rows owned by a purged account are deleted explicitly, child-first. Relying on the
 foreign keys would not do: seven of them are RESTRICT (they would abort the deploy),
 and six columns pointing at ``users`` carry no constraint at all (they would leave
-orphans behind).
+orphans behind). Grandchildren guarded by a RESTRICT key (a support attachment, a
+follow-up bound to a template) are cleared first, for the same reason.
 
 Idempotent: a second run finds nothing left to delete.
 
@@ -56,6 +57,14 @@ _OWNED_ROWS: list[tuple[str, str]] = [
     ("organizations", "owner_user_id"),
     ("prospects", "user_id"),
     ("credit_transactions", "user_id"),
+]
+
+# Grandchildren: they hang off a row above by a RESTRICT key, so they must go
+# first or the parent delete is refused. (child, child column, parent, user column)
+_DEPENDENT_ROWS: list[tuple[str, str, str, str]] = [
+    ("support_attachments", "message_id", "support_messages", "sender_id"),
+    ("support_attachments", "ticket_id", "support_tickets", "user_id"),
+    ("campaign_follow_ups", "template_id", "email_templates", "user_id"),
 ]
 
 # Columns merely *pointing* at a purged user, blanked instead of deleted: an
@@ -104,6 +113,16 @@ def run_migration() -> None:
             detached = conn.execute(statement, {"ids": target_ids}).rowcount
             if detached:
                 print(f"  ~ {table}.{column}: {detached} row(s) detached")
+
+        for child, child_column, parent, user_column in _DEPENDENT_ROWS:
+            if not _table_exists(conn, child) or not _table_exists(conn, parent):
+                continue
+            statement = text(
+                f"DELETE FROM {child} WHERE {child_column} IN (SELECT id FROM {parent} WHERE {user_column} IN :ids)"
+            ).bindparams(bindparam("ids", expanding=True))
+            deleted = conn.execute(statement, {"ids": target_ids}).rowcount
+            if deleted:
+                print(f"  - {child} (via {parent}): {deleted} row(s)")
 
         for table, column in _OWNED_ROWS:
             if not _table_exists(conn, table):
