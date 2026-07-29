@@ -63,8 +63,8 @@
         @update:model-value="goToStep"
       />
 
-      <div v-if="currentStep === 1" key="step-1" class="wizard-step mt-8 space-y-6">
-        <header class="mx-auto max-w-2xl">
+      <div v-if="currentStep === 1" key="step-1" class="wizard-step mx-auto mt-8 max-w-2xl space-y-6">
+        <header>
           <h1 class="text-2xl font-bold text-[var(--app-ink)]">Comment enverrez-vous vos emails ?</h1>
           <p class="text-muted mt-2 text-sm leading-relaxed">
             Le seul réglage indispensable : sans lui, aucune campagne ne peut partir. Gmail se connecte en un clic ;

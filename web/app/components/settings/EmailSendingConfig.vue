@@ -1,5 +1,6 @@
 <template>
-  <div class="mx-auto max-w-2xl space-y-8">
+  <!-- No width or centering here: each host page decides its own layout. -->
+  <div class="space-y-8">
     <UiTabs v-model="viewProvider" :tabs="TABS">
       <template #icon="{ tab }">
         <UiGoogleLogo v-if="tab.key === 'gmail'" class="h-5 w-5" />
