@@ -78,12 +78,7 @@
 
           <div>
             <label class="text-muted mb-1.5 block text-xs font-medium">Signature</label>
-            <select v-model="signatureId" class="input-field">
-              <option :value="null">Aucune signature</option>
-              <option v-for="signature in signatures" :key="signature.id" :value="signature.id">
-                {{ signature.name }}{{ signature.is_default ? ' (par défaut)' : '' }}
-              </option>
-            </select>
+            <UiSelectField v-model="selectedSignatureId" :options="signatureOptions" />
             <button
               type="button"
               class="mt-1.5 text-xs font-medium text-[var(--app-ink-soft)] underline decoration-[var(--app-line)] underline-offset-2 hover:text-[var(--app-ink)]"
@@ -116,7 +111,8 @@
 <script lang="ts" setup>
 import type { UseToastReturn } from '~/types/Composables'
 import type { SendEmailForm, UiSendEmailDrawerEmits, UiSendEmailDrawerProps } from '~/types/UiSendEmailDrawer'
-import type { EmitFn, PropType, Ref } from 'vue'
+import type { ComputedRef, EmitFn, PropType, Ref, WritableComputedRef } from 'vue'
+import type { SelectFieldOption } from '~/types/SelectField'
 import type { EmailSignature, Prospect } from '~/types'
 import type { SendEmailPrefill } from '~/types/DrawerStack'
 import { ref, watch } from 'vue'
@@ -163,6 +159,25 @@ const signatureId: Ref<number | null> = ref(null)
 
 /** Key of the recipient the form was last initialised for. */
 const lastInitKey: Ref<string> = ref('')
+
+/** Signature entries, « Aucune signature » carried by id 0 since the selector needs a real value. */
+const signatureOptions: ComputedRef<SelectFieldOption<number>[]> = computed((): SelectFieldOption<number>[] => [
+  { value: 0, label: 'Aucune signature' },
+  ...signatures.value.map(
+    (signature: EmailSignature): SelectFieldOption<number> => ({
+      value: signature.id,
+      label: `${signature.name}${signature.is_default ? ' (par défaut)' : ''}`,
+    }),
+  ),
+])
+
+/** Selected signature, mapping the selector's 0 back to the null the API expects. */
+const selectedSignatureId: WritableComputedRef<number> = computed({
+  get: (): number => signatureId.value ?? 0,
+  set: (value: number): void => {
+    signatureId.value = value === 0 ? null : value
+  },
+})
 
 /** Manual send form state. */
 const form: Ref<SendEmailForm> = ref({

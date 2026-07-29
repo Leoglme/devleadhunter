@@ -15,19 +15,9 @@
       </div>
 
       <div class="flex shrink-0 flex-wrap items-center gap-2">
-        <select
-          v-if="members.length > 0"
-          v-model="store.scope"
-          class="input-field h-9 w-full text-xs sm:w-48"
-          :disabled="store.isLoading"
-          @change="onScopeChange"
-        >
-          <option value="me">Mes prospects</option>
-          <option value="org">Toute l'organisation</option>
-          <option v-for="member in members" :key="member.user_id" :value="`member:${member.user_id}`">
-            {{ member.name }}
-          </option>
-        </select>
+        <div v-if="members.length > 0" class="w-full sm:w-56">
+          <UiSelectField v-model="scope" :options="scopeOptions" :disabled="store.isLoading" />
+        </div>
 
         <button type="button" class="btn-primary relative h-9 text-xs" @click="openFiltersDrawer">
           <UIcon name="i-lucide-sliders-horizontal" class="mr-1.5 h-3.5 w-3.5" />
@@ -72,9 +62,10 @@
 </template>
 
 <script lang="ts" setup>
-import type { ComputedRef } from 'vue'
+import type { ComputedRef, WritableComputedRef } from 'vue'
 import { computed, onMounted } from 'vue'
 import type { CoverageMember } from '~/services/dashboardService'
+import type { SelectFieldOption } from '~/types/SelectField'
 import { useCoverageStore } from '~/stores/coverage'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 
@@ -96,14 +87,30 @@ const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore(
 /** Organization members selectable as scopes. */
 const members: ComputedRef<CoverageMember[]> = computed((): CoverageMember[] => store.coverage?.members ?? [])
 
+/** Whose prospects the map shows: mine, the whole organization, or one member's. */
+const scopeOptions: ComputedRef<SelectFieldOption[]> = computed((): SelectFieldOption[] => [
+  { value: 'me', label: 'Mes prospects' },
+  { value: 'org', label: "Toute l'organisation" },
+  ...members.value.map(
+    (member: CoverageMember): SelectFieldOption => ({
+      value: `member:${member.user_id}`,
+      label: member.name,
+    }),
+  ),
+])
+
+/** Selected scope — reloading the map is part of changing it. */
+const scope: WritableComputedRef<string> = computed({
+  get: (): string => store.scope,
+  set: (value: string): void => {
+    store.scope = value
+    void store.load()
+  },
+})
+
 /** Open the filters & zones drawer. */
 function openFiltersDrawer(): void {
   drawerStack.push({ kind: 'coverage-filters' })
-}
-
-/** Reload coverage when the scope changes. */
-function onScopeChange(): void {
-  void store.load()
 }
 
 onMounted((): void => {

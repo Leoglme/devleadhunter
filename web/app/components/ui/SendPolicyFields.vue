@@ -35,16 +35,12 @@
 
     <div class="grid grid-cols-2 gap-4">
       <div>
-        <label class="app-label mb-1.5 block" for="sp-win-start">Début de journée</label>
-        <select id="sp-win-start" v-model.number="windowStartHour" class="app-input">
-          <option v-for="h in 24" :key="h - 1" :value="h - 1">{{ String(h - 1).padStart(2, '0') }}:00</option>
-        </select>
+        <label class="app-label mb-1.5 block">Début de journée</label>
+        <UiSelectField v-model="windowStartHour" :options="dayStartOptions" />
       </div>
       <div>
-        <label class="app-label mb-1.5 block" for="sp-win-end">Fin de journée</label>
-        <select id="sp-win-end" v-model.number="windowEndHour" class="app-input">
-          <option v-for="h in 24" :key="h" :value="h">{{ String(h).padStart(2, '0') }}:00</option>
-        </select>
+        <label class="app-label mb-1.5 block">Fin de journée</label>
+        <UiSelectField v-model="windowEndHour" :options="dayEndOptions" />
       </div>
     </div>
 
@@ -79,6 +75,7 @@
 <script lang="ts" setup>
 import type { ComputedRef, EmitFn, PropType, WritableComputedRef } from 'vue'
 import { computed } from 'vue'
+import type { SelectFieldOption } from '~/types/SelectField'
 import type { SendPolicy } from '~/types/Automation'
 import type { UiSendPolicyFieldsEmits, UiSendPolicyFieldsProps } from '~/types/UiSendPolicyFields'
 import { SEND_POLICY_DAY_LABELS } from '~/constants/sendPolicyDayLabels'
@@ -121,6 +118,24 @@ const spacingMinutes: WritableComputedRef<number> = computed({
 /** Human list of the selected days. */
 const selectedDaysLabel: ComputedRef<string> = computed((): string =>
   formatSendPolicyDays(props.modelValue.days_of_week),
+)
+
+/** Hours 00:00 → 23:00, the possible starts of a sending day. */
+const dayStartOptions: SelectFieldOption<number>[] = Array.from(
+  { length: 24 },
+  (_unused: unknown, hour: number): SelectFieldOption<number> => ({
+    value: hour,
+    label: `${String(hour).padStart(2, '0')}:00`,
+  }),
+)
+
+/** Hours 01:00 → 24:00, the possible ends of a sending day. */
+const dayEndOptions: SelectFieldOption<number>[] = Array.from(
+  { length: 24 },
+  (_unused: unknown, index: number): SelectFieldOption<number> => ({
+    value: index + 1,
+    label: `${String(index + 1).padStart(2, '0')}:00`,
+  }),
 )
 
 /**

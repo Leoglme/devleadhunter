@@ -1,26 +1,43 @@
 <template>
   <USelectMenu
-    v-model="modelValue"
+    v-model="selectedOption"
     :items="props.options"
-    value-key="value"
     label-key="label"
+    :placeholder="props.placeholder"
+    :disabled="props.disabled"
     class="w-full"
-    placeholder="Sélectionner…"
   />
 </template>
 
-<script lang="ts" setup>
-import type { ModelRef, PropType } from 'vue'
-import type { SelectFieldOption, SelectFieldProps } from '~/types/SelectField'
+<script lang="ts" setup generic="TValue extends SelectFieldValue">
+import type { ModelRef, PropType, WritableComputedRef } from 'vue'
+import { computed } from 'vue'
+import type { SelectFieldOption, SelectFieldProps, SelectFieldValue } from '~/types/SelectField'
 
-const modelValue: Ref<string, string> & [ModelRef<string, string, string, string>, Record<string, true | undefined>] =
-  defineModel<string>({ required: true })
+const modelValue: ModelRef<TValue> = defineModel<TValue>({ required: true })
 
-/** Native select whose entries come from a typed option list. */
-const props: SelectFieldProps = defineProps({
+/** Searchable select whose entries come from a typed option list. */
+const props: SelectFieldProps<TValue> = defineProps({
   options: {
-    type: Array as PropType<SelectFieldOption[]>,
+    type: Array as PropType<SelectFieldOption<TValue>[]>,
     required: true,
+  },
+  placeholder: {
+    type: String,
+    default: 'Sélectionner…',
+  },
+  disabled: {
+    type: Boolean,
+    default: false,
+  },
+})
+
+// Driven by the option object: `value-key` cannot resolve a key through a generic.
+const selectedOption: WritableComputedRef<SelectFieldOption<TValue> | undefined> = computed({
+  get: (): SelectFieldOption<TValue> | undefined =>
+    props.options.find((option: SelectFieldOption<TValue>): boolean => option.value === modelValue.value),
+  set: (option: SelectFieldOption<TValue> | undefined): void => {
+    if (option) modelValue.value = option.value
   },
 })
 </script>

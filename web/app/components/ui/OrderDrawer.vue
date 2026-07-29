@@ -140,9 +140,7 @@
               <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
                 >Statut</label
               >
-              <select v-model="editForm.status" class="input-field">
-                <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
-              </select>
+              <UiSelectField v-model="editForm.status" :options="statusOptions" />
             </div>
             <div>
               <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"

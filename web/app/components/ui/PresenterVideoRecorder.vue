@@ -159,30 +159,12 @@
           <div class="space-y-4 px-4 py-4">
             <div class="grid gap-3 sm:grid-cols-2">
               <div>
-                <label class="app-label mb-1.5 block" for="recorder-camera">Caméra</label>
-                <select
-                  id="recorder-camera"
-                  :value="recorder.selectedCameraId.value"
-                  class="app-input"
-                  @change="onCameraChange"
-                >
-                  <option v-for="device in recorder.cameras.value" :key="device.deviceId" :value="device.deviceId">
-                    {{ device.label }}
-                  </option>
-                </select>
+                <label class="app-label mb-1.5 block">Caméra</label>
+                <UiSelectField v-model="selectedCameraId" :options="cameraOptions" />
               </div>
               <div>
-                <label class="app-label mb-1.5 block" for="recorder-microphone">Micro</label>
-                <select
-                  id="recorder-microphone"
-                  :value="recorder.selectedMicrophoneId.value"
-                  class="app-input"
-                  @change="onMicrophoneChange"
-                >
-                  <option v-for="device in recorder.microphones.value" :key="device.deviceId" :value="device.deviceId">
-                    {{ device.label }}
-                  </option>
-                </select>
+                <label class="app-label mb-1.5 block">Micro</label>
+                <UiSelectField v-model="selectedMicrophoneId" :options="microphoneOptions" />
               </div>
             </div>
 
@@ -319,11 +301,12 @@
 
 <script lang="ts" setup>
 import type { UseAuthReturn, UseToastReturn } from '~/types/Composables'
-import type { ComputedRef, Ref } from 'vue'
+import type { ComputedRef, Ref, WritableComputedRef } from 'vue'
+import type { SelectFieldOption } from '~/types/SelectField'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { PresenterVideo } from '~/services/presenterVideoService'
 import type { ProspectionScriptSegment } from '~/composables/useProspectionScript'
-import type { RecordedTake } from '~/composables/useWebcamRecorder'
+import type { RecordedTake, RecorderDevice } from '~/composables/useWebcamRecorder'
 import type { KeptTake, RecorderPhase, UiPresenterVideoRecorderProps } from '~/types/UiPresenterVideoRecorder'
 import { PresenterVideoService } from '~/services/presenterVideoService'
 import { useAuth } from '~/composables/useAuth'
@@ -476,24 +459,56 @@ async function askForCamera(): Promise<void> {
   await bindPreview()
 }
 
+const cameraOptions: ComputedRef<SelectFieldOption[]> = computed((): SelectFieldOption[] =>
+  recorder.cameras.value.map(
+    (device: RecorderDevice): SelectFieldOption => ({
+      value: device.deviceId,
+      label: device.label,
+    }),
+  ),
+)
+
+const microphoneOptions: ComputedRef<SelectFieldOption[]> = computed((): SelectFieldOption[] =>
+  recorder.microphones.value.map(
+    (device: RecorderDevice): SelectFieldOption => ({
+      value: device.deviceId,
+      label: device.label,
+    }),
+  ),
+)
+
+/** Camera bound to the selector — picking one reopens the stream. */
+const selectedCameraId: WritableComputedRef<string> = computed({
+  get: (): string => recorder.selectedCameraId.value,
+  set: (deviceId: string): void => {
+    void onCameraChange(deviceId)
+  },
+})
+
+/** Microphone bound to the selector — picking one reopens the stream. */
+const selectedMicrophoneId: WritableComputedRef<string> = computed({
+  get: (): string => recorder.selectedMicrophoneId.value,
+  set: (deviceId: string): void => {
+    void onMicrophoneChange(deviceId)
+  },
+})
+
 /**
  * Reopen the stream on the picked camera.
- * @param event - Change event of the camera select.
+ * @param deviceId - Identifier of the chosen camera.
  */
-async function onCameraChange(event: Event): Promise<void> {
-  const value: string = (event.target as HTMLSelectElement).value
-  await recorder.switchDevices(value, recorder.selectedMicrophoneId.value)
+async function onCameraChange(deviceId: string): Promise<void> {
+  await recorder.switchDevices(deviceId, recorder.selectedMicrophoneId.value)
   await bindPreview()
 }
 
 /**
  * Reopen the stream on the picked microphone.
- * @param event - Change event of the microphone select.
+ * @param deviceId - Identifier of the chosen microphone.
  */
-async function onMicrophoneChange(event: Event): Promise<void> {
-  const value: string = (event.target as HTMLSelectElement).value
+async function onMicrophoneChange(deviceId: string): Promise<void> {
   hasHeardSound.value = false
-  await recorder.switchDevices(recorder.selectedCameraId.value, value)
+  await recorder.switchDevices(recorder.selectedCameraId.value, deviceId)
   await bindPreview()
 }
 

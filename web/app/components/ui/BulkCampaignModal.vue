@@ -53,17 +53,20 @@
         </div>
 
         <div v-if="mode === 'existing'">
-          <label class="text-muted mb-1.5 block text-xs font-medium" for="bulk-campaign-select">Campagne</label>
+          <label class="text-muted mb-1.5 block text-xs font-medium">Campagne</label>
           <div v-if="loading" class="text-muted py-3 text-sm">
             <UIcon name="i-lucide-loader-circle" class="mr-2 h-4 w-4 animate-spin" />Chargement…
           </div>
           <div v-else-if="campaigns.length === 0" class="text-muted py-3 text-sm">
             Aucune campagne. Créez-en une nouvelle.
           </div>
-          <select v-else id="bulk-campaign-select" v-model="selectedCampaignId" class="input-field appearance-none">
-            <option :value="null" disabled>— Sélectionner —</option>
-            <option v-for="c in campaigns" :key="c.id" :value="c.id">{{ c.name }} ({{ c.prospects_count }})</option>
-          </select>
+          <UiSelectField
+            v-else
+            v-model="selectedCampaignId"
+            :options="campaignOptions"
+            placeholder="Sélectionner une campagne"
+            aria-label="Campagne"
+          />
         </div>
 
         <div v-else>
@@ -102,6 +105,7 @@
 import type { UseToastReturn } from '~/types/Composables'
 import type { ComputedRef, PropType, Ref } from 'vue'
 import { computed, ref, watch } from 'vue'
+import type { SelectFieldOption } from '~/types/SelectField'
 import type { UiBulkCampaignModalProps } from '~/types/UiBulkCampaignModal'
 import type { CampaignDetailResponse, CampaignListResponse, CampaignResponse } from '~/services/campaignService'
 import { CampaignService } from '~/services/campaignService'
@@ -135,8 +139,18 @@ const mode: Ref<'existing' | 'new'> = ref('existing')
 /** Campaigns available to pick from. */
 const campaigns: Ref<CampaignResponse[]> = ref([])
 
-/** Selected existing campaign id. */
-const selectedCampaignId: Ref<number | null> = ref(null)
+/** Selected existing campaign id (0 while nothing is picked). */
+const selectedCampaignId: Ref<number> = ref(0)
+
+/** Campaigns to pick from, with how many prospects each already holds. */
+const campaignOptions: ComputedRef<SelectFieldOption<number>[]> = computed((): SelectFieldOption<number>[] =>
+  campaigns.value.map(
+    (campaign: CampaignResponse): SelectFieldOption<number> => ({
+      value: campaign.id,
+      label: `${campaign.name} (${campaign.prospects_count})`,
+    }),
+  ),
+)
 
 /** New campaign name (create mode). */
 const newName: Ref<string> = ref('')
@@ -153,7 +167,7 @@ const error: Ref<string | null> = ref(null)
 /** Whether the form can be submitted. */
 const canSubmit: ComputedRef<boolean> = computed((): boolean => {
   if (props.prospectIds.length === 0) return false
-  return mode.value === 'new' ? newName.value.trim().length >= 2 : selectedCampaignId.value !== null
+  return mode.value === 'new' ? newName.value.trim().length >= 2 : selectedCampaignId.value !== 0
 })
 
 /**
@@ -188,7 +202,7 @@ async function submit(): Promise<void> {
       campaignId = created.id
       campaignName = created.name
     } else {
-      campaignId = selectedCampaignId.value as number
+      campaignId = selectedCampaignId.value
       campaignName = campaigns.value.find((c: CampaignResponse): boolean => c.id === campaignId)?.name ?? 'campagne'
     }
 
@@ -208,7 +222,7 @@ watch(
   (isOpen: boolean): void => {
     if (isOpen) {
       mode.value = 'existing'
-      selectedCampaignId.value = null
+      selectedCampaignId.value = 0
       newName.value = ''
       error.value = null
       loadCampaigns()

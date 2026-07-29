@@ -94,12 +94,24 @@
       <UiStatCard label="Avec Téléphone" :value="prospectsWithPhone" icon="i-lucide-phone" accent="sky" />
     </div>
 
-    <div class="app-card p-4">
-      <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @5xl:grid-cols-5">
-        <div>
-          <label class="app-label mb-1.5 block">Rechercher</label>
-          <input v-model="searchQuery" type="text" placeholder="Nom, ville, email..." class="app-input" />
+    <div class="app-card space-y-4 p-4">
+      <div class="flex justify-end">
+        <div class="relative w-full @2xl:w-80">
+          <UIcon
+            name="i-lucide-search"
+            class="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-[var(--app-faint)]"
+          />
+          <input
+            v-model="searchQuery"
+            type="search"
+            placeholder="Nom, ville, email..."
+            aria-label="Rechercher un prospect"
+            class="app-input pl-9"
+          />
         </div>
+      </div>
+
+      <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
         <div>
           <label class="app-label mb-1.5 block">Site web</label>
           <UiSelectField v-model="filterWebsite" :options="websiteFilterOptions" />

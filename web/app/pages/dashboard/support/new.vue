@@ -1,5 +1,5 @@
 <template>
-  <div class="mx-auto max-w-2xl space-y-8">
+  <div class="max-w-3xl space-y-8">
     <div>
       <NuxtLink
         to="/dashboard/support"
@@ -31,13 +31,15 @@
       </div>
 
       <div>
-        <label class="text-muted mb-1.5 block text-xs font-medium" for="topic">
+        <label class="text-muted mb-1.5 block text-xs font-medium">
           Catégorie <span class="text-[var(--app-red)]">*</span>
         </label>
-        <select id="topic" v-model="form.topic" required class="input-field">
-          <option disabled value="">Sélectionner une catégorie</option>
-          <option v-for="topic in topics" :key="topic.value" :value="topic.value">{{ topic.label }}</option>
-        </select>
+        <UiSelectField
+          v-model="form.topic"
+          :options="topics"
+          placeholder="Sélectionner une catégorie"
+          aria-label="Catégorie du ticket"
+        />
       </div>
 
       <div>

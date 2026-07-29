@@ -107,10 +107,9 @@
           <template v-if="selected.size > 0">
             <span class="h-4 w-px bg-[var(--app-line)]" />
             <span class="font-label text-xs text-[var(--app-ink-soft)]">{{ selected.size }} sélectionné(s)</span>
-            <select v-model="bulkTemplateId" class="app-input h-8 w-auto min-w-40 text-xs">
-              <option :value="''">Changer de template…</option>
-              <option v-for="tpl in demoTemplates" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
-            </select>
+            <div class="min-w-48">
+              <UiSelectField v-model="bulkTemplateId" :options="bulkTemplateOptions" />
+            </div>
             <button class="app-btn-secondary h-8 px-3 text-xs" :disabled="isActing" @click="regenerate">
               <UIcon name="i-lucide-refresh-cw" class="h-3.5 w-3.5" />Régénérer
             </button>
@@ -263,6 +262,7 @@ import type { UseToastReturn } from '~/types/Composables'
 import type { AutomationDetailKpi } from '~/types/AutomationDetailPage'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import type { SelectFieldOption } from '~/types/SelectField'
 import type { AutomationDetail, AutomationItem, AutomationStep, EmailPreview } from '~/types/Automation'
 import type { DemoSiteTemplate } from '~/services/demoSiteService'
 import { useAutomationsStore } from '~/stores/automations'
@@ -289,6 +289,14 @@ const selected: Ref<Set<number>> = ref(new Set<number>())
 const demoTemplates: Ref<DemoSiteTemplate[]> = ref([])
 /** Template chosen in the bulk toolbar (empty = keep current). */
 const bulkTemplateId: Ref<string> = ref('')
+
+/** Bulk-toolbar templates, the first entry keeping each site on its current one. */
+const bulkTemplateOptions: ComputedRef<SelectFieldOption[]> = computed((): SelectFieldOption[] => [
+  { value: '', label: 'Changer de template…' },
+  ...demoTemplates.value.map(
+    (template: DemoSiteTemplate): SelectFieldOption => ({ value: template.id, label: template.name }),
+  ),
+])
 /** Email preview modal state. */
 const previewOpen: Ref<boolean> = ref(false)
 const isPreviewing: Ref<boolean> = ref(false)

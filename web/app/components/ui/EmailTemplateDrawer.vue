@@ -176,11 +176,7 @@
               </div>
 
               <div v-if="includeSignature && signatures.length" class="mt-3.5">
-                <select v-model="form.signature_id" class="input-field">
-                  <option v-for="signature in signatures" :key="signature.id" :value="signature.id">
-                    {{ signature.name }}{{ signature.is_default ? ' (par défaut)' : '' }}
-                  </option>
-                </select>
+                <UiSelectField v-model="selectedSignatureId" :options="signatureOptions" />
               </div>
 
               <div v-if="signatures.length === 0" class="mt-3.5">
@@ -267,7 +263,7 @@ import type {
   UiEmailTemplateDrawerEmits,
   UiEmailTemplateDrawerProps,
 } from '~/types/UiEmailTemplateDrawer'
-import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
+import type { ComputedRef, EmitFn, PropType, Ref, WritableComputedRef } from 'vue'
 import type { EmailSignature, EmailTemplate, EmailTemplateCategory } from '~/types'
 import type { EmailTemplateDrawerMode } from '~/types/DrawerStack'
 import type { SelectFieldOption } from '~/types/SelectField'
@@ -348,6 +344,23 @@ const form: Ref<EmailTemplateForm> = ref({
   is_active: true,
   signature_id: null,
   category: 'first_email',
+})
+
+const signatureOptions: ComputedRef<SelectFieldOption<number>[]> = computed((): SelectFieldOption<number>[] =>
+  signatures.value.map(
+    (signature: EmailSignature): SelectFieldOption<number> => ({
+      value: signature.id,
+      label: `${signature.name}${signature.is_default ? ' (par défaut)' : ''}`,
+    }),
+  ),
+)
+
+/** Signature bound to the selector — the form keeps `null` for « none », the selector never shows it. */
+const selectedSignatureId: WritableComputedRef<number> = computed({
+  get: (): number => form.value.signature_id ?? 0,
+  set: (value: number): void => {
+    form.value.signature_id = value
+  },
 })
 
 /** Sequence-step options offered by the category selector. */

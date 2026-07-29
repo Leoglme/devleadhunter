@@ -88,16 +88,8 @@
             </div>
 
             <div>
-              <label for="sp-source" class="app-label mb-1.5 block">Source</label>
-              <select id="sp-source" v-model="form.source" class="app-input w-full">
-                <option
-                  v-for="option in PROSPECT_SOURCE_SEARCH_OPTIONS"
-                  :key="option.value || 'all'"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
+              <label class="app-label mb-1.5 block">Source</label>
+              <UiSelectField v-model="form.source" :options="PROSPECT_SOURCE_SEARCH_OPTIONS" aria-label="Source" />
             </div>
 
             <div class="space-y-3 border-t border-[var(--app-line-soft)] pt-4">

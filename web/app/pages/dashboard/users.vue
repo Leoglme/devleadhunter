@@ -38,18 +38,17 @@
       <UiStatCard label="Crédits consommés" :value="totalCreditsConsumed" icon="i-lucide-coins" accent="emerald" />
     </div>
 
-    <div class="app-card p-4">
-      <label class="app-label mb-1.5 block" for="users-search">Rechercher</label>
-      <div class="relative">
+    <div class="flex justify-end">
+      <div class="relative w-full @2xl:w-72">
         <UIcon
           name="i-lucide-search"
           class="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-[var(--app-faint)]"
         />
         <input
-          id="users-search"
           v-model="searchQuery"
           type="search"
           placeholder="Nom ou email…"
+          aria-label="Rechercher un utilisateur"
           class="app-input pl-9"
         />
       </div>

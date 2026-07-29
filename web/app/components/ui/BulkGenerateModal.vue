@@ -46,13 +46,11 @@
         </div>
 
         <div v-else>
-          <label class="text-muted mb-1.5 block text-xs font-medium" for="bulk-template-select">Template</label>
+          <label class="text-muted mb-1.5 block text-xs font-medium">Template</label>
           <div v-if="loading" class="text-muted py-3 text-sm">
             <UIcon name="i-lucide-loader-circle" class="mr-2 h-4 w-4 animate-spin" />Chargement des templates…
           </div>
-          <select v-else id="bulk-template-select" v-model="selectedTemplateId" class="input-field appearance-none">
-            <option v-for="tpl in templates" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
-          </select>
+          <UiSelectField v-else v-model="selectedTemplateId" :options="templateOptions" aria-label="Template" />
 
           <label class="mt-4 flex cursor-pointer items-center gap-2.5 text-sm text-[var(--app-ink)]">
             <input v-model="inviteCms" type="checkbox" class="h-4 w-4 cursor-pointer accent-[var(--app-green)]" />
@@ -88,8 +86,9 @@
 
 <script lang="ts" setup>
 import type { UseToastReturn } from '~/types/Composables'
-import type { PropType, Ref } from 'vue'
-import { ref, watch } from 'vue'
+import type { ComputedRef, PropType, Ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import type { SelectFieldOption } from '~/types/SelectField'
 import type { UiBulkGenerateModalProps } from '~/types/UiBulkGenerateModal'
 import type { BulkGenerateResult, DemoSiteTemplate } from '~/services/demoSiteService'
 import { DemoSiteService } from '~/services/demoSiteService'
@@ -122,6 +121,12 @@ const templates: Ref<DemoSiteTemplate[]> = ref([])
 
 /** Selected template id. */
 const selectedTemplateId: Ref<string> = ref('')
+
+const templateOptions: ComputedRef<SelectFieldOption[]> = computed((): SelectFieldOption[] =>
+  templates.value.map(
+    (template: DemoSiteTemplate): SelectFieldOption => ({ value: template.id, label: template.name }),
+  ),
+)
 
 /** Whether to send a CMS invite to each client immediately. */
 const inviteCms: Ref<boolean> = ref(false)
