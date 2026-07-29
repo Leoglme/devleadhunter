@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="mb-6 flex items-center justify-between">
+    <div class="mb-6">
       <p class="app-label flex items-center gap-2">
         <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
         Compte

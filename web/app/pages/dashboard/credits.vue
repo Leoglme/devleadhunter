@@ -1,11 +1,13 @@
 <template>
   <div>
-    <div class="mb-6 flex items-center justify-between">
-      <p class="app-label flex items-center gap-2">
-        <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
-        Compte
-      </p>
-      <h1 class="app-page-title mt-2">Mes crédits</h1>
+    <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <p class="app-label flex items-center gap-2">
+          <LandingAsterisk class="text-[0.6rem] text-[var(--app-accent)]" />
+          Compte
+        </p>
+        <h1 class="app-page-title mt-2">Mes crédits</h1>
+      </div>
       <NuxtLink
         to="/dashboard/buy-credits"
         class="flex items-center gap-1.5 text-sm text-[var(--app-ink)] transition-colors hover:text-[var(--app-ink-soft)]"
