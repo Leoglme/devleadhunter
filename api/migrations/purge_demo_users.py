@@ -7,11 +7,11 @@ it already produced, everywhere.
 Kept: the configured admin, and any account holding the ADMIN role — so a real
 administrator is never wiped by a stale ``ADMIN_EMAIL``.
 
-Rows owned by a purged account are deleted explicitly, child-first. Relying on the
-foreign keys would not do: seven of them are RESTRICT (they would abort the deploy),
-and six columns pointing at ``users`` carry no constraint at all (they would leave
-orphans behind). Grandchildren guarded by a RESTRICT key (a support attachment, a
-follow-up bound to a template) are cleared first, for the same reason.
+Rows owned by a purged account are deleted explicitly: six columns pointing at
+``users`` carry no foreign key at all and would leave orphans behind. Whatever a
+RESTRICT key protects is cleared first, and that dependency graph is **read from the
+live schema** — production and development were created years apart and do not carry
+the same delete rules, so any hard-coded order is wrong on one of the two.
 
 Idempotent: a second run finds nothing left to delete.
 
@@ -59,13 +59,9 @@ _OWNED_ROWS: list[tuple[str, str]] = [
     ("credit_transactions", "user_id"),
 ]
 
-# Grandchildren: they hang off a row above by a RESTRICT key, so they must go
-# first or the parent delete is refused. (child, child column, parent, user column)
-_DEPENDENT_ROWS: list[tuple[str, str, str, str]] = [
-    ("support_attachments", "message_id", "support_messages", "sender_id"),
-    ("support_attachments", "ticket_id", "support_tickets", "user_id"),
-    ("campaign_follow_ups", "template_id", "email_templates", "user_id"),
-]
+# Deep enough for this schema (attachment → message → ticket); a deeper chain means
+# a cycle or an unexpected model, and must fail loudly rather than loop.
+_MAX_DEPENDENCY_DEPTH: int = 6
 
 # Columns merely *pointing* at a purged user, blanked instead of deleted: an
 # unsubscribe record must outlive the account, and a ticket must keep its history.
@@ -82,6 +78,69 @@ def _table_exists(conn, table: str) -> bool:
         {"t": table},
     ).scalar()
     return bool(result)
+
+
+def _restricting_children(conn, table: str) -> list[tuple[str, str]]:
+    """
+    Tables holding a foreign key to ``table`` that would refuse its deletion.
+
+    Read from the live schema rather than hard-coded: production and development
+    databases were created years apart and do not carry the same delete rules
+    (``support_messages.ticket_id`` is RESTRICT in production, CASCADE locally).
+    CASCADE and SET NULL children are left out — the database handles those.
+
+    Args:
+        conn: Open connection.
+        table: Table about to be deleted from.
+
+    Returns:
+        (child table, child column) pairs to clear first.
+    """
+    rows = conn.execute(
+        text(
+            "SELECT k.TABLE_NAME, k.COLUMN_NAME "
+            "FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE k "
+            "JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS r "
+            "  ON r.CONSTRAINT_NAME = k.CONSTRAINT_NAME AND r.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA "
+            "WHERE k.TABLE_SCHEMA = DATABASE() AND k.REFERENCED_TABLE_NAME = :t "
+            "  AND r.DELETE_RULE NOT IN ('CASCADE', 'SET NULL')"
+        ),
+        {"t": table},
+    ).all()
+    # A self-reference cannot be resolved by a subquery on the same table (MySQL 1093).
+    return [(row[0], row[1]) for row in rows if row[0] != table]
+
+
+def _purge_table(conn, table: str, where_sql: str, target_ids: list[int], depth: int = 0) -> None:
+    """
+    Delete the rows of ``table`` matched by ``where_sql``, children first.
+
+    Args:
+        conn: Open connection.
+        table: Table to delete from.
+        where_sql: Condition selecting the rows to delete, using the ``:ids`` parameter.
+        target_ids: Identifiers of the accounts being purged.
+        depth: Current recursion depth.
+
+    Raises:
+        RuntimeError: When the dependency chain is deeper than expected.
+    """
+    if depth > _MAX_DEPENDENCY_DEPTH:
+        raise RuntimeError(f"Dependency chain too deep at {table} — cycle or unexpected schema")
+
+    for child_table, child_column in _restricting_children(conn, table):
+        _purge_table(
+            conn,
+            child_table,
+            f"{child_column} IN (SELECT id FROM {table} WHERE {where_sql})",
+            target_ids,
+            depth + 1,
+        )
+
+    statement = text(f"DELETE FROM {table} WHERE {where_sql}").bindparams(bindparam("ids", expanding=True))
+    deleted = conn.execute(statement, {"ids": target_ids}).rowcount
+    if deleted:
+        print(f"  - {'  ' * depth}{table}: {deleted} row(s)")
 
 
 def run_migration() -> None:
@@ -114,27 +173,12 @@ def run_migration() -> None:
             if detached:
                 print(f"  ~ {table}.{column}: {detached} row(s) detached")
 
-        for child, child_column, parent, user_column in _DEPENDENT_ROWS:
-            if not _table_exists(conn, child) or not _table_exists(conn, parent):
-                continue
-            statement = text(
-                f"DELETE FROM {child} WHERE {child_column} IN (SELECT id FROM {parent} WHERE {user_column} IN :ids)"
-            ).bindparams(bindparam("ids", expanding=True))
-            deleted = conn.execute(statement, {"ids": target_ids}).rowcount
-            if deleted:
-                print(f"  - {child} (via {parent}): {deleted} row(s)")
-
         for table, column in _OWNED_ROWS:
             if not _table_exists(conn, table):
                 continue
-            statement = text(f"DELETE FROM {table} WHERE {column} IN :ids").bindparams(bindparam("ids", expanding=True))
-            deleted = conn.execute(statement, {"ids": target_ids}).rowcount
-            if deleted:
-                print(f"  - {table}: {deleted} row(s)")
+            _purge_table(conn, table, f"{column} IN :ids", target_ids)
 
-        purge_users = text("DELETE FROM users WHERE id IN :ids").bindparams(bindparam("ids", expanding=True))
-        purged = conn.execute(purge_users, {"ids": target_ids}).rowcount
-        print(f"  - users: {purged} account(s)")
+        _purge_table(conn, "users", "id IN :ids", target_ids)
 
     print("Migration completed successfully.")
 
