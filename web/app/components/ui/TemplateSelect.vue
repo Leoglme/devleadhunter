@@ -1,11 +1,13 @@
 <template>
   <div>
     <div class="flex items-center gap-2">
+      <!-- Portalled to body with no z-index of its own: without this it opens behind a drawer. -->
       <USelectMenu
         :model-value="selectedItem"
         :items="items"
         :search-input="{ placeholder: 'Rechercher un modèle…' }"
         placeholder="— Sélectionner un modèle —"
+        :ui="{ content: 'z-[110]' }"
         class="min-w-0 flex-1"
         @update:model-value="onSelect"
       />

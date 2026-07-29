@@ -94,7 +94,7 @@
       <UiStatCard label="Avec Téléphone" :value="prospectsWithPhone" icon="i-lucide-phone" accent="sky" />
     </div>
 
-    <div class="app-card space-y-4 p-4">
+    <div class="app-card space-y-3 p-4">
       <div class="flex justify-end">
         <div class="relative w-full @2xl:w-80">
           <UIcon
