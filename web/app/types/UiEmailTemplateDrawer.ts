@@ -1,10 +1,13 @@
-import type { EmailTemplate } from '~/types'
+import type { EmailTemplate, EmailTemplateCategory } from '~/types'
 import type { EmailTemplateDrawerMode } from '~/types/DrawerStack'
 import type { UiDrawerProps } from '~/types/UiDrawer'
 
 export type UiEmailTemplateDrawerProps = UiDrawerProps & {
   mode?: EmailTemplateDrawerMode
   template?: EmailTemplate | null
+  browsePositionLabel?: string
+  canBrowsePrevious?: boolean
+  canBrowseNext?: boolean
 }
 
 /** Local shape of the template form. */
@@ -14,6 +17,7 @@ export type EmailTemplateForm = {
   body_html: string
   is_active: boolean
   signature_id: number | null
+  category: EmailTemplateCategory
 }
 
 export type UiEmailTemplateDrawerEmits = {
@@ -21,4 +25,6 @@ export type UiEmailTemplateDrawerEmits = {
   back: []
   saved: [template: EmailTemplate]
   edit: [template: EmailTemplate]
+  browsePrevious: []
+  browseNext: []
 }

@@ -79,32 +79,13 @@
 
         <div class="flex-1 overflow-y-auto">
           <template v-if="!editMode">
-            <div
-              v-if="browsePositionLabel"
-              class="flex items-center justify-between gap-3 border-b border-[var(--app-line-soft)] px-5 py-2.5"
-            >
-              <button
-                type="button"
-                class="app-btn-secondary h-8 px-3 text-xs"
-                :disabled="!canBrowsePrevious"
-                @click="$emit('browsePrevious')"
-              >
-                <UIcon name="i-lucide-chevron-left" class="h-3.5 w-3.5" />
-                Précédent
-              </button>
-              <span class="font-label text-[11px] whitespace-nowrap text-[var(--app-ink-soft)] tabular-nums">
-                {{ browsePositionLabel }}
-              </span>
-              <button
-                type="button"
-                class="app-btn-secondary h-8 px-3 text-xs"
-                :disabled="!canBrowseNext"
-                @click="$emit('browseNext')"
-              >
-                Suivant
-                <UIcon name="i-lucide-chevron-right" class="h-3.5 w-3.5" />
-              </button>
-            </div>
+            <UiDrawerBrowseNav
+              :position-label="browsePositionLabel"
+              :can-previous="canBrowsePrevious"
+              :can-next="canBrowseNext"
+              @previous="$emit('browsePrevious')"
+              @next="$emit('browseNext')"
+            />
 
             <div v-if="prospect.organization_id" class="px-5 pt-4">
               <div

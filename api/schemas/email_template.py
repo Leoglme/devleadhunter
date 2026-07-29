@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from enums.email_template_category import EmailTemplateCategory
+
 
 class EmailTemplateBase(BaseModel):
     """Base schema for email template."""
@@ -16,6 +18,7 @@ class EmailTemplateBase(BaseModel):
     body_text: str | None = None
     variables: list[str] | None = None
     signature_id: int | None = None
+    category: EmailTemplateCategory = EmailTemplateCategory.FIRST_EMAIL
 
 
 class EmailTemplateCreate(EmailTemplateBase):
@@ -34,6 +37,7 @@ class EmailTemplateUpdate(BaseModel):
     email_account_id: int | None = None
     variables: list[str] | None = None
     is_active: bool | None = None
+    category: EmailTemplateCategory | None = None
     # ``signature_id`` is nullable on purpose: an explicit ``null`` detaches the
     # signature (switch turned off), so it must be part of the update payload.
     signature_id: int | None = None
@@ -54,6 +58,9 @@ class EmailTemplateResponse(BaseModel):
     variables: list[str] | None = None
     signature_id: int | None = None
     is_active: bool
+    category: EmailTemplateCategory = EmailTemplateCategory.FIRST_EMAIL
+    # Exposed so the app can pin the recommended templates (higher = pinned higher).
+    sort_order: int = 0
     created_at: datetime
     updated_at: datetime | None = None
 

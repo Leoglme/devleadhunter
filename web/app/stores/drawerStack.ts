@@ -3,7 +3,7 @@ import type { ComputedRef, Ref } from 'vue'
 import { computed, ref, watch } from 'vue'
 import type { DrawerStackEntry, OrderMutationNotice, ProspectMutationNotice } from '~/types/DrawerStack'
 import type { Order } from '~/services/ordersService'
-import type { Prospect } from '~/types'
+import type { EmailTemplate, Prospect } from '~/types'
 
 /** sessionStorage key persisting the drawer stack across page reloads. */
 const DRAWER_STACK_STORAGE_KEY: string = 'dlh-drawer-stack'
@@ -26,6 +26,7 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
   const prospectMutationCounter: Ref<number> = ref(0)
   // Volontairement hors sessionStorage : sert seulement à naviguer entre voisins pendant la session.
   const prospectBrowseList: Ref<Prospect[]> = ref([])
+  const emailTemplateBrowseList: Ref<EmailTemplate[]> = ref([])
   const lastOrderMutation: Ref<OrderMutationNotice | null> = ref(null)
   const orderMutationCounter: Ref<number> = ref(0)
   const emailLogsRefreshCounter: Ref<number> = ref(0)
@@ -60,10 +61,11 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     stack.value.pop()
   }
 
-  /** Close every drawer, and forget the list the prospect drawer was browsing. */
+  /** Close every drawer, and forget the lists the drawers were browsing. */
   function closeAll(): void {
     stack.value = []
     prospectBrowseList.value = []
+    emailTemplateBrowseList.value = []
   }
 
   /**
@@ -72,6 +74,14 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
    */
   function setProspectBrowseList(list: Prospect[]): void {
     prospectBrowseList.value = list
+  }
+
+  /**
+   * Remember the list the email template preview browses, so it can step to its neighbours.
+   * @param list - Templates in the order they are displayed by the calling page.
+   */
+  function setEmailTemplateBrowseList(list: EmailTemplate[]): void {
+    emailTemplateBrowseList.value = list
   }
 
   /**
@@ -183,6 +193,7 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     lastProspectMutation,
     prospectMutationCounter,
     prospectBrowseList,
+    emailTemplateBrowseList,
     lastOrderMutation,
     orderMutationCounter,
     emailLogsRefreshCounter,
@@ -195,6 +206,7 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     back,
     closeAll,
     setProspectBrowseList,
+    setEmailTemplateBrowseList,
     notifyProspectUpdated,
     notifyProspectDeleted,
     notifyOrderUpdated,

@@ -250,6 +250,26 @@ def _extract_variables(*texts: str) -> list[str]:
     return sorted(found)
 
 
+def _category_for(name: str) -> str:
+    """
+    Classify a seeded template from its name.
+
+    Deliberately the same rule as the ``add_email_template_category`` migration,
+    so a seeded template and a backfilled one always land in the same tab.
+
+    Args:
+        name: Template name as defined above (« Relance J+3 — rappel court », …).
+
+    Returns:
+        The matching ``EmailTemplateCategory`` value.
+    """
+    from enums.email_template_category import EmailTemplateCategory
+
+    if "relance" in name.lower():
+        return EmailTemplateCategory.FOLLOW_UP.value
+    return EmailTemplateCategory.FIRST_EMAIL.value
+
+
 def seed_email_templates() -> None:
     """
     Insert the cold-email starter templates for the admin user.
@@ -298,6 +318,7 @@ def seed_email_templates() -> None:
                     body_html=body_html,
                     variables=json.dumps(variables),
                     is_active=True,
+                    category=_category_for(name),
                     sort_order=int(tpl["sort_order"]),
                 )
             )

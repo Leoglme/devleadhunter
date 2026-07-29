@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from core.database import Base
+from enums.email_template_category import EmailTemplateCategory
 
 if TYPE_CHECKING:
     from models.email_account import EmailAccount
@@ -50,6 +51,14 @@ class EmailTemplate(Base):
     body_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     variables: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Which step of the sequence this template is written for — drives the tabs of
+    # the templates page. "first_email" (the J1 cold email) or "follow_up".
+    category: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        server_default=EmailTemplateCategory.FIRST_EMAIL.value,
+        default=EmailTemplateCategory.FIRST_EMAIL.value,
+    )
     # Higher = pinned higher in the app's template list (recommended templates use a high value).
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)

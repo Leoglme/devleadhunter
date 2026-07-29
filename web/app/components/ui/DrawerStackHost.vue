@@ -44,10 +44,15 @@
       :mode="emailTemplateEntry?.mode ?? 'create'"
       :template="emailTemplateEntry?.template ?? null"
       :show-back="hasPrevious"
+      :browse-position-label="templateBrowsePositionLabel"
+      :can-browse-previous="canBrowsePreviousTemplate"
+      :can-browse-next="canBrowseNextTemplate"
       @close="drawerStack.closeAll()"
       @back="drawerStack.back()"
       @saved="handleTemplateSaved"
       @edit="handleTemplateEdit"
+      @browse-previous="browseToTemplate('previous')"
+      @browse-next="browseToTemplate('next')"
     />
 
     <UiEmailSignaturesDrawer
@@ -166,7 +171,7 @@ import type {
   OrderDrawerEntry,
   OrganizationDrawerEntry,
   ProfileDrawerEntry,
-  ProspectBrowseDirection,
+  DrawerBrowseDirection,
   ProspectDrawerEntry,
   SearchProspectsDrawerEntry,
   SendEmailDrawerEntry,
@@ -352,10 +357,42 @@ const canBrowseNext: ComputedRef<boolean> = computed(
  * Open the neighbouring prospect of the browsed list, keeping the drawer in place.
  * @param direction - Which neighbour to open.
  */
-function browseToProspect(direction: ProspectBrowseDirection): void {
+function browseToProspect(direction: DrawerBrowseDirection): void {
   const step: number = direction === 'previous' ? -1 : 1
   const target: Prospect | undefined = drawerStack.prospectBrowseList[browseIndex.value + step]
   if (target) drawerStack.push({ kind: 'prospect', prospect: target })
+}
+
+/** Position of the previewed template in the browsed list, -1 when that list is unknown. */
+const templateBrowseIndex: ComputedRef<number> = computed((): number => {
+  // Only the preview steps through the list — editing one template at a time is deliberate.
+  if (emailTemplateEntry.value?.mode !== 'preview') return -1
+  const openId: number | undefined = emailTemplateEntry.value.template?.id
+  if (openId === undefined) return -1
+  return drawerStack.emailTemplateBrowseList.findIndex((candidate: EmailTemplate): boolean => candidate.id === openId)
+})
+
+const templateBrowsePositionLabel: ComputedRef<string> = computed((): string =>
+  templateBrowseIndex.value < 0
+    ? ''
+    : `${templateBrowseIndex.value + 1} / ${drawerStack.emailTemplateBrowseList.length}`,
+)
+
+const canBrowsePreviousTemplate: ComputedRef<boolean> = computed((): boolean => templateBrowseIndex.value > 0)
+
+const canBrowseNextTemplate: ComputedRef<boolean> = computed(
+  (): boolean =>
+    templateBrowseIndex.value >= 0 && templateBrowseIndex.value < drawerStack.emailTemplateBrowseList.length - 1,
+)
+
+/**
+ * Preview the neighbouring template of the browsed list, keeping the drawer in place.
+ * @param direction - Which neighbour to open.
+ */
+function browseToTemplate(direction: DrawerBrowseDirection): void {
+  const step: number = direction === 'previous' ? -1 : 1
+  const target: EmailTemplate | undefined = drawerStack.emailTemplateBrowseList[templateBrowseIndex.value + step]
+  if (target) drawerStack.push({ kind: 'email-template', mode: 'preview', template: target })
 }
 
 /**

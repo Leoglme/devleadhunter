@@ -21,7 +21,7 @@ export type ProspectDrawerEntry = {
 }
 
 /** Step taken by the prospect drawer inside the list it browses. */
-export type ProspectBrowseDirection = 'previous' | 'next'
+export type DrawerBrowseDirection = 'previous' | 'next'
 
 /** Prefilled values of the email composer (e.g. « Renvoyer » from a log). */
 export type SendEmailPrefill = {

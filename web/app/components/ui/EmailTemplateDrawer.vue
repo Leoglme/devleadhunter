@@ -39,6 +39,15 @@
           </button>
         </div>
 
+        <UiDrawerBrowseNav
+          v-if="mode === 'preview'"
+          :position-label="browsePositionLabel"
+          :can-previous="canBrowsePrevious"
+          :can-next="canBrowseNext"
+          @previous="emit('browsePrevious')"
+          @next="emit('browseNext')"
+        />
+
         <div v-if="mode === 'preview'" class="flex-1 overflow-y-auto px-5 py-4">
           <div v-if="isPreviewLoading" class="flex items-center justify-center py-16">
             <UIcon name="i-lucide-loader-circle" class="h-6 w-6 animate-spin text-[var(--app-faint)]" />
@@ -65,6 +74,14 @@
                 class="input-field"
                 placeholder="Ex : Proposition de site web"
               />
+            </div>
+
+            <div>
+              <label class="mb-2 block text-sm font-medium text-[var(--app-ink)]">Étape de la séquence</label>
+              <UiSelectField v-model="form.category" :options="categoryOptions" />
+              <p class="text-muted mt-1.5 text-xs">
+                Classe le modèle dans l'onglet correspondant — un premier email et une relance ne s'écrivent pas pareil.
+              </p>
             </div>
 
             <div>
@@ -251,13 +268,15 @@ import type {
   UiEmailTemplateDrawerProps,
 } from '~/types/UiEmailTemplateDrawer'
 import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
-import type { EmailSignature, EmailTemplate } from '~/types'
+import type { EmailSignature, EmailTemplate, EmailTemplateCategory } from '~/types'
 import type { EmailTemplateDrawerMode } from '~/types/DrawerStack'
+import type { SelectFieldOption } from '~/types/SelectField'
 import { computed, ref, watch } from 'vue'
 import { EmailTemplatesService } from '~/services/emailTemplatesService'
 import { EmailSignaturesService } from '~/services/emailSignaturesService'
 import { useVariableInsertion } from '~/composables/useVariableInsertion'
 import { EmailVariables } from '~/utils/emailVariables'
+import { EMAIL_TEMPLATE_CATEGORIES, EMAIL_TEMPLATE_CATEGORY_LABELS } from '~/utils/emailTemplate'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import { useToast } from '~/composables/useToast'
 
@@ -276,6 +295,18 @@ const props: UiEmailTemplateDrawerProps = defineProps({
     default: null,
   },
   showBack: {
+    type: Boolean,
+    default: false,
+  },
+  browsePositionLabel: {
+    type: String,
+    default: '',
+  },
+  canBrowsePrevious: {
+    type: Boolean,
+    default: false,
+  },
+  canBrowseNext: {
     type: Boolean,
     default: false,
   },
@@ -316,7 +347,16 @@ const form: Ref<EmailTemplateForm> = ref({
   body_html: '',
   is_active: true,
   signature_id: null,
+  category: 'first_email',
 })
+
+/** Sequence-step options offered by the category selector. */
+const categoryOptions: SelectFieldOption[] = EMAIL_TEMPLATE_CATEGORIES.map(
+  (category: EmailTemplateCategory): SelectFieldOption => ({
+    value: category,
+    label: EMAIL_TEMPLATE_CATEGORY_LABELS[category],
+  }),
+)
 
 /** Subject input element (for cursor-aware variable insertion). */
 const subjectRef: Ref<HTMLInputElement | null> = ref(null)
@@ -425,6 +465,7 @@ async function handleSave(): Promise<void> {
         body_html: form.value.body_html,
         is_active: form.value.is_active,
         signature_id: signatureId,
+        category: form.value.category,
       })
       toast.success('Modèle mis à jour')
       emit('saved', updated)
@@ -434,6 +475,7 @@ async function handleSave(): Promise<void> {
         subject: form.value.subject,
         body_html: form.value.body_html,
         signature_id: signatureId,
+        category: form.value.category,
       })
       toast.success('Modèle créé')
       emit('saved', created)
@@ -521,6 +563,7 @@ watch(
       body_html: props.template?.body_html ?? '',
       is_active: props.template?.is_active ?? true,
       signature_id: props.template?.signature_id ?? null,
+      category: props.template?.category ?? 'first_email',
     }
   },
   { immediate: true },

@@ -72,6 +72,8 @@ async def get_email_templates(current_user: User = Depends(get_current_user), db
             "variables": json.loads(template.variables) if template.variables else [],
             "signature_id": template.signature_id,
             "is_active": template.is_active,
+            "category": template.category,
+            "sort_order": template.sort_order,
             "created_at": template.created_at,
             "updated_at": template.updated_at,
         }
@@ -106,6 +108,8 @@ async def get_email_template(
         variables=json.loads(template.variables) if template.variables else [],
         signature_id=template.signature_id,
         is_active=template.is_active,
+        category=template.category,
+        sort_order=template.sort_order,
         created_at=template.created_at,
         updated_at=template.updated_at,
     )
@@ -147,6 +151,7 @@ async def create_email_template(
         body_text=template_data.body_text,
         variables=json.dumps(variables),
         signature_id=template_data.signature_id,
+        category=template_data.category.value,
     )
 
     db.add(new_template)
@@ -164,6 +169,8 @@ async def create_email_template(
         variables=variables,
         signature_id=new_template.signature_id,
         is_active=new_template.is_active,
+        category=new_template.category,
+        sort_order=new_template.sort_order,
         created_at=new_template.created_at,
         updated_at=new_template.updated_at,
     )
@@ -210,6 +217,8 @@ async def update_email_template(
         template.body_text = template_data.body_text
     if template_data.is_active is not None:
         template.is_active = template_data.is_active
+    if template_data.category is not None:
+        template.category = template_data.category.value
     # Signature: apply only when the field is explicitly present in the payload.
     # ``null`` means "detach" (switch off), so an ``is not None`` guard would be
     # wrong; ``model_fields_set`` distinguishes omitted from explicit null and
@@ -241,6 +250,8 @@ async def update_email_template(
         variables=json.loads(template.variables) if template.variables else [],
         signature_id=template.signature_id,
         is_active=template.is_active,
+        category=template.category,
+        sort_order=template.sort_order,
         created_at=template.created_at,
         updated_at=template.updated_at,
     )

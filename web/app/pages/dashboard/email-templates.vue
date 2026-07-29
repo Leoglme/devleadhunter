@@ -15,6 +15,8 @@
       </button>
     </div>
 
+    <UiTabs v-model="activeCategory" :tabs="categoryTabs" />
+
     <div class="flex flex-wrap items-center gap-3">
       <div class="relative w-full max-w-xs">
         <UIcon
@@ -24,7 +26,7 @@
         <input v-model="searchQuery" type="text" placeholder="Rechercher un modèle…" class="input-field pl-9" />
       </div>
       <p class="text-muted text-xs">
-        {{ emailTemplates.length }} modèle{{ emailTemplates.length > 1 ? 's' : '' }}
+        {{ emailTemplates.length }} modèle{{ emailTemplates.length > 1 ? 's' : '' }} au total
         <template v-if="inactiveTemplates.length">
           · {{ inactiveTemplates.length }} inactif{{ inactiveTemplates.length > 1 ? 's' : '' }}
         </template>
@@ -53,7 +55,13 @@
     </div>
 
     <div v-else-if="filteredTemplates.length === 0" class="card px-6 py-10 text-center">
-      <p class="text-muted text-sm">Aucun modèle ne correspond à « {{ searchQuery }} ».</p>
+      <p v-if="searchQuery.trim()" class="text-muted text-sm">
+        Aucun modèle ne correspond à « {{ searchQuery }} » dans cet onglet.
+      </p>
+      <p v-else class="text-muted text-sm">
+        Aucun modèle dans « {{ activeCategoryLabel }} » — créez-en un, ou changez la catégorie d'un modèle existant
+        depuis sa fiche.
+      </p>
     </div>
 
     <template v-else>
@@ -68,10 +76,18 @@
           >
             <button type="button" class="min-w-0 flex-1 cursor-pointer text-left" @click="openPreviewDrawer(template)">
               <div class="flex flex-wrap items-center gap-2">
+                <span
+                  v-if="isTemplateRecommended(template)"
+                  class="shrink-0 text-sm leading-none text-[var(--app-accent)]"
+                  title="Modèle recommandé — épinglé en haut de la liste"
+                  aria-label="Modèle recommandé"
+                >
+                  ★
+                </span>
                 <h3
                   class="truncate text-sm font-semibold text-[var(--app-ink)] underline decoration-transparent underline-offset-4 transition-colors group-hover:decoration-[var(--app-accent)]"
                 >
-                  {{ template.name }}
+                  {{ templateNameWithoutStar(template.name) }}
                 </h3>
                 <span v-if="!template.is_active" class="app-badge">Inactif</span>
               </div>
@@ -173,12 +189,19 @@
 <script lang="ts" setup>
 import type { UseToastReturn } from '~/types/Composables'
 import type { TemplateGroup } from '~/types/EmailTemplatesPage'
+import type { UiTab } from '~/types/UiTabs'
 import type { ComputedRef, Ref } from 'vue'
-import type { EmailTemplate } from '~/types'
+import type { EmailTemplate, EmailTemplateCategory } from '~/types'
 import { computed, onMounted, ref, watch } from 'vue'
 import { EmailTemplatesService } from '~/services/emailTemplatesService'
 import { useToast } from '~/composables/useToast'
 import { useDrawerStackStore } from '~/stores/drawerStack'
+import {
+  EMAIL_TEMPLATE_CATEGORIES,
+  EMAIL_TEMPLATE_CATEGORY_LABELS,
+  isTemplateRecommended,
+  templateNameWithoutStar,
+} from '~/utils/emailTemplate'
 
 definePageMeta({
   layout: 'dashboard',
@@ -198,11 +221,39 @@ const templateToDelete: Ref<EmailTemplate | null> = ref(null)
 const openMenuTemplateId: Ref<number | null> = ref(null)
 const confirmModal: Ref<{ open: () => void; close: () => void } | null> = ref(null)
 
-/** Templates matching the search query (name or subject). */
+/** Sequence step currently displayed. */
+const activeCategory: Ref<EmailTemplateCategory> = ref('first_email')
+
+/** Templates of the active tab only, before the search filter. */
+const categoryTemplates: ComputedRef<EmailTemplate[]> = computed((): EmailTemplate[] =>
+  emailTemplates.value.filter((template: EmailTemplate): boolean => template.category === activeCategory.value),
+)
+
+/** One tab per sequence step, each showing how many templates it holds. */
+const categoryTabs: ComputedRef<UiTab[]> = computed((): UiTab[] =>
+  EMAIL_TEMPLATE_CATEGORIES.map((category: EmailTemplateCategory): UiTab => {
+    const count: number = emailTemplates.value.filter(
+      (template: EmailTemplate): boolean => template.category === category,
+    ).length
+    return {
+      key: category,
+      label: EMAIL_TEMPLATE_CATEGORY_LABELS[category],
+      hint: `${count} modèle${count > 1 ? 's' : ''}`,
+      icon: category === 'first_email' ? 'i-lucide-mail' : 'i-lucide-reply',
+    }
+  }),
+)
+
+/** Label of the active tab, used by the empty state. */
+const activeCategoryLabel: ComputedRef<string> = computed(
+  (): string => EMAIL_TEMPLATE_CATEGORY_LABELS[activeCategory.value],
+)
+
+/** Templates of the active tab matching the search query (name or subject). */
 const filteredTemplates: ComputedRef<EmailTemplate[]> = computed((): EmailTemplate[] => {
   const query: string = searchQuery.value.trim().toLowerCase()
-  if (!query) return emailTemplates.value
-  return emailTemplates.value.filter(
+  if (!query) return categoryTemplates.value
+  return categoryTemplates.value.filter(
     (template: EmailTemplate): boolean =>
       template.name.toLowerCase().includes(query) || template.subject.toLowerCase().includes(query),
   )
@@ -226,6 +277,11 @@ const templateGroups: ComputedRef<TemplateGroup[]> = computed((): TemplateGroup[
   if (inactive.length) groups.push({ key: 'inactive', heading: 'Modèles inactifs', templates: inactive })
   return groups
 })
+
+/** Displayed templates, flattened in reading order — the list the preview drawer walks. */
+const browsableTemplates: ComputedRef<EmailTemplate[]> = computed((): EmailTemplate[] =>
+  templateGroups.value.flatMap((group: TemplateGroup): EmailTemplate[] => group.templates),
+)
 
 /**
  * Load every template of the current user.
@@ -268,9 +324,11 @@ function openEditDrawer(template: EmailTemplate): void {
 
 /**
  * Open the preview drawer for a template (rendered with sample data).
+ * Hands the drawer the list currently displayed, so it can step to its neighbours.
  * @param template - Template to preview.
  */
 function openPreviewDrawer(template: EmailTemplate): void {
+  drawerStack.setEmailTemplateBrowseList(browsableTemplates.value)
   drawerStack.push({ kind: 'email-template', mode: 'preview', template })
 }
 
@@ -285,6 +343,7 @@ async function duplicateTemplate(template: EmailTemplate): Promise<void> {
       subject: template.subject,
       body_html: template.body_html,
       signature_id: template.signature_id ?? null,
+      category: template.category,
     })
     emailTemplates.value.unshift(copy)
     toast.success(`Modèle « ${template.name} » dupliqué`)

@@ -370,6 +370,12 @@ export type EmailAccount = {
   updated_at?: string | null
 }
 
+/**
+ * Step of the cold-email sequence a template is written for. A first email and a
+ * follow-up are never interchangeable, so the templates page tabs on this.
+ */
+export type EmailTemplateCategory = 'first_email' | 'follow_up'
+
 export type EmailTemplate = {
   id: number
   user_id: number
@@ -380,6 +386,9 @@ export type EmailTemplate = {
   variables?: string[]
   signature_id?: number | null
   is_active: boolean
+  category: EmailTemplateCategory
+  /** Higher = pinned higher; the seeded « ★ Recommandé » templates use a high value. */
+  sort_order: number
   created_at: string
   updated_at?: string | null
 }
@@ -501,6 +510,7 @@ export type EmailTemplateCreate = {
   email_account_id?: number
   variables?: string[]
   signature_id?: number | null
+  category?: EmailTemplateCategory
 }
 
 export type EmailTemplateUpdate = {
@@ -511,6 +521,7 @@ export type EmailTemplateUpdate = {
   variables?: string[]
   is_active?: boolean
   signature_id?: number | null
+  category?: EmailTemplateCategory
 }
 
 export type SendEmailRequest = {
