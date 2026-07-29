@@ -1,17 +1,17 @@
 """
-User seeder to create initial admin user and sample users.
-"""
+User seeder to create the initial admin user.
 
-from faker import Faker
+Demo accounts used to be generated here with Faker. They are gone: random emails
+never collide, so every run created ten more accounts, and cleaning them up in one
+environment did nothing for the next run. The ``purge_demo_users`` migration
+removes the ones already created.
+"""
 
 from core.config import settings
 from core.database import get_db, init_db
 from enums.user_role import UserRole
 from models.user import User
 from services.auth_service import AuthService
-
-# Initialize Faker
-fake = Faker()
 
 
 def seed_admin_user() -> None:
@@ -46,40 +46,6 @@ def seed_admin_user() -> None:
             db.refresh(admin_user)
 
             print(f"[OK] Admin user created: {settings.admin_email}")
-
-        # Random users are DEMO fixtures (random emails → never collide → 10 new
-        # accounts every run). Skip them in production so deploys don't pollute the DB.
-        if settings.is_production:
-            print("[SKIP] Random demo users are not seeded in production")
-        else:
-            # Create 10 random users
-            users_created = 0
-            for i in range(10):
-                random_name = fake.name()
-                random_email = fake.email()
-
-                # Check if user already exists
-                existing_user = AuthService.get_user_by_email(db, random_email)
-                if existing_user:
-                    continue
-
-                # Create random user
-                random_user = User(
-                    name=random_name,
-                    email=random_email,
-                    hashed_password=AuthService.hash_password("password123"),  # Default password for random users
-                    role=UserRole.USER.value,
-                    is_active=True,
-                )
-
-                db.add(random_user)
-                users_created += 1
-
-            if users_created > 0:
-                db.commit()
-                print(f"[OK] Created {users_created} random users")
-            else:
-                print("[OK] Random users already exist")
 
     except Exception as e:
         print(f"[ERROR] Failed to seed users: {e}")

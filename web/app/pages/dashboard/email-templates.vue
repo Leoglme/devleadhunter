@@ -15,22 +15,17 @@
       </button>
     </div>
 
-    <UiTabs v-model="activeCategory" :tabs="categoryTabs" />
-
-    <div class="flex flex-wrap items-center gap-3">
-      <div class="relative w-full max-w-xs">
+    <div
+      class="flex flex-col-reverse gap-3 border-b border-[var(--app-line)] @2xl:flex-row @2xl:items-end @2xl:justify-between @2xl:gap-4"
+    >
+      <UiFilterTabs v-model="activeCategory" :tabs="categoryTabs" />
+      <div class="relative w-full @2xl:mb-2.5 @2xl:w-72">
         <UIcon
           name="i-lucide-search"
           class="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-[var(--app-faint)]"
         />
         <input v-model="searchQuery" type="text" placeholder="Rechercher un modèle…" class="input-field pl-9" />
       </div>
-      <p class="text-muted text-xs">
-        {{ emailTemplates.length }} modèle{{ emailTemplates.length > 1 ? 's' : '' }} au total
-        <template v-if="inactiveTemplates.length">
-          · {{ inactiveTemplates.length }} inactif{{ inactiveTemplates.length > 1 ? 's' : '' }}
-        </template>
-      </p>
     </div>
 
     <div v-if="isLoading" class="card">
@@ -189,7 +184,7 @@
 <script lang="ts" setup>
 import type { UseToastReturn } from '~/types/Composables'
 import type { TemplateGroup } from '~/types/EmailTemplatesPage'
-import type { UiTab } from '~/types/UiTabs'
+import type { UiFilterTab } from '~/types/UiFilterTabs'
 import type { ComputedRef, Ref } from 'vue'
 import type { EmailTemplate, EmailTemplateCategory } from '~/types'
 import { computed, onMounted, ref, watch } from 'vue'
@@ -229,19 +224,15 @@ const categoryTemplates: ComputedRef<EmailTemplate[]> = computed((): EmailTempla
   emailTemplates.value.filter((template: EmailTemplate): boolean => template.category === activeCategory.value),
 )
 
-/** One tab per sequence step, each showing how many templates it holds. */
-const categoryTabs: ComputedRef<UiTab[]> = computed((): UiTab[] =>
-  EMAIL_TEMPLATE_CATEGORIES.map((category: EmailTemplateCategory): UiTab => {
-    const count: number = emailTemplates.value.filter(
-      (template: EmailTemplate): boolean => template.category === category,
-    ).length
-    return {
+/** One tab per sequence step, each badged with how many templates it holds. */
+const categoryTabs: ComputedRef<UiFilterTab[]> = computed((): UiFilterTab[] =>
+  EMAIL_TEMPLATE_CATEGORIES.map(
+    (category: EmailTemplateCategory): UiFilterTab => ({
       key: category,
       label: EMAIL_TEMPLATE_CATEGORY_LABELS[category],
-      hint: `${count} modèle${count > 1 ? 's' : ''}`,
-      icon: category === 'first_email' ? 'i-lucide-mail' : 'i-lucide-reply',
-    }
-  }),
+      count: emailTemplates.value.filter((template: EmailTemplate): boolean => template.category === category).length,
+    }),
+  ),
 )
 
 /** Label of the active tab, used by the empty state. */
@@ -257,11 +248,6 @@ const filteredTemplates: ComputedRef<EmailTemplate[]> = computed((): EmailTempla
     (template: EmailTemplate): boolean =>
       template.name.toLowerCase().includes(query) || template.subject.toLowerCase().includes(query),
   )
-})
-
-/** Inactive templates (used by the counter). */
-const inactiveTemplates: ComputedRef<EmailTemplate[]> = computed((): EmailTemplate[] => {
-  return emailTemplates.value.filter((template: EmailTemplate): boolean => !template.is_active)
 })
 
 /** Filtered templates grouped into « Actifs » / « Inactifs » sections. */

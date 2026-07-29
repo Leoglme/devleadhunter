@@ -48,7 +48,7 @@
           @next="emit('browseNext')"
         />
 
-        <div v-if="mode === 'preview'" class="flex-1 overflow-y-auto px-5 py-4">
+        <div v-if="mode === 'preview'" class="flex-1 overflow-x-hidden overflow-y-auto px-5 py-4">
           <div v-if="isPreviewLoading" class="flex items-center justify-center py-16">
             <UIcon name="i-lucide-loader-circle" class="h-6 w-6 animate-spin text-[var(--app-faint)]" />
           </div>

@@ -67,6 +67,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_order_billing_details", "migrations.add_order_billing_details"),
     ("add_platform_commission_percent", "migrations.add_platform_commission_percent"),
     ("add_email_template_category", "migrations.add_email_template_category"),
+    ("purge_demo_users", "migrations.purge_demo_users"),
     # Charset drift must be repaired before anything compares strings on those tables.
     ("fix_utf8mb4_collation", "migrations.fix_utf8mb4_collation"),
     # Content rewrites run last, once every schema change is in place.

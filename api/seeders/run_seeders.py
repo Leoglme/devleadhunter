@@ -15,11 +15,12 @@ if str(_ROOT) not in sys.path:
 
 from core.database import init_db
 
-# Order matters: credit settings before users, users before transactions.
+# Order matters: credit settings before users, users before everything they own.
+# No demo-fixture seeder here on purpose — anything that invents users, credits or
+# transactions piles up a bit more on every run, in every environment.
 SEEDERS: list[tuple[str, str, str]] = [
     ("credit_settings", "seeders.credit_settings_seeder", "seed_credit_settings"),
     ("users", "seeders.user_seeder", "seed_admin_user"),
-    ("credit_transactions", "seeders.credit_transaction_seeder", "seed_credit_transactions"),
     ("resend_config", "seeders.resend_config_seeder", "seed_resend_config"),
     ("email_templates", "seeders.email_template_seeder", "seed_email_templates"),
 ]

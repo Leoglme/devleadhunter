@@ -9,12 +9,6 @@ export const EMAIL_TEMPLATE_CATEGORY_LABELS: Record<EmailTemplateCategory, strin
   follow_up: 'Relance',
 }
 
-/** One-line explanation of each sequence step, shown as the tab hint. */
-export const EMAIL_TEMPLATE_CATEGORY_HINTS: Record<EmailTemplateCategory, string> = {
-  first_email: 'Le mail qui ouvre la séquence',
-  follow_up: 'Les mails qui relancent ensuite',
-}
-
 /**
  * Whether a template is one of the recommended picks, pinned at the top of its tab.
  * @param template - Template to test.
