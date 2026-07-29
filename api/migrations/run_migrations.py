@@ -31,6 +31,8 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_prospects_table", "migrations.add_prospects_table"),
     ("add_minimum_credits_purchase", "migrations.add_minimum_credits_purchase"),
     ("add_campaigns_table", "migrations.add_campaigns_table"),
+    ("add_campaign_queue", "migrations.add_campaign_queue"),
+    ("add_resend_config", "migrations.add_resend_config"),
     ("add_demo_sites_table", "migrations.add_demo_sites_table"),
     ("add_demo_site_verification_columns", "migrations.add_demo_site_verification_columns"),
     ("add_demo_site_storyblok_invite_sent", "migrations.add_demo_site_storyblok_invite_sent"),
@@ -40,6 +42,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_campaign_settings", "migrations.add_campaign_settings"),
     ("add_campaign_follow_ups_table", "migrations.add_campaign_follow_ups_table"),
     ("nullable_queue_email_account", "migrations.nullable_queue_email_account"),
+    ("nullable_email_account_id", "migrations.nullable_email_account_id"),
     ("add_demo_site_prospect_id", "migrations.add_demo_site_prospect_id"),
     ("add_order_refund_columns", "migrations.add_order_refund_columns"),
     ("add_campaign_behavior_followups", "migrations.add_campaign_behavior_followups"),
@@ -63,7 +66,12 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_order_payment_provider_columns", "migrations.add_order_payment_provider_columns"),
     ("add_order_billing_details", "migrations.add_order_billing_details"),
     ("add_platform_commission_percent", "migrations.add_platform_commission_percent"),
+    # Content rewrites run last, once every schema change is in place.
+    ("strip_brands_from_subjects", "migrations.strip_brands_from_subjects"),
 ]
+
+# Modules of this package that are not migrations and must not be registered.
+_NON_MIGRATION_MODULES: frozenset[str] = frozenset({"__init__", "run_migrations"})
 
 
 def _load_dotenv() -> None:
@@ -91,6 +99,29 @@ def _mark_applied(engine, name: str) -> None:
         )
 
 
+def _assert_registry_is_exhaustive() -> None:
+    """
+    Fail loudly when a migration file exists but is not registered above.
+
+    An unregistered migration is silently never applied: ``init_db()`` creates
+    missing tables but never ALTERs an existing one, so the column simply stays
+    absent in production and every SELECT on that table 500s. Failing here stops
+    the deploy instead, while the schema is still coherent.
+
+    Raises:
+        RuntimeError: When at least one migration module is missing from ``MIGRATION_MODULES``.
+    """
+    on_disk: set[str] = {
+        path.stem for path in Path(__file__).resolve().parent.glob("*.py") if path.stem not in _NON_MIGRATION_MODULES
+    }
+    registered: set[str] = {name for name, _ in MIGRATION_MODULES}
+    unregistered: list[str] = sorted(on_disk - registered)
+    if unregistered:
+        raise RuntimeError(
+            "Migration(s) not registered in MIGRATION_MODULES, they would never run: " + ", ".join(unregistered)
+        )
+
+
 def _run_module_migration(module_name: str) -> None:
     module = importlib.import_module(module_name)
     run_migration = getattr(module, "run_migration", None)
@@ -100,6 +131,7 @@ def _run_module_migration(module_name: str) -> None:
 
 
 def main() -> None:
+    _assert_registry_is_exhaustive()
     _load_dotenv()
     engine = create_engine(settings.database_url)
 

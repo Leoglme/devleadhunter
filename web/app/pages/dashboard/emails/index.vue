@@ -23,7 +23,7 @@
             :disabled="isLoading || isSyncing"
             class="app-btn-secondary h-9 shrink-0 px-4 text-xs whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
             :title="'Synchronise les statuts depuis Resend (utile en local sans webhook)'"
-            @click="syncStatus"
+            @click="syncStatus(true)"
           >
             <UIcon
               :name="isSyncing ? 'i-lucide-loader-circle' : 'i-lucide-rotate-cw'"
@@ -421,25 +421,38 @@ function openDrawer(log: EmailLog): void {
   drawerStack.push({ kind: 'email-log', log, campaignName: resolveCampaignName(log.campaign_id) })
 }
 
-/** Fetch logs (limit 500), campaigns and stats in parallel. */
+/**
+ * Fetch the campaigns used to name and filter the logs.
+ * Purely decorative: a failure here leaves the list readable, so it never surfaces an error.
+ * @returns A promise that resolves once the campaigns are loaded (or given up on).
+ */
+async function loadCampaignLabels(): Promise<void> {
+  try {
+    const campaignsRes: CampaignListResponse = await CampaignService.list(0, 200)
+    campaigns.value = campaignsRes.campaigns
+  } catch (err: unknown) {
+    console.error('[Suivi des emails] Campagnes indisponibles, la liste reste consultable :', err)
+    campaigns.value = []
+  }
+}
+
+/** Fetch logs (limit 500) and stats — the two payloads the page cannot render without. */
 async function loadLogs(): Promise<void> {
   isLoading.value = true
   error.value = null
   try {
-    const [logsRes, campaignsRes, statsRes]: [{ total: number; logs: EmailLog[] }, CampaignListResponse, EmailStats] =
-      await Promise.all([
-        EmailCampaignsService.getEmailLogs({ limit: 500 }),
-        CampaignService.list(0, 200),
-        EmailCampaignsService.getEmailStats(),
-      ])
+    const [logsRes, statsRes]: [{ total: number; logs: EmailLog[] }, EmailStats] = await Promise.all([
+      EmailCampaignsService.getEmailLogs({ limit: 500 }),
+      EmailCampaignsService.getEmailStats(),
+    ])
     logs.value = logsRes.logs
-    campaigns.value = campaignsRes.campaigns
     stats.value = statsRes
   } catch (err: unknown) {
     error.value = err instanceof Error ? err.message : 'Erreur lors du chargement des emails'
   } finally {
     isLoading.value = false
   }
+  await loadCampaignLabels()
 }
 
 // Un email envoyé depuis le drawer (d'ici ou d'une fiche prospect) rafraîchit la liste.
@@ -453,9 +466,12 @@ watch(
 /**
  * Poll the Resend API for the latest status of all unresolved emails.
  * Useful in local development where the webhook is not publicly reachable.
+ * @param isUserRequested - True when triggered by the « Sync Resend » button. The automatic
+ * sync on page load stays silent unless it actually updated a status, so landing on the page
+ * never raises an alarm about an empty mailbox.
  * @returns A promise that resolves once the sync is complete.
  */
-async function syncStatus(): Promise<void> {
+async function syncStatus(isUserRequested: boolean): Promise<void> {
   isSyncing.value = true
   try {
     const result: { updated: number; checked: number; errors?: string[] | undefined } = await ApiClient.post<{
@@ -466,19 +482,25 @@ async function syncStatus(): Promise<void> {
     if (result.updated > 0) {
       toast.success(`${result.updated} statut(s) mis à jour`)
       await loadLogs()
-    } else if (result.checked === 0) {
+    } else if (isUserRequested && result.checked === 0 && logs.value.length === 0) {
+      // Nothing sent yet: there is simply nothing to synchronize, and no problem to report.
+      toast.info('Aucun email envoyé pour le moment')
+    } else if (isUserRequested && result.checked === 0) {
       toast.warning(
         "Aucun email à synchroniser — vérifiez que le Message ID Resend est bien stocké (ouvrez le drawer d'un email)",
       )
-    } else {
+    } else if (isUserRequested) {
       toast.info(`${result.checked} email(s) vérifiés — aucun changement`)
     }
     if (result.errors && result.errors.length > 0) {
       console.error('[Sync Resend] Errors:', result.errors)
-      toast.error(result.errors[0] ?? 'Erreur Resend — voir la console')
+      if (isUserRequested) toast.error(result.errors[0] ?? 'Erreur Resend — voir la console')
     }
   } catch (err: unknown) {
-    toast.error(err instanceof Error ? err.message : 'Erreur lors de la synchronisation')
+    console.error('[Sync Resend] Failed:', err)
+    if (isUserRequested) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la synchronisation')
+    }
   } finally {
     isSyncing.value = false
   }
@@ -486,7 +508,8 @@ async function syncStatus(): Promise<void> {
 
 onMounted(async (): Promise<void> => {
   await loadLogs()
-  // Auto-sync on page load so statuses are fresh even without webhooks
-  await syncStatus()
+  // Auto-sync on page load so statuses are fresh even without webhooks. It runs
+  // unattended, so it only speaks up when it actually changed something.
+  await syncStatus(false)
 })
 </script>
