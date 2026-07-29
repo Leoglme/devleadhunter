@@ -137,6 +137,32 @@ def _verify_signature(
     return False
 
 
+def _read_tag(tags: object, name: str) -> str | None:
+    """
+    Read a Resend tag, whichever shape the payload uses.
+
+    Resend accepts ``[{"name": …, "value": …}]`` when sending but echoes back a flat
+    ``{"name": "value"}`` object in webhooks. Assuming a single shape raised an
+    AttributeError on every tagged event, which surfaced as a 500 and endless retries.
+
+    Args:
+        tags: The ``tags`` field of the payload, in either shape.
+        name: Tag to read.
+
+    Returns:
+        The tag value, or None when absent or unreadable.
+    """
+    if isinstance(tags, dict):
+        value = tags.get(name)
+        return str(value) if value is not None else None
+    if isinstance(tags, list):
+        for entry in tags:
+            if isinstance(entry, dict) and entry.get("name") == name:
+                value = entry.get("value")
+                return str(value) if value is not None else None
+    return None
+
+
 @router.post("/resend", status_code=status.HTTP_204_NO_CONTENT)
 async def resend_webhook(
     request: Request,
@@ -190,17 +216,15 @@ async def resend_webhook(
 
     email_log: EmailLog | None = None
 
-    # Primary lookup: the ``email_log_id`` tag we attach at send time.
-    tags: list[dict[str, str]] = data.get("tags", [])
-    for tag in tags:
-        if tag.get("name") == "email_log_id":
-            raw_id = tag.get("value")
-            if raw_id:
-                try:
-                    email_log = db.execute(select(EmailLog).where(EmailLog.id == int(raw_id))).scalar_one_or_none()
-                except (ValueError, TypeError):
-                    logger.warning("[Webhook] Non-integer email_log_id tag value: %r", raw_id)
-            break
+    # Primary lookup: the ``email_log_id`` tag we attach at send time. Tags are sent
+    # as [{name, value}] but echoed back as a flat {name: value} object, so both
+    # shapes are accepted — reading only one of them 500s on every campaign email.
+    raw_id: str | None = _read_tag(data.get("tags"), "email_log_id")
+    if raw_id:
+        try:
+            email_log = db.execute(select(EmailLog).where(EmailLog.id == int(raw_id))).scalar_one_or_none()
+        except (ValueError, TypeError):
+            logger.warning("[Webhook] Non-integer email_log_id tag value: %r", raw_id)
 
     # Fallback: match by the provider-assigned message ID.
     if email_log is None and resend_message_id:
