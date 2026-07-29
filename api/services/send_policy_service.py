@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from models.send_policy import (
     DEFAULT_DAILY_CAP,
     DEFAULT_DAYS_OF_WEEK,
+    DEFAULT_FOLLOW_UP_DELAY_DAYS,
     DEFAULT_SPACING_MINUTES,
     DEFAULT_WINDOW_END_HOUR,
     DEFAULT_WINDOW_START_HOUR,
@@ -64,6 +65,7 @@ class ResolvedPolicy:
         window_start_hour: int,
         window_end_hour: int,
         spacing_minutes: int,
+        follow_up_delay_days: int,
     ) -> None:
         self.daily_cap: int = max(1, daily_cap)
         self.days_of_week: list[int] = sorted(set(days_of_week)) or list(DEFAULT_DAYS_OF_WEEK)
@@ -71,6 +73,7 @@ class ResolvedPolicy:
         # Ensure the window is at least one hour wide.
         self.window_end_hour: int = max(self.window_start_hour + 1, min(24, window_end_hour))
         self.spacing_minutes: int = max(1, spacing_minutes)
+        self.follow_up_delay_days: int = max(1, follow_up_delay_days)
 
 
 class SendPolicyService:
@@ -90,6 +93,7 @@ class SendPolicyService:
                 DEFAULT_WINDOW_START_HOUR,
                 DEFAULT_WINDOW_END_HOUR,
                 DEFAULT_SPACING_MINUTES,
+                DEFAULT_FOLLOW_UP_DELAY_DAYS,
             )
         return ResolvedPolicy(
             row.daily_cap,
@@ -97,6 +101,7 @@ class SendPolicyService:
             row.window_start_hour,
             row.window_end_hour,
             row.spacing_minutes,
+            row.follow_up_delay_days,
         )
 
     def upsert(
@@ -109,6 +114,7 @@ class SendPolicyService:
         window_start_hour: int,
         window_end_hour: int,
         spacing_minutes: int,
+        follow_up_delay_days: int,
     ) -> SendPolicy:
         """Create or update the user's send policy."""
         row: SendPolicy | None = self.get_policy(db, user_id)
@@ -120,6 +126,7 @@ class SendPolicyService:
         row.window_start_hour = max(0, min(23, window_start_hour))
         row.window_end_hour = max(row.window_start_hour + 1, min(24, window_end_hour))
         row.spacing_minutes = max(1, spacing_minutes)
+        row.follow_up_delay_days = max(1, follow_up_delay_days)
         db.commit()
         db.refresh(row)
         return row
@@ -171,6 +178,41 @@ class SendPolicyService:
             cur = cur + timedelta(minutes=policy.spacing_minutes)
 
         return slots
+
+    def follow_up_slot(
+        self,
+        policy: ResolvedPolicy,
+        sent_at_utc: datetime,
+        delay_days: int | None = None,
+    ) -> datetime:
+        """
+        When a follow-up should leave, counted in *sending* days.
+
+        Calendar arithmetic is wrong here: ``sent_at + 5 days`` on a Monday lands on
+        the following Saturday, outside the window the user configured. Only the
+        weekdays ticked in the policy are counted, so a follow-up always falls the
+        same weekday and hour as the email it answers.
+
+        Args:
+            policy: The resolved policy.
+            sent_at_utc: When the answered email actually left (naive UTC).
+            delay_days: Sending days to wait; defaults to the policy value.
+
+        Returns:
+            The follow-up instant, as naive UTC, inside the sending window.
+        """
+        remaining: int = max(1, delay_days if delay_days is not None else policy.follow_up_delay_days)
+        cur: datetime = _to_local(sent_at_utc)
+
+        # Bounded: a policy always has at least one sending day, so this ends.
+        guard: int = 0
+        while remaining > 0 and guard < remaining * 8 + 16:
+            guard += 1
+            cur = cur + timedelta(days=1)
+            if cur.weekday() in policy.days_of_week:
+                remaining -= 1
+
+        return _to_utc(self._advance_into_window(cur, policy))
 
     def _advance_into_window(self, cur: datetime, policy: ResolvedPolicy) -> datetime:
         """Move ``cur`` forward to the next valid weekday + in-window instant."""

@@ -445,7 +445,7 @@ class AcquisitionOrchestrator:
         campaign_service.add_prospects_to_campaign(db, campaign.id, run.user_id, prospect_ids)
 
         # Follow-up sequence (optional).
-        self._create_follow_ups(db, campaign.id, run.follow_ups)
+        self._create_follow_ups(db, campaign.id, run.follow_ups, run.user_id)
 
         run.campaign_id = campaign.id
 
@@ -490,11 +490,14 @@ class AcquisitionOrchestrator:
             len(skipped_ids),
         )
 
-    def _create_follow_ups(self, db: Session, campaign_id: int, follow_ups: list | None) -> None:
+    def _create_follow_ups(self, db: Session, campaign_id: int, follow_ups: list | None, user_id: int) -> None:
         """Create CampaignFollowUp rows from a run's ``follow_ups`` config, if any."""
         if not follow_ups:
             return
         from models.campaign_follow_up import CampaignFollowUp
+        from services.send_policy_service import send_policy_service
+
+        default_delay: int = send_policy_service.resolve(db, user_id).follow_up_delay_days
 
         for position, step in enumerate(follow_ups, start=1):
             template_id = step.get("template_id")
@@ -504,7 +507,7 @@ class AcquisitionOrchestrator:
                 CampaignFollowUp(
                     campaign_id=campaign_id,
                     template_id=int(template_id),
-                    delay_days=int(step.get("delay_days", 5)),
+                    delay_days=int(step.get("delay_days") or default_delay),
                     position=position,
                 )
             )

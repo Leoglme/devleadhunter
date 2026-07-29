@@ -21,6 +21,8 @@ DEFAULT_DAILY_CAP: int = 20
 DEFAULT_WINDOW_START_HOUR: int = 7
 DEFAULT_WINDOW_END_HOUR: int = 18
 DEFAULT_SPACING_MINUTES: int = 20
+# Counted in *sending* days (the weekdays ticked above), not calendar days.
+DEFAULT_FOLLOW_UP_DELAY_DAYS: int = 5
 
 
 class SendPolicy(Base):
@@ -41,6 +43,9 @@ class SendPolicy(Base):
     )
     spacing_minutes: Mapped[int] = mapped_column(
         Integer, nullable=False, default=DEFAULT_SPACING_MINUTES, server_default="20"
+    )
+    follow_up_delay_days: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=DEFAULT_FOLLOW_UP_DELAY_DAYS, server_default="5"
     )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(onupdate=func.now(), nullable=True)

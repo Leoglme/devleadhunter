@@ -230,6 +230,32 @@
               @preview="openPreview"
             />
           </div>
+
+          <div
+            class="flex items-start justify-between gap-4 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-3.5"
+          >
+            <div class="min-w-0">
+              <label class="text-sm font-medium text-[var(--app-ink)]" for="automation-auto-follow-up">
+                Envoyer une relance
+              </label>
+              <p class="mt-0.5 text-xs leading-relaxed text-[var(--app-ink-soft)]">
+                Un second email part aux prospects restés silencieux, au délai fixé dans votre cadence d'envoi.
+              </p>
+            </div>
+            <UiSwitch id="automation-auto-follow-up" v-model="form.autoFollowUp" />
+          </div>
+
+          <div v-if="form.autoFollowUp">
+            <label class="app-label mb-1.5 block">Modèle de relance</label>
+            <UiTemplateSelect
+              :model-value="form.followUpTemplate"
+              :templates="emailTemplates"
+              allow-create
+              @update:model-value="form.followUpTemplate = $event"
+              @create="openCreate((id) => (form.followUpTemplate = id))"
+              @preview="openPreview"
+            />
+          </div>
         </div>
 
         <UiCallout v-if="form.autoCampaign && !form.emailA" variant="warning">
@@ -446,6 +472,8 @@ const form: Ref<TunnelForm> = ref({
   templateId: '',
   theme: { ...defaultTheme },
   autoCampaign: true,
+  autoFollowUp: true,
+  followUpTemplate: 0,
   emailA: 0,
   emailB: 0,
   metiers: '',
@@ -874,7 +902,10 @@ async function launch(): Promise<void> {
       email_template_id_a: form.value.autoCampaign ? form.value.emailA || null : null,
       email_template_id_b: form.value.autoCampaign ? form.value.emailB || null : null,
       send_delay_minutes: 20,
-      follow_ups: [],
+      follow_ups:
+        form.value.autoCampaign && form.value.autoFollowUp && form.value.followUpTemplate
+          ? [{ template_id: form.value.followUpTemplate }]
+          : [],
     })
     clearDraft()
     toast.success('Automatisation lancée')

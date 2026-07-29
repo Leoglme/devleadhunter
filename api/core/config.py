@@ -82,7 +82,7 @@ class Settings(BaseSettings):
         description="Public base URL for generated demo websites (localhost:3001 in dev, demo.dibodev.fr in prod)",
     )
     demo_site_ttl_days: int = Field(
-        default=14,
+        default=21,
         alias="DEMO_SITE_TTL_DAYS",
         description="Number of days before a demo site is auto-deleted",
     )

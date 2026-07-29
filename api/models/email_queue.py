@@ -84,6 +84,8 @@ class EmailQueue(Base):
         nullable=True,
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
+    # Why a row was skipped, shown on the campaign page (empty for every other status).
+    skip_reason: Mapped[str | None] = mapped_column(String(160), nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(onupdate=func.now(), nullable=True)
 

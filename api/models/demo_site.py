@@ -18,7 +18,7 @@ class DemoSite(Base):
     """
     A temporary demo website generated from a template.
 
-    Hosted at demo.dibodev.fr/{slug} for 14 days by default.
+    Hosted at demo.dibodev.fr/{slug} for 21 days by default.
     """
 
     __tablename__ = "demo_sites"

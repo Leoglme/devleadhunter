@@ -13,7 +13,8 @@ class SequenceFollowUpInput(BaseModel):
     """One follow-up step in an automatisation's campaign."""
 
     template_id: int
-    delay_days: int = Field(5, ge=1, le=365)
+    # Left unset, the user's send-policy delay applies — the cadence owns the timing.
+    delay_days: int | None = Field(None, ge=1, le=365)
 
 
 class SequenceCreateRequest(BaseModel):

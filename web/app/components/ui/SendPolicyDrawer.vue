@@ -96,6 +96,7 @@ const form: Ref<SendPolicy> = ref({
   window_start_hour: 7,
   window_end_hour: 18,
   spacing_minutes: 20,
+  follow_up_delay_days: 5,
 })
 
 /** Whether the end hour is strictly after the start hour. */

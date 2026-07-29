@@ -100,7 +100,7 @@
       },
       "act2": {
         "verb": "Générer",
-        "description": "Une template métier se remplit avec ses vraies données — photos, avis, horaires — et devient un site de démonstration en ligne à son nom, pendant 14 jours."
+        "description": "Une template métier se remplit avec ses vraies données — photos, avis, horaires — et devient un site de démonstration en ligne à son nom, pendant 21 jours."
       },
       "act3": {
         "verb": "Démarcher",
@@ -118,7 +118,7 @@
         "prospectReviews": "126 avis",
         "prospectEmail": "Email trouvé : contact{'@'}…",
         "prospectStamp": "Sans site web",
-        "siteLabel": "Site démo · 14 jours",
+        "siteLabel": "Site démo · 21 jours",
         "siteUrl": "demo.dibodev.fr/plomberie-martin",
         "siteTitle": "Plomberie Martin",
         "siteTagline": "Dépannage & rénovation à Lyon",
@@ -141,7 +141,7 @@
       "description": "Chaque démonstration est un site complet, rapide, connecté à un CMS. Votre prospect découvre son entreprise déjà en ligne — c'est ce qui déclenche la vente.",
       "bullet1": "Des templates métier au design soigné, qui ne sentent pas le site généré par IA",
       "bullet2": "Le client modifie contenu, photos et pages lui-même dans le CMS, sans développeur",
-      "bullet3": "En démo pendant 14 jours, supprimé automatiquement ensuite"
+      "bullet3": "En démo pendant 21 jours, supprimé automatiquement ensuite"
     },
     "campaigns": {
       "eyebrow": "Cold email & A/B testing",

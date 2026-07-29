@@ -100,7 +100,7 @@
       },
       "act2": {
         "verb": "Generate",
-        "description": "A trade-specific template fills itself with their real data — photos, reviews, opening hours — and becomes a live demo site in their name, for 14 days."
+        "description": "A trade-specific template fills itself with their real data — photos, reviews, opening hours — and becomes a live demo site in their name, for 21 days."
       },
       "act3": {
         "verb": "Reach out",
@@ -118,7 +118,7 @@
         "prospectReviews": "126 reviews",
         "prospectEmail": "Email found: contact{'@'}…",
         "prospectStamp": "No website",
-        "siteLabel": "Demo site · 14 days",
+        "siteLabel": "Demo site · 21 days",
         "siteUrl": "demo.dibodev.fr/martin-plumbing",
         "siteTitle": "Martin Plumbing",
         "siteTagline": "Repairs & renovation in Lyon",
@@ -141,7 +141,7 @@
       "description": "Every demo is a complete, fast website connected to a CMS. Your prospect discovers their business already online — that's what closes the sale.",
       "bullet1": "Carefully designed trade templates that don't look AI-generated",
       "bullet2": "The client edits content, photos and pages in the CMS, no developer needed",
-      "bullet3": "Live as a demo for 14 days, then removed automatically"
+      "bullet3": "Live as a demo for 21 days, then removed automatically"
     },
     "campaigns": {
       "eyebrow": "Cold email & A/B testing",

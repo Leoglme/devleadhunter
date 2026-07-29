@@ -57,6 +57,23 @@
       />
     </div>
 
+    <div>
+      <label class="app-label mb-1.5 block" for="sp-follow-up-delay">Délai avant relance (jours d'envoi)</label>
+      <input
+        id="sp-follow-up-delay"
+        v-model.number="followUpDelayDays"
+        type="number"
+        min="1"
+        max="60"
+        class="app-input w-32"
+        placeholder="5"
+      />
+      <p class="text-muted mt-1.5 text-xs">
+        Compté en jours d'envoi, pas en jours calendaires : une relance tombe toujours le même jour de semaine que
+        l'email auquel elle répond.
+      </p>
+    </div>
+
     <p
       class="flex items-start gap-2 rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-3.5 text-[11px] text-[var(--app-ink-soft)]"
     >
@@ -113,6 +130,12 @@ const windowEndHour: WritableComputedRef<number> = computed({
 const spacingMinutes: WritableComputedRef<number> = computed({
   get: (): number => props.modelValue.spacing_minutes,
   set: (value: number): void => patch({ spacing_minutes: value }),
+})
+
+/** Sending days to wait before a follow-up leaves. */
+const followUpDelayDays: WritableComputedRef<number> = computed({
+  get: (): number => props.modelValue.follow_up_delay_days,
+  set: (value: number): void => patch({ follow_up_delay_days: value }),
 })
 
 /** Human list of the selected days. */

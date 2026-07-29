@@ -474,6 +474,61 @@ class CampaignQueueService:
         if item.queue_type == "initial" and result.get("success"):
             self._schedule_follow_ups(item)
 
+    def _demo_link_outlives(self, j1_item: EmailQueue, template_id: int | None, scheduled_at: datetime) -> bool:
+        """
+        Whether a follow-up may be queued, i.e. its demo link will still be alive.
+
+        A demo site dies ``DEMO_SITE_TTL_DAYS`` after its **generation**, not after
+        the first send, so a late follow-up can ship a dead ``{lien_demo}`` — worse
+        than sending nothing. The J1 has the same guard at enqueue time; this is its
+        counterpart for a follow-up, whose date is only known once the J1 has left.
+
+        The refusal is recorded as a ``skipped`` queue row so the campaign page shows
+        why the sequence stopped, instead of the follow-up silently never existing.
+
+        Args:
+            j1_item: The J1 whose follow-up is being scheduled.
+            template_id: Template of the follow-up step.
+            scheduled_at: When that follow-up would leave.
+
+        Returns:
+            True when the follow-up can be queued.
+        """
+        template: EmailTemplate | None = self.db.get(EmailTemplate, template_id) if template_id else None
+        if not self._template_uses_demo_link(template):
+            return True
+
+        site: DemoSite | None = self._active_demo_for_prospect(j1_item.prospect_id, j1_item.user_id)
+        expires_at: datetime | None = site.expires_at if site else None
+        if expires_at is not None and expires_at.tzinfo is not None:
+            expires_at = expires_at.replace(tzinfo=None)
+        if expires_at is not None and expires_at > scheduled_at:
+            return True
+
+        logger.warning(
+            "[Queue] Follow-up skipped for prospect %d — demo site expires %s, before the follow-up on %s",
+            j1_item.prospect_id,
+            expires_at.isoformat() if expires_at else "never (no active site)",
+            scheduled_at.isoformat(),
+        )
+        self.db.add(
+            EmailQueue(
+                user_id=j1_item.user_id,
+                campaign_id=j1_item.campaign_id,
+                prospect_id=j1_item.prospect_id,
+                template_id=template_id,
+                email_account_id=None,
+                queue_type="followup",
+                ab_variant=j1_item.ab_variant,
+                follow_up_index=j1_item.follow_up_index + 1,
+                scheduled_at=scheduled_at,
+                status=_STATUS_SKIPPED,
+                skip_reason="Site démo expiré avant la relance",
+            )
+        )
+        self.db.commit()
+        return False
+
     def _schedule_follow_ups(self, j1_item: EmailQueue) -> None:
         """
         Create EmailQueue rows for all follow-up steps after a J1 success.
@@ -497,10 +552,19 @@ class CampaignQueueService:
             .all()
         )
 
+        from services.send_policy_service import send_policy_service
+
+        resolved = send_policy_service.resolve(self.db, campaign.user_id)
+        sent_at: datetime = _utcnow()
+
         if not follow_ups:
             # Legacy fallback: single follow-up fields on the campaign.
             if campaign.follow_up_template_id:
-                follow_up_at = _utcnow() + timedelta(days=campaign.follow_up_delay_days)
+                follow_up_at = send_policy_service.follow_up_slot(
+                    resolved, sent_at, campaign.follow_up_delay_days or None
+                )
+                if not self._demo_link_outlives(j1_item, campaign.follow_up_template_id, follow_up_at):
+                    return
                 self.db.add(
                     EmailQueue(
                         user_id=j1_item.user_id,
@@ -518,10 +582,13 @@ class CampaignQueueService:
                 self.db.commit()
             return
 
-        # Build the sequence: each step's scheduled_at = previous + delay.
-        base_time = _utcnow()
+        # Each step waits its own delay, counted in sending days from the J1 send.
+        elapsed_days: int = 0
         for step in follow_ups:
-            base_time += timedelta(days=step.delay_days)
+            elapsed_days += max(1, step.delay_days)
+            step_at: datetime = send_policy_service.follow_up_slot(resolved, sent_at, elapsed_days)
+            if not self._demo_link_outlives(j1_item, step.template_id, step_at):
+                break
             self.db.add(
                 EmailQueue(
                     user_id=j1_item.user_id,
@@ -532,7 +599,7 @@ class CampaignQueueService:
                     queue_type="followup",
                     ab_variant=j1_item.ab_variant,
                     follow_up_index=step.position,
-                    scheduled_at=base_time,
+                    scheduled_at=step_at,
                     status=_STATUS_PENDING,
                 )
             )

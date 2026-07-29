@@ -85,7 +85,8 @@ export interface AutomationDetail extends Automation {
 /** A follow-up step configured on an automatisation's campaign. */
 export type AutomationFollowUpInput = {
   template_id: number
-  delay_days: number
+  /** Left out, the send policy's delay applies — the cadence owns the timing. */
+  delay_days?: number
 }
 
 /** Payload to create an automatisation (selection or full-auto query). */
@@ -125,4 +126,5 @@ export type SendPolicy = {
   window_start_hour: number
   window_end_hour: number
   spacing_minutes: number
+  follow_up_delay_days: number
 }

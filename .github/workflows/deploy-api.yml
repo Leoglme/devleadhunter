@@ -129,7 +129,7 @@ jobs:
             DEMO_HOST_BASE_URL=https://demo.dibodev.fr
             DEMO_SITE_VERIFY_RETRIES=3
             DEMO_SITE_VERIFY_RETRY_DELAY_SECONDS=2
-            DEMO_SITE_TTL_DAYS=14
+            DEMO_SITE_TTL_DAYS=21
             STORYBLOK_MANAGEMENT_TOKEN=${{ secrets.STORYBLOK_MANAGEMENT_TOKEN }}
             STORYBLOK_REGION=eu
             STORYBLOK_WEBHOOK_SECRET=${{ secrets.STORYBLOK_WEBHOOK_SECRET }}

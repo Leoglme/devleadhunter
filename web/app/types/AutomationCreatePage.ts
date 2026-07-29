@@ -37,6 +37,8 @@ export type TunnelForm = {
   templateId: string
   theme: DemoSiteTheme
   autoCampaign: boolean
+  autoFollowUp: boolean
+  followUpTemplate: number
   emailA: number
   emailB: number
   metiers: string

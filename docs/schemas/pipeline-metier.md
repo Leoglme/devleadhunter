@@ -44,7 +44,7 @@ flowchart TD
     end
 
     E4 --> G1 --> G2 --> G3 --> G4
-    G4 --> DEMO["Démo en ligne 14 jours<br/>demo.dibodev.fr/slug"]
+    G4 --> DEMO["Démo en ligne 21 jours<br/>demo.dibodev.fr/slug"]
     G4 --> G5 --> VIDEO["Page vidéo tracée<br/>/v/slug"]
 
     subgraph OUTREACH["4 · Démarchage"]

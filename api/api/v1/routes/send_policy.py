@@ -1,7 +1,8 @@
 """
 Send policy routes — the user's global cold-email cadence (Paramètres → Envoi).
 
-Governs the whole email queue: daily cap, allowed weekdays and hours, spacing.
+Governs the whole email queue: daily cap, allowed weekdays and hours, spacing,
+and how many sending days a follow-up waits.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ class SendPolicyResponse(BaseModel):
     window_start_hour: int
     window_end_hour: int
     spacing_minutes: int
+    follow_up_delay_days: int
 
 
 class SendPolicyUpdate(BaseModel):
@@ -36,6 +38,7 @@ class SendPolicyUpdate(BaseModel):
     window_start_hour: int = Field(..., ge=0, le=23)
     window_end_hour: int = Field(..., ge=1, le=24)
     spacing_minutes: int = Field(..., ge=1, le=1440)
+    follow_up_delay_days: int = Field(..., ge=1, le=60)
 
 
 def _resolved(db: Session, user_id: int) -> SendPolicyResponse:
@@ -47,6 +50,7 @@ def _resolved(db: Session, user_id: int) -> SendPolicyResponse:
         window_start_hour=r.window_start_hour,
         window_end_hour=r.window_end_hour,
         spacing_minutes=r.spacing_minutes,
+        follow_up_delay_days=r.follow_up_delay_days,
     )
 
 
@@ -74,5 +78,6 @@ async def update_send_policy(
         window_start_hour=data.window_start_hour,
         window_end_hour=data.window_end_hour,
         spacing_minutes=data.spacing_minutes,
+        follow_up_delay_days=data.follow_up_delay_days,
     )
     return _resolved(db, current_user.id)

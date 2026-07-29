@@ -5,7 +5,7 @@
         <p class="text-xs font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">Prospection</p>
         <h1 class="app-page-title mt-1">Sites démo</h1>
         <p class="mt-2 max-w-xl text-sm text-[var(--app-ink-soft)]">
-          Générez des sites vitrines pour vos prospects — hébergés 14 jours sur demo.dibodev.fr
+          Générez des sites vitrines pour vos prospects — hébergés 21 jours sur demo.dibodev.fr
         </p>
       </div>
       <NuxtLink to="/dashboard/demo-sites/create" class="btn-primary inline-flex w-fit items-center gap-2">
