@@ -78,7 +78,9 @@ jobs:
             TARGET_DIR="/var/www/api.devleadhunter.dibodev.fr/html"
             cd "$TARGET_DIR"
             sudo apt-get update -y --allow-releaseinfo-change || true
-            sudo apt-get install -y python3-venv
+            # ffmpeg porte tout le pipeline vidéo (mesure de durée, normalisation,
+            # montage) : sans lui l'API rend une erreur trompeuse sur chaque upload.
+            sudo apt-get install -y python3-venv ffmpeg
             if [ ! -x ".venv/bin/python" ]; then
               python3 -m venv .venv
             fi

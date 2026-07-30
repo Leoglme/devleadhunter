@@ -61,8 +61,27 @@ _RECORDING_HEIGHT = 720
 _RECORDING_FPS = 30
 
 
+class FfmpegUnavailableError(RuntimeError):
+    """Raised when the ffmpeg binary is missing — a server fault, not a bad upload."""
+
+
+def _ffmpeg_missing_error() -> HTTPException:
+    """Build the 500 returned when ffmpeg cannot be executed at all."""
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=(
+            f"Traitement vidéo indisponible : ffmpeg introuvable sur le serveur ({settings.ffmpeg_path}). "
+            "Installez-le ou configurez FFMPEG_PATH."
+        ),
+    )
+
+
 def _probe_media_duration_sync(file_path: str) -> float:
-    """Blocking ffmpeg probe — run it via ``asyncio.to_thread`` only."""
+    """Blocking ffmpeg probe — run it via ``asyncio.to_thread`` only.
+
+    Raises:
+        FfmpegUnavailableError: The ffmpeg binary cannot be executed.
+    """
     try:
         result = subprocess.run(
             [settings.ffmpeg_path, "-hide_banner", "-i", file_path],
@@ -70,7 +89,11 @@ def _probe_media_duration_sync(file_path: str) -> float:
             stderr=subprocess.PIPE,
             timeout=30,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+    except FileNotFoundError as exc:
+        # Sans ce cas distinct, une durée nulle ferait passer une panne serveur
+        # pour une vidéo corrompue.
+        raise FfmpegUnavailableError(settings.ffmpeg_path) from exc
+    except subprocess.TimeoutExpired as exc:
         logger.warning("ffmpeg probe failed for %s: %s", file_path, exc)
         return 0.0
 
@@ -90,6 +113,9 @@ def _measure_media_duration_sync(file_path: str) -> float:
     a live stream, so its header carries no duration at all and ffmpeg prints
     ``Duration: N/A``. Decoding to the null muxer makes ffmpeg walk the whole
     file and report the real end timestamp on its last progress line.
+
+    Raises:
+        FfmpegUnavailableError: The ffmpeg binary cannot be executed.
     """
     try:
         result = subprocess.run(
@@ -98,7 +124,9 @@ def _measure_media_duration_sync(file_path: str) -> float:
             stderr=subprocess.PIPE,
             timeout=120,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+    except FileNotFoundError as exc:
+        raise FfmpegUnavailableError(settings.ffmpeg_path) from exc
+    except subprocess.TimeoutExpired as exc:
         logger.warning("ffmpeg decode-probe failed for %s: %s", file_path, exc)
         return 0.0
 
@@ -128,11 +156,18 @@ async def probe_media_duration(file_path: str) -> float:
 
     Returns:
         Duration in seconds (0.0 when it cannot be determined).
+
+    Raises:
+        HTTPException: 500 when ffmpeg is not installed on the server.
     """
-    duration = await asyncio.to_thread(_probe_media_duration_sync, file_path)
-    if duration > 0:
-        return duration
-    return await asyncio.to_thread(_measure_media_duration_sync, file_path)
+    try:
+        duration = await asyncio.to_thread(_probe_media_duration_sync, file_path)
+        if duration > 0:
+            return duration
+        return await asyncio.to_thread(_measure_media_duration_sync, file_path)
+    except FfmpegUnavailableError as exc:
+        logger.error("[Presenter] ffmpeg is not installed (%s)", settings.ffmpeg_path)
+        raise _ffmpeg_missing_error() from exc
 
 
 def _has_audio_stream_sync(file_path: str) -> bool:
@@ -488,10 +523,7 @@ class PresenterVideoService:
                 timeout=600,
             )
         except FileNotFoundError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"ffmpeg introuvable ({settings.ffmpeg_path}). Installez-le ou configurez FFMPEG_PATH.",
-            ) from exc
+            raise _ffmpeg_missing_error() from exc
         except subprocess.TimeoutExpired as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -585,10 +617,7 @@ class PresenterVideoService:
                 timeout=300,
             )
         except FileNotFoundError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"ffmpeg introuvable ({settings.ffmpeg_path}). Installez-le ou configurez FFMPEG_PATH.",
-            ) from exc
+            raise _ffmpeg_missing_error() from exc
         except subprocess.TimeoutExpired as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
