@@ -91,6 +91,24 @@ async def warmup_maps_suggestion_session() -> None:
     await _ensure_maps_suggestion_session()
 
 
+async def close_maps_suggestion_session() -> None:
+    """Release the autocomplete tab, reopened on demand by the next search.
+
+    Keeping it warm is worth it on a server; on the user's desktop it leaves a
+    visible Chrome window sitting there once the business has been picked.
+    """
+    global _maps_suggestion_session
+
+    session = _maps_suggestion_session
+    _maps_suggestion_session = None
+    if session is None:
+        return
+    try:
+        await session.browser.close()
+    except Exception:
+        logger.warning("Could not close the Maps autocomplete session", exc_info=True)
+
+
 class GoogleScraper(NodriverScraperMixin, BaseScraper):
     """
     Google Maps scraper for extracting business prospect data.
