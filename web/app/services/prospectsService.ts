@@ -1,4 +1,5 @@
 import { ApiClient } from '~/services/api'
+import { postToScraperSidecar } from '~/services/scraperSidecarService'
 
 import type {
   Prospect,
@@ -64,7 +65,12 @@ export class ProspectsService {
    *
    */
   static async enrichProspect(payload: ProspectEnrichPayload): Promise<ProspectCreatePayload> {
-    return ApiClient.post<ProspectCreatePayload>(`${BASE_URL}/enrich`, payload)
+    // Desktop : le scraping part de l'IP résidentielle de l'utilisateur, pas du VPS.
+    const local: ProspectCreatePayload | null = await postToScraperSidecar<ProspectCreatePayload>(
+      '/scraper/enrich',
+      payload,
+    )
+    return local ?? ApiClient.post<ProspectCreatePayload>(`${BASE_URL}/enrich`, payload)
   }
 
   /**
@@ -73,7 +79,11 @@ export class ProspectsService {
   static async searchProspectSuggestions(
     payload: ProspectSearchSuggestionsPayload,
   ): Promise<ProspectSearchSuggestion[]> {
-    return ApiClient.post<ProspectSearchSuggestion[]>(`${BASE_URL}/search-suggestions`, payload)
+    const local: ProspectSearchSuggestion[] | null = await postToScraperSidecar<ProspectSearchSuggestion[]>(
+      '/scraper/search-suggestions',
+      payload,
+    )
+    return local ?? ApiClient.post<ProspectSearchSuggestion[]>(`${BASE_URL}/search-suggestions`, payload)
   }
 
   /**

@@ -7,6 +7,8 @@ mod db_sync;
 #[cfg(windows)]
 mod media_permissions;
 
+mod scraper_sidecar;
+
 /// Sync the local dev database from prod (mysqldump → import). The command always exists
 /// (so the frontend can `invoke` it), but only runs in debug builds; in a release build it
 /// returns an error instead — the desktop app never syncs against a user's machine in prod.
@@ -28,7 +30,11 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![sync_dev_database_from_prod])
+        .manage(scraper_sidecar::SidecarState::default())
+        .invoke_handler(tauri::generate_handler![
+            sync_dev_database_from_prod,
+            scraper_sidecar::scraper_sidecar_info
+        ])
         .setup(|_app| {
             // Sans ça, `getUserMedia` (enregistrement du clip de prospection)
             // ne peut pas ouvrir la caméra dans l'app desktop.
@@ -39,8 +45,19 @@ pub fn run() {
                     media_permissions::grant_camera_and_microphone(&window);
                 }
             }
+
+            // Le scraping doit partir de l'IP résidentielle de l'utilisateur :
+            // un échec ici ne doit pas empêcher le reste de l'app de démarrer.
+            if let Err(error) = scraper_sidecar::start(&_app.handle().clone()) {
+                log::error!("scraping sidecar unavailable: {error}");
+            }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while building tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                scraper_sidecar::stop(app_handle);
+            }
+        });
 }
