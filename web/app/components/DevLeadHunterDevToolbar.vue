@@ -22,10 +22,19 @@
       icon="i-lucide-database"
       :loading="isSyncing"
       title="Écrase la base LOCALE avec les données de PROD (desktop dev uniquement). Requiert web/.env.sync (voir .env.sync.example)."
-      @click="onSyncDatabase"
+      @click="syncConfirmModal?.open()"
     >
       Sync DB prod <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> local
     </UButton>
+
+    <UiConfirmModal
+      ref="syncConfirmModal"
+      title="Synchroniser la base locale"
+      message="Remplacer la base LOCALE par les données de PROD ? Les tables locales seront écrasées par le dump de prod, et le bucket R2 dev sera aligné sur celui de prod (copie incrémentale)."
+      confirm-text="Synchroniser"
+      cancel-text="Annuler"
+      @confirm="syncDatabaseFromProd"
+    />
   </div>
 </template>
 
@@ -43,6 +52,7 @@ const { isDesktopDev, syncDevDatabaseFromProd }: UseDesktopRuntimeReturn = useDe
 const toast: ReturnType<typeof useToast> = useToast()
 
 const isSyncing: Ref<boolean> = ref(false)
+const syncConfirmModal: Ref<{ open: () => void } | null> = ref(null)
 /** Root element, used to measure the toolbar during a drag. */
 const rootEl: Ref<HTMLElement | null> = ref(null)
 /** Current absolute position (null = default bottom-right). */
@@ -122,20 +132,12 @@ function endDrag(): void {
 }
 
 /**
- * Confirm, then pull the prod database into the local dev database. Shows the result
- * (or error) via a toast. Only reachable in desktop dev (button is gated + the Tauri
- * command is compiled only into debug builds).
+ * Pull the prod database into the local dev database, once the confirmation dialog has
+ * been accepted. Shows the result (or error) via a toast. Only reachable in desktop dev
+ * (button is gated + the Tauri command is compiled only into debug builds).
  * @returns A promise resolved once the sync finishes.
  */
-async function onSyncDatabase(): Promise<void> {
-  const confirmed: boolean = window.confirm(
-    'Synchroniser la base LOCALE avec les données de PROD ?\n\n' +
-      'Les tables locales seront REMPLACÉES par le dump de prod, et le bucket R2 dev ' +
-      'sera aligné sur celui de prod (copie incrémentale).',
-  )
-  if (!confirmed) {
-    return
-  }
+async function syncDatabaseFromProd(): Promise<void> {
   isSyncing.value = true
   try {
     const message: string = await syncDevDatabaseFromProd()
