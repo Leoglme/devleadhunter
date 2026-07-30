@@ -337,7 +337,12 @@
 
             <div v-if="prospect.website" class="border-t border-[var(--app-surface-2)]"></div>
 
-            <UiProspectEnrichment :prospect-id="prospect.id" :open="open" />
+            <UiProspectEnrichment
+              :prospect-id="prospect.id"
+              :prospect-name="prospect.name"
+              :prospect-city="prospect.city ?? ''"
+              :open="open"
+            />
 
             <div class="border-t border-[var(--app-surface-2)]"></div>
 
