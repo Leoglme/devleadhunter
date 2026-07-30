@@ -2,6 +2,12 @@ import { ApiClient } from '~/services/api'
 
 const BASE_URL: string = '/api/v1/settings/presenter-video'
 
+/**
+ * Above this weight, a network-level failure is almost always the reverse proxy
+ * rejecting the body rather than a genuine connectivity problem.
+ */
+const LIKELY_PROXY_LIMIT_BYTES: number = 50 * 1024 * 1024
+
 /** How the stored clip was produced. */
 export type PresenterVideoSource = 'upload' | 'recorded'
 
@@ -25,18 +31,26 @@ export type PresenterVideo = {
  *
  * @param path - Path appended to the presenter-video base URL.
  * @param formData - The multipart body.
+ * @param payloadBytes - Weight being sent, quoted back when the upload is refused.
  * @returns The stored clip metadata.
  * @throws With the API message when the request fails.
  */
-async function putMultipart(path: string, formData: FormData): Promise<PresenterVideo> {
+async function putMultipart(path: string, formData: FormData, payloadBytes: number): Promise<PresenterVideo> {
   const userStore: ReturnType<typeof useUserStore> = useUserStore()
   const config: ReturnType<typeof useRuntimeConfig> = useRuntimeConfig()
 
-  const response: Response = await fetch(`${config.public.apiBase}${BASE_URL}${path}`, {
-    method: 'PUT',
-    headers: userStore.token ? { Authorization: `Bearer ${userStore.token}` } : {},
-    body: formData,
-  })
+  let response: Response
+  try {
+    response = await fetch(`${config.public.apiBase}${BASE_URL}${path}`, {
+      method: 'PUT',
+      headers: userStore.token ? { Authorization: `Bearer ${userStore.token}` } : {},
+      body: formData,
+    })
+  } catch (error: unknown) {
+    // A proxy rejecting an oversized body answers 413 without CORS headers, which
+    // `fetch` surfaces as the same bare « Failed to fetch » as a dead network.
+    throw new Error(describeUnreachableUpload(payloadBytes, error))
+  }
 
   if (!response.ok) {
     const errorText: string = await response.text().catch((): string => '')
@@ -48,10 +62,40 @@ async function putMultipart(path: string, formData: FormData): Promise<Presenter
         errorMessage = errorText
       }
     }
+    if (response.status === 413) {
+      errorMessage = `Vidéo trop lourde pour le serveur (${formatMegabytes(payloadBytes)}). Ré-exportez-la en 720p, ou raccourcissez-la.`
+    }
     throw new Error(errorMessage)
   }
 
   return (await response.json()) as PresenterVideo
+}
+
+/**
+ * Turn an unreachable upload into a sentence the user can act on.
+ * @param payloadBytes - Weight that was being sent.
+ * @param error - Whatever ``fetch`` rejected with.
+ * @returns A French message naming the likely cause.
+ */
+function describeUnreachableUpload(payloadBytes: number, error: unknown): string {
+  if (payloadBytes > LIKELY_PROXY_LIMIT_BYTES) {
+    return (
+      `L'envoi a été refusé avant d'atteindre le serveur — la vidéo est probablement trop lourde ` +
+      `(${formatMegabytes(payloadBytes)}). Ré-exportez-la en 720p, ou raccourcissez-la.`
+    )
+  }
+  return error instanceof Error && error.message
+    ? `Connexion au serveur impossible (${error.message}). Vérifiez votre connexion puis réessayez.`
+    : 'Connexion au serveur impossible. Vérifiez votre connexion puis réessayez.'
+}
+
+/**
+ * Format a byte count as a rounded French megabyte label.
+ * @param bytes - Raw size.
+ * @returns A label such as « 262 Mo ».
+ */
+function formatMegabytes(bytes: number): string {
+  return `${Math.round(bytes / (1024 * 1024))} Mo`
 }
 
 export class PresenterVideoService {
@@ -86,7 +130,7 @@ export class PresenterVideoService {
     formData.append('intro_seconds', String(introSeconds))
     formData.append('outro_seconds', String(outroSeconds))
     formData.append('auto_generate', String(autoGenerate))
-    return putMultipart('', formData)
+    return putMultipart('', formData, file.size)
   }
 
   /**
@@ -113,7 +157,7 @@ export class PresenterVideoService {
     formData.append('middle', middle)
     formData.append('outro', outro)
     formData.append('auto_generate', String(autoGenerate))
-    return putMultipart('/segments', formData)
+    return putMultipart('/segments', formData, intro.size + middle.size + outro.size)
   }
 
   /**
