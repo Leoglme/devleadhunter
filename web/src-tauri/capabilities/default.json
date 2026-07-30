@@ -10,6 +10,16 @@
     {
       "identifier": "shell:allow-open",
       "allow": [{ "url": "https://**" }, { "url": "http://**" }]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "binaries/devleadhunter-scraper",
+          "sidecar": true,
+          "args": ["--port", { "validator": "\\d{2,5}" }]
+        }
+      ]
     }
   ]
 }

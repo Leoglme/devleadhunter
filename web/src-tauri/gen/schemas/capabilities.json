@@ -8,7 +8,13 @@
       "core:default",
       "updater:default",
       "process:default",
-      { "identifier": "shell:allow-open", "allow": [{ "url": "https://**" }, { "url": "http://**" }] }
+      { "identifier": "shell:allow-open", "allow": [{ "url": "https://**" }, { "url": "http://**" }] },
+      {
+        "identifier": "shell:allow-execute",
+        "allow": [
+          { "args": ["--port", { "validator": "\\d{2,5}" }], "name": "binaries/devleadhunter-scraper", "sidecar": true }
+        ]
+      }
     ]
   }
 }

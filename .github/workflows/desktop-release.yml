@@ -39,6 +39,20 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # Le scraping doit tourner sur la machine de l'utilisateur (IP résidentielle) :
+      # le sidecar est packagé ici, puis embarqué par Tauri via `externalBin`.
+      - name: Set up Python for the scraping sidecar
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build the scraping sidecar
+        working-directory: api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+          python build_scraper_sidecar.py
+
       # Version + updater injectés avant le build (signature des artefacts).
       - name: Set desktop version and updater config
         shell: bash

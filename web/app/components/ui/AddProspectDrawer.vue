@@ -194,7 +194,9 @@ import { computed, ref, watch } from 'vue'
 import type { Prospect, ProspectCreatePayload, ProspectSearchSuggestion } from '~/types'
 import type { BusinessSearchInputExpose } from '~/types/BusinessSearchInput'
 import type { UiDrawerProps } from '~/types/UiDrawer'
+import type { ScraperChromeState } from '~/services/scraperSidecarService'
 import { ProspectsService } from '~/services/prospectsService'
+import { getScraperChromeState } from '~/services/scraperSidecarService'
 import { useToast } from '~/composables/useToast'
 
 /** Drawer to add a prospect manually. */
@@ -295,10 +297,30 @@ async function handleEnrichProspect(): Promise<void> {
       website: result.website ?? '',
     }
   } catch (err: unknown) {
-    enrichError.value = err instanceof Error ? err.message : 'Impossible de récupérer la fiche Google'
+    enrichError.value = await describeScrapingFailure(err)
   } finally {
     isEnriching.value = false
   }
+}
+
+/**
+ * Turn a scraping failure into something the user can act on.
+ *
+ * On a fresh install the sidecar may still be downloading Chrome; without this
+ * the user only sees « recherche impossible » and has no idea to simply wait.
+ *
+ * @param error - Whatever the scraping call rejected with.
+ * @returns A French sentence naming the cause.
+ */
+async function describeScrapingFailure(error: unknown): Promise<string> {
+  const chromeState: ScraperChromeState = await getScraperChromeState()
+  if (chromeState === 'installing') {
+    return 'Première utilisation : le navigateur de recherche est en cours d’installation. Réessayez dans une minute.'
+  }
+  if (chromeState === 'unavailable') {
+    return "Le navigateur de recherche n'a pas pu être installé. Vérifiez votre connexion, puis relancez l'application."
+  }
+  return error instanceof Error ? error.message : 'Impossible de récupérer la fiche Google'
 }
 
 /**

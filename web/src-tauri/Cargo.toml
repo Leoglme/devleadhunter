@@ -19,6 +19,9 @@ tauri-plugin-process = "2"
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+log = "0.4"
+# Jeton du sidecar : il doit venir du CSPRNG de l'OS, pas de l'horloge.
+getrandom = "0.3"
 # Loads api/.env.sync + web/.env.sync for the debug-only prod → local DB sync command.
 dotenvy = "0.15"
 
