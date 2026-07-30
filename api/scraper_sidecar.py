@@ -35,7 +35,9 @@ from models.prospect import (
     ProspectSearchSuggestionsRequest,
 )
 from scrappers.chrome_provisioning import ensure_chrome, find_installed_chrome
+from scrappers.email_scraper import email_scraper
 from scrappers.enrichment_scraper import EnrichmentData, enrichment_scraper
+from scrappers.google_scraper import close_maps_suggestion_session
 from services.prospect_enrichment_service import prospect_enrichment_service
 
 logger = logging.getLogger(__name__)
@@ -46,6 +48,29 @@ class SidecarEnrichmentRequest(BaseModel):
 
     business_name: str
     city: str | None = None
+
+
+async def close_transient_browsers() -> None:
+    """Close the throwaway Chrome windows a request opened.
+
+    ``email_scraper`` is a shared singleton whose browser is never closed by its
+    own code paths. On a server that only wastes memory; on the user's desktop it
+    leaves visible Chrome windows piling up after every action, so the sidecar
+    cleans up once each request is done.
+    """
+    try:
+        if email_scraper.browser:
+            await email_scraper.close()
+    except Exception:
+        logger.warning("Could not close the transient email-scraper browser", exc_info=True)
+
+
+async def close_autocomplete_session() -> None:
+    """Drop the autocomplete tab once the user has picked their business."""
+    try:
+        await close_maps_suggestion_session()
+    except Exception:
+        logger.warning("Could not close the autocomplete session", exc_info=True)
 
 
 # État de l'approvisionnement Chrome, exposé par ``/health``.
@@ -187,6 +212,9 @@ async def enrich(request: ProspectEnrichRequest) -> ProspectCreate:
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    finally:
+        await close_transient_browsers()
+        await close_autocomplete_session()
 
 
 @app.post(
@@ -216,6 +244,9 @@ async def enrichment(request: SidecarEnrichmentRequest) -> EnrichmentData:
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    finally:
+        await close_transient_browsers()
+        await close_autocomplete_session()
 
 
 def main() -> None:

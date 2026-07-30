@@ -75,6 +75,9 @@ const isOpen: Ref<boolean> = ref(false)
 let searchRequestId: number = 0
 let blurTimeoutId: ReturnType<typeof setTimeout> | null = null
 
+/** Vrai le temps qu'une suggestion choisie réécrive le champ, pour ne pas relancer la recherche. */
+let isApplyingSuggestion: boolean = false
+
 /**
  * Lance une recherche de suggestions Google Maps pour la requête saisie.
  * @param query - Texte saisi par l'utilisateur.
@@ -120,6 +123,13 @@ const fetchSuggestions: UseDebounceFnReturn<(query: string) => Promise<void>> = 
 )
 
 watch(searchTerm, (value: string): void => {
+  // Choisir une suggestion réécrit le champ : sans ce garde, le watcher rouvrait
+  // le menu et relançait une recherche — donc un Chrome de plus à chaque clic.
+  if (isApplyingSuggestion) {
+    isApplyingSuggestion = false
+    return
+  }
+
   const trimmedQuery: string = value.trim()
   if (trimmedQuery.length >= minQueryLength) {
     isSearching.value = true
@@ -169,7 +179,11 @@ function handleBlur(): void {
  * @param suggestion - Entreprise sélectionnée.
  */
 function selectSuggestion(suggestion: ProspectSearchSuggestion): void {
+  isApplyingSuggestion = true
+  searchRequestId += 1
   searchTerm.value = suggestion.label
+  suggestions.value = []
+  isSearching.value = false
   isOpen.value = false
   emit('select', suggestion)
 }
