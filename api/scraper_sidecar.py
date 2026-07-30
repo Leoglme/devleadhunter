@@ -25,6 +25,7 @@ import sys
 import uvicorn
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from core.win32_asyncio import ensure_proactor_event_loop
 from models.prospect import (
@@ -34,9 +35,18 @@ from models.prospect import (
     ProspectSearchSuggestionsRequest,
 )
 from scrappers.chrome_provisioning import ensure_chrome, find_installed_chrome
+from scrappers.enrichment_scraper import EnrichmentData, enrichment_scraper
 from services.prospect_enrichment_service import prospect_enrichment_service
 
 logger = logging.getLogger(__name__)
+
+
+class SidecarEnrichmentRequest(BaseModel):
+    """Business to enrich, as the desktop app asks for it."""
+
+    business_name: str
+    city: str | None = None
+
 
 # État de l'approvisionnement Chrome, exposé par ``/health``.
 _chrome_state: str = "unknown"
@@ -173,6 +183,35 @@ async def enrich(request: ProspectEnrichRequest) -> ProspectCreate:
         return await prospect_enrichment_service.enrich_from_google(
             business_name=request.business_name,
             google_maps_url=request.google_maps_url,
+            city=request.city,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@app.post(
+    "/scraper/enrichment",
+    response_model=EnrichmentData,
+    dependencies=[Depends(require_sidecar_token)],
+)
+async def enrichment(request: SidecarEnrichmentRequest) -> EnrichmentData:
+    """Scrape the full enrichment of a business (photos, reviews, hours, socials).
+
+    Returns the raw result: persisting it stays the remote API's job, which is
+    why nothing here touches a database.
+
+    Args:
+        request: Business name and optional city.
+
+    Returns:
+        The scraped enrichment payload.
+
+    Raises:
+        HTTPException: 400 when the enrichment cannot be scraped.
+    """
+    try:
+        return await enrichment_scraper.enrich(
+            business_name=request.business_name,
             city=request.city,
         )
     except ValueError as exc:

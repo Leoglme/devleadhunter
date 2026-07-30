@@ -3,6 +3,8 @@ import type { EnrichmentReview, EnrichmentOpeningHours } from '~/services/enrich
 export type UiProspectEnrichmentProps = {
   prospectId: number | null
   open: boolean
+  prospectName: string
+  prospectCity: string
 }
 
 export type EnrichmentForm = {

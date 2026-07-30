@@ -1,4 +1,5 @@
 import { ApiClient } from './api'
+import { postToScraperSidecar } from '~/services/scraperSidecarService'
 
 /** A single scraped review. */
 export type EnrichmentReview = {
@@ -84,12 +85,31 @@ export class EnrichmentService {
   }
 
   /**
-   * Run (or re-run) enrichment scraping for a prospect.
+   * Run (or re-run) enrichment for a prospect.
+   *
+   * In the desktop app the scraping happens locally — Google blocks datacenter
+   * IPs, so it must leave from the user's own connection — and only the result
+   * is posted for persistence. Without a sidecar the server scrapes as before.
+   *
    * @param prospectId - Target prospect id.
+   * @param businessName - Business name the scraper looks up.
+   * @param city - City narrowing the lookup.
    * @returns The refreshed enrichment record.
    */
-  static async runProspectEnrichment(prospectId: number): Promise<ProspectEnrichment> {
-    return ApiClient.post<ProspectEnrichment>(`/api/v1/prospects/${prospectId}/enrichment/run`, {})
+  static async runProspectEnrichment(
+    prospectId: number,
+    businessName: string,
+    city: string,
+  ): Promise<ProspectEnrichment> {
+    const scrapedData: unknown = businessName
+      ? await postToScraperSidecar<unknown>('/scraper/enrichment', {
+          business_name: businessName,
+          city: city || null,
+        })
+      : null
+    // `null` et non `{}` : chaque champ d'EnrichmentData a un défaut, donc un objet
+    // vide passerait pour un scrape réussi et l'API cesserait de scraper elle-même.
+    return ApiClient.post<ProspectEnrichment>(`/api/v1/prospects/${prospectId}/enrichment/run`, scrapedData)
   }
 
   /**

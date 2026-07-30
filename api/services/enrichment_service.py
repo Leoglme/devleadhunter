@@ -114,15 +114,34 @@ class EnrichmentService:
         if data.social_links:
             record.social_links = data.social_links
 
-    async def enrich(self, db: Session, user_id: int, prospect: ProspectDB) -> ProspectEnrichment:
-        """Run the enrichment scraper for a prospect and persist the result."""
+    async def enrich(
+        self,
+        db: Session,
+        user_id: int,
+        prospect: ProspectDB,
+        scraped_data: EnrichmentData | None = None,
+    ) -> ProspectEnrichment:
+        """Persist enrichment for a prospect, scraping it here only when needed.
+
+        Args:
+            db: Active database session.
+            user_id: Owner of the prospect.
+            prospect: Prospect being enriched.
+            scraped_data: Result already scraped by the desktop sidecar. When set,
+                nothing is scraped here — Google blocks datacenter IPs, so the
+                desktop app scrapes from the user's own connection and posts the
+                outcome. ``None`` keeps the server-side scrape (web build).
+
+        Returns:
+            The persisted enrichment record.
+        """
         record = self.get_or_create(db, user_id, prospect.id)
         record.status = EnrichmentStatus.ENRICHING.value
         record.error_message = None
         db.commit()
 
         try:
-            data = await enrichment_scraper.enrich(
+            data = scraped_data or await enrichment_scraper.enrich(
                 business_name=prospect.name,
                 city=prospect.city,
             )

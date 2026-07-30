@@ -10,6 +10,7 @@ from core.database import get_db
 from enums.enrichment_status import EnrichmentStatus
 from models.user import User
 from schemas.enrichment import ProspectEnrichmentResponse, ProspectEnrichmentUpdate
+from scrappers.enrichment_scraper import EnrichmentData
 from services.auth_service import get_current_active_user
 from services.enrichment_service import enrichment_service
 
@@ -41,14 +42,20 @@ async def get_prospect_enrichment(
 @router.post("/{prospect_id}/enrichment/run", response_model=ProspectEnrichmentResponse)
 async def run_prospect_enrichment(
     prospect_id: int,
+    scraped_data: EnrichmentData | None = None,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> ProspectEnrichmentResponse:
-    """Run (or re-run) enrichment scraping for a prospect."""
+    """Run (or re-run) enrichment for a prospect.
+
+    The desktop app scrapes on the user's own machine (Google blocks datacenter
+    IPs) and posts the result as ``scraped_data``; without it the server scrapes
+    itself, which is what the web build does.
+    """
     prospect = enrichment_service.get_prospect_for_user(db, current_user.id, prospect_id)
     if not prospect:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
-    record = await enrichment_service.enrich(db, current_user.id, prospect)
+    record = await enrichment_service.enrich(db, current_user.id, prospect, scraped_data=scraped_data)
     return ProspectEnrichmentResponse.model_validate(record)
 
 

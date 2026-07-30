@@ -228,6 +228,14 @@ const props: UiProspectEnrichmentProps = defineProps({
     type: Number as PropType<number | null>,
     default: null,
   },
+  prospectName: {
+    type: String,
+    default: '',
+  },
+  prospectCity: {
+    type: String,
+    default: '',
+  },
   open: {
     type: Boolean,
     required: true,
@@ -367,7 +375,11 @@ async function run(): Promise<void> {
   if (!props.prospectId) return
   isRunning.value = true
   try {
-    record.value = await EnrichmentService.runProspectEnrichment(props.prospectId)
+    record.value = await EnrichmentService.runProspectEnrichment(
+      props.prospectId,
+      props.prospectName,
+      props.prospectCity,
+    )
     syncForm()
     toast.success('Données récupérées')
   } catch (err: unknown) {
