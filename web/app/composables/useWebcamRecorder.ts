@@ -81,9 +81,13 @@ function describeMediaError(error: unknown): string {
 
 /**
  * Pick the best container this browser can actually record.
+ *
+ * Shared with the import path, which re-encodes oversized clips through the
+ * same recorder (see ``useVideoCompression``).
+ *
  * @returns A supported MIME type, or an empty string to let the browser choose.
  */
-function resolveMimeType(): string {
+export function resolveRecorderMimeType(): string {
   if (typeof MediaRecorder === 'undefined') return ''
   return CANDIDATE_MIME_TYPES.find((candidate: string): boolean => MediaRecorder.isTypeSupported(candidate)) ?? ''
 }
@@ -93,7 +97,7 @@ function resolveMimeType(): string {
  * @param mimeType - MIME type the recorder actually used.
  * @returns ``mp4`` or ``webm``.
  */
-function extensionForMimeType(mimeType: string): string {
+export function extensionForRecorderMimeType(mimeType: string): string {
   return mimeType.includes('mp4') ? 'mp4' : 'webm'
 }
 
@@ -330,7 +334,7 @@ export function useWebcamRecorder(): {
     const source: MediaStream | null = stream.value
     if (!source || isRecording.value) return false
 
-    const mimeType: string = resolveMimeType()
+    const mimeType: string = resolveRecorderMimeType()
     try {
       recorder = new MediaRecorder(source, {
         ...(mimeType ? { mimeType } : {}),
@@ -371,7 +375,7 @@ export function useWebcamRecorder(): {
           timerHandle = null
         }
         const durationSeconds: number = (performance.now() - startedAt) / 1000
-        const mimeType: string = active.mimeType || resolveMimeType() || 'video/webm'
+        const mimeType: string = active.mimeType || resolveRecorderMimeType() || 'video/webm'
         const blob: Blob = new Blob(chunks, { type: mimeType })
         chunks = []
         recorder = null
@@ -381,7 +385,7 @@ export function useWebcamRecorder(): {
           blob,
           url: URL.createObjectURL(blob),
           durationSeconds,
-          extension: extensionForMimeType(mimeType),
+          extension: extensionForRecorderMimeType(mimeType),
         })
       }
       active.stop()

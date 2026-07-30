@@ -97,6 +97,11 @@
               :selected-file="selectedFile"
               :is-dragging="isDragging"
               :is-uploading="isUploading"
+              :picked-clip-preview-url="pickedClipPreviewUrl"
+              :is-compressing="isCompressing"
+              :compression-progress="compressionProgress"
+              :bytes-before-compression="pickedClipOriginalBytes"
+              :size-error-message="clipSizeErrorMessage"
               @pick="openFilePicker"
               @drop-file="handleDropFile"
               @dragging="isDragging = $event"
@@ -283,9 +288,11 @@ import type { PresenterVideoCaptureMode, PresenterVideoConfigEmits } from '~/typ
 import type { ComputedRef, EmitFn, Ref } from 'vue'
 import type { PresenterVideo } from '~/services/presenterVideoService'
 import type { ProspectionScriptSegment } from '~/composables/useProspectionScript'
+import type { UseVideoCompressionReturn, VideoCompressionResult } from '~/composables/useVideoCompression'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { PresenterVideoService } from '~/services/presenterVideoService'
 import { buildDefaultScript } from '~/composables/useProspectionScript'
+import { PRESENTER_VIDEO_MAX_BYTES, useVideoCompression } from '~/composables/useVideoCompression'
 import { useToast } from '~/composables/useToast'
 import { useAuth } from '~/composables/useAuth'
 
@@ -323,6 +330,7 @@ const RECORDING_TIPS: string[] = ['1080p suffit', 'Lumière face à vous', 'Rega
 
 const toast: UseToastReturn = useToast()
 const { user }: UseAuthReturn = useAuth()
+const { isCompressing, compressionProgress, compressPresenterClip }: UseVideoCompressionReturn = useVideoCompression()
 
 const info: Ref<PresenterVideo | null> = ref(null)
 const previewUrl: Ref<string | null> = ref(null)
@@ -338,6 +346,15 @@ const introSeconds: Ref<number> = ref(4)
 const outroSeconds: Ref<number> = ref(5)
 const autoGenerate: Ref<boolean> = ref(true)
 const captureMode: Ref<PresenterVideoCaptureMode | null> = ref(null)
+
+/** Playable preview of the clip just picked, before it is sent. */
+const pickedClipPreviewUrl: Ref<string | null> = ref(null)
+
+/** Weight of the picked clip before compression, to show what was gained. */
+const pickedClipOriginalBytes: Ref<number | null> = ref(null)
+
+/** Blocking message when the picked clip is still too heavy to be sent. */
+const clipSizeErrorMessage: Ref<string | null> = ref(null)
 
 /** Whether the capture UI is shown on purpose while a clip already exists. */
 const isReplacingClip: Ref<boolean> = ref(false)
@@ -491,24 +508,94 @@ function openFilePicker(): void {
  * Keep the selected file from the input change event.
  * @param event - Native change event of the file input.
  */
-function handleFileSelected(event: Event): void {
+async function handleFileSelected(event: Event): Promise<void> {
   const input: HTMLInputElement | null = event.target as HTMLInputElement | null
-  selectedFile.value = input?.files?.[0] ?? null
+  const file: File | null = input?.files?.[0] ?? null
+  if (file) await adoptPickedClip(file)
 }
 
 /**
  * Accept a file dropped on the drop zone.
  * @param file - The dropped file.
  */
-function handleDropFile(file: File): void {
+async function handleDropFile(file: File): Promise<void> {
+  await adoptPickedClip(file)
+}
+
+/** Drop the preview of the clip awaiting upload (avoids leaking blobs). */
+function releasePickedClipPreview(): void {
+  if (pickedClipPreviewUrl.value) {
+    URL.revokeObjectURL(pickedClipPreviewUrl.value)
+    pickedClipPreviewUrl.value = null
+  }
+}
+
+/** Forget the clip awaiting upload, along with its preview and messages. */
+function resetPickedClip(): void {
+  releasePickedClipPreview()
+  selectedFile.value = null
+  pickedClipOriginalBytes.value = null
+  clipSizeErrorMessage.value = null
+  if (fileInputRef.value) fileInputRef.value.value = ''
+}
+
+/**
+ * Show a picked clip right away, then shrink it to the montage canvas.
+ *
+ * Compression is transparent: the user drops a file and sees the preview, the
+ * final weight, and — if the clip still cannot be sent — why.
+ *
+ * @param file - The clip dropped on the zone or chosen in the file picker.
+ */
+async function adoptPickedClip(file: File): Promise<void> {
+  // Two concurrent re-encodings would race to overwrite `selectedFile`.
+  if (isCompressing.value || isUploading.value) return
+
+  releasePickedClipPreview()
   selectedFile.value = file
+  pickedClipOriginalBytes.value = null
+  clipSizeErrorMessage.value = null
+  pickedClipPreviewUrl.value = URL.createObjectURL(file)
+
+  const result: VideoCompressionResult = await compressPresenterClip(file)
+  selectedFile.value = result.file
+  pickedClipOriginalBytes.value = result.wasCompressed ? result.originalBytes : null
+  clipSizeErrorMessage.value = describeOversizedClip(result)
+}
+
+/**
+ * Explain, in the user's terms, why a clip cannot be sent as-is.
+ *
+ * Returning `null` means the clip is good to go.
+ *
+ * @param result - Outcome of the compression attempt.
+ * @returns A sentence naming the fix, or `null` when the clip fits.
+ */
+function describeOversizedClip(result: VideoCompressionResult): string | null {
+  if (result.file.size <= PRESENTER_VIDEO_MAX_BYTES) return null
+
+  const currentMb: number = Math.round(result.file.size / (1024 * 1024))
+  const maxMb: number = Math.round(PRESENTER_VIDEO_MAX_BYTES / (1024 * 1024))
+  const limits: string = `Cette vidéo pèse ${currentMb} Mo, au-delà de la limite d'envoi de ${maxMb} Mo.`
+
+  if (result.skipReason === 'undecodable') {
+    return `${limits} Son format n'a pas pu être lu ici pour l'alléger automatiquement — ré-exportez-la en MP4 (H.264), 720p suffit.`
+  }
+  return `${limits} Ré-exportez-la en 720p ou raccourcissez-la (30 à 45 s suffisent).`
 }
 
 /**
  * Upload the selected clip (replaces the previous one server-side).
  */
 async function handleUpload(): Promise<void> {
-  if (!selectedFile.value) return
+  if (!selectedFile.value || isCompressing.value) return
+
+  // Without this guard the request dies in nginx, surfacing as « Failed to fetch ».
+  if (selectedFile.value.size > PRESENTER_VIDEO_MAX_BYTES) {
+    toast.error(clipSizeErrorMessage.value ?? 'Cette vidéo est trop lourde pour être envoyée.')
+    return
+  }
+
   isUploading.value = true
   try {
     applyInfo(
@@ -519,8 +606,7 @@ async function handleUpload(): Promise<void> {
         autoGenerate.value,
       ),
     )
-    selectedFile.value = null
-    if (fileInputRef.value) fileInputRef.value.value = ''
+    resetPickedClip()
     isReplacingClip.value = false
     releasePreview()
     previewUrl.value = await PresenterVideoService.getPresenterVideoObjectUrl()
@@ -593,5 +679,6 @@ onMounted(async (): Promise<void> => {
 
 onBeforeUnmount((): void => {
   releasePreview()
+  releasePickedClipPreview()
 })
 </script>
