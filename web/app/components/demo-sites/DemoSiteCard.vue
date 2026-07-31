@@ -36,7 +36,7 @@
 
         <p
           v-if="site.verification_message && !DemoSiteService.isDemoSiteReachable(site)"
-          class="text-xs text-amber-300/90"
+          class="text-xs text-red-300/90"
         >
           {{ site.verification_message }}
         </p>
@@ -94,8 +94,7 @@ const statusClass: ComputedRef<string> = computed(() => {
   if (DemoSiteService.isDemoSiteReachable(props.site)) {
     return 'bg-[var(--app-green)]/20 text-[var(--app-green)]'
   }
-  if (props.site.status === 'failed') return 'bg-red-500/20 text-red-300'
-  return 'bg-amber-500/20 text-amber-300'
+  return 'bg-red-500/20 text-red-300'
 })
 
 const templateLabel: ComputedRef<string> = computed(() => {

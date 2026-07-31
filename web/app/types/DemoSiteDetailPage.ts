@@ -1,4 +1,4 @@
-export type DemoSiteStatTone = 'success' | 'warning' | 'muted' | undefined
+export type DemoSiteStatTone = 'success' | 'danger' | 'muted' | undefined
 
 export type DemoSiteStat = {
   label: string

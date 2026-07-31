@@ -241,7 +241,7 @@
         <section class="space-y-6">
           <div
             v-if="site.verification_message && !DemoSiteService.isDemoSiteReachable(site)"
-            class="card border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200"
+            class="card border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300"
           >
             {{ site.verification_message }}
           </div>
@@ -259,7 +259,7 @@
                 class="mt-1 text-xl font-semibold text-[var(--app-ink)]"
                 :class="[
                   stat.tone === 'success' && 'text-[var(--app-green)]',
-                  stat.tone === 'warning' && 'text-amber-300',
+                  stat.tone === 'danger' && 'text-red-300',
                   stat.tone === 'muted' && 'truncate text-base',
                 ]"
               >
@@ -388,8 +388,7 @@ const statusLabel: ComputedRef<string> = computed(() => {
 const statusClass: ComputedRef<string> = computed(() => {
   if (site.value && DemoSiteService.isDemoSiteReachable(site.value))
     return 'bg-[var(--app-green)]/20 text-[var(--app-green)]'
-  if (site.value?.status === 'failed') return 'bg-red-500/20 text-red-300'
-  return 'bg-amber-500/20 text-amber-300'
+  return 'bg-red-500/20 text-red-300'
 })
 
 const daysLeft: ComputedRef<number> = computed(() =>
@@ -441,7 +440,7 @@ const stats: ComputedRef<DemoSiteStat[]> = computed(() => {
     {
       label: 'Statut URL',
       value: urlLive ? 'Live' : 'Offline',
-      tone: urlLive ? 'success' : 'warning',
+      tone: urlLive ? 'success' : 'danger',
     },
     {
       label: 'Jours restants',
