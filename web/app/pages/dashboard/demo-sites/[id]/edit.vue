@@ -60,13 +60,15 @@
         </div>
       </div>
 
-      <p class="flex items-start gap-2 text-xs leading-relaxed text-[var(--app-ink-soft)]">
-        <UIcon name="i-lucide-info" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        Le modèle et les couleurs se changent depuis
-        <NuxtLink :to="`/dashboard/demo-sites/${demoSiteId}`" class="underline underline-offset-2">
-          la fiche du site </NuxtLink
-        >, où l'aperçu montre le rendu en direct.
-      </p>
+      <div class="card space-y-5 p-6">
+        <h2 class="font-semibold text-[var(--app-ink)]">Template & couleurs</h2>
+        <DemoSitesTemplatePicker
+          v-model="form.template_id"
+          :templates="templates"
+          :theme="form.theme"
+          @update:theme="form.theme = $event"
+        />
+      </div>
 
       <div
         v-if="saveMessage"
@@ -92,7 +94,7 @@
 
 <script lang="ts" setup>
 import type { ComputedRef, Ref } from 'vue'
-import type { DemoSite, DemoSiteTheme } from '~/services/demoSiteService'
+import type { DemoSite, DemoSiteTemplate, DemoSiteTheme } from '~/services/demoSiteService'
 import { DEFAULT_DEMO_SITE_THEME, DemoSiteService } from '~/services/demoSiteService'
 
 definePageMeta({ layout: 'dashboard', middleware: 'auth' })
@@ -103,6 +105,7 @@ const demoSiteId: number = Number(route.params.id)
 const site: Ref<DemoSite | null> = ref(null)
 const pending: Ref<boolean> = ref(true)
 const loadError: Ref<string | null> = ref(null)
+const templates: Ref<DemoSiteTemplate[]> = ref([])
 const isSaving: Ref<boolean> = ref(false)
 const isRegenerating: Ref<boolean> = ref(false)
 const saveMessage: Ref<string | null> = ref(null)
@@ -186,8 +189,12 @@ async function handleRegenerate(): Promise<void> {
 
 onMounted(async () => {
   try {
-    const loadedSite: DemoSite = await DemoSiteService.getDemoSite(demoSiteId)
+    const [loadedSite, loadedTemplates]: [DemoSite, DemoSiteTemplate[]] = await Promise.all([
+      DemoSiteService.getDemoSite(demoSiteId),
+      DemoSiteService.listDemoSiteTemplates(),
+    ])
     site.value = loadedSite
+    templates.value = loadedTemplates
     form.value = {
       business_name: loadedSite.business_name,
       template_id: loadedSite.template_id,
