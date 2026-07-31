@@ -28,7 +28,10 @@
 
     <UiLoader v-if="pending" />
 
-    <div v-else-if="loadError" class="card border-red-500/30 bg-red-500/10 p-6 text-red-300">
+    <div
+      v-else-if="loadError"
+      class="card border-[var(--app-red)]/30 bg-[var(--app-red-soft)] p-6 text-[var(--app-red)]"
+    >
       {{ loadError }}
     </div>
 
@@ -113,7 +116,7 @@
             </button>
             <button
               type="button"
-              class="btn-secondary w-full text-xs text-red-300"
+              class="btn-secondary w-full text-xs text-[var(--app-red)]"
               :disabled="deleting"
               @click="handleDelete"
             >
@@ -141,7 +144,7 @@
               Génération en cours (capture + montage)…
             </div>
 
-            <p v-else-if="site.video_status === 'failed'" class="mt-3 text-xs text-red-300">
+            <p v-else-if="site.video_status === 'failed'" class="mt-3 text-xs text-[var(--app-red)]">
               {{ site.video_error || 'La génération a échoué.' }}
             </p>
 
@@ -173,7 +176,7 @@
                 </button>
                 <button
                   type="button"
-                  class="btn-secondary w-full text-xs text-red-300"
+                  class="btn-secondary w-full text-xs text-[var(--app-red)]"
                   :disabled="deletingVideo"
                   @click="askDeleteVideo"
                 >
@@ -241,7 +244,7 @@
         <section class="space-y-6">
           <div
             v-if="site.verification_message && !DemoSiteService.isDemoSiteReachable(site)"
-            class="card border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300"
+            class="card border-[var(--app-red)]/30 bg-[var(--app-red-soft)] p-4 text-sm text-[var(--app-red)]"
           >
             {{ site.verification_message }}
           </div>
@@ -259,7 +262,7 @@
                 class="mt-1 text-xl font-semibold text-[var(--app-ink)]"
                 :class="[
                   stat.tone === 'success' && 'text-[var(--app-green)]',
-                  stat.tone === 'danger' && 'text-red-300',
+                  stat.tone === 'danger' && 'text-[var(--app-red)]',
                   stat.tone === 'muted' && 'truncate text-base',
                 ]"
               >
@@ -388,7 +391,7 @@ const statusLabel: ComputedRef<string> = computed(() => {
 const statusClass: ComputedRef<string> = computed(() => {
   if (site.value && DemoSiteService.isDemoSiteReachable(site.value))
     return 'bg-[var(--app-green)]/20 text-[var(--app-green)]'
-  return 'bg-red-500/20 text-red-300'
+  return 'bg-[var(--app-red)]/20 text-[var(--app-red)]'
 })
 
 const daysLeft: ComputedRef<number> = computed(() =>
@@ -429,8 +432,8 @@ const videoStatusLabel: ComputedRef<string | null> = computed(() => {
 
 const videoStatusClass: ComputedRef<string> = computed(() => {
   if (site.value?.video_status === 'ready') return 'bg-[var(--app-green)]/20 text-[var(--app-green)]'
-  if (site.value?.video_status === 'failed') return 'bg-red-500/20 text-red-300'
-  return 'bg-amber-500/20 text-amber-300'
+  if (site.value?.video_status === 'failed') return 'bg-[var(--app-red)]/20 text-[var(--app-red)]'
+  return 'bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]'
 })
 
 const stats: ComputedRef<DemoSiteStat[]> = computed(() => {
