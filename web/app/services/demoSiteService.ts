@@ -8,6 +8,13 @@ export type DemoSiteTheme = {
   accent: string
 }
 
+/** Colors applied to a demo site that has no theme of its own yet. */
+export const DEFAULT_DEMO_SITE_THEME: DemoSiteTheme = {
+  primary: '#0284c7',
+  secondary: '#0f172a',
+  accent: '#f59e0b',
+}
+
 export type DemoSiteTemplate = {
   id: string
   name: string

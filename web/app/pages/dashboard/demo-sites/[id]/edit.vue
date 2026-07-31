@@ -60,15 +60,13 @@
         </div>
       </div>
 
-      <div class="card space-y-5 p-6">
-        <h2 class="font-semibold text-[var(--app-ink)]">Template & couleurs</h2>
-        <DemoSitesTemplatePicker
-          v-model="form.template_id"
-          :templates="templates"
-          :theme="form.theme"
-          @update:theme="form.theme = $event"
-        />
-      </div>
+      <p class="flex items-start gap-2 text-xs leading-relaxed text-[var(--app-ink-soft)]">
+        <UIcon name="i-lucide-info" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        Le modèle et les couleurs se changent depuis
+        <NuxtLink :to="`/dashboard/demo-sites/${demoSiteId}`" class="underline underline-offset-2">
+          la fiche du site </NuxtLink
+        >, où l'aperçu montre le rendu en direct.
+      </p>
 
       <div
         v-if="saveMessage"
@@ -94,8 +92,8 @@
 
 <script lang="ts" setup>
 import type { ComputedRef, Ref } from 'vue'
-import type { DemoSite, DemoSiteTemplate, DemoSiteTheme } from '~/services/demoSiteService'
-import { DemoSiteService } from '~/services/demoSiteService'
+import type { DemoSite, DemoSiteTheme } from '~/services/demoSiteService'
+import { DEFAULT_DEMO_SITE_THEME, DemoSiteService } from '~/services/demoSiteService'
 
 definePageMeta({ layout: 'dashboard', middleware: 'auth' })
 
@@ -105,13 +103,10 @@ const demoSiteId: number = Number(route.params.id)
 const site: Ref<DemoSite | null> = ref(null)
 const pending: Ref<boolean> = ref(true)
 const loadError: Ref<string | null> = ref(null)
-const templates: Ref<DemoSiteTemplate[]> = ref([])
 const isSaving: Ref<boolean> = ref(false)
 const isRegenerating: Ref<boolean> = ref(false)
 const saveMessage: Ref<string | null> = ref(null)
 const saveSuccess: Ref<boolean> = ref(false)
-
-const defaultTheme: DemoSiteTheme = { primary: '#0284c7', secondary: '#0f172a', accent: '#f59e0b' }
 
 const form: Ref<{
   business_name: string
@@ -128,7 +123,7 @@ const form: Ref<{
   email: '',
   city: '',
   description: '',
-  theme: { ...defaultTheme },
+  theme: { ...DEFAULT_DEMO_SITE_THEME },
 })
 
 const canSave: ComputedRef<boolean> = computed(() => {
@@ -191,12 +186,8 @@ async function handleRegenerate(): Promise<void> {
 
 onMounted(async () => {
   try {
-    const [loadedSite, loadedTemplates]: [DemoSite, DemoSiteTemplate[]] = await Promise.all([
-      DemoSiteService.getDemoSite(demoSiteId),
-      DemoSiteService.listDemoSiteTemplates(),
-    ])
+    const loadedSite: DemoSite = await DemoSiteService.getDemoSite(demoSiteId)
     site.value = loadedSite
-    templates.value = loadedTemplates
     form.value = {
       business_name: loadedSite.business_name,
       template_id: loadedSite.template_id,
@@ -204,7 +195,7 @@ onMounted(async () => {
       email: loadedSite.email ?? '',
       city: loadedSite.city ?? '',
       description: loadedSite.description ?? '',
-      theme: loadedSite.theme ? { ...loadedSite.theme } : { ...defaultTheme },
+      theme: loadedSite.theme ? { ...loadedSite.theme } : { ...DEFAULT_DEMO_SITE_THEME },
     }
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : 'Impossible de charger le site'

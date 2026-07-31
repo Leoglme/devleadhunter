@@ -222,6 +222,11 @@ const props: TemplatePickerProps = defineProps({
     type: String as PropType<string | null>,
     default: null,
   },
+  // When set, the live preview shows this site instead of the template catalog.
+  publishedSiteUrl: {
+    type: String as PropType<string | null>,
+    default: null,
+  },
 })
 
 const emit: EmitFn<TemplatePickerEmits> = defineEmits<TemplatePickerEmits>()
@@ -336,6 +341,10 @@ function buildLivePreviewUrl(template: DemoSiteTemplate): string {
  * Point the live iframe at the selected template with the current colors.
  */
 function applyLivePreviewUrl(): void {
+  if (props.publishedSiteUrl) {
+    livePreviewUrl.value = props.publishedSiteUrl
+    return
+  }
   if (selectedTemplate.value) livePreviewUrl.value = buildLivePreviewUrl(selectedTemplate.value)
 }
 
@@ -445,6 +454,8 @@ watch(
 )
 
 watch((): DemoSiteTheme => props.theme, scheduleLivePreviewReload, { deep: true })
+
+watch((): string | null => props.publishedSiteUrl ?? null, applyLivePreviewUrl)
 
 watch([livePreviewUrl, isLivePreview], (): void => {
   if (isLivePreview.value) beginPreviewLoad()

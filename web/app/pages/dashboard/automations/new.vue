@@ -392,11 +392,11 @@ import { computed, onMounted, ref, watch } from 'vue'
 import type { Prospect } from '~/types'
 import type { TemplateSelectOption } from '~/types/TemplateSelect'
 import type { UiWizardStep } from '~/types/UiWizardStepper'
-import type { DemoSiteTemplate, DemoSiteTheme } from '~/services/demoSiteService'
+import type { DemoSiteTemplate } from '~/services/demoSiteService'
 import { AutomationsService } from '~/services/automationsService'
 import { ProspectsService } from '~/services/prospectsService'
 import { EmailTemplatesService } from '~/services/emailTemplatesService'
-import { DemoSiteService } from '~/services/demoSiteService'
+import { DEFAULT_DEMO_SITE_THEME, DemoSiteService } from '~/services/demoSiteService'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import { useProspectSearchStore } from '~/stores/prospectSearch'
 import { useDashboardScroll } from '~/composables/useDashboardScroll'
@@ -413,8 +413,6 @@ const route: ReturnType<typeof useRoute> = useRoute()
 const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 const searchStore: ReturnType<typeof useProspectSearchStore> = useProspectSearchStore()
 const { scrollToTop }: UseDashboardScrollReturn = useDashboardScroll()
-
-const defaultTheme: DemoSiteTheme = { primary: '#0284c7', secondary: '#0f172a', accent: '#f59e0b' }
 
 /** Every wizard step, in order; the emails one is dropped when the tunnel targets sites only. */
 const ALL_STEPS: AutomationStepDefinition[] = [
@@ -470,7 +468,7 @@ const form: Ref<TunnelForm> = ref({
   name: '',
   mode: 'semi_auto',
   templateId: '',
-  theme: { ...defaultTheme },
+  theme: { ...DEFAULT_DEMO_SITE_THEME },
   autoCampaign: true,
   autoFollowUp: true,
   followUpTemplate: 0,
