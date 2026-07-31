@@ -33,6 +33,7 @@
       message="Remplacer la base LOCALE par les données de PROD ? Les tables locales seront écrasées par le dump de prod, et le bucket R2 dev sera aligné sur celui de prod (copie incrémentale)."
       confirm-text="Synchroniser"
       cancel-text="Annuler"
+      confirm-button-variant="primary"
       @confirm="syncDatabaseFromProd"
     />
   </div>

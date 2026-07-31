@@ -14,7 +14,7 @@
           <button class="app-btn-secondary flex-1" @click="handleCancel">
             {{ props.cancelText }}
           </button>
-          <button class="app-btn-danger flex-1" @click="handleConfirm">
+          <button class="flex-1" :class="confirmButtonClass" @click="handleConfirm">
             {{ props.confirmText }}
           </button>
         </div>
@@ -24,9 +24,9 @@
 </template>
 
 <script lang="ts" setup>
-import type { Ref } from 'vue'
-import { ref } from 'vue'
-import type { UiConfirmModalProps } from '~/types/UiConfirmModal'
+import type { ComputedRef, PropType, Ref } from 'vue'
+import { computed, ref } from 'vue'
+import type { UiConfirmModalConfirmButtonVariant, UiConfirmModalProps } from '~/types/UiConfirmModal'
 
 /** Confirm/cancel dialog whose labels are all overridable. */
 const props: UiConfirmModalProps = defineProps({
@@ -46,6 +46,10 @@ const props: UiConfirmModalProps = defineProps({
     type: String,
     default: 'Annuler',
   },
+  confirmButtonVariant: {
+    type: String as PropType<UiConfirmModalConfirmButtonVariant>,
+    default: 'danger',
+  },
 })
 
 const emit: {
@@ -54,8 +58,17 @@ const emit: {
   (e: 'confirm' | 'cancel'): void
 }>()
 
+const CONFIRM_BUTTON_CLASSES: Record<UiConfirmModalConfirmButtonVariant, string> = {
+  danger: 'app-btn-danger',
+  primary: 'app-btn-primary',
+}
+
 /** Whether the modal is visible. */
 const isOpen: Ref<boolean> = ref(false)
+
+const confirmButtonClass: ComputedRef<string> = computed(
+  (): string => CONFIRM_BUTTON_CLASSES[props.confirmButtonVariant ?? 'danger'],
+)
 
 /**
  * Open the modal.
