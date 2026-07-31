@@ -15,6 +15,11 @@ export type UseAuthReturn = {
   user: ComputedRef<User | null>
 }
 
+export type UseAutomationCompletionNotifierReturn = {
+  start: () => void
+  stop: () => void
+}
+
 export type UseCopyToClipboardReturn = {
   copy: (text: string) => Promise<void>
   copied: Ref<boolean>

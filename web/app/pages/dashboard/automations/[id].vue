@@ -132,18 +132,27 @@
             :key="item.id"
             class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-4 py-3 transition-colors hover:bg-[var(--app-surface-2)]/40"
           >
-            <button
-              type="button"
-              class="flex h-4 w-4 shrink-0 items-center justify-center rounded border"
-              :class="
-                selected.has(item.id)
-                  ? 'border-[var(--app-ink)] bg-[var(--app-ink)] text-[var(--app-surface)]'
-                  : 'border-[var(--app-line)]'
-              "
-              @click="toggleSelect(item.id)"
-            >
-              <UIcon v-if="selected.has(item.id)" name="i-lucide-check" class="h-3 w-3" />
-            </button>
+            <div class="flex h-4 w-4 shrink-0 items-center justify-center">
+              <UIcon
+                v-if="isItemProcessing(item)"
+                name="i-lucide-loader-circle"
+                class="h-4 w-4 animate-spin text-[var(--app-ink-soft)]"
+                title="En cours — patientez"
+              />
+              <button
+                v-else
+                type="button"
+                class="flex h-4 w-4 items-center justify-center rounded border"
+                :class="
+                  selected.has(item.id)
+                    ? 'border-[var(--app-ink)] bg-[var(--app-ink)] text-[var(--app-surface)]'
+                    : 'border-[var(--app-line)]'
+                "
+                @click="toggleSelect(item.id)"
+              >
+                <UIcon v-if="selected.has(item.id)" name="i-lucide-check" class="h-3 w-3" />
+              </button>
+            </div>
 
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
@@ -275,6 +284,9 @@ definePageMeta({
   middleware: 'auth',
 })
 
+/** Steps where the orchestrator is actively working — the row shows a spinner, not a checkbox. */
+const PROCESSING_STEPS: AutomationStep[] = ['found', 'enriching', 'generating']
+
 const store: ReturnType<typeof useAutomationsStore> = useAutomationsStore()
 const toast: UseToastReturn = useToast()
 const route: ReturnType<typeof useRoute> = useRoute()
@@ -381,6 +393,23 @@ function stepBadgeClass(step: AutomationStep): string {
   if (step === 'failed') return 'app-badge--danger'
   if (step === 'skipped') return ''
   return 'app-badge--progress'
+}
+
+/**
+ * Whether the orchestrator is still working on an item — the row then shows a spinner
+ * instead of the selection checkbox, so the user knows to wait. True only while the run
+ * is running and the step is transient (including ``enriched``/``generated`` when the run
+ * will auto-advance them).
+ * @param item - The prospect row.
+ * @returns True while the item is still being processed.
+ */
+function isItemProcessing(item: AutomationItem): boolean {
+  const current: AutomationDetail | null = run.value
+  if (current === null || current.status !== 'running') return false
+  if (PROCESSING_STEPS.includes(item.step)) return true
+  if (item.step === 'enriched') return current.auto_generate
+  if (item.step === 'generated') return current.auto_campaign
+  return false
 }
 
 /**

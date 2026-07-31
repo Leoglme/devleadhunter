@@ -78,11 +78,13 @@
 
 <script lang="ts" setup>
 import type { AppTheme } from '~/types/AppTheme'
+import type { UseAutomationCompletionNotifierReturn } from '~/types/Composables'
 import type { ComputedRef, Ref } from 'vue'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useUserStore } from '~/stores/user'
 import { useAppTheme } from '~/composables/useAppTheme'
 import { useDrawerStackStore } from '~/stores/drawerStack'
+import { useAutomationCompletionNotifier } from '~/composables/useAutomationCompletionNotifier'
 import { DASHBOARD_SCROLL_CONTAINER_ID } from '~/composables/useDashboardScroll'
 
 /** Auth initialization state (boot loader overlay). */
@@ -106,6 +108,9 @@ const { theme, initTheme }: { theme: Ref<AppTheme, AppTheme>; initTheme: () => v
 
 /** Persistent drawer stack — drives the content push when a drawer is open. */
 const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
+
+/** Background watcher toasting automatisation completions across every dashboard page. */
+const automationNotifier: UseAutomationCompletionNotifierReturn = useAutomationCompletionNotifier()
 
 // Authenticated app shell — never index dashboard pages (thin content behind auth).
 useSeoMeta({
@@ -203,12 +208,14 @@ onMounted(async (): Promise<void> => {
   checkMobile()
   if (import.meta.client) {
     window.addEventListener('resize', handleResize)
+    automationNotifier.start()
   }
 })
 
 onUnmounted((): void => {
   if (import.meta.client) {
     window.removeEventListener('resize', handleResize)
+    automationNotifier.stop()
   }
 })
 </script>
