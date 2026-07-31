@@ -76,10 +76,18 @@ class Settings(BaseSettings):
     )
 
     # Demo site builder / Storyblok
+    public_demo_host_base_url: str = Field(
+        default="https://demo.dibodev.fr",
+        alias="PUBLIC_DEMO_HOST_BASE_URL",
+        description="Canonical public host for demo sites: the stored demo_url and every client-facing link "
+        "({lien_demo}, {lien_video}). Stable across environments, NEVER localhost — the local dev preview "
+        "host is DEMO_HOST_BASE_URL.",
+    )
     demo_host_base_url: str = Field(
         default="http://localhost:3001",
         alias="DEMO_HOST_BASE_URL",
-        description="Public base URL for generated demo websites (localhost:3001 in dev, demo.dibodev.fr in prod)",
+        description="Local dev preview host for the demo-host app (localhost:3001), used only to verify a site "
+        "built locally. Client-facing URLs use PUBLIC_DEMO_HOST_BASE_URL, not this.",
     )
     demo_site_ttl_days: int = Field(
         default=21,

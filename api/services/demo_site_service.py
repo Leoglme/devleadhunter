@@ -152,8 +152,8 @@ class DemoSiteService:
         return candidate
 
     def demo_url_for_slug(self, slug: str) -> str:
-        """Build the public demo URL for a slug."""
-        base: str = settings.demo_host_base_url.rstrip("/")
+        """Build the canonical public demo URL for a slug (demo.dibodev.fr, never the dev preview host)."""
+        base: str = settings.public_demo_host_base_url.rstrip("/")
         return f"{base}/{slug}"
 
     def _apply_verification(self, demo_site: DemoSite, verification: DemoSiteVerificationResult) -> None:

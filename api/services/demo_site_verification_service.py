@@ -174,14 +174,14 @@ class DemoSiteVerificationService:
                     ),
                 )
 
-        if self._configured_demo_host_is_local():
+        if self._configured_demo_host_is_local() and not settings.is_production:
             return DemoSiteVerificationResult(
                 public_api_ok=True,
                 demo_url_live=False,
                 local_demo_url=local_demo_url,
                 local_demo_url_live=False,
                 message=(
-                    f"Local demo-host is not reachable at {demo_url}. Run: cd demo-host && npm run dev (port 3001)."
+                    f"Local demo-host is not reachable at {local_demo_url}. Run: cd demo-host && npm run dev (port 3001)."
                 ),
             )
 
