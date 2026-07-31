@@ -73,7 +73,6 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("fix_utf8mb4_collation", "migrations.fix_utf8mb4_collation"),
     # Content rewrites run last, once every schema change is in place.
     ("strip_brands_from_subjects", "migrations.strip_brands_from_subjects"),
-    ("backfill_demo_urls_to_public_host", "migrations.backfill_demo_urls_to_public_host"),
 ]
 
 # Modules of this package that are not migrations and must not be registered.

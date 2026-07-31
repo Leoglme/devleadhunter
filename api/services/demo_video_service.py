@@ -82,7 +82,7 @@ def thumbnail_object_key(slug: str) -> str:
 
 def video_page_url(slug: str) -> str:
     """Public player-page URL on the demo host (PostHog-tracked)."""
-    return f"{settings.public_demo_host_base_url.rstrip('/')}/v/{slug}"
+    return f"{settings.demo_host_base_url.rstrip('/')}/v/{slug}"
 
 
 def public_video_file_url(slug: str) -> str:
