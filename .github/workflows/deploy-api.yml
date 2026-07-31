@@ -154,6 +154,9 @@ jobs:
             QONTO_CLIENT_ID=${{ secrets.QONTO_CLIENT_ID }}
             QONTO_CLIENT_SECRET=${{ secrets.QONTO_CLIENT_SECRET }}
             QONTO_REDIRECT_URI=https://api.devleadhunter.dibodev.fr/api/v1/payment-accounts/qonto/callback
+            # Canonical public host for demo sites (stored demo_url + {lien_demo}/{lien_video}).
+            # DEMO_HOST_BASE_URL stays the dev-only preview host; in prod it is unused.
+            PUBLIC_DEMO_HOST_BASE_URL=https://demo.dibodev.fr
             DEMO_HOST_BASE_URL=https://demo.dibodev.fr
             DEMO_SITE_VERIFY_RETRIES=3
             DEMO_SITE_VERIFY_RETRY_DELAY_SECONDS=2
