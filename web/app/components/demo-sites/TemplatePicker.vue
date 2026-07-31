@@ -1,17 +1,23 @@
 <template>
   <div class="@container">
-    <input ref="colorInputRef" type="color" class="sr-only" :value="theme[activeColorKey]" @input="onColorInput" />
-
-    <div class="grid gap-4 @3xl:grid-cols-[280px_minmax(0,1fr)]">
+    <div
+      :class="templatesBelowPreview ? 'flex flex-col-reverse gap-4' : 'grid gap-4 @3xl:grid-cols-[280px_minmax(0,1fr)]'"
+    >
       <div
-        class="flex gap-2 overflow-x-auto pb-1 @3xl:max-h-[560px] @3xl:flex-col @3xl:overflow-x-visible @3xl:overflow-y-auto @3xl:pr-1 @3xl:pb-0"
+        :class="[
+          'flex gap-2 overflow-x-auto pb-1',
+          templatesBelowPreview
+            ? ''
+            : '@3xl:max-h-[560px] @3xl:flex-col @3xl:overflow-x-visible @3xl:overflow-y-auto @3xl:pr-1 @3xl:pb-0',
+        ]"
       >
         <button
           v-for="template in sortedTemplates"
           :key="template.id"
           type="button"
           :class="[
-            'w-56 shrink-0 rounded-xl border p-2 text-left transition-colors @3xl:w-full',
+            'w-56 shrink-0 rounded-xl border p-2 text-left transition-colors',
+            templatesBelowPreview ? '' : '@3xl:w-full',
             modelValue === template.id
               ? 'border-[var(--app-ink)] bg-[var(--app-surface)] ring-1 ring-[var(--app-ink)]/15'
               : 'border-[var(--app-line)] bg-[var(--app-surface)] hover:border-[var(--app-ink-soft)]',
@@ -47,7 +53,7 @@
         </button>
       </div>
 
-      <div v-if="selectedTemplate" class="app-card self-start overflow-hidden">
+      <div v-if="selectedTemplate" :class="['app-card overflow-hidden', templatesBelowPreview ? '' : 'self-start']">
         <div
           ref="previewContainer"
           :class="[
@@ -164,13 +170,20 @@
                   {{ colorLabels[colorKey] }}
                 </span>
                 <div class="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    :title="`Choisir la couleur ${colorLabels[colorKey].toLowerCase()}`"
-                    class="h-8 w-8 shrink-0 cursor-pointer rounded-lg border border-[var(--app-line)] transition-transform hover:scale-105"
-                    :style="{ backgroundColor: theme[colorKey] }"
-                    @click="openColorPicker(colorKey)"
-                  />
+                  <div class="group relative h-8 w-8 shrink-0">
+                    <div
+                      class="pointer-events-none h-8 w-8 rounded-lg border border-[var(--app-line)] transition-transform group-hover:scale-105"
+                      :style="{ backgroundColor: theme[colorKey] }"
+                    />
+                    <input
+                      :value="theme[colorKey]"
+                      type="color"
+                      :title="`Choisir la couleur ${colorLabels[colorKey].toLowerCase()}`"
+                      :aria-label="`Choisir la couleur ${colorLabels[colorKey].toLowerCase()}`"
+                      class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                      @input="updateThemeColor(colorKey, ($event.target as HTMLInputElement).value)"
+                    />
+                  </div>
                   <input
                     :value="theme[colorKey]"
                     type="text"
@@ -227,6 +240,11 @@ const props: TemplatePickerProps = defineProps({
     type: String as PropType<string | null>,
     default: null,
   },
+  // When true, stack a full-width preview with the template strip below it (demo site page).
+  templatesBelowPreview: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit: EmitFn<TemplatePickerEmits> = defineEmits<TemplatePickerEmits>()
@@ -246,8 +264,6 @@ const LIVE_VIEWPORTS: Record<TemplatePreviewDevice, { width: number; height: num
   mobile: { width: 390, height: 844 },
 }
 
-const colorInputRef: Ref<HTMLInputElement | null> = ref(null)
-const activeColorKey: Ref<TemplateThemeColorKey> = ref('primary')
 const previewContainer: Ref<HTMLElement | null> = ref(null)
 const paneWidth: Ref<number> = ref(640)
 const paneHeight: Ref<number> = ref(400)
@@ -411,25 +427,6 @@ function selectTemplate(template: DemoSiteTemplate): void {
 function resetTheme(): void {
   const defaults: DemoSiteTheme | undefined = selectedTemplate.value?.default_theme
   if (defaults) emit('update:theme', { ...defaults })
-}
-
-/**
- * Open the native color picker for a theme key.
- * @param colorKey - Theme key being edited.
- */
-function openColorPicker(colorKey: TemplateThemeColorKey): void {
-  activeColorKey.value = colorKey
-  nextTick((): void => {
-    colorInputRef.value?.click()
-  })
-}
-
-/**
- * Handle a color input change from the hidden native picker.
- * @param event - Input event of the hidden color input.
- */
-function onColorInput(event: Event): void {
-  updateThemeColor(activeColorKey.value, (event.target as HTMLInputElement).value)
 }
 
 /**

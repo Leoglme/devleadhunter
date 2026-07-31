@@ -6,6 +6,7 @@ export type TemplatePickerProps = {
   theme: DemoSiteTheme
   recommendedTrade?: string | null
   publishedSiteUrl?: string | null
+  templatesBelowPreview?: boolean
 }
 
 export type TemplateThemeColorKey = keyof DemoSiteTheme

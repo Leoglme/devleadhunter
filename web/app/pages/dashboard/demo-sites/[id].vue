@@ -288,6 +288,7 @@
                 :templates="templates"
                 :theme="selectedTheme"
                 :published-site-url="publishedSiteUrl"
+                templates-below-preview
                 @update:theme="selectedTheme = $event"
               />
               <div v-else-if="openUrl">
