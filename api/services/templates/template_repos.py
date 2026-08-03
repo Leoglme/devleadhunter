@@ -15,12 +15,12 @@ GITHUB_ORG = "DevLeadHunter"
 
 # template_id -> (repo name, live tag). Mirror of demo-host/nuxt.config.ts `extends`.
 TEMPLATE_REPOS: dict[str, tuple[str, str]] = {
-    "artisan-edito": ("devleadhunter-template-artisan-edito", "v1.2.1"),
-    "plumber-signature": ("devleadhunter-template-plumber-signature", "v1.2.1"),
-    "plumber-atelier": ("devleadhunter-template-plumber-atelier", "v1.3.1"),
-    "plumber-cuivre": ("devleadhunter-template-plumber-cuivre", "v1.2.1"),
-    "electrician-lumen": ("devleadhunter-template-electrician-lumen", "v1.2.1"),
-    "mechanic-pitlane": ("devleadhunter-template-mechanic-pitlane", "v1.3.1"),
+    "artisan-edito": ("devleadhunter-template-artisan-edito", "v1.2.2"),
+    "plumber-signature": ("devleadhunter-template-plumber-signature", "v1.2.2"),
+    "plumber-atelier": ("devleadhunter-template-plumber-atelier", "v1.3.2"),
+    "plumber-cuivre": ("devleadhunter-template-plumber-cuivre", "v1.2.2"),
+    "electrician-lumen": ("devleadhunter-template-electrician-lumen", "v1.2.2"),
+    "mechanic-pitlane": ("devleadhunter-template-mechanic-pitlane", "v1.3.2"),
     "dental": ("devleadhunter-template-dental", "v1.1.4"),
     "food": ("devleadhunter-template-food", "v1.0.6"),
     "barber": ("devleadhunter-template-barber", "v1.1.5"),
