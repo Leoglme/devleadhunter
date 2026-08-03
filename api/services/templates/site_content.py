@@ -23,6 +23,8 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from services.validation_service import validation_service
+
 # Generic, per-trade editorial defaults. A template's build_site_content may pass these
 # (or its own) so the services/FAQ sections render and stay editable in Storyblok.
 PLUMBER_SERVICES: list[dict[str, str]] = [
@@ -165,7 +167,12 @@ def map_prospect_and_enrichment(
         if isinstance(url, str) and url.strip()
     ]
 
-    about = description.strip() if isinstance(description, str) and description.strip() else about_default
+    about = description.strip() if isinstance(description, str) and description.strip() else ""
+    # Already-stored enrichments may hold a platform's own meta description
+    # ("Find local businesses…") — never show that on a client-facing site.
+    if validation_service.is_generic_platform_description(about):
+        about = ""
+    about = about or about_default
     site_city = city or area
     area_label = f"{area} et ses alentours" if city else ""
 

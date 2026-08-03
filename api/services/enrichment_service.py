@@ -27,6 +27,7 @@ from services.scraper_diagnostics_service import (
     STATUS_OK,
     scraper_diagnostics_service,
 )
+from services.validation_service import validation_service
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,8 @@ class EnrichmentService:
             record.rating = data.rating
         if data.reviews_count is not None:
             record.reviews_count = data.reviews_count
-        if data.description:
+        # Guard against outdated sidecar payloads still sending the Maps page meta.
+        if data.description and not validation_service.is_generic_platform_description(data.description):
             record.description = data.description
         if data.logo_url:
             record.logo_url = data.logo_url

@@ -25,6 +25,7 @@ from scrappers.nodriver_dom import NodriverDom
 from scrappers.nodriver_executor import run_nodriver_task
 from scrappers.osm_enrichment import enrich_from_osm
 from scrappers.resilient_extract import parse_ld_json_blocks
+from services.validation_service import validation_service
 
 logger = logging.getLogger(__name__)
 
@@ -283,7 +284,7 @@ class EnrichmentScraper:
 
             raw = await NodriverDom.evaluate(tab, f"JSON.stringify({_EXTRACT_JS})", by_value=True)
             data = json.loads(raw) if isinstance(raw, str) else {}
-            return self._build_from_raw(data)
+            return self._build_from_raw(data, business_name=business_name, city=city)
         except Exception as exc:
             logger.warning("Enrichment scrape failed for %s: %s", business_name, exc)
             return EnrichmentData()
@@ -291,11 +292,18 @@ class EnrichmentScraper:
             await browser.close()
 
     @staticmethod
-    def _build_from_raw(data: dict[str, Any]) -> EnrichmentData:
+    def _build_from_raw(
+        data: dict[str, Any],
+        *,
+        business_name: str | None = None,
+        city: str | None = None,
+    ) -> EnrichmentData:
         """Coerce the raw JS payload into a typed EnrichmentData.
 
         DOM selectors first, then JSON-LD (schema.org) as a stable fallback for
         description / rating / reviews_count when the obfuscated classes miss.
+        ``business_name`` / ``city`` gate the meta-description fallback: it is the
+        PAGE's meta, trustworthy only when it actually names the business.
         """
         if not isinstance(data, dict):
             return EnrichmentData()
@@ -329,10 +337,21 @@ class EnrichmentScraper:
             reviews_count = _as_int(business.get("reviews_count"))
 
         dom_description = (str(data["description"]).strip() if data.get("description") else None) or None
+        # The DOM value is the page's meta description: on a place deep link it names
+        # the business, on a search/consent page it's Google's own boilerplate.
+        if dom_description and (
+            validation_service.is_generic_platform_description(dom_description)
+            or not validation_service.description_mentions_business(dom_description, business_name, city)
+        ):
+            logger.info("Enrichment: dropping irrelevant meta description %r", dom_description[:80])
+            dom_description = None
+
         description = dom_description
         if business and business.get("description"):
-            # Prefer a JSON-LD description over the generic meta description fallback.
-            description = str(business["description"]).strip() or dom_description
+            # Prefer a JSON-LD description over the meta description fallback.
+            ld_description = str(business["description"]).strip()
+            if ld_description and not validation_service.is_generic_platform_description(ld_description):
+                description = ld_description
 
         return EnrichmentData(
             source="google",

@@ -2,6 +2,10 @@
 Validation service for prospect data.
 """
 
+import re
+import unicodedata
+from typing import ClassVar
+
 
 class ValidationService:
     """
@@ -11,6 +15,21 @@ class ValidationService:
     and checking prospect information such as websites,
     contact details, etc.
     """
+
+    # Lowercase markers of a platform's OWN meta description scraped by mistake
+    # (e.g. the Google Maps page meta instead of the business description).
+    GENERIC_PLATFORM_DESCRIPTION_MARKERS: ClassVar[tuple[str, ...]] = (
+        "google maps",
+        "find local businesses",
+        "view maps and get driving directions",
+        "trouvez des commerces locaux",
+        "consultez des plans et calculez des itinéraires",
+    )
+
+    # Tokens too common to prove a description talks about THIS business.
+    _WEAK_MENTION_TOKENS: ClassVar[frozenset[str]] = frozenset(
+        {"les", "des", "sur", "sous", "chez", "sarl", "sas", "eurl", "ets", "saint", "sainte"}
+    )
 
     @staticmethod
     def is_valid_website(url: str | None) -> bool:
@@ -74,6 +93,70 @@ class ValidationService:
                     return True
 
         return False
+
+    @staticmethod
+    def _significant_tokens(text: str) -> set[str]:
+        """
+        Split a text into lowercase, accent-free tokens usable for matching.
+
+        Args:
+            text: Any human text (business name, city, description).
+
+        Returns:
+            Tokens of 3+ characters, minus the too-common ones.
+        """
+        decomposed = unicodedata.normalize("NFD", text.lower())
+        without_accents = "".join(char for char in decomposed if unicodedata.category(char) != "Mn")
+        tokens = set(re.findall(r"[a-z0-9]{3,}", without_accents))
+        return tokens - ValidationService._WEAK_MENTION_TOKENS
+
+    @classmethod
+    def is_generic_platform_description(cls, description: str | None) -> bool:
+        """
+        Check whether a description is a platform's own boilerplate, not the business's.
+
+        Real-world case: the Google Maps search page meta ("Find local businesses,
+        view maps and get driving directions in Google Maps.") scraped as the
+        prospect's description and displayed verbatim on his demo site.
+
+        Args:
+            description: Scraped description text.
+
+        Returns:
+            True when the text is platform boilerplate and must be dropped.
+        """
+        if not description:
+            return False
+        lowered = description.lower()
+        return any(marker in lowered for marker in cls.GENERIC_PLATFORM_DESCRIPTION_MARKERS)
+
+    @classmethod
+    def description_mentions_business(
+        cls,
+        description: str,
+        business_name: str | None,
+        city: str | None,
+    ) -> bool:
+        """
+        Check whether a description talks about the given business at all.
+
+        Used on untrusted description sources (a page meta description): a text
+        that names neither the business nor its city is about something else.
+        With no name and no city to compare against, the check passes.
+
+        Args:
+            description: Scraped description text.
+            business_name: Prospect business name.
+            city: Prospect city.
+
+        Returns:
+            True when the description shares a significant token with the
+            business name or the city.
+        """
+        expected_tokens = cls._significant_tokens(f"{business_name or ''} {city or ''}")
+        if not expected_tokens:
+            return True
+        return bool(cls._significant_tokens(description) & expected_tokens)
 
     @staticmethod
     def is_valid_email(email: str | None) -> bool:
