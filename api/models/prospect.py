@@ -7,6 +7,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from enums.source import Source
+from enums.website_status import WebsiteStatus
 
 
 class ProspectBase(BaseModel):
@@ -31,6 +32,13 @@ class ProspectBase(BaseModel):
     phone: str | None = Field(None, description="Phone number")
     email: EmailStr | None = Field(None, description="Email address")
     website: str | None = Field(None, description="Website URL")
+    website_status: WebsiteStatus | None = Field(
+        None,
+        description=(
+            "Liveness of the found website: live, dead (DNS/4xx/5xx/error page) or "
+            "placeholder (directory mini-site). None when no website or never checked."
+        ),
+    )
     category: str = Field(..., description="Business category")
     source: Source = Field(..., description="Data source identifier")
     confidence: int = Field(
@@ -103,6 +111,7 @@ class ProspectUpdate(BaseModel):
     phone: str | None = Field(None, description="Phone number")
     email: EmailStr | None = Field(None, description="Email address")
     website: str | None = Field(None, description="Website URL")
+    website_status: WebsiteStatus | None = Field(None, description="Liveness of the website URL")
     category: str | None = Field(None, description="Business category")
     source: Source | None = Field(None, description="Data source identifier")
     confidence: int | None = Field(None, ge=1, le=4, description="Confidence score 1-4")

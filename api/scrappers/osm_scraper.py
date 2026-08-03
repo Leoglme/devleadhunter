@@ -10,10 +10,12 @@ from collections.abc import Callable
 import aiohttp
 
 from enums.source import Source
+from enums.website_status import WebsiteStatus
 from models.prospect import ProspectCreate
 from services.address_service import address_service
 from services.scrape_progress import ScrapeProgressReporter
 from services.validation_service import validation_service
+from services.website_liveness_service import website_liveness_service
 
 from .base_scraper import BaseScraper
 from .email_scraper import email_scraper
@@ -309,9 +311,11 @@ class OSMScraper(BaseScraper):
             if website and not validation_service.is_valid_website(website):
                 website = None
 
-            # Only return prospect if no website
-            if only_without_website and website:
-                logger.info(f"Prospect {name} has a website, skipping")
+            # A dead or placeholder website does not disqualify the prospect —
+            # it is kept with its URL and marked via website_status.
+            website_status = await website_liveness_service.check_website_status(website)
+            if only_without_website and website_status is WebsiteStatus.LIVE:
+                logger.info(f"Prospect {name} has a live website, skipping")
                 return None
 
             # Try to find email
@@ -324,9 +328,12 @@ class OSMScraper(BaseScraper):
                 except Exception as e:
                     logger.debug(f"Could not find email: {e}")
 
-            # Calculate confidence
+            # Calculate confidence — a dead/placeholder site must not lower it.
             confidence = validation_service.calculate_confidence_score(
-                phone=phone, address=address, email=email, website=website
+                phone=phone,
+                address=address,
+                email=email,
+                website=website if website_status is WebsiteStatus.LIVE else None,
             )
 
             prospect = ProspectCreate(
@@ -336,6 +343,7 @@ class OSMScraper(BaseScraper):
                 phone=phone,
                 email=email,
                 website=website,
+                website_status=website_status,
                 category=category,
                 source=Source.OSM,
                 confidence=min(confidence, 4),

@@ -24,6 +24,7 @@ def _policy() -> ResolvedPolicy:
         window_start_hour=7,
         window_end_hour=18,
         spacing_minutes=20,
+        follow_up_delay_days=5,
     )
 
 
@@ -46,7 +47,7 @@ def test_slots_stay_in_window_and_weekdays() -> None:
 
 def test_daily_cap_respected() -> None:
     """No local calendar day exceeds the daily cap."""
-    policy = ResolvedPolicy(5, [0, 1, 2, 3, 4], 7, 18, 20)
+    policy = ResolvedPolicy(5, [0, 1, 2, 3, 4], 7, 18, 20, 5)
     slots = send_policy_service.next_send_slots(policy, 23)
     per_day: dict[object, int] = {}
     for slot in slots:
@@ -69,7 +70,7 @@ def test_spacing_within_day() -> None:
 
 def test_seed_counts_pushes_to_next_day() -> None:
     """A day already at the cap gets no new slots."""
-    policy = ResolvedPolicy(3, [0, 1, 2, 3, 4], 7, 18, 20)
+    policy = ResolvedPolicy(3, [0, 1, 2, 3, 4], 7, 18, 20, 5)
     start = datetime(2026, 7, 13, 6, 0, 0)  # Monday, before the window (UTC)
     first_local_day = _to_local(start).date()
     slots = send_policy_service.next_send_slots(policy, 3, start_utc=start, seed_counts={first_local_day: 3})

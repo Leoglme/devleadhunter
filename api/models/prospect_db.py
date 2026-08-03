@@ -44,6 +44,9 @@ class ProspectDB(Base):
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     website: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Liveness of the found website (WebsiteStatus value, NULL = none/unchecked).
+    # Dead/placeholder prospects keep their URL so the verdict can be verified by hand.
+    website_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     category: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     source: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     confidence: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

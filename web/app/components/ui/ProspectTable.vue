@@ -92,7 +92,23 @@
         </BaseTableTd>
 
         <BaseTableTd>
-          <span v-if="prospect.website" class="app-badge">
+          <span
+            v-if="prospect.website_status === 'dead'"
+            class="app-badge app-badge--danger"
+            title="Le site trouvé ne répond plus — cible idéale"
+          >
+            <UIcon name="i-lucide-unplug" class="h-3 w-3" />
+            Site mort
+          </span>
+          <span
+            v-else-if="prospect.website_status === 'placeholder'"
+            class="app-badge app-badge--info"
+            title="Mini-site annuaire (business.site, Solocal…) — pas un vrai site"
+          >
+            <UIcon name="i-lucide-layout-template" class="h-3 w-3" />
+            Site annuaire
+          </span>
+          <span v-else-if="prospect.website" class="app-badge">
             <UIcon name="i-lucide-circle-check" class="h-3 w-3" />
             Oui
           </span>

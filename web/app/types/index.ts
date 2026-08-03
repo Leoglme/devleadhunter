@@ -3,6 +3,12 @@ export type BusinessCategory = 'restaurant' | 'plombier' | 'electricien' | 'coif
 /** Mirrors the backend ``Source`` enum ; ``all`` is a filter-only sentinel, never stored. */
 export type ProspectSource = 'google' | 'pagesjaunes' | 'yelp' | 'osm' | 'auto' | 'brightdata' | 'manual' | 'all'
 
+/** Mirrors the backend ``WebsiteStatus`` enum ; absent/null = no website or never checked. */
+export type ProspectWebsiteStatus = 'live' | 'dead' | 'placeholder'
+
+/** Website filter values — `yes`/`no` reason in "working website" : a dead or directory site counts as none. */
+export type ProspectWebsiteFilter = 'all' | 'yes' | 'no' | 'dead' | 'improvable'
+
 /**
  * Prospect interface representing a business without website
  */
@@ -15,6 +21,7 @@ export type Prospect = {
   phone?: string
   email?: string
   website?: string
+  website_status?: ProspectWebsiteStatus | null
   category: string
   source: ProspectSource
   confidence: number

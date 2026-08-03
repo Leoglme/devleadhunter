@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.database import get_db
+from enums.website_status import WebsiteStatus
 from models.credit_settings import CreditSettings
 from models.prospect import (
     Prospect,
@@ -178,8 +179,12 @@ async def search_prospects(
                     status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Failed to deduct credits. Please try again."
                 )
 
-        # Calculate statistics
-        has_website = sum(1 for p in prospects if p.website)
+        # Calculate statistics — a dead or placeholder website counts as "no website"
+        has_website = sum(
+            1
+            for p in prospects
+            if p.website and p.website_status not in (WebsiteStatus.DEAD, WebsiteStatus.PLACEHOLDER)
+        )
         without_website = len(prospects) - has_website
 
         return ProspectSearchResponse(

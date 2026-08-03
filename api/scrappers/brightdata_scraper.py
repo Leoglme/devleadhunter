@@ -6,7 +6,8 @@ Strategy
 1. Fetch the PagesJaunes listing page for the given category + city via Web Unlocker.
 2. Parse the HTML to extract detail-page URLs (/pros/<id>).
 3. For each detail URL, fetch and parse: name, phone, address, website.
-4. Skip prospects that already have a website when ``only_without_website=True``.
+4. Skip prospects with a LIVE website when ``only_without_website=True`` —
+   dead or placeholder websites (business.site, Solocal…) are kept and marked.
 5. For each qualifying prospect, run a tiered Google SERP email search:
    a. ``"{name}" "{phone}"``     — most targeted (finds guide-artisan.fr, RGE, etc.)
    b. ``"{name}" "{city}" email``— city-scoped search
@@ -28,9 +29,11 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 from enums.source import Source
+from enums.website_status import WebsiteStatus
 from models.prospect import ProspectCreate
 from services.scrape_progress import ScrapeProgressReporter
 from services.validation_service import validation_service
+from services.website_liveness_service import website_liveness_service
 
 from .base_scraper import BaseScraper
 
@@ -455,11 +458,14 @@ class BrightDataScraper(BaseScraper):
                 website = href
                 break
 
+        # A dead or placeholder website does not disqualify the prospect —
+        # it is kept with its URL and marked via website_status.
+        website_status = await website_liveness_service.check_website_status(website or None)
         confidence = validation_service.calculate_confidence_score(
             phone=phone or None,
             address=address or None,
             email=None,
-            website=website or None,
+            website=website if website_status is WebsiteStatus.LIVE else None,
         )
 
         return ProspectCreate(
@@ -469,6 +475,7 @@ class BrightDataScraper(BaseScraper):
             phone=phone or None,
             email=None,
             website=website or None,
+            website_status=website_status,
             category=category,
             source=Source.BRIGHTDATA,
             confidence=max(1, min(confidence, 4)),
@@ -657,8 +664,8 @@ class BrightDataScraper(BaseScraper):
                 if prospect is None:
                     continue
 
-                if only_without_website and prospect.website:
-                    logger.debug("[BrightData] Skipping '%s' (has website)", prospect.name)
+                if only_without_website and prospect.website_status is WebsiteStatus.LIVE:
+                    logger.debug("[BrightData] Skipping '%s' (has a live website)", prospect.name)
                     continue
 
                 candidates.append(prospect)
@@ -693,7 +700,7 @@ class BrightDataScraper(BaseScraper):
                         phone=data.get("phone"),
                         address=data.get("address"),
                         email=email,
-                        website=data.get("website"),
+                        website=data.get("website") if prospect.website_status is WebsiteStatus.LIVE else None,
                     )
                     data["confidence"] = max(1, min(conf, 4))
                     prospect = ProspectCreate(**data)

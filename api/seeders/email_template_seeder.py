@@ -9,7 +9,8 @@ Templates follow the /cold-email skill rules:
 
 Variables available: {salutation}, {prenom}, {nom}, {entreprise}, {ville}, {metier}, {lien_demo},
 {lien_video} (player page of the prospection video), {vignette_video} (clickable
-personalised thumbnail block — the recommended way to put the video in a J1).
+personalised thumbnail block — the recommended way to put the video in a J1),
+{ancien_site} (the prospect's dead website domain — dead-site templates only).
 ({salutation} always renders a safe greeting — « Bonjour » / « Bonjour Léo » /
 « Bonjour M. Guillaume » — from the resolved decision-maker; {prenom}/{nom}
 are EMPTY when unknown, never a company word.)
@@ -206,6 +207,36 @@ _TEMPLATES: list[dict[str, object]] = [
             "<p>{salutation},</p>"
             "<p>Sans retour de votre part, je vais libérer le site de {entreprise} cette semaine.</p>"
             "<p>Si c'est juste une question de timing, dites-le moi et je le garde de côté : {lien_demo}</p>"
+            "<p>Léo</p>"
+        ),
+    },
+    # ── Site mort : prospects dont le site trouvé ne répond plus (filtre
+    #    « Site mort / annuaire » dans Mes prospects, website_status = dead ou
+    #    placeholder). L'accroche la plus forte du catalogue : le besoin est
+    #    déjà reconnu, le prospect a déjà payé pour un site par le passé.
+    {
+        "name": "Site mort — J1 (votre site ne répond plus)",
+        "sort_order": 93,
+        "subject": "site hors ligne",
+        "body_html": (
+            "<p>{salutation},</p>"
+            "<p>En cherchant {entreprise}, je suis tombé sur {ancien_site} : il ne répond plus. "
+            "Vos clients qui vous cherchent tombent sur une page d'erreur.</p>"
+            "<p>J'ai monté un site prêt à prendre le relais, à votre nom : {lien_demo}</p>"
+            "<p>Je vous montre ?</p>"
+            "<p>Léo</p>"
+        ),
+    },
+    {
+        "name": "Site mort — Relance (J+5, avec prix)",
+        "sort_order": 0,
+        "subject": "toujours hors ligne",
+        "body_html": (
+            "<p>{salutation},</p>"
+            "<p>Votre ancien site ({ancien_site}) est toujours en erreur — le remplaçant, lui, "
+            "est en ligne : {lien_demo}</p>"
+            "<p>500€ une fois, sans abonnement, mise en ligne comprise.</p>"
+            "<p>Ça vous intéresse ?</p>"
             "<p>Léo</p>"
         ),
     },

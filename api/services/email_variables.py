@@ -31,6 +31,7 @@ class EmailVariables:
     DEMO_LINK = "lien_demo"
     VIDEO_LINK = "lien_video"
     VIDEO_THUMBNAIL = "vignette_video"
+    OLD_WEBSITE = "ancien_site"
 
     @staticmethod
     def build_video_thumbnail_html(video_link: str, thumbnail_url: str) -> str:
@@ -56,6 +57,29 @@ class EmailVariables:
             f'style="display:block;width:100%;max-width:480px;border-radius:12px;border:0;" />'
             f"</a></p>"
         )
+
+    @staticmethod
+    def display_website(url: str | None) -> str:
+        """
+        Format a website URL for the body of an email.
+
+        `{ancien_site}` names the prospect's dead website in the "votre site ne
+        répond plus" pitch — a bare domain reads better than a full URL there.
+
+        Args:
+            url: Stored website URL, or None.
+
+        Returns:
+            The URL without scheme or trailing slash, empty when unknown.
+        """
+        if not url:
+            return ""
+        cleaned = url.strip()
+        for scheme in ("https://", "http://"):
+            if cleaned.startswith(scheme):
+                cleaned = cleaned[len(scheme) :]
+                break
+        return cleaned.rstrip("/")
 
     @staticmethod
     def resolved_contact(db: Session, prospect_id: int) -> tuple[str | None, str | None, str | None]:
@@ -122,4 +146,5 @@ class EmailVariables:
             cls.DEMO_LINK: demo_link,
             cls.VIDEO_LINK: video_link,
             cls.VIDEO_THUMBNAIL: cls.build_video_thumbnail_html(video_link, video_thumbnail_url),
+            cls.OLD_WEBSITE: cls.display_website(prospect.website),
         }

@@ -22,6 +22,7 @@ import unicodedata
 from collections.abc import Callable
 
 from enums.source import Source
+from enums.website_status import WebsiteStatus
 from models.prospect import ProspectCreate
 from services.scrape_progress import ScrapeProgressReporter
 from services.validation_service import validation_service
@@ -129,7 +130,7 @@ class AutoScraper(BaseScraper):
                     phone=data.get("phone"),
                     address=data.get("address"),
                     email=found,
-                    website=data.get("website"),
+                    website=data.get("website") if prospect.website_status is WebsiteStatus.LIVE else None,
                 )
                 data["confidence"] = max(1, min(confidence, 4))
                 return ProspectCreate(**data)

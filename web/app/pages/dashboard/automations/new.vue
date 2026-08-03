@@ -402,6 +402,7 @@ import { useProspectSearchStore } from '~/stores/prospectSearch'
 import { useDashboardScroll } from '~/composables/useDashboardScroll'
 import { useToast } from '~/composables/useToast'
 import { sortTemplatesByRecommendation } from '~/utils/templateRecommendation'
+import { ProspectWebsite } from '~/utils/prospectWebsite'
 
 definePageMeta({
   layout: 'dashboard',
@@ -456,11 +457,11 @@ const filterCategory: Ref<string> = ref('')
 const currentPage: Ref<number> = ref(1)
 const pageSize: number = 25
 
-/** Website filter options. */
+/** Website filter options — un site mort ou annuaire compte comme « sans site ». */
 const websiteFilterOptions: { value: string; label: string }[] = [
   { value: 'all', label: 'Tous' },
   { value: 'yes', label: 'Avec site' },
-  { value: 'no', label: 'Sans site' },
+  { value: 'no', label: 'Sans site (ou site mort)' },
 ]
 
 /** Wizard state. */
@@ -536,8 +537,10 @@ const filteredProspects: ComputedRef<Prospect[]> = computed((): Prospect[] => {
     const cat: string = filterCategory.value.toLowerCase()
     list = list.filter((p: Prospect): boolean => p.category.toLowerCase().includes(cat))
   }
-  if (filterWebsite.value === 'yes') list = list.filter((p: Prospect): boolean => Boolean(p.website))
-  else if (filterWebsite.value === 'no') list = list.filter((p: Prospect): boolean => !p.website)
+  if (filterWebsite.value === 'yes')
+    list = list.filter((prospect: Prospect): boolean => ProspectWebsite.hasWorkingWebsite(prospect))
+  else if (filterWebsite.value === 'no')
+    list = list.filter((prospect: Prospect): boolean => !ProspectWebsite.hasWorkingWebsite(prospect))
   return list
 })
 

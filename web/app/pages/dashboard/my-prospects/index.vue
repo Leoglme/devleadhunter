@@ -340,9 +340,10 @@ import type { LocationQueryValue } from 'vue-router'
 import type { UseToastReturn } from '~/types/Composables'
 import { ref, computed, watch, onMounted } from 'vue'
 import type { ComputedRef, Ref } from 'vue'
-import type { Prospect } from '~/types'
+import type { Prospect, ProspectWebsiteFilter } from '~/types'
 import { ProspectsService } from '~/services/prospectsService'
 import { downloadProspectsJson, downloadProspectTemplateJson, parseProspectsJson } from '~/utils/prospectJson'
+import { ProspectWebsite } from '~/utils/prospectWebsite'
 import { EnrichmentService } from '~/services/enrichmentService'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import type { BulkGenerateResult } from '~/services/demoSiteService'
@@ -363,13 +364,14 @@ const bulkBusy: Ref<boolean> = ref(false)
 const searchQuery: Ref<string> = ref('')
 const filterCategory: Ref<string> = ref('')
 const filterCity: Ref<string> = ref('')
-const filterWebsite: Ref<'all' | 'yes' | 'no' | 'improvable'> = ref('no')
+const filterWebsite: Ref<ProspectWebsiteFilter> = ref('no')
 const activeTab: Ref<'not_contacted' | 'contacted'> = ref('not_contacted')
 
 const websiteFilterOptions: { value: string; label: string }[] = [
   { value: 'all', label: 'Tous' },
   { value: 'yes', label: 'Oui' },
-  { value: 'no', label: 'Non' },
+  { value: 'no', label: 'Non (aucun ou site mort)' },
+  { value: 'dead', label: 'Site mort / annuaire' },
   { value: 'improvable', label: 'Améliorable (audit)' },
 ]
 const currentPage: Ref<number> = ref(1)
@@ -409,7 +411,7 @@ const prospectsWithEmail: ComputedRef<number> = computed(
   () => prospects.value.filter((prospect: Prospect) => prospect.email).length,
 )
 const prospectsWithoutWebsite: ComputedRef<number> = computed(
-  () => prospects.value.filter((prospect: Prospect) => !prospect.website).length,
+  () => prospects.value.filter((prospect: Prospect) => !ProspectWebsite.hasWorkingWebsite(prospect)).length,
 )
 const prospectsWithPhone: ComputedRef<number> = computed(
   () => prospects.value.filter((prospect: Prospect) => prospect.phone).length,
@@ -441,9 +443,13 @@ const baseFiltered: ComputedRef<Prospect[]> = computed(() => {
   }
 
   if (filterWebsite.value === 'yes') {
-    filtered = filtered.filter((prospect: Prospect) => !!prospect.website)
+    filtered = filtered.filter((prospect: Prospect) => ProspectWebsite.hasWorkingWebsite(prospect))
   } else if (filterWebsite.value === 'no') {
-    filtered = filtered.filter((prospect: Prospect) => !prospect.website)
+    // Un site mort ou un mini-site annuaire compte comme « sans site ».
+    filtered = filtered.filter((prospect: Prospect) => !ProspectWebsite.hasWorkingWebsite(prospect))
+  } else if (filterWebsite.value === 'dead') {
+    // URL trouvée mais site mort ou mini-site annuaire → accroche « site hors ligne ».
+    filtered = filtered.filter((prospect: Prospect) => ProspectWebsite.hasBrokenWebsite(prospect))
   } else if (filterWebsite.value === 'improvable') {
     // Site existant jugé faible par l'audit Lighthouse → cible refonte.
     filtered = filtered.filter(

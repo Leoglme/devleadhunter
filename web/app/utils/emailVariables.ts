@@ -90,6 +90,14 @@ export class EmailVariables {
       description: 'Bloc image cliquable de la vidéo de prospection (HTML prêt à coller, renvoie au player).',
       example: '[vignette cliquable de la vidéo]',
     },
+    {
+      key: 'ancien_site',
+      token: '{ancien_site}',
+      label: 'Ancien site',
+      description:
+        'Domaine du site mort du prospect (vide s’il n’en a pas) — pour l’accroche « votre site ne répond plus ».',
+      example: 'garage-du-viaduc.business.site',
+    },
   ]
 
   /**

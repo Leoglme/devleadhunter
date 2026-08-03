@@ -14,6 +14,7 @@ from typing import TypeVar
 from urllib.parse import quote
 
 from enums.source import Source
+from enums.website_status import WebsiteStatus
 from models.prospect import ProspectCreate, ProspectSearchSuggestion
 from scrappers import scrape_signals
 from scrappers.nodriver_browser import NODRIVER_AVAILABLE, NodriverBrowser, NodriverScraperMixin
@@ -22,6 +23,7 @@ from scrappers.nodriver_executor import run_nodriver_task
 from scrappers.resilient_extract import find_phone, parse_ld_json_blocks
 from services.scrape_progress import ScrapeProgressReporter
 from services.validation_service import validation_service
+from services.website_liveness_service import website_liveness_service
 
 from .base_scraper import BaseScraper
 from .email_scraper import email_scraper
@@ -355,6 +357,10 @@ class GoogleScraper(NodriverScraperMixin, BaseScraper):
             phone = self._sanitize_maps_text(phone) if phone else None
             category = self._sanitize_maps_text(category) if category else default_category
 
+            # Maps sometimes lists a Facebook/Instagram page as the website.
+            if website and not validation_service.is_valid_website(website):
+                website = None
+
             if not name:
                 return None
 
@@ -383,10 +389,11 @@ class GoogleScraper(NodriverScraperMixin, BaseScraper):
         website = details.get("website")
         category = details.get("category") or "Entreprise"
 
+        website_status = await website_liveness_service.check_website_status(website)
         confidence = validation_service.calculate_confidence_score(
             phone=phone,
             address=address,
-            website=website,
+            website=website if website_status is WebsiteStatus.LIVE else None,
         )
 
         email: str | None = None
@@ -402,6 +409,7 @@ class GoogleScraper(NodriverScraperMixin, BaseScraper):
             phone=phone,
             email=email,
             website=website,
+            website_status=website_status,
             category=category,
             source=Source.GOOGLE,
             confidence=confidence,
@@ -706,7 +714,8 @@ class GoogleScraper(NodriverScraperMixin, BaseScraper):
                     )
                     single = await self._extract_current_place(tab, default_category=category, item_timeout_s=4.0)
                     if single and single.get("name") and self._is_valid_place_name(single["name"]):
-                        if only_without_website and single.get("website"):
+                        single_status = await website_liveness_service.check_website_status(single.get("website"))
+                        if only_without_website and single_status is WebsiteStatus.LIVE:
                             return []
                         prospect = await self._build_prospect_from_details(single)
                         if progress:
@@ -775,7 +784,10 @@ class GoogleScraper(NodriverScraperMixin, BaseScraper):
                     address = details.get("address") or ""
                     phone = details.get("phone")
                     website = details.get("website")
-                    if only_without_website and website:
+                    # A dead or placeholder website does not disqualify the
+                    # prospect — it is kept with its URL and marked via website_status.
+                    website_status = await website_liveness_service.check_website_status(website)
+                    if only_without_website and website_status is WebsiteStatus.LIVE:
                         continue
 
                     extracted_category = details.get("category") or category
@@ -784,7 +796,7 @@ class GoogleScraper(NodriverScraperMixin, BaseScraper):
                     confidence = validation_service.calculate_confidence_score(
                         phone=phone,
                         address=address,
-                        website=website,
+                        website=website if website_status is WebsiteStatus.LIVE else None,
                     )
 
                     email: str | None = None
@@ -801,6 +813,7 @@ class GoogleScraper(NodriverScraperMixin, BaseScraper):
                             phone=phone,
                             email=email,
                             website=website,
+                            website_status=website_status,
                             category=extracted_category,
                             source=Source.GOOGLE,
                             confidence=confidence,

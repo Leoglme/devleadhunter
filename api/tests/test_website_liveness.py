@@ -1,0 +1,149 @@
+"""Unit tests for the website liveness classification.
+
+Real HTTP is out of the question in CI, so ``httpx.AsyncClient`` is faked: each
+test drives a canned response (status code, body) or a transport error and
+asserts the classification — the exact rules the scrapers rely on to keep
+dead-site prospects instead of skipping them.
+"""
+
+import asyncio
+from typing import ClassVar
+
+import pytest
+
+import services.website_liveness_service as liveness_module
+from enums.website_status import WebsiteStatus
+from services.website_liveness_service import WebsiteLivenessService
+
+
+class _FakeResponse:
+    """Minimal httpx.Response stand-in."""
+
+    def __init__(self, status_code: int = 200, text: str = "<html>ok</html>") -> None:
+        self.status_code = status_code
+        self.text = text
+
+
+class _FakeAsyncClient:
+    """Fake httpx.AsyncClient returning a canned response or raising an error."""
+
+    response: ClassVar[_FakeResponse | None] = None
+    error: ClassVar[Exception | None] = None
+    requested_urls: ClassVar[list[str]] = []
+
+    def __init__(self, **_: object) -> None:
+        return None
+
+    async def __aenter__(self) -> "_FakeAsyncClient":
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        return None
+
+    async def get(self, url: str) -> _FakeResponse:
+        _FakeAsyncClient.requested_urls.append(url)
+        if _FakeAsyncClient.error is not None:
+            raise _FakeAsyncClient.error
+        return _FakeAsyncClient.response or _FakeResponse()
+
+
+@pytest.fixture(autouse=True)
+def _fake_httpx(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Route the service's httpx through the fake client with a fresh cache."""
+    _FakeAsyncClient.response = None
+    _FakeAsyncClient.error = None
+    _FakeAsyncClient.requested_urls = []
+    monkeypatch.setattr(liveness_module.httpx, "AsyncClient", _FakeAsyncClient)
+
+
+def _check(service: WebsiteLivenessService, url: str | None) -> WebsiteStatus | None:
+    return asyncio.run(service.check_website_status(url))
+
+
+def test_no_url_returns_none() -> None:
+    service = WebsiteLivenessService()
+    assert _check(service, None) is None
+    assert _check(service, "   ") is None
+    assert _FakeAsyncClient.requested_urls == []
+
+
+def test_responding_website_is_live() -> None:
+    service = WebsiteLivenessService()
+    _FakeAsyncClient.response = _FakeResponse(status_code=200)
+    assert _check(service, "https://www.artisan-durand.fr") is WebsiteStatus.LIVE
+
+
+def test_not_found_website_is_dead() -> None:
+    service = WebsiteLivenessService()
+    _FakeAsyncClient.response = _FakeResponse(status_code=404)
+    assert _check(service, "https://garage-du-viaduc.fr") is WebsiteStatus.DEAD
+
+
+def test_server_error_website_is_dead() -> None:
+    service = WebsiteLivenessService()
+    _FakeAsyncClient.response = _FakeResponse(status_code=503)
+    assert _check(service, "https://plomberie-morel.fr") is WebsiteStatus.DEAD
+
+
+def test_bot_protection_status_is_not_dead() -> None:
+    """403/429 usually mean a WAF on a working site — never call those dead."""
+    service = WebsiteLivenessService()
+    _FakeAsyncClient.response = _FakeResponse(status_code=403)
+    assert _check(service, "https://protected-site.fr") is WebsiteStatus.LIVE
+
+
+def test_hosting_error_page_is_dead() -> None:
+    """Solocal answers 200 with a 'SITE NOT FOUND' page for dead mini-sites."""
+    service = WebsiteLivenessService()
+    _FakeAsyncClient.response = _FakeResponse(status_code=200, text="<h1>SITE NOT FOUND</h1>")
+    assert _check(service, "https://ancien-site-artisan.fr") is WebsiteStatus.DEAD
+
+
+def test_dns_failure_is_dead() -> None:
+    service = WebsiteLivenessService()
+    _FakeAsyncClient.error = liveness_module.httpx.ConnectError("[Errno 11001] getaddrinfo failed")
+    assert _check(service, "https://domaine-disparu.fr") is WebsiteStatus.DEAD
+
+
+def test_timeout_is_inconclusive_and_live() -> None:
+    """A slow site must never be pitched as dead — same behaviour as before the check."""
+    service = WebsiteLivenessService()
+    _FakeAsyncClient.error = liveness_module.httpx.ReadTimeout("timed out")
+    assert _check(service, "https://site-tres-lent.fr") is WebsiteStatus.LIVE
+
+
+def test_live_directory_mini_site_is_placeholder() -> None:
+    service = WebsiteLivenessService()
+    _FakeAsyncClient.response = _FakeResponse(status_code=200)
+    assert _check(service, "https://debiolepatrick.site-solocal.com") is WebsiteStatus.PLACEHOLDER
+    assert _check(service, "https://monsalon.wixsite.com/coiffure") is WebsiteStatus.PLACEHOLDER
+    assert _check(service, "https://www.pagesjaunes.fr/pros/12345678") is WebsiteStatus.PLACEHOLDER
+
+
+def test_dead_directory_mini_site_is_dead() -> None:
+    """business.site pages all 404 since Google closed them — DEAD wins over PLACEHOLDER."""
+    service = WebsiteLivenessService()
+    _FakeAsyncClient.response = _FakeResponse(status_code=404)
+    assert _check(service, "https://garage-du-viaduc.business.site") is WebsiteStatus.DEAD
+
+
+def test_placeholder_host_requires_suffix_match() -> None:
+    """A domain merely containing a placeholder name is a normal website."""
+    service = WebsiteLivenessService()
+    _FakeAsyncClient.response = _FakeResponse(status_code=200)
+    assert _check(service, "https://mybusiness.site.example.fr") is WebsiteStatus.LIVE
+
+
+def test_scheme_less_url_is_normalized() -> None:
+    service = WebsiteLivenessService()
+    _FakeAsyncClient.response = _FakeResponse(status_code=200)
+    assert _check(service, "artisan-sans-schema.fr") is WebsiteStatus.LIVE
+    assert _FakeAsyncClient.requested_urls == ["https://artisan-sans-schema.fr"]
+
+
+def test_verdict_is_cached_per_url() -> None:
+    service = WebsiteLivenessService()
+    _FakeAsyncClient.response = _FakeResponse(status_code=404)
+    assert _check(service, "https://meme-site.fr") is WebsiteStatus.DEAD
+    assert _check(service, "https://meme-site.fr") is WebsiteStatus.DEAD
+    assert len(_FakeAsyncClient.requested_urls) == 1

@@ -25,6 +25,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 from enums.source import Source
+from enums.website_status import WebsiteStatus
 from models.prospect import ProspectCreate
 from scrappers import scrape_signals
 from scrappers.nodriver_browser import (
@@ -39,6 +40,7 @@ from scrappers.resilient_extract import extract_ld_json_from_html, parse_ld_json
 from services.address_service import address_service
 from services.scrape_progress import ScrapeProgressReporter
 from services.validation_service import validation_service
+from services.website_liveness_service import website_liveness_service
 
 from .base_scraper import BaseScraper
 from .email_scraper import email_scraper
@@ -335,8 +337,11 @@ class PagesJaunesScraper(NodriverScraperMixin, BaseScraper):
                 if ld_site and validation_service.is_valid_website(ld_site):
                     website = ld_site
 
-            if only_without_website and website:
-                logger.info("Prospect %s has a website, skipping", name)
+            # A dead or placeholder website does not disqualify the prospect —
+            # it is kept with its URL and marked via website_status.
+            website_status = await website_liveness_service.check_website_status(website)
+            if only_without_website and website_status is WebsiteStatus.LIVE:
+                logger.info("Prospect %s has a live website, skipping", name)
                 return None
 
             email: str | None = None
@@ -349,7 +354,7 @@ class PagesJaunesScraper(NodriverScraperMixin, BaseScraper):
                 phone=phone,
                 address=address,
                 email=email,
-                website=website,
+                website=website if website_status is WebsiteStatus.LIVE else None,
             )
 
             return ProspectCreate(
@@ -359,6 +364,7 @@ class PagesJaunesScraper(NodriverScraperMixin, BaseScraper):
                 phone=phone,
                 email=email,
                 website=website,
+                website_status=website_status,
                 category=category,
                 source=Source.PAGESJAUNES,
                 confidence=min(confidence, 4),
@@ -485,7 +491,7 @@ class PagesJaunesScraper(NodriverScraperMixin, BaseScraper):
         logger.info("[PJ-HTTP] Extracted %d detail URLs from listing page", len(urls))
         return urls
 
-    def _http_parse_detail(
+    async def _http_parse_detail(
         self,
         html: str,
         *,
@@ -496,7 +502,8 @@ class PagesJaunesScraper(NodriverScraperMixin, BaseScraper):
         Parse a Pages Jaunes business detail page fetched via plain HTTP.
 
         Returns a ProspectCreate on success, or None when the page couldn't
-        be parsed (missing name, or prospect has website when only_without_website=True).
+        be parsed (missing name, or prospect has a live website when
+        only_without_website=True — dead/placeholder websites are kept).
         """
         soup = BeautifulSoup(html, "html.parser")
 
@@ -592,15 +599,18 @@ class PagesJaunesScraper(NodriverScraperMixin, BaseScraper):
             if validation_service.is_valid_website(ld_site):
                 website = ld_site
 
-        if only_without_website and website:
-            logger.info("[PJ-HTTP] Skipping %s — has website", name)
+        # A dead or placeholder website does not disqualify the prospect —
+        # it is kept with its URL and marked via website_status.
+        website_status = await website_liveness_service.check_website_status(website)
+        if only_without_website and website_status is WebsiteStatus.LIVE:
+            logger.info("[PJ-HTTP] Skipping %s — has a live website", name)
             return None
 
         confidence = validation_service.calculate_confidence_score(
             phone=phone,
             address=address,
             email=None,
-            website=website,
+            website=website if website_status is WebsiteStatus.LIVE else None,
         )
 
         return ProspectCreate(
@@ -610,6 +620,7 @@ class PagesJaunesScraper(NodriverScraperMixin, BaseScraper):
             phone=phone,
             email=None,  # email enrichment happens in auto_scraper
             website=website,
+            website_status=website_status,
             category=category,
             source=Source.PAGESJAUNES,
             confidence=min(confidence, 4),
@@ -677,7 +688,7 @@ class PagesJaunesScraper(NodriverScraperMixin, BaseScraper):
                     logger.debug("[PJ-HTTP] Detail %s fetch blocked, skipping", full_url)
                     continue
 
-                prospect = self._http_parse_detail(
+                prospect = await self._http_parse_detail(
                     detail_html,
                     search_city=city,
                     only_without_website=only_without_website,

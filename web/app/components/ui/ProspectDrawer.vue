@@ -211,6 +211,22 @@
                     {{ prospect.website }}
                   </p>
                   <p v-else class="text-sm text-[var(--app-faint)]">—</p>
+                  <span
+                    v-if="prospect.website_status === 'dead'"
+                    class="app-badge app-badge--danger mt-1"
+                    title="DNS mort, erreur 404/5xx ou page « site introuvable » — vérifiez en ouvrant le lien"
+                  >
+                    <UIcon name="i-lucide-unplug" class="h-3 w-3" />
+                    Ne répond plus
+                  </span>
+                  <span
+                    v-else-if="prospect.website_status === 'placeholder'"
+                    class="app-badge app-badge--info mt-1"
+                    title="Mini-site annuaire (business.site, Solocal…) — pas un vrai site"
+                  >
+                    <UIcon name="i-lucide-layout-template" class="h-3 w-3" />
+                    Mini-site annuaire
+                  </span>
                 </div>
                 <a
                   v-if="prospect.website"

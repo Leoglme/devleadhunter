@@ -174,6 +174,7 @@ class ProspectService:
             phone=prospect.phone,
             email=prospect.email,
             website=prospect.website,
+            website_status=prospect.website_status.value if prospect.website_status is not None else None,
             category=prospect.category,
             source=source_value,
             confidence=prospect.confidence,
@@ -258,9 +259,12 @@ class ProspectService:
 
         # Update fields
         update_dict = update_data.model_dump(exclude_unset=True)
+        # A manually corrected URL invalidates the liveness verdict of the old one.
+        if "website" in update_dict and "website_status" not in update_dict:
+            update_dict["website_status"] = None
         for field, value in update_dict.items():
-            if field == "source" and value is not None:
-                # Convert Source enum to string
+            if field in ("source", "website_status") and value is not None:
+                # Convert enum to its stored string value
                 value = value.value if hasattr(value, "value") else str(value)
             setattr(db_prospect, field, value)
 
