@@ -2,81 +2,109 @@
   <article
     class="card group relative overflow-hidden transition-all duration-300 hover:border-[var(--app-ink-soft)] hover:shadow-lg hover:shadow-black/20"
   >
-    <NuxtLink :to="`/dashboard/demo-sites/${site.id}`" class="block">
-      <div
-        class="relative h-36 overflow-hidden border-b border-[var(--app-line)] transition-transform duration-500 group-hover:scale-[1.02]"
-        :style="{ background: cardGradient }"
+    <!-- Lien étiré : toute la carte navigue ; les actions vivent au-dessus (z-20) — jamais de liens imbriqués. -->
+    <NuxtLink
+      :to="`/dashboard/demo-sites/${site.id}`"
+      class="absolute inset-0 z-10"
+      :aria-label="`Voir le détail du site de ${site.business_name}`"
+    />
+
+    <div
+      class="relative h-36 overflow-hidden border-b border-[var(--app-line)] transition-transform duration-500 group-hover:scale-[1.02]"
+      :style="{ background: fallbackGradient }"
+    >
+      <iframe
+        v-if="previewUrl"
+        :src="previewUrl"
+        :class="[
+          'pointer-events-none absolute top-0 left-0 h-[400%] w-[400%] origin-top-left scale-[0.25] border-0 bg-white transition-opacity duration-500',
+          isPreviewLoaded ? 'opacity-100' : 'opacity-0',
+        ]"
+        loading="lazy"
+        tabindex="-1"
+        aria-hidden="true"
+        title="Aperçu du site démo"
+        sandbox="allow-scripts allow-same-origin"
+        @load="isPreviewLoaded = true"
+      ></iframe>
+      <span
+        class="absolute top-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-0.5 text-[10px] font-bold tracking-wide text-white uppercase backdrop-blur-sm"
       >
-        <div class="absolute inset-0 bg-gradient-to-t from-[var(--app-surface)] via-transparent to-transparent"></div>
-        <div class="relative px-5 pt-5">
-          <span
-            :class="[
-              'inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase',
-              statusClass,
-            ]"
-          >
-            {{ statusLabel }}
-          </span>
-          <h2 class="mt-3 truncate text-lg font-semibold text-white">{{ site.business_name }}</h2>
-          <p class="text-xs text-white/60">{{ templateLabel }}</p>
-        </div>
+        <span :class="['h-1.5 w-1.5 rounded-full', statusDotClass]"></span>
+        {{ statusLabel }}
+      </span>
+    </div>
+
+    <div class="space-y-4 p-5">
+      <div class="min-w-0">
+        <h2 class="truncate text-lg font-semibold text-[var(--app-ink)]">{{ site.business_name }}</h2>
+        <p class="text-xs text-[var(--app-ink-soft)]">{{ templateLabel }}</p>
       </div>
 
-      <div class="space-y-4 p-5">
-        <div class="flex items-center justify-between text-xs text-[var(--app-ink-soft)]">
-          <span class="flex items-center gap-1.5">
-            <UIcon name="i-lucide-clock" class="h-3.5 w-3.5" />
-            Expire {{ formatNumericDate(site.expires_at) }}
-          </span>
-          <span v-if="site.city" class="flex items-center gap-1.5">
-            <UIcon name="i-lucide-map-pin" class="h-3.5 w-3.5" />
-            {{ site.city }}
-          </span>
-        </div>
-
-        <p
-          v-if="site.verification_message && !DemoSiteService.isDemoSiteReachable(site)"
-          class="text-xs text-[var(--app-red)]"
-        >
-          {{ site.verification_message }}
-        </p>
-
-        <div class="flex flex-wrap gap-2" @click.prevent.stop>
-          <button v-if="openUrl" type="button" class="btn-primary h-9 px-4 text-xs" @click="openDemoUrl(openUrl)">
-            Ouvrir
-          </button>
-          <NuxtLink :to="`/dashboard/demo-sites/${site.id}`" class="btn-secondary h-9 px-4 text-xs"> Détails </NuxtLink>
-          <button v-if="openUrl" type="button" class="btn-secondary h-9 px-4 text-xs" @click="copyDemoUrl(openUrl)">
-            {{ copied ? 'Copié !' : 'Copier' }}
-          </button>
-        </div>
+      <div class="flex items-center justify-between text-xs text-[var(--app-ink-soft)]">
+        <span class="flex items-center gap-1.5">
+          <UIcon name="i-lucide-clock" class="h-3.5 w-3.5" />
+          Expire {{ formatNumericDate(site.expires_at) }}
+        </span>
+        <span v-if="site.city" class="flex items-center gap-1.5">
+          <UIcon name="i-lucide-map-pin" class="h-3.5 w-3.5" />
+          {{ site.city }}
+        </span>
       </div>
-    </NuxtLink>
+
+      <p
+        v-if="site.verification_message && !DemoSiteService.isDemoSiteReachable(site)"
+        class="text-xs text-[var(--app-red)]"
+      >
+        {{ site.verification_message }}
+      </p>
+
+      <div class="relative z-20 flex flex-wrap gap-2">
+        <button v-if="openUrl" type="button" class="btn-primary h-9 px-4 text-xs" @click="openDemoUrl(openUrl)">
+          Ouvrir
+        </button>
+        <NuxtLink :to="`/dashboard/demo-sites/${site.id}`" class="btn-secondary h-9 px-4 text-xs"> Détails </NuxtLink>
+        <button v-if="openUrl" type="button" class="btn-secondary h-9 px-4 text-xs" @click="copyDemoUrl(openUrl)">
+          {{ copied ? 'Copié !' : 'Copier' }}
+        </button>
+      </div>
+    </div>
   </article>
 </template>
 
 <script lang="ts" setup>
 import { formatNumericDate } from '~/utils/date'
-import type { ComputedRef, EmitFn, PropType } from 'vue'
+import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
 import type { DemoSite } from '~/services/demoSiteService'
 import type { DemoSiteCardEmits, DemoSiteCardProps } from '~/types/DemoSiteCard'
 import { DemoSiteService } from '~/services/demoSiteService'
 
-/** Demo site summary card with copy and open shortcuts. */
+/** Demo site summary card: live scaled preview, stretched-link navigation, copy and open shortcuts. */
 const props: DemoSiteCardProps = defineProps({
   site: {
     type: Object as PropType<DemoSite>,
     required: true,
+  },
+  templateName: {
+    type: String as PropType<string | null>,
+    default: null,
   },
 })
 
 const emit: EmitFn<DemoSiteCardEmits> = defineEmits<DemoSiteCardEmits>()
 
 const copied: Ref<boolean> = ref(false)
+const isPreviewLoaded: Ref<boolean> = ref(false)
 
 const openUrl: ComputedRef<string | null> = computed(() => DemoSiteService.getDemoSiteOpenUrl(props.site))
 
-const cardGradient: ComputedRef<string> = computed(() => {
+/** URL rendered in the scaled preview — only when the site actually responds. */
+const previewUrl: ComputedRef<string | null> = computed(() =>
+  DemoSiteService.isDemoSiteReachable(props.site) ? openUrl.value : null,
+)
+
+/** Shown behind the preview while it loads, and alone when the site is down. */
+const fallbackGradient: ComputedRef<string> = computed(() => {
   if (DemoSiteService.isDemoSiteReachable(props.site)) {
     return 'linear-gradient(135deg, #0f172a 0%, #0284c7 100%)'
   }
@@ -90,20 +118,14 @@ const statusLabel: ComputedRef<string> = computed(() => {
   return props.site.status
 })
 
-const statusClass: ComputedRef<string> = computed(() => {
+const statusDotClass: ComputedRef<string> = computed(() => {
   if (DemoSiteService.isDemoSiteReachable(props.site)) {
-    return 'bg-[var(--app-green)]/20 text-[var(--app-green)]'
+    return 'bg-[var(--app-green)]'
   }
-  return 'bg-[var(--app-red)]/20 text-[var(--app-red)]'
+  return 'bg-[var(--app-red)]'
 })
 
-const templateLabel: ComputedRef<string> = computed(() => {
-  const labels: Record<string, string> = {
-    'plumber-cuivre': 'Plombier Source',
-    'electrician-lumen': 'Électricien Lumen',
-  }
-  return labels[props.site.template_id] ?? props.site.template_id
-})
+const templateLabel: ComputedRef<string> = computed(() => props.templateName ?? props.site.template_id)
 
 /**
  * Copy the demo URL and show a short confirmation state.

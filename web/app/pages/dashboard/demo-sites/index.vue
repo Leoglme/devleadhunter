@@ -43,6 +43,7 @@
         v-for="site in sites"
         :key="site.id"
         :site="site"
+        :template-name="templateNameById[site.template_id] ?? null"
         @copy="copyDemoUrl"
         @open="openDemoUrl"
       />
@@ -53,13 +54,15 @@
 <script lang="ts" setup>
 import type { UseCopyToClipboardReturn, UseOpenExternalUrlReturn } from '~/types/Composables'
 import type { Ref } from 'vue'
-import type { DemoSite, DemoSiteListResponse } from '~/services/demoSiteService'
+import type { DemoSite, DemoSiteListResponse, DemoSiteTemplate } from '~/services/demoSiteService'
 import { DemoSiteService } from '~/services/demoSiteService'
 
 definePageMeta({ layout: 'dashboard', middleware: 'auth' })
 
 const sites: Ref<DemoSite[]> = ref([])
 const pending: Ref<boolean> = ref(true)
+/** Registry display name of each template, keyed by template id. */
+const templateNameById: Ref<Record<string, string>> = ref({})
 
 const { copy }: UseCopyToClipboardReturn = useCopyToClipboard()
 const { openExternalUrl }: UseOpenExternalUrlReturn = useOpenExternalUrl()
@@ -78,7 +81,22 @@ async function copyDemoUrl(url: string): Promise<void> {
   await copy(url)
 }
 
+/**
+ * Load the template registry names shown under each card title.
+ */
+async function loadTemplateNames(): Promise<void> {
+  try {
+    const templates: DemoSiteTemplate[] = await DemoSiteService.listDemoSiteTemplates()
+    templateNameById.value = Object.fromEntries(
+      templates.map((template: DemoSiteTemplate): [string, string] => [template.id, template.name]),
+    )
+  } catch {
+    // The raw template id shown as fallback is good enough when the registry call fails.
+  }
+}
+
 onMounted(async () => {
+  loadTemplateNames()
   try {
     const response: DemoSiteListResponse = await DemoSiteService.listDemoSites()
     sites.value = response.items

@@ -193,6 +193,9 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
    */
   async function init(slug: string, status: string, variant: string | null): Promise<void> {
     if (!import.meta.client || initialized) return
+    // Embedded rendering = the dashboard's scaled card preview, never a prospect
+    // visit — tracking it would pollute the lead scoring with fake activity.
+    if (window.self !== window.top) return
     const key: string = String(config.public.posthogProjectApiKey ?? '')
     const host: string = String(config.public.posthogIngestionHost ?? '')
     // Never track a delivered/sold site, and skip when PostHog is not configured.
