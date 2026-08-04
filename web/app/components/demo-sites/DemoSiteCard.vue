@@ -10,9 +10,14 @@
     />
 
     <div
-      class="relative h-36 overflow-hidden border-b border-[var(--app-line)] transition-transform duration-500 group-hover:scale-[1.02]"
-      :style="{ background: fallbackGradient }"
+      class="relative h-36 overflow-hidden border-b border-[var(--app-line)] bg-[var(--app-surface-2)] transition-transform duration-500 group-hover:scale-[1.02]"
     >
+      <div
+        v-if="!isPreviewLoaded"
+        :class="['absolute inset-0 flex items-center justify-center', previewUrl ? 'animate-pulse' : '']"
+      >
+        <UIcon name="i-lucide-globe" class="h-6 w-6 text-[var(--app-faint)]" />
+      </div>
       <iframe
         v-if="previewUrl"
         :src="previewUrl"
@@ -102,14 +107,6 @@ const openUrl: ComputedRef<string | null> = computed(() => DemoSiteService.getDe
 const previewUrl: ComputedRef<string | null> = computed(() =>
   DemoSiteService.isDemoSiteReachable(props.site) ? openUrl.value : null,
 )
-
-/** Shown behind the preview while it loads, and alone when the site is down. */
-const fallbackGradient: ComputedRef<string> = computed(() => {
-  if (DemoSiteService.isDemoSiteReachable(props.site)) {
-    return 'linear-gradient(135deg, #0f172a 0%, #0284c7 100%)'
-  }
-  return 'linear-gradient(135deg, var(--app-surface-2) 0%, var(--app-line) 100%)'
-})
 
 const statusLabel: ComputedRef<string> = computed(() => {
   if (DemoSiteService.isDemoSiteReachable(props.site)) return 'En ligne'
