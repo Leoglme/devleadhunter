@@ -423,36 +423,45 @@
       </div>
 
       <div v-if="activeTab === 'prospects'" class="space-y-4">
-        <div class="flex items-center justify-between">
-          <p class="text-muted text-sm">
-            {{ campaign.prospects.length }} prospect{{ campaign.prospects.length !== 1 ? 's' : '' }}
-          </p>
-          <button class="btn-secondary" @click="showAddProspectsModal = true">
-            <UIcon name="i-lucide-user-plus" class="mr-1.5 h-4 w-4" />Ajouter
-          </button>
-        </div>
+        <template v-if="campaign.prospects.length > 0">
+          <div class="flex items-center justify-between">
+            <p class="text-muted text-sm">
+              {{ campaign.prospects.length }} prospect{{ campaign.prospects.length !== 1 ? 's' : '' }}
+            </p>
+            <button class="btn-secondary" @click="openAddProspectsDrawer">
+              <UIcon name="i-lucide-user-plus" class="mr-1.5 h-4 w-4" />Ajouter
+            </button>
+          </div>
+
+          <div class="app-card overflow-hidden">
+            <UiProspectTable
+              :prospects="campaignProspectRows"
+              :selected-prospects="campaignSelectedProspects"
+              :show-ab-variant="!!campaign.ab_template_id_b"
+              :ab-variants="campaignAbVariants"
+              row-action="remove"
+              @view-prospect="openProspectDrawer"
+              @remove-prospect="startRemoveProspectFromRow"
+              @toggle-select="toggleCampaignProspectSelect"
+              @toggle-select-all="toggleCampaignProspectSelectAll"
+            />
+          </div>
+        </template>
 
         <div
-          v-if="campaign.prospects.length === 0"
-          class="rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] py-14 text-center"
+          v-else
+          class="flex flex-col items-center rounded-xl border border-dashed border-[var(--app-line)] bg-[var(--app-surface)] px-6 py-16 text-center"
         >
-          <UIcon name="i-lucide-users" class="mx-auto mb-3 h-10 w-10 text-[var(--app-faint)]" />
-          <p class="text-muted text-sm">Aucun prospect dans cette campagne</p>
-          <button class="btn-secondary mt-4" @click="showAddProspectsModal = true">Ajouter des prospects</button>
-        </div>
-
-        <div v-else class="app-card overflow-hidden">
-          <UiProspectTable
-            :prospects="campaignProspectRows"
-            :selected-prospects="campaignSelectedProspects"
-            :show-ab-variant="!!campaign.ab_template_id_b"
-            :ab-variants="campaignAbVariants"
-            row-action="remove"
-            @view-prospect="openProspectDrawer"
-            @remove-prospect="startRemoveProspectFromRow"
-            @toggle-select="toggleCampaignProspectSelect"
-            @toggle-select-all="toggleCampaignProspectSelectAll"
-          />
+          <span class="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--app-line)]">
+            <UIcon name="i-lucide-user-plus" class="h-5 w-5 text-[var(--app-ink-soft)]" />
+          </span>
+          <p class="text-sm font-semibold text-[var(--app-ink)]">Aucun prospect dans cette campagne</p>
+          <p class="text-muted mx-auto mt-1 max-w-xs text-sm">
+            Ajoutez des prospects pour programmer les premiers envois de cette campagne.
+          </p>
+          <button class="btn-primary mt-5" @click="openAddProspectsDrawer">
+            <UIcon name="i-lucide-user-plus" class="mr-1.5 h-4 w-4" />Ajouter des prospects
+          </button>
         </div>
       </div>
 
@@ -531,49 +540,6 @@
         </div>
       </div>
     </template>
-
-    <div
-      v-if="showAddProspectsModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-[var(--app-overlay)] backdrop-blur-sm"
-      @click.self="showAddProspectsModal = false"
-    >
-      <div class="w-full max-w-2xl rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-6">
-        <h2 class="mb-4 text-base font-semibold text-[var(--app-ink)]">Ajouter des prospects</h2>
-        <div v-if="availableProspects.length === 0" class="py-8 text-center">
-          <p class="text-muted text-sm">Aucun prospect disponible à ajouter</p>
-        </div>
-        <div v-else>
-          <div class="mb-4 max-h-96 space-y-1 overflow-y-auto">
-            <div
-              v-for="prospect in availableProspects"
-              :key="prospect.id"
-              class="flex cursor-pointer items-center gap-3 rounded-lg p-2.5 transition-colors hover:bg-[var(--app-surface)]"
-              @click="toggleProspect(prospect.id)"
-            >
-              <UiCheckbox
-                :id="`prospect-${prospect.id}`"
-                :model-value="selectedProspectIds.includes(prospect.id)"
-                @update:model-value="toggleProspect(prospect.id)"
-              />
-              <div>
-                <p class="text-sm text-[var(--app-ink)]">{{ prospect.name }}</p>
-                <p class="text-muted text-xs">{{ prospect.city }} · {{ prospect.category }}</p>
-              </div>
-            </div>
-          </div>
-          <div class="flex gap-3 border-t border-[var(--app-line)] pt-3">
-            <button class="btn-secondary flex-1" @click="showAddProspectsModal = false">Annuler</button>
-            <button
-              :disabled="selectedProspectIds.length === 0"
-              class="btn-primary flex-1 disabled:cursor-not-allowed disabled:opacity-50"
-              @click="handleAddProspects"
-            >
-              Ajouter {{ selectedProspectIds.length || '' }} prospect{{ selectedProspectIds.length !== 1 ? 's' : '' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
 
     <UiConfirmModal
       ref="removeProspectModal"
@@ -676,8 +642,6 @@ const templates: Ref<TemplateOption[]> = ref([])
 const isLoading: Ref<boolean> = ref(false)
 const isSavingSettings: Ref<boolean> = ref(false)
 const activeTab: Ref<string> = ref('config')
-const showAddProspectsModal: Ref<boolean> = ref(false)
-const selectedProspectIds: Ref<number[]> = ref([])
 const campaignSelectedProspects: Ref<string[]> = ref([])
 const prospectToRemoveId: Ref<number | null> = ref(null)
 const removeProspectModal: Ref<{ open: () => void } | null> = ref(null)
@@ -744,12 +708,6 @@ const campaignAbVariants: ComputedRef<Record<number, string | null | undefined>>
     return variants
   },
 )
-
-const availableProspects: ComputedRef<Prospect[]> = computed((): Prospect[] => {
-  if (!campaign.value) return []
-  const existingIds: Set<number> = new Set(campaign.value.prospects.map((prospect: CampaignProspect) => prospect.id))
-  return allProspects.value.filter((p: Prospect): boolean => !existingIds.has(p.id))
-})
 
 const canLaunch: ComputedRef<boolean> = computed((): boolean => settingsForm.value.template_id > 0)
 
@@ -987,18 +945,15 @@ async function handleDeleteCampaign(): Promise<void> {
 }
 
 /**
- * Add the selected prospects to the campaign.
+ * Open the drawer to attach existing prospects to this campaign.
  */
-async function handleAddProspects(): Promise<void> {
-  if (selectedProspectIds.value.length === 0) return
-  try {
-    campaign.value = await CampaignService.addProspects(campaignId.value, selectedProspectIds.value)
-    toast.success(`${selectedProspectIds.value.length} prospect(s) ajouté(s)`)
-    selectedProspectIds.value = []
-    showAddProspectsModal.value = false
-  } catch {
-    toast.error("Erreur lors de l'ajout")
-  }
+function openAddProspectsDrawer(): void {
+  if (!campaign.value) return
+  drawerStack.push({
+    kind: 'campaign-prospects-picker',
+    campaignId: campaignId.value,
+    existingProspectIds: campaign.value.prospects.map((prospect: CampaignProspect): number => prospect.id),
+  })
 }
 
 /**
@@ -1062,16 +1017,6 @@ async function handleRemoveProspect(): Promise<void> {
   } finally {
     prospectToRemoveId.value = null
   }
-}
-
-/**
- * Toggle a prospect's selection in the add modal.
- * @param id - Prospect ID.
- */
-function toggleProspect(id: number): void {
-  const idx: number = selectedProspectIds.value.indexOf(id)
-  if (idx > -1) selectedProspectIds.value.splice(idx, 1)
-  else selectedProspectIds.value.push(id)
 }
 
 /** Open the send-policy drawer, where the effective cadence is set. */

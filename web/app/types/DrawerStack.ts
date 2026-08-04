@@ -80,6 +80,13 @@ export type SearchProspectsDrawerEntry = {
   prefill?: SearchProspectsPrefill
 }
 
+/** Picker attaching existing prospects to a campaign (from its Prospects tab). */
+export type CampaignProspectsPickerDrawerEntry = {
+  kind: 'campaign-prospects-picker'
+  campaignId: number
+  existingProspectIds: number[]
+}
+
 export type SendPolicyDrawerEntry = {
   kind: 'send-policy'
 }
@@ -133,6 +140,7 @@ export type DrawerStackEntry =
   | CampaignFormDrawerEntry
   | AddProspectDrawerEntry
   | SearchProspectsDrawerEntry
+  | CampaignProspectsPickerDrawerEntry
   | SendPolicyDrawerEntry
   | CoverageFiltersDrawerEntry
   | CoverageProspectsDrawerEntry

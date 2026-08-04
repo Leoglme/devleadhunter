@@ -119,12 +119,13 @@ useSeoMeta({
 
 /**
  * Right margin pushing the content aside so the open drawer hides nothing.
- * Matches each drawer's width; only from lg up (below, the drawer overlays).
+ * Matches each drawer's width; only from xl up — below, the drawer overlays,
+ * otherwise the sidebar + push would crush the content on mid-size screens.
  */
 const drawerPushClass: ComputedRef<string> = computed((): string => {
   const top: ReturnType<typeof useDrawerStackStore>['topEntry'] = drawerStack.topEntry
   if (!top) return ''
-  return top.kind === 'email-template' ? 'lg:mr-[560px]' : 'lg:mr-[480px]'
+  return top.kind === 'email-template' ? 'xl:mr-[560px]' : 'xl:mr-[480px]'
 })
 
 /** Credits counter shown in the pill ("∞" when unlimited). */

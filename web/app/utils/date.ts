@@ -10,13 +10,27 @@
 const LOCALE: string = 'fr-FR'
 
 /**
+ * Parse an API date string into a `Date`, reading zone-less values as UTC.
+ *
+ * The backend serialises naive UTC without an offset; left as-is `new Date()`
+ * would read it as local time and shift every clock. Zoned values pass untouched.
+ * @param iso - ISO-8601 date or date-time string.
+ * @returns A `Date` at the correct instant.
+ */
+function parseApiDate(iso: string): Date {
+  const hasTime: boolean = iso.includes('T')
+  const hasZone: boolean = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(iso)
+  return new Date(hasTime && !hasZone ? `${iso}Z` : iso)
+}
+
+/**
  * Format an ISO date as `01/06/26 14:32`.
  * @param iso - ISO-8601 date string, or a falsy value for an unknown date.
  * @returns The formatted date, or an empty string when `iso` is falsy.
  */
 export function formatCompactDateTime(iso: string | null | undefined): string {
   if (!iso) return ''
-  return new Date(iso).toLocaleString(LOCALE, {
+  return parseApiDate(iso).toLocaleString(LOCALE, {
     day: '2-digit',
     month: '2-digit',
     year: '2-digit',
@@ -32,7 +46,7 @@ export function formatCompactDateTime(iso: string | null | undefined): string {
  */
 export function formatNumericDate(iso: string | null | undefined): string {
   if (!iso) return ''
-  return new Date(iso).toLocaleDateString(LOCALE)
+  return parseApiDate(iso).toLocaleDateString(LOCALE)
 }
 
 /**
@@ -42,7 +56,7 @@ export function formatNumericDate(iso: string | null | undefined): string {
  */
 export function formatNumericDateTime(iso: string | null | undefined): string {
   if (!iso) return ''
-  return new Date(iso).toLocaleString(LOCALE, {
+  return parseApiDate(iso).toLocaleString(LOCALE, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -58,7 +72,7 @@ export function formatNumericDateTime(iso: string | null | undefined): string {
  */
 export function formatNumericDayMonthTime(iso: string | null | undefined): string {
   if (!iso) return ''
-  return new Date(iso).toLocaleString(LOCALE, {
+  return parseApiDate(iso).toLocaleString(LOCALE, {
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',
@@ -73,7 +87,7 @@ export function formatNumericDayMonthTime(iso: string | null | undefined): strin
  */
 export function formatShortMonthDate(iso: string | null | undefined): string {
   if (!iso) return ''
-  return new Date(iso).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' })
+  return parseApiDate(iso).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 /**
@@ -83,7 +97,7 @@ export function formatShortMonthDate(iso: string | null | undefined): string {
  */
 export function formatLongMonthDate(iso: string | null | undefined): string {
   if (!iso) return ''
-  return new Date(iso).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' })
+  return parseApiDate(iso).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 /**
@@ -93,7 +107,7 @@ export function formatLongMonthDate(iso: string | null | undefined): string {
  */
 export function formatShortMonthDateTime(iso: string | null | undefined): string {
   if (!iso) return ''
-  return new Date(iso).toLocaleString(LOCALE, {
+  return parseApiDate(iso).toLocaleString(LOCALE, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -109,7 +123,7 @@ export function formatShortMonthDateTime(iso: string | null | undefined): string
  */
 export function formatShortMonthDayTime(iso: string | null | undefined): string {
   if (!iso) return ''
-  return new Date(iso).toLocaleString(LOCALE, {
+  return parseApiDate(iso).toLocaleString(LOCALE, {
     day: 'numeric',
     month: 'short',
     hour: '2-digit',
@@ -124,5 +138,5 @@ export function formatShortMonthDayTime(iso: string | null | undefined): string 
  */
 export function formatDayAndShortMonth(iso: string | null | undefined): string {
   if (!iso) return ''
-  return new Date(iso).toLocaleDateString(LOCALE, { day: '2-digit', month: 'short' })
+  return parseApiDate(iso).toLocaleDateString(LOCALE, { day: '2-digit', month: 'short' })
 }

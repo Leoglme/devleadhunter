@@ -102,6 +102,16 @@
       @back="drawerStack.back()"
     />
 
+    <UiCampaignProspectsPickerDrawer
+      :open="campaignProspectsPickerEntry !== null"
+      :show-back="hasPrevious"
+      :campaign-id="campaignProspectsPickerEntry?.campaignId ?? null"
+      :existing-prospect-ids="campaignProspectsPickerEntry?.existingProspectIds ?? []"
+      @close="drawerStack.closeAll()"
+      @back="drawerStack.back()"
+      @added="handleCampaignProspectsAdded"
+    />
+
     <UiSendPolicyDrawer
       :open="sendPolicyEntry !== null"
       :show-back="hasPrevious"
@@ -161,6 +171,7 @@ import type { UseToastReturn } from '~/types/Composables'
 import type { ComputedRef } from 'vue'
 import type {
   AddProspectDrawerEntry,
+  CampaignProspectsPickerDrawerEntry,
   CoverageFiltersDrawerEntry,
   CoverageProspectsDrawerEntry,
   CampaignFormDrawerEntry,
@@ -255,6 +266,23 @@ const searchProspectsEntry: ComputedRef<SearchProspectsDrawerEntry | null> = com
     return drawerStack.topEntry?.kind === 'search-prospects' ? drawerStack.topEntry : null
   },
 )
+
+/** Top entry narrowed to the campaign prospects picker drawer. */
+const campaignProspectsPickerEntry: ComputedRef<CampaignProspectsPickerDrawerEntry | null> = computed(
+  (): CampaignProspectsPickerDrawerEntry | null => {
+    return drawerStack.topEntry?.kind === 'campaign-prospects-picker' ? drawerStack.topEntry : null
+  },
+)
+
+/** Prospects attached to the campaign — refresh the page behind, then leave the stack. */
+function handleCampaignProspectsAdded(): void {
+  drawerStack.bumpCampaignsRefresh()
+  if (drawerStack.hasPrevious) {
+    drawerStack.back()
+  } else {
+    drawerStack.closeAll()
+  }
+}
 
 /** Top entry narrowed to the send-policy drawer. */
 const sendPolicyEntry: ComputedRef<SendPolicyDrawerEntry | null> = computed((): SendPolicyDrawerEntry | null => {
