@@ -218,13 +218,15 @@ const categoryTemplates: ComputedRef<EmailTemplate[]> = computed((): EmailTempla
   emailTemplates.value.filter((template: EmailTemplate): boolean => template.category === activeCategory.value),
 )
 
-/** One tab per sequence step, each badged with how many templates it holds. */
+/** One tab per sequence step, each badged with how many active templates it holds. */
 const categoryTabs: ComputedRef<UiFilterTab[]> = computed((): UiFilterTab[] =>
   EMAIL_TEMPLATE_CATEGORIES.map(
     (category: EmailTemplateCategory): UiFilterTab => ({
       key: category,
       label: EMAIL_TEMPLATE_CATEGORY_LABELS[category],
-      count: emailTemplates.value.filter((template: EmailTemplate): boolean => template.category === category).length,
+      count: emailTemplates.value.filter(
+        (template: EmailTemplate): boolean => template.category === category && template.is_active,
+      ).length,
     }),
   ),
 )
