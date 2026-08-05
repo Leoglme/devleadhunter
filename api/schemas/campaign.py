@@ -74,6 +74,8 @@ class CampaignSettingsUpdate(BaseModel):
     send_delay_minutes: int | None = Field(None, ge=1, le=1440)
     # Personalise follow-up bodies from demo behaviour (additive — falls back to template)
     behavior_personalized_followups: bool | None = None
+    # When False, never attach the prospection video (combo templates degrade to the demo link)
+    include_video: bool | None = None
     # Full replacement of the follow-up sequence (if provided)
     follow_ups: list[CampaignFollowUpCreate] | None = None
 
@@ -149,6 +151,7 @@ class CampaignResponse(CampaignBase):
     send_delay_minutes: int = 20
     follow_up_delay_days: int = 5
     behavior_personalized_followups: bool = False
+    include_video: bool = True
     started_at: datetime | None = None
     created_at: datetime
     updated_at: datetime | None = None

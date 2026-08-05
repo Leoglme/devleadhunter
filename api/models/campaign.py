@@ -85,6 +85,9 @@ class Campaign(Base):
     # When True, follow-up emails are personalized from the prospect's demo
     # behaviour (PostHog) at send time, falling back to the static template.
     behavior_personalized_followups: Mapped[bool] = mapped_column(default=False, nullable=False)
+    # When False, the campaign never attaches the prospection video: {vignette_video}
+    # renders empty and combo templates fall back to their demo link. Default on.
+    include_video: Mapped[bool] = mapped_column(default=True, nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)

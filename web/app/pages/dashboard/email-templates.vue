@@ -60,9 +60,15 @@
     </div>
 
     <template v-else>
-      <section v-for="group in templateGroups" :key="group.key">
-        <p class="app-label mb-2">{{ group.heading }} · {{ group.templates.length }}</p>
-        <div class="card divide-y divide-[var(--app-line-soft)] overflow-hidden p-0">
+      <UiCollapsibleCard
+        v-for="group in templateGroups"
+        :key="`${group.key}${isSearching ? ':search' : ''}`"
+        :icon="group.icon"
+        :title="group.heading"
+        :suffix="String(group.templates.length)"
+        :default-open="group.defaultOpen"
+      >
+        <div class="divide-y divide-[var(--app-line-soft)]">
           <div
             v-for="template in group.templates"
             :key="template.id"
@@ -167,7 +173,7 @@
             </div>
           </div>
         </div>
-      </section>
+      </UiCollapsibleCard>
     </template>
 
     <UiConfirmModal
@@ -250,7 +256,10 @@ const filteredTemplates: ComputedRef<EmailTemplate[]> = computed((): EmailTempla
   )
 })
 
-/** Filtered templates grouped into « Actifs » / « Inactifs » sections. */
+/** True when a search query is narrowing the list — every card is expanded then. */
+const isSearching: ComputedRef<boolean> = computed((): boolean => searchQuery.value.trim().length > 0)
+
+/** Active templates grouped into per-theme collapsible cards, then the archived bucket. */
 const templateGroups: ComputedRef<TemplateGroup[]> = computed((): TemplateGroup[] => {
   const active: EmailTemplate[] = filteredTemplates.value.filter(
     (template: EmailTemplate): boolean => template.is_active,
@@ -258,9 +267,35 @@ const templateGroups: ComputedRef<TemplateGroup[]> = computed((): TemplateGroup[
   const inactive: EmailTemplate[] = filteredTemplates.value.filter(
     (template: EmailTemplate): boolean => !template.is_active,
   )
+
+  // Bucket by theme, keeping the API order (sort_order desc) so recommended themes come first.
+  const byTheme: Map<string, EmailTemplate[]> = new Map()
+  for (const template of active) {
+    const theme: string = template.theme?.trim() || 'Autres'
+    const bucket: EmailTemplate[] = byTheme.get(theme) ?? []
+    bucket.push(template)
+    byTheme.set(theme, bucket)
+  }
+
   const groups: TemplateGroup[] = []
-  if (active.length) groups.push({ key: 'active', heading: 'Modèles actifs', templates: active })
-  if (inactive.length) groups.push({ key: 'inactive', heading: 'Modèles inactifs', templates: inactive })
+  for (const [theme, templates] of byTheme) {
+    groups.push({
+      key: `theme:${theme}`,
+      heading: theme,
+      icon: 'i-lucide-folder',
+      defaultOpen: isSearching.value || templates.some(isTemplateRecommended),
+      templates,
+    })
+  }
+  if (inactive.length) {
+    groups.push({
+      key: 'inactive',
+      heading: 'Modèles inactifs',
+      icon: 'i-lucide-archive',
+      defaultOpen: isSearching.value,
+      templates: inactive,
+    })
+  }
   return groups
 })
 
@@ -330,6 +365,7 @@ async function duplicateTemplate(template: EmailTemplate): Promise<void> {
       body_html: template.body_html,
       signature_id: template.signature_id ?? null,
       category: template.category,
+      theme: template.theme ?? null,
     })
     emailTemplates.value.unshift(copy)
     toast.success(`Modèle « ${template.name} » dupliqué`)

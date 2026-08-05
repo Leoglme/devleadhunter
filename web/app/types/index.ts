@@ -160,6 +160,7 @@ export type User = {
   credits_available?: number | null
   credits_consumed?: number | null
   onboarding_completed?: boolean
+  site_sale_price_cents?: number
 }
 
 export type LoginCredentials = {
@@ -174,12 +175,13 @@ export type SignupPayload = {
 }
 
 /**
- * Profile update payload (self-service `PATCH /auth/me`) — fields are optional so
- * the user can change name and/or email.
+ * Profile update payload (self-service `PATCH /auth/me`) — every field is optional,
+ * so the user can change name, email and/or their default website sale price.
  */
 export type ProfileUpdate = {
   name?: string
   email?: string
+  site_sale_price_cents?: number
 }
 
 export type ApiResponse<T> = {
@@ -396,6 +398,8 @@ export type EmailTemplate = {
   category: EmailTemplateCategory
   /** Higher = pinned higher; the seeded « ★ Recommandé » templates use a high value. */
   sort_order: number
+  /** Thematic group (French label) folding the templates page into collapsible cards. */
+  theme?: string | null
   created_at: string
   updated_at?: string | null
 }
@@ -518,6 +522,7 @@ export type EmailTemplateCreate = {
   variables?: string[]
   signature_id?: number | null
   category?: EmailTemplateCategory
+  theme?: string | null
 }
 
 export type EmailTemplateUpdate = {
@@ -529,6 +534,7 @@ export type EmailTemplateUpdate = {
   is_active?: boolean
   signature_id?: number | null
   category?: EmailTemplateCategory
+  theme?: string | null
 }
 
 export type SendEmailRequest = {

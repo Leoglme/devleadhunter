@@ -43,6 +43,7 @@ def _build_user_response(db: Session, user: User) -> UserResponse:
         created_at=user.created_at,
         updated_at=user.updated_at,
         onboarding_completed=user.onboarding_completed,
+        site_sale_price_cents=user.site_sale_price_cents,
         credit_balance=balance,
         credits_available=balance,
         credits_consumed=credit_service.get_user_credits_consumed(db, user.id),
@@ -165,6 +166,8 @@ async def update_current_user_info(
         current_user.name = user_data.name
     if user_data.email is not None:
         current_user.email = user_data.email
+    if user_data.site_sale_price_cents is not None:
+        current_user.site_sale_price_cents = user_data.site_sale_price_cents
 
     db.commit()
     db.refresh(current_user)

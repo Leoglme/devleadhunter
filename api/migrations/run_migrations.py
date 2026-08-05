@@ -46,6 +46,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_demo_site_prospect_id", "migrations.add_demo_site_prospect_id"),
     ("add_order_refund_columns", "migrations.add_order_refund_columns"),
     ("add_campaign_behavior_followups", "migrations.add_campaign_behavior_followups"),
+    ("add_campaign_include_video", "migrations.add_campaign_include_video"),
     ("add_demo_site_custom_domain", "migrations.add_demo_site_custom_domain"),
     ("add_prospect_contacted", "migrations.add_prospect_contacted"),
     ("add_organizations", "migrations.add_organizations"),
@@ -61,12 +62,14 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_presenter_auto_generate", "migrations.add_presenter_auto_generate"),
     ("add_user_sending_provider", "migrations.add_user_sending_provider"),
     ("add_user_onboarding_completed", "migrations.add_user_onboarding_completed"),
+    ("add_user_site_sale_price", "migrations.add_user_site_sale_price"),
     ("add_presenter_video_source", "migrations.add_presenter_video_source"),
     ("add_email_signatures", "migrations.add_email_signatures"),
     ("add_order_payment_provider_columns", "migrations.add_order_payment_provider_columns"),
     ("add_order_billing_details", "migrations.add_order_billing_details"),
     ("add_platform_commission_percent", "migrations.add_platform_commission_percent"),
     ("add_email_template_category", "migrations.add_email_template_category"),
+    ("add_email_template_theme", "migrations.add_email_template_theme"),
     ("purge_demo_users", "migrations.purge_demo_users"),
     ("add_queue_skip_reason_and_follow_up_delay", "migrations.add_queue_skip_reason_and_follow_up_delay"),
     ("add_prospect_website_status", "migrations.add_prospect_website_status"),
@@ -74,6 +77,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("fix_utf8mb4_collation", "migrations.fix_utf8mb4_collation"),
     # Content rewrites run last, once every schema change is in place.
     ("strip_brands_from_subjects", "migrations.strip_brands_from_subjects"),
+    ("reseed_email_template_library", "migrations.reseed_email_template_library"),
 ]
 
 # Modules of this package that are not migrations and must not be registered.

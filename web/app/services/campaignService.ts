@@ -32,6 +32,7 @@ export type CampaignResponse = {
   send_delay_minutes: number
   follow_up_delay_days: number
   behavior_personalized_followups: boolean
+  include_video: boolean
   started_at?: string | null
   created_at: string
   updated_at?: string | null
@@ -85,6 +86,7 @@ export type CampaignSettingsPayload = {
   disable_ab?: boolean
   send_delay_minutes?: number
   behavior_personalized_followups?: boolean
+  include_video?: boolean
   follow_ups?: Array<{ template_id: number; delay_days: number; position: number }>
 }
 

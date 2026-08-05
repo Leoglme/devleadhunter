@@ -61,6 +61,8 @@ class EmailTemplate(Base):
     )
     # Higher = pinned higher in the app's template list (recommended templates use a high value).
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    # Thematic group (French label) that folds the templates page into collapsible cards.
+    theme: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(onupdate=func.now(), nullable=True)
 

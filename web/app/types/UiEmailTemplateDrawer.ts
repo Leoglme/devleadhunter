@@ -18,6 +18,7 @@ export type EmailTemplateForm = {
   is_active: boolean
   signature_id: number | null
   category: EmailTemplateCategory
+  theme: string
 }
 
 export type UiEmailTemplateDrawerEmits = {

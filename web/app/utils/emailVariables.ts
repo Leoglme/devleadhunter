@@ -98,6 +98,13 @@ export class EmailVariables {
         'Domaine du site mort du prospect (vide s’il n’en a pas) — pour l’accroche « votre site ne répond plus ».',
       example: 'garage-du-viaduc.business.site',
     },
+    {
+      key: 'prix',
+      token: '{prix}',
+      label: 'Prix',
+      description: 'Prix de vente configuré, rendu « 500 € ». Vide dans un premier email — à réserver aux relances.',
+      example: '500 €',
+    },
   ]
 
   /**

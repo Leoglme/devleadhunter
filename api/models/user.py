@@ -39,6 +39,7 @@ class User(Base):
         is_active: Whether the user is active
         sending_provider: Active email-sending transport (resend | gmail)
         onboarding_completed: Whether the setup wizard has been completed
+        site_sale_price_cents: Website sale price in cents (default 500 €)
         created_at: Timestamp when user was created
         updated_at: Timestamp when user was last updated
         credit_transactions: Relationship to credit transactions
@@ -56,6 +57,9 @@ class User(Base):
     sending_provider: Mapped[str] = mapped_column(String(20), default=SendingProvider.RESEND.value, nullable=False)
     # Whether the post-signup setup wizard (/configuration) has been completed.
     onboarding_completed: Mapped[bool] = mapped_column(default=False, nullable=False)
+    # Website sale price in cents (default 500 €): per-user default for {prix},
+    # new orders, and the sale drawer.
+    site_sale_price_cents: Mapped[int] = mapped_column(default=50000, nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(onupdate=func.now(), nullable=True)
 

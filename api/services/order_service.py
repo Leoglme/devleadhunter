@@ -22,6 +22,7 @@ from enums.product_type import PRODUCT_DEFAULT_AMOUNT_CENTS, PRODUCT_LABELS, Pro
 from models.order import Order
 from models.prospect_db import ProspectDB
 from models.user import User
+from services.pricing_service import PricingService
 
 if TYPE_CHECKING:
     from models.demo_site import DemoSite
@@ -141,9 +142,12 @@ class OrderService:
                 business_name = business_name or prospect.name
                 customer_email = customer_email or prospect.email
 
-        resolved_amount = (
-            amount_cents if amount_cents is not None else PRODUCT_DEFAULT_AMOUNT_CENTS.get(product_type, 50000)
-        )
+        if amount_cents is not None:
+            resolved_amount = amount_cents
+        elif product_type == ProductType.WEBSITE.value:
+            resolved_amount = PricingService.sale_price_cents(db, user_id)
+        else:
+            resolved_amount = PRODUCT_DEFAULT_AMOUNT_CENTS.get(product_type, 50000)
 
         order = Order(
             user_id=user_id,

@@ -87,6 +87,8 @@ def _detail_response(db: Session, campaign) -> CampaignDetailResponse:
         ab_template_id_b=campaign.ab_template_id_b,
         send_delay_minutes=campaign.send_delay_minutes,
         follow_up_delay_days=campaign.follow_up_delay_days,
+        behavior_personalized_followups=campaign.behavior_personalized_followups,
+        include_video=campaign.include_video,
         started_at=campaign.started_at,
         created_at=campaign.created_at,
         updated_at=campaign.updated_at,
@@ -162,6 +164,8 @@ async def list_campaigns(
                 ab_template_id_b=c.ab_template_id_b,
                 send_delay_minutes=c.send_delay_minutes,
                 follow_up_delay_days=c.follow_up_delay_days,
+                behavior_personalized_followups=c.behavior_personalized_followups,
+                include_video=c.include_video,
                 started_at=c.started_at,
                 created_at=c.created_at,
                 updated_at=c.updated_at,
@@ -237,6 +241,8 @@ async def update_campaign_settings(
         campaign.send_delay_minutes = settings.send_delay_minutes
     if settings.behavior_personalized_followups is not None:
         campaign.behavior_personalized_followups = settings.behavior_personalized_followups
+    if settings.include_video is not None:
+        campaign.include_video = settings.include_video
 
     if settings.follow_ups is not None:
         # Replace the entire follow-up sequence.

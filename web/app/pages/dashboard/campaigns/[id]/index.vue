@@ -304,6 +304,23 @@
               </span>
             </span>
           </label>
+
+          <label
+            class="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] p-3"
+          >
+            <input
+              v-model="settingsForm.include_video"
+              type="checkbox"
+              class="mt-0.5 h-4 w-4 rounded border-[var(--app-line)]"
+            />
+            <span class="text-xs">
+              <span class="font-medium text-[var(--app-ink)]">Joindre la vidéo de prospection</span>
+              <span class="text-muted mt-0.5 block">
+                Insère la vignette vidéo quand une vidéo est prête. Décochée, la campagne n'envoie que le lien du site
+                (les modèles combinés basculent alors sur la démo seule).
+              </span>
+            </span>
+          </label>
         </section>
 
         <div class="flex items-center justify-end gap-3">
@@ -653,6 +670,7 @@ const settingsForm: Ref<{
   send_delay_minutes: number
   enable_ab: boolean
   behavior_personalized_followups: boolean
+  include_video: boolean
   follow_ups: Array<{ template_id: number; delay_days: number }>
 }> = ref({
   template_id: 0,
@@ -660,6 +678,7 @@ const settingsForm: Ref<{
   send_delay_minutes: 20,
   enable_ab: false,
   behavior_personalized_followups: false,
+  include_video: true,
   follow_ups: [],
 })
 
@@ -754,11 +773,13 @@ const settingsDirty: ComputedRef<boolean> = computed((): boolean => {
     send_delay_minutes: number
     enable_ab: boolean
     behavior_personalized_followups: boolean
+    include_video: boolean
     follow_ups: { template_id: number; delay_days: number }[]
   } = settingsForm.value
   if (f.template_id !== (c.template_id ?? 0)) return true
   if (f.send_delay_minutes !== c.send_delay_minutes) return true
   if (f.behavior_personalized_followups !== c.behavior_personalized_followups) return true
+  if (f.include_video !== c.include_video) return true
   if (f.enable_ab !== !!c.ab_template_id_b) return true
   if (f.enable_ab && f.ab_template_id_b !== (c.ab_template_id_b ?? 0)) return true
   if (f.follow_ups.length !== c.follow_ups.length) return true
@@ -836,6 +857,7 @@ function syncSettingsForm(c: CampaignDetailResponse): void {
     send_delay_minutes: c.send_delay_minutes,
     enable_ab: !!c.ab_template_id_b,
     behavior_personalized_followups: c.behavior_personalized_followups,
+    include_video: c.include_video,
     follow_ups: c.follow_ups.map((fu: CampaignFollowUp) => ({
       template_id: fu.template_id,
       delay_days: fu.delay_days,
@@ -862,6 +884,7 @@ async function saveSettings(): Promise<void> {
       send_delay_minutes: number
       enable_ab: boolean
       behavior_personalized_followups: boolean
+      include_video: boolean
       follow_ups: { template_id: number; delay_days: number }[]
     } = settingsForm.value
     const updated: CampaignDetailResponse = await CampaignService.updateSettings(campaignId.value, {
@@ -870,6 +893,7 @@ async function saveSettings(): Promise<void> {
       disable_ab: !f.enable_ab,
       send_delay_minutes: f.send_delay_minutes,
       behavior_personalized_followups: f.behavior_personalized_followups,
+      include_video: f.include_video,
       follow_ups: f.follow_ups
         .filter((fu: { template_id: number; delay_days: number }) => fu.template_id > 0)
         .map((fu: { template_id: number; delay_days: number }, i: number) => ({

@@ -32,6 +32,7 @@ from models.email_template import EmailTemplate
 from models.prospect_db import ProspectDB
 from services.email_sending_service import EmailSendingService
 from services.email_variables import EmailVariables
+from services.pricing_service import PricingService
 from services.unsubscribe_service import unsubscribe_service
 
 logger = logging.getLogger(__name__)
@@ -164,12 +165,19 @@ class CampaignQueueService:
                 result.skipped_no_demo.append({"id": prospect.id, "name": prospect.name or ""})
                 continue
 
-            # Guard: same rule for {lien_video}/{vignette_video} — never ship
-            # an email whose video block would be empty.
-            if uses_video and not self._video_for_prospect(prospect.id, campaign.user_id, variant)[0]:
-                logger.info("[Queue] Skipping prospect %d — no prospection video for {lien_video}", prospect.id)
-                result.skipped_no_video.append({"id": prospect.id, "name": prospect.name or ""})
-                continue
+            # Guard: a video-only template (no {lien_demo} fallback) still needs a
+            # ready video and the campaign's video toggle on, else the email has no
+            # content. A combo template ({lien_demo} + {vignette_video}) is never
+            # skipped here — it degrades to the demo link when the video is missing
+            # or the toggle is off (handled at dispatch).
+            if uses_video and not uses_demo:
+                has_video = campaign.include_video and bool(
+                    self._video_for_prospect(prospect.id, campaign.user_id, variant)[0]
+                )
+                if not has_video:
+                    logger.info("[Queue] Skipping prospect %d — video-only template, no video ready", prospect.id)
+                    result.skipped_no_video.append({"id": prospect.id, "name": prospect.name or ""})
+                    continue
 
             to_enqueue.append((prospect.id, tpl_id, variant))
 
@@ -406,26 +414,33 @@ class CampaignQueueService:
         # Guard (defense in depth): never send an email whose template needs
         # {lien_demo} when the prospect has no active demo site — e.g. the demo
         # expired between enqueue and dispatch.
+        uses_demo: bool = self._template_uses_demo_link(template)
         demo_link: str = self._demo_link_for_prospect(prospect.id, item.user_id, item.ab_variant)
-        if self._template_uses_demo_link(template) and not demo_link:
+        if uses_demo and not demo_link:
             logger.info("[Queue] Skipping send for prospect %d — no active demo site for {lien_demo}", prospect.id)
             item.status = _STATUS_SKIPPED
             self.db.commit()
             return
 
-        # Same defense for {lien_video}/{vignette_video} — the video may have
-        # been deleted (or its demo expired) between enqueue and dispatch.
-        video_link, video_thumbnail_url = self._video_for_prospect(prospect.id, item.user_id, item.ab_variant)
-        if self._template_uses_video(template) and not video_link:
-            logger.info("[Queue] Skipping send for prospect %d — no prospection video for {lien_video}", prospect.id)
+        # Video: attach it only when the template uses it AND the campaign's video
+        # toggle is on. A video-only template (no {lien_demo} fallback) with no
+        # usable video has nothing to say and is skipped; a combo template just
+        # degrades to its demo link (empty vignette).
+        uses_video: bool = self._template_uses_video(template)
+        video_link, video_thumbnail_url = "", ""
+        if uses_video and campaign.include_video:
+            video_link, video_thumbnail_url = self._video_for_prospect(prospect.id, item.user_id, item.ab_variant)
+        if uses_video and not uses_demo and not video_link:
+            logger.info("[Queue] Skipping send for prospect %d — video-only template, no video ready", prospect.id)
             item.status = _STATUS_SKIPPED
             self.db.commit()
             return
 
         # Build personalisation variables ({salutation}/{prenom}/{nom} come from
         # the resolved decision-maker — never the company name).
+        sale_price_cents: int = PricingService.sale_price_cents(self.db, item.user_id)
         variables: dict[str, str] = EmailVariables.build_for_prospect(
-            self.db, prospect, demo_link, video_link, video_thumbnail_url
+            self.db, prospect, demo_link, video_link, video_thumbnail_url, sale_price_cents=sale_price_cents
         )
 
         email_service = EmailSendingService(self.db)
@@ -637,13 +652,16 @@ class CampaignQueueService:
         if not template:
             return {"success": False, "error": "Template introuvable"}
 
-        video_link, video_thumbnail_url = self._video_for_prospect(prospect_id, campaign.user_id, None)
+        video_link, video_thumbnail_url = "", ""
+        if self._template_uses_video(template) and campaign.include_video:
+            video_link, video_thumbnail_url = self._video_for_prospect(prospect_id, campaign.user_id, None)
         variables: dict[str, str] = EmailVariables.build_for_prospect(
             self.db,
             prospect,
             self._demo_link_for_prospect(prospect_id, campaign.user_id, None),
             video_link,
             video_thumbnail_url,
+            sale_price_cents=PricingService.sale_price_cents(self.db, campaign.user_id),
         )
 
         email_service = EmailSendingService(self.db)

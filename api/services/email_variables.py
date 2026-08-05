@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from models.prospect_db import ProspectDB
 from models.prospect_enrichment import ProspectEnrichment
 from services.decision_maker import build_greeting
+from services.pricing_service import PricingService
+from services.trade_normalizer import TradeNormalizer
 
 
 class EmailVariables:
@@ -32,6 +34,7 @@ class EmailVariables:
     VIDEO_LINK = "lien_video"
     VIDEO_THUMBNAIL = "vignette_video"
     OLD_WEBSITE = "ancien_site"
+    PRICE = "prix"
 
     @staticmethod
     def build_video_thumbnail_html(video_link: str, thumbnail_url: str) -> str:
@@ -115,6 +118,7 @@ class EmailVariables:
         demo_link: str = "",
         video_link: str = "",
         video_thumbnail_url: str = "",
+        sale_price_cents: int | None = None,
     ) -> dict[str, str]:
         """
         Build the full substitution map for a prospect's emails.
@@ -129,6 +133,7 @@ class EmailVariables:
             demo_link: URL of his generated demo site.
             video_link: URL of the tracked video player page.
             video_thumbnail_url: Absolute URL of the personalised thumbnail.
+            sale_price_cents: The sender's website sale price, rendered into {prix}; empty when unset.
 
         Returns:
             The variable name to value map, ready for template substitution.
@@ -142,9 +147,10 @@ class EmailVariables:
             cls.CITY: prospect.city or "",
             cls.EMAIL: prospect.email or "",
             cls.PHONE: prospect.phone or "",
-            cls.TRADE: prospect.category or "",
+            cls.TRADE: TradeNormalizer.normalize(prospect.category),
             cls.DEMO_LINK: demo_link,
             cls.VIDEO_LINK: video_link,
             cls.VIDEO_THUMBNAIL: cls.build_video_thumbnail_html(video_link, video_thumbnail_url),
             cls.OLD_WEBSITE: cls.display_website(prospect.website),
+            cls.PRICE: PricingService.format_price(sale_price_cents) if sale_price_cents is not None else "",
         }
