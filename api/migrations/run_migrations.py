@@ -69,7 +69,6 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_order_billing_details", "migrations.add_order_billing_details"),
     ("add_platform_commission_percent", "migrations.add_platform_commission_percent"),
     ("add_email_template_category", "migrations.add_email_template_category"),
-    ("add_email_template_theme", "migrations.add_email_template_theme"),
     ("purge_demo_users", "migrations.purge_demo_users"),
     ("add_queue_skip_reason_and_follow_up_delay", "migrations.add_queue_skip_reason_and_follow_up_delay"),
     ("add_prospect_website_status", "migrations.add_prospect_website_status"),

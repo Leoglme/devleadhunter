@@ -85,19 +85,6 @@
             </div>
 
             <div>
-              <label class="mb-2 block text-sm font-medium text-[var(--app-ink)]">Thème</label>
-              <input
-                v-model="form.theme"
-                type="text"
-                class="input-field"
-                placeholder="Ex : Visibilité, Offre, Site en panne…"
-              />
-              <p class="text-muted mt-1.5 text-xs">
-                Regroupe le modèle dans une carte repliable de la liste. Laissez vide pour le placer dans « Autres ».
-              </p>
-            </div>
-
-            <div>
               <label class="mb-2 block text-sm font-medium text-[var(--app-ink)]">
                 Objet <span class="text-[var(--app-red)]">*</span>
               </label>
@@ -357,7 +344,6 @@ const form: Ref<EmailTemplateForm> = ref({
   is_active: true,
   signature_id: null,
   category: 'first_email',
-  theme: '',
 })
 
 const signatureOptions: ComputedRef<SelectFieldOption<number>[]> = computed((): SelectFieldOption<number>[] =>
@@ -493,7 +479,6 @@ async function handleSave(): Promise<void> {
         is_active: form.value.is_active,
         signature_id: signatureId,
         category: form.value.category,
-        theme: form.value.theme,
       })
       toast.success('Modèle mis à jour')
       emit('saved', updated)
@@ -504,7 +489,6 @@ async function handleSave(): Promise<void> {
         body_html: form.value.body_html,
         signature_id: signatureId,
         category: form.value.category,
-        theme: form.value.theme,
       })
       toast.success('Modèle créé')
       emit('saved', created)
@@ -593,7 +577,6 @@ watch(
       is_active: props.template?.is_active ?? true,
       signature_id: props.template?.signature_id ?? null,
       category: props.template?.category ?? 'first_email',
-      theme: props.template?.theme ?? '',
     }
   },
   { immediate: true },

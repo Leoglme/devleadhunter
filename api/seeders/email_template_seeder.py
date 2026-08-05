@@ -18,8 +18,7 @@ CTA, ≤ 4 lines). Rules baked in:
 Variables: {salutation} {prenom} {nom} {entreprise} {ville} {metier} {lien_demo}
 {lien_video} {vignette_video} {ancien_site} {prix}.
 
-``theme`` folds the templates page into per-angle collapsible cards; ``sort_order``
-(higher = pinned) marks the recommended cards, expanded by default.
+``sort_order`` (higher = pinned) marks the recommended templates at the top of the list.
 
 Safe to re-run: templates are matched by (user_id, name) and skipped if present,
 so the seeder only APPENDS. The one-time prod cut-over of the previous 17-template
@@ -37,14 +36,12 @@ from enums.email_template_category import EmailTemplateCategory
 _FIRST = EmailTemplateCategory.FIRST_EMAIL.value
 _FOLLOW = EmailTemplateCategory.FOLLOW_UP.value
 
-# The canonical library. ``sort_order`` > 0 = recommended (card expanded by default);
-# ``theme`` = the French label of its accordion card.
+# The canonical library. ``sort_order`` > 0 = recommended (pinned to the top of the list).
 EMAIL_TEMPLATE_LIBRARY: list[dict[str, object]] = [
     # ── Premier email ────────────────────────────────────────────────────────
     {
         "name": "Visibilité - on vous cherche",
         "category": _FIRST,
-        "theme": "Visibilité",
         "sort_order": 100,
         "subject": "On vous cherche, on trouve les autres",
         "body_html": (
@@ -59,7 +56,6 @@ EMAIL_TEMPLATE_LIBRARY: list[dict[str, object]] = [
     {
         "name": "Crédibilité - la première impression",
         "category": _FIRST,
-        "theme": "Crédibilité",
         "sort_order": 95,
         "subject": "Votre site est déjà prêt",
         "body_html": (
@@ -74,7 +70,6 @@ EMAIL_TEMPLATE_LIBRARY: list[dict[str, object]] = [
     {
         "name": "Bouche-à-oreille - on vous retrouve",
         "category": _FIRST,
-        "theme": "Bouche-à-oreille",
         "sort_order": 90,
         "subject": "Quand on vous recommande à un proche",
         "body_html": (
@@ -90,7 +85,6 @@ EMAIL_TEMPLATE_LIBRARY: list[dict[str, object]] = [
     {
         "name": "Vidéo - je vous montre",
         "category": _FIRST,
-        "theme": "Vidéo",
         "sort_order": 0,
         "subject": "Votre site en vidéo, en 30 secondes",
         "body_html": (
@@ -104,7 +98,6 @@ EMAIL_TEMPLATE_LIBRARY: list[dict[str, object]] = [
     {
         "name": "Site en panne - premier email",
         "category": _FIRST,
-        "theme": "Site en panne",
         "sort_order": 0,
         "subject": "Votre site ne répond plus",
         "body_html": (
@@ -118,7 +111,6 @@ EMAIL_TEMPLATE_LIBRARY: list[dict[str, object]] = [
     {
         "name": "Refonte - premier email",
         "category": _FIRST,
-        "theme": "Refonte",
         "sort_order": 0,
         "subject": "Votre nouveau site est déjà en ligne",
         "body_html": (
@@ -133,7 +125,6 @@ EMAIL_TEMPLATE_LIBRARY: list[dict[str, object]] = [
     {
         "name": "Rappel court",
         "category": _FOLLOW,
-        "theme": "Relance simple",
         "sort_order": 90,
         "subject": "Vous avez vu votre site ?",
         "body_html": (
@@ -145,7 +136,6 @@ EMAIL_TEMPLATE_LIBRARY: list[dict[str, object]] = [
     {
         "name": "Offre à vie",
         "category": _FOLLOW,
-        "theme": "Offre",
         "sort_order": 85,
         "subject": "Un seul paiement, le site est à vous",
         "body_html": (
@@ -159,7 +149,6 @@ EMAIL_TEMPLATE_LIBRARY: list[dict[str, object]] = [
     {
         "name": "Autonomie - vous gardez la main",
         "category": _FOLLOW,
-        "theme": "Autonomie",
         "sort_order": 0,
         "subject": "Vous gérez votre site vous-même",
         "body_html": (
@@ -173,7 +162,6 @@ EMAIL_TEMPLATE_LIBRARY: list[dict[str, object]] = [
     {
         "name": "Urgence douce",
         "category": _FOLLOW,
-        "theme": "Urgence",
         "sort_order": 0,
         "subject": "Jusqu'à quand je garde votre site ?",
         "body_html": (
@@ -187,7 +175,6 @@ EMAIL_TEMPLATE_LIBRARY: list[dict[str, object]] = [
     {
         "name": "Site en panne - relance",
         "category": _FOLLOW,
-        "theme": "Site en panne",
         "sort_order": 0,
         "subject": "Votre nouveau site est prêt, lui",
         "body_html": (
@@ -201,7 +188,6 @@ EMAIL_TEMPLATE_LIBRARY: list[dict[str, object]] = [
     {
         "name": "Refonte - relance",
         "category": _FOLLOW,
-        "theme": "Refonte",
         "sort_order": 0,
         "subject": "Votre ancien site ou le nouveau ?",
         "body_html": (
@@ -275,7 +261,6 @@ def seed_email_templates() -> None:
                     is_active=True,
                     category=str(tpl["category"]),
                     sort_order=int(tpl["sort_order"]),  # type: ignore[arg-type]
-                    theme=str(tpl["theme"]),
                 )
             )
             created += 1

@@ -58,7 +58,6 @@ def run_migration() -> None:
                 "variables": _variables_json(str(template["subject"]), str(template["body_html"])),
                 "category": str(template["category"]),
                 "sort_order": int(template["sort_order"]),  # type: ignore[arg-type]
-                "theme": str(template["theme"]),
             }
             existing_id = conn.execute(
                 text("SELECT id FROM email_templates WHERE user_id = :user_id AND name = :name"),
@@ -70,7 +69,7 @@ def run_migration() -> None:
                         """
                         UPDATE email_templates
                         SET subject = :subject, body_html = :body_html, variables = :variables,
-                            category = :category, sort_order = :sort_order, theme = :theme, is_active = 1
+                            category = :category, sort_order = :sort_order, is_active = 1
                         WHERE id = :id
                         """
                     ),
@@ -81,9 +80,9 @@ def run_migration() -> None:
                     text(
                         """
                         INSERT INTO email_templates
-                            (user_id, name, subject, body_html, variables, is_active, category, sort_order, theme)
+                            (user_id, name, subject, body_html, variables, is_active, category, sort_order)
                         VALUES
-                            (:user_id, :name, :subject, :body_html, :variables, 1, :category, :sort_order, :theme)
+                            (:user_id, :name, :subject, :body_html, :variables, 1, :category, :sort_order)
                         """
                     ),
                     params,

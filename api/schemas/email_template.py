@@ -19,7 +19,6 @@ class EmailTemplateBase(BaseModel):
     variables: list[str] | None = None
     signature_id: int | None = None
     category: EmailTemplateCategory = EmailTemplateCategory.FIRST_EMAIL
-    theme: str | None = Field(None, max_length=64)
 
 
 class EmailTemplateCreate(EmailTemplateBase):
@@ -39,7 +38,6 @@ class EmailTemplateUpdate(BaseModel):
     variables: list[str] | None = None
     is_active: bool | None = None
     category: EmailTemplateCategory | None = None
-    theme: str | None = Field(None, max_length=64)
     # ``signature_id`` is nullable on purpose: an explicit ``null`` detaches the
     # signature (switch turned off), so it must be part of the update payload.
     signature_id: int | None = None
@@ -63,8 +61,6 @@ class EmailTemplateResponse(BaseModel):
     category: EmailTemplateCategory = EmailTemplateCategory.FIRST_EMAIL
     # Exposed so the app can pin the recommended templates (higher = pinned higher).
     sort_order: int = 0
-    # Thematic group (French label) driving the collapsible cards on the templates page.
-    theme: str | None = None
     created_at: datetime
     updated_at: datetime | None = None
 

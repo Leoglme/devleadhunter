@@ -49,7 +49,7 @@
       </div>
     </div>
 
-    <div v-else-if="filteredTemplates.length === 0" class="card px-6 py-10 text-center">
+    <div v-else-if="activeTemplates.length === 0" class="card px-6 py-10 text-center">
       <p v-if="searchQuery.trim()" class="text-muted text-sm">
         Aucun modèle ne correspond à « {{ searchQuery }} » dans cet onglet.
       </p>
@@ -60,120 +60,109 @@
     </div>
 
     <template v-else>
-      <UiCollapsibleCard
-        v-for="group in templateGroups"
-        :key="`${group.key}${isSearching ? ':search' : ''}`"
-        :icon="group.icon"
-        :title="group.heading"
-        :suffix="String(group.templates.length)"
-        :default-open="group.defaultOpen"
-      >
-        <div class="divide-y divide-[var(--app-line-soft)]">
-          <div
-            v-for="template in group.templates"
-            :key="template.id"
-            class="group flex items-start gap-4 px-4 py-3 transition-colors hover:bg-[var(--app-surface-2)]/60"
-            :class="template.is_active ? '' : 'opacity-70'"
-          >
-            <button type="button" class="min-w-0 flex-1 cursor-pointer text-left" @click="openPreviewDrawer(template)">
-              <div class="flex flex-wrap items-center gap-2">
-                <span
-                  v-if="isTemplateRecommended(template)"
-                  class="shrink-0 text-sm leading-none text-[var(--app-accent)]"
-                  title="Modèle recommandé — épinglé en haut de la liste"
-                  aria-label="Modèle recommandé"
-                >
-                  ★
-                </span>
-                <h3
-                  class="truncate text-sm font-semibold text-[var(--app-ink)] underline decoration-transparent underline-offset-4 transition-colors group-hover:decoration-[var(--app-accent)]"
-                >
-                  {{ templateNameWithoutStar(template.name) }}
-                </h3>
-                <span v-if="!template.is_active" class="app-badge">Inactif</span>
-              </div>
-              <p class="text-muted mt-0.5 truncate text-xs">{{ template.subject }}</p>
-              <p
-                v-if="template.variables && template.variables.length"
-                class="font-label mt-1.5 text-[10px] text-[var(--app-faint)]"
+      <div class="card divide-y divide-[var(--app-line-soft)] overflow-hidden p-0">
+        <div
+          v-for="template in activeTemplates"
+          :key="template.id"
+          class="group flex items-start gap-4 px-4 py-3 transition-colors hover:bg-[var(--app-surface-2)]/60"
+        >
+          <button type="button" class="min-w-0 flex-1 cursor-pointer text-left" @click="openPreviewDrawer(template)">
+            <div class="flex flex-wrap items-center gap-2">
+              <span
+                v-if="isTemplateRecommended(template)"
+                class="shrink-0 text-sm leading-none text-[var(--app-accent)]"
+                title="Modèle recommandé — épinglé en haut de la liste"
+                aria-label="Modèle recommandé"
               >
-                <UIcon name="i-lucide-braces" class="mr-1 inline-block h-3 w-3 align-[-2px]" />{{
-                  variablesLabel(template)
-                }}
-              </p>
+                ★
+              </span>
+              <h3
+                class="truncate text-sm font-semibold text-[var(--app-ink)] underline decoration-transparent underline-offset-4 transition-colors group-hover:decoration-[var(--app-accent)]"
+              >
+                {{ templateNameWithoutStar(template.name) }}
+              </h3>
+            </div>
+            <p class="text-muted mt-0.5 truncate text-xs">{{ template.subject }}</p>
+            <p
+              v-if="template.variables && template.variables.length"
+              class="font-label mt-1.5 text-[10px] text-[var(--app-faint)]"
+            >
+              <UIcon name="i-lucide-braces" class="mr-1 inline-block h-3 w-3 align-[-2px]" />{{
+                variablesLabel(template)
+              }}
+            </p>
+          </button>
+
+          <div class="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
+              title="Aperçu avec des données d'exemple"
+              :aria-label="`Aperçu de ${template.name}`"
+              @click="openPreviewDrawer(template)"
+            >
+              <UIcon name="i-lucide-eye" class="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
+              title="Modifier"
+              :aria-label="`Modifier ${template.name}`"
+              @click="openEditDrawer(template)"
+            >
+              <UIcon name="i-lucide-square-pen" class="h-3.5 w-3.5" />
             </button>
 
-            <div class="flex shrink-0 items-center gap-1">
+            <div class="relative">
               <button
                 type="button"
                 class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
-                title="Aperçu avec des données d'exemple"
-                :aria-label="`Aperçu de ${template.name}`"
-                @click="openPreviewDrawer(template)"
+                title="Plus d'actions"
+                :aria-label="`Plus d'actions pour ${template.name}`"
+                :aria-expanded="openMenuTemplateId === template.id"
+                @click.stop="toggleActionsMenu(template.id)"
               >
-                <UIcon name="i-lucide-eye" class="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
-                title="Modifier"
-                :aria-label="`Modifier ${template.name}`"
-                @click="openEditDrawer(template)"
-              >
-                <UIcon name="i-lucide-square-pen" class="h-3.5 w-3.5" />
+                <UIcon name="i-lucide-ellipsis-vertical" class="h-3.5 w-3.5" />
               </button>
 
-              <div class="relative">
-                <button
-                  type="button"
-                  class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
-                  title="Plus d'actions"
-                  :aria-label="`Plus d'actions pour ${template.name}`"
-                  :aria-expanded="openMenuTemplateId === template.id"
-                  @click.stop="toggleActionsMenu(template.id)"
+              <template v-if="openMenuTemplateId === template.id">
+                <div class="fixed inset-0 z-40" @click="openMenuTemplateId = null"></div>
+                <div
+                  class="absolute right-0 z-50 mt-1.5 w-48 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-1 shadow-lg shadow-black/5"
                 >
-                  <UIcon name="i-lucide-ellipsis-vertical" class="h-3.5 w-3.5" />
-                </button>
-
-                <template v-if="openMenuTemplateId === template.id">
-                  <div class="fixed inset-0 z-40" @click="openMenuTemplateId = null"></div>
-                  <div
-                    class="absolute right-0 z-50 mt-1.5 w-48 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-1 shadow-lg shadow-black/5"
+                  <button
+                    type="button"
+                    class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
+                    @click="runRowAction(template, duplicateTemplate)"
                   >
-                    <button
-                      type="button"
-                      class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
-                      @click="runRowAction(template, duplicateTemplate)"
-                    >
-                      <UIcon name="i-lucide-copy" class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
-                      Dupliquer
-                    </button>
-                    <button
-                      type="button"
-                      class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
-                      @click="runRowAction(template, toggleTemplateActive)"
-                    >
-                      <UIcon
-                        :name="template.is_active ? 'i-lucide-pause' : 'i-lucide-play'"
-                        class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]"
-                      />
-                      {{ template.is_active ? 'Désactiver' : 'Activer' }}
-                    </button>
-                    <button
-                      type="button"
-                      class="mt-1 flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-t border-[var(--app-line-soft)] px-2.5 py-2 text-left text-xs font-medium text-[var(--app-red)] transition-colors hover:bg-[var(--app-red-soft)]"
-                      @click="runRowAction(template, confirmDelete)"
-                    >
-                      <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5 shrink-0" />
-                      Supprimer
-                    </button>
-                  </div>
-                </template>
-              </div>
+                    <UIcon name="i-lucide-copy" class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
+                    Dupliquer
+                  </button>
+                  <button
+                    type="button"
+                    class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-[var(--app-ink)] transition-colors hover:bg-[var(--app-surface-2)]"
+                    @click="runRowAction(template, toggleTemplateActive)"
+                  >
+                    <UIcon
+                      :name="template.is_active ? 'i-lucide-pause' : 'i-lucide-play'"
+                      class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]"
+                    />
+                    {{ template.is_active ? 'Désactiver' : 'Activer' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="mt-1 flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-t border-[var(--app-line-soft)] px-2.5 py-2 text-left text-xs font-medium text-[var(--app-red)] transition-colors hover:bg-[var(--app-red-soft)]"
+                    @click="runRowAction(template, confirmDelete)"
+                  >
+                    <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5 shrink-0" />
+                    Supprimer
+                  </button>
+                </div>
+              </template>
             </div>
           </div>
         </div>
-      </UiCollapsibleCard>
+      </div>
     </template>
 
     <UiConfirmModal
@@ -189,7 +178,6 @@
 
 <script lang="ts" setup>
 import type { UseToastReturn } from '~/types/Composables'
-import type { TemplateGroup } from '~/types/EmailTemplatesPage'
 import type { UiFilterTab } from '~/types/UiFilterTabs'
 import type { ComputedRef, Ref } from 'vue'
 import type { EmailTemplate, EmailTemplateCategory } from '~/types'
@@ -256,52 +244,9 @@ const filteredTemplates: ComputedRef<EmailTemplate[]> = computed((): EmailTempla
   )
 })
 
-/** True when a search query is narrowing the list — every card is expanded then. */
-const isSearching: ComputedRef<boolean> = computed((): boolean => searchQuery.value.trim().length > 0)
-
-/** Active templates grouped into per-theme collapsible cards, then the archived bucket. */
-const templateGroups: ComputedRef<TemplateGroup[]> = computed((): TemplateGroup[] => {
-  const active: EmailTemplate[] = filteredTemplates.value.filter(
-    (template: EmailTemplate): boolean => template.is_active,
-  )
-  const inactive: EmailTemplate[] = filteredTemplates.value.filter(
-    (template: EmailTemplate): boolean => !template.is_active,
-  )
-
-  // Bucket by theme, keeping the API order (sort_order desc) so recommended themes come first.
-  const byTheme: Map<string, EmailTemplate[]> = new Map()
-  for (const template of active) {
-    const theme: string = template.theme?.trim() || 'Autres'
-    const bucket: EmailTemplate[] = byTheme.get(theme) ?? []
-    bucket.push(template)
-    byTheme.set(theme, bucket)
-  }
-
-  const groups: TemplateGroup[] = []
-  for (const [theme, templates] of byTheme) {
-    groups.push({
-      key: `theme:${theme}`,
-      heading: theme,
-      icon: 'i-lucide-folder',
-      defaultOpen: isSearching.value || templates.some(isTemplateRecommended),
-      templates,
-    })
-  }
-  if (inactive.length) {
-    groups.push({
-      key: 'inactive',
-      heading: 'Modèles inactifs',
-      icon: 'i-lucide-archive',
-      defaultOpen: isSearching.value,
-      templates: inactive,
-    })
-  }
-  return groups
-})
-
-/** Displayed templates, flattened in reading order — the list the preview drawer walks. */
-const browsableTemplates: ComputedRef<EmailTemplate[]> = computed((): EmailTemplate[] =>
-  templateGroups.value.flatMap((group: TemplateGroup): EmailTemplate[] => group.templates),
+/** Active templates of the current tab (search-filtered), in the API's pinned order. */
+const activeTemplates: ComputedRef<EmailTemplate[]> = computed((): EmailTemplate[] =>
+  filteredTemplates.value.filter((template: EmailTemplate): boolean => template.is_active),
 )
 
 /**
@@ -349,7 +294,7 @@ function openEditDrawer(template: EmailTemplate): void {
  * @param template - Template to preview.
  */
 function openPreviewDrawer(template: EmailTemplate): void {
-  drawerStack.setEmailTemplateBrowseList(browsableTemplates.value)
+  drawerStack.setEmailTemplateBrowseList(activeTemplates.value)
   drawerStack.push({ kind: 'email-template', mode: 'preview', template })
 }
 
@@ -365,7 +310,6 @@ async function duplicateTemplate(template: EmailTemplate): Promise<void> {
       body_html: template.body_html,
       signature_id: template.signature_id ?? null,
       category: template.category,
-      theme: template.theme ?? null,
     })
     emailTemplates.value.unshift(copy)
     toast.success(`Modèle « ${template.name} » dupliqué`)

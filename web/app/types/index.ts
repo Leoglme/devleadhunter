@@ -398,8 +398,6 @@ export type EmailTemplate = {
   category: EmailTemplateCategory
   /** Higher = pinned higher; the seeded « ★ Recommandé » templates use a high value. */
   sort_order: number
-  /** Thematic group (French label) folding the templates page into collapsible cards. */
-  theme?: string | null
   created_at: string
   updated_at?: string | null
 }
@@ -522,7 +520,6 @@ export type EmailTemplateCreate = {
   variables?: string[]
   signature_id?: number | null
   category?: EmailTemplateCategory
-  theme?: string | null
 }
 
 export type EmailTemplateUpdate = {
@@ -534,7 +531,6 @@ export type EmailTemplateUpdate = {
   is_active?: boolean
   signature_id?: number | null
   category?: EmailTemplateCategory
-  theme?: string | null
 }
 
 export type SendEmailRequest = {
