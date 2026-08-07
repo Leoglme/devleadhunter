@@ -129,6 +129,91 @@ def test_service_parses_prospect_postal_code_from_address() -> None:
     assert "département" in reason
 
 
+# ── Cross-source identity check (registry ↔ Maps place) ─────────────────────
+
+
+def _record_with_place(place_postal_code: str | None) -> SimpleNamespace:
+    return SimpleNamespace(place_postal_code=place_postal_code)
+
+
+def _registry_candidate(siege_postal_code: str | None) -> SimpleNamespace:
+    return SimpleNamespace(primary=True, raw={"siege_postal_code": siege_postal_code})
+
+
+def test_identity_check_coherent_when_same_department() -> None:
+    """Registry siège and Maps place in the same département → coherent."""
+    status, detail = EnrichmentService._identity_check(_record_with_place("35510"), _registry_candidate("35000"))
+    assert status == "coherent"
+    assert detail is not None and "même zone" in detail
+
+
+def test_identity_check_conflict_when_departments_differ() -> None:
+    """Registry siège in another département than the place → probable homonym."""
+    status, detail = EnrichmentService._identity_check(_record_with_place("63000"), _registry_candidate("59000"))
+    assert status == "conflict"
+    assert detail is not None and "homonyme" in detail
+
+
+def test_identity_check_skipped_without_both_anchors() -> None:
+    """Missing place or siège postal code → no verdict at all."""
+    assert EnrichmentService._identity_check(_record_with_place(None), _registry_candidate("59000")) == (None, None)
+    assert EnrichmentService._identity_check(_record_with_place("63000"), _registry_candidate(None)) == (None, None)
+    assert EnrichmentService._identity_check(_record_with_place("63000"), None) == (None, None)
+
+
+def test_identity_check_ignores_supporting_candidates() -> None:
+    """Only registry-grade candidates carry a siège to compare."""
+    supporting = SimpleNamespace(primary=False, raw={"siege_postal_code": "59000"})
+    assert EnrichmentService._identity_check(_record_with_place("63000"), supporting) == (None, None)
+
+
+# ── Maps place identity as geo fallback for the cascade ─────────────────────
+
+
+def test_context_uses_place_identity_when_address_has_no_postal_code() -> None:
+    """A prospect without usable address borrows the validated place geo."""
+    from services.decision_maker.resolver import context_from_prospect
+
+    prospect = SimpleNamespace(
+        name="Plomberie Vidal",
+        address=None,
+        city=None,
+        website=None,
+        phone=None,
+    )
+    enrichment = SimpleNamespace(
+        description=None,
+        reviews=[],
+        place_postal_code="63000",
+        place_city="Clermont-Ferrand",
+    )
+    context = context_from_prospect(prospect, enrichment)
+    assert context.postal_code == "63000"
+    assert context.city == "Clermont-Ferrand"
+
+
+def test_context_prefers_the_prospect_own_address() -> None:
+    """The prospect's own postal code always wins over the place fallback."""
+    from services.decision_maker.resolver import context_from_prospect
+
+    prospect = SimpleNamespace(
+        name="Plomberie Vidal",
+        address="12 rue des Forges, 35000 Rennes",
+        city="Rennes",
+        website=None,
+        phone=None,
+    )
+    enrichment = SimpleNamespace(
+        description=None,
+        reviews=[],
+        place_postal_code="63000",
+        place_city="Clermont-Ferrand",
+    )
+    context = context_from_prospect(prospect, enrichment)
+    assert context.postal_code == "35000"
+    assert context.city == "Rennes"
+
+
 # ── Raw-payload parsing (place identity extraction) ──────────────────────────
 
 

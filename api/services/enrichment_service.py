@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from enums.contact_name_status import ContactNameStatus, ProposedContactState
 from enums.enrichment_status import EnrichmentStatus
+from enums.identity_check_status import IdentityCheckStatus
 from models.prospect_db import ProspectDB
 from models.prospect_enrichment import ProspectEnrichment
 from scrappers import scrape_signals
@@ -126,6 +127,12 @@ class EnrichmentService:
             record.services = data.services
         if data.social_links:
             record.social_links = data.social_links
+        if data.place_title:
+            record.place_title = data.place_title
+        if data.place_city:
+            record.place_city = data.place_city
+        if data.place_postal_code:
+            record.place_postal_code = data.place_postal_code
 
     async def enrich(
         self,
@@ -211,9 +218,18 @@ class EnrichmentService:
             resolution = await decision_maker_resolver.resolve(context_from_prospect(prospect, record))
             record.name_candidates = [candidate.to_persistable() for candidate in resolution.candidates]
 
-            if resolution.status == NameResolution.AUTO and resolution.candidate is not None:
+            # Shared entity check: the registry match and the Maps place must
+            # designate the same business — a conflict blocks automatic use.
+            status_to_apply = resolution.status
+            check_status, check_detail = self._identity_check(record, resolution.candidate)
+            record.identity_check_status = check_status
+            record.identity_check_detail = check_detail
+            if status_to_apply == NameResolution.AUTO and check_status == IdentityCheckStatus.CONFLICT.value:
+                status_to_apply = NameResolution.PROPOSED
+
+            if status_to_apply == NameResolution.AUTO and resolution.candidate is not None:
                 self._store_trusted_contact(record, resolution.candidate)
-            elif resolution.status == NameResolution.PROPOSED and resolution.candidate is not None:
+            elif status_to_apply == NameResolution.PROPOSED and resolution.candidate is not None:
                 self._store_proposed_contact(record, resolution.candidate)
             else:
                 self._clear_machine_contact(record)
@@ -402,6 +418,36 @@ class EnrichmentService:
         db.commit()
         db.refresh(record)
         return record
+
+    @staticmethod
+    def _identity_check(record: ProspectEnrichment, candidate: NameCandidate | None) -> tuple[str | None, str | None]:
+        """Cross-check the registry match against the Maps place identity.
+
+        The place was already validated against the prospect at enrichment time,
+        so a registry siège in another département than the place means the
+        registry matched a homonym — the name must not be used automatically.
+
+        Returns:
+            The (IdentityCheckStatus value, French detail) pair — (None, None)
+            when either anchor is missing.
+        """
+        if candidate is None or not candidate.primary:
+            return None, None
+        siege_postal = str(candidate.raw.get("siege_postal_code") or "") if candidate.raw else ""
+        place_postal = record.place_postal_code or ""
+        if len(siege_postal) != 5 or len(place_postal) != 5:
+            return None, None
+        if siege_postal[:2] == place_postal[:2]:
+            return (
+                IdentityCheckStatus.COHERENT.value,
+                f"Identité croisée : le registre (CP {siege_postal}) et la fiche Google Maps "
+                f"(CP {place_postal}) désignent la même zone",
+            )
+        return (
+            IdentityCheckStatus.CONFLICT.value,
+            f"Le registre (CP {siege_postal}) et la fiche Google Maps (CP {place_postal}) "
+            "ne désignent probablement pas la même entreprise — homonyme possible",
+        )
 
     @staticmethod
     def _place_mismatch(prospect: ProspectDB, data: EnrichmentData) -> str | None:

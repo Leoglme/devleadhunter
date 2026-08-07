@@ -89,6 +89,20 @@
           {{ record?.contact_name_provenance }}
         </p>
 
+        <p
+          v-if="record?.identity_check_detail"
+          :class="[
+            'mb-2 flex items-start gap-1.5 text-[10px] leading-relaxed',
+            isIdentityConflict ? 'text-[var(--app-red)]' : 'text-[var(--app-ink-soft)]',
+          ]"
+        >
+          <UIcon
+            :name="isIdentityConflict ? 'i-lucide-shield-alert' : 'i-lucide-shield-check'"
+            :class="['mt-0.5 h-3 w-3 shrink-0', isIdentityConflict ? '' : 'text-[var(--app-green)]']"
+          />
+          {{ record?.identity_check_detail }}
+        </p>
+
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="mb-1 block text-[10px] text-[var(--app-ink-soft)]">Prénom</label>
@@ -338,6 +352,11 @@ const contactSourceLabel: ComputedRef<string> = computed(
 /** Confidence badge tone: green when solid (≥ 80 %), amber when worth an eye. */
 const contactConfidenceBadgeClass: ComputedRef<string> = computed((): string =>
   (record.value?.contact_name_confidence ?? 0) >= 0.8 ? 'app-badge--success' : 'app-badge--progress',
+)
+
+/** True when the registry and the Maps place disagree (probable homonym). */
+const isIdentityConflict: ComputedRef<boolean> = computed(
+  (): boolean => record.value?.identity_check_status === 'conflict',
 )
 
 /** True when a name proposal awaits the user's confirm/reject decision. */

@@ -57,6 +57,11 @@ export type ProspectEnrichment = {
   proposed_provenance: string | null
   proposed_state: string | null
   name_candidates: ContactNameCandidate[]
+  place_title: string | null
+  place_city: string | null
+  place_postal_code: string | null
+  identity_check_status: string | null
+  identity_check_detail: string | null
   error_message: string | null
   enriched_at: string | null
   created_at: string

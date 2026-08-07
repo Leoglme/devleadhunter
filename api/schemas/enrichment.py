@@ -42,6 +42,12 @@ class ProspectEnrichmentResponse(BaseModel):
     proposed_state: str | None = None
     # Every candidate of the last cascade run (drawer display + calibration).
     name_candidates: list[dict[str, Any]] = Field(default_factory=list)
+    # Maps place identity + cross-source check (registry ↔ place).
+    place_title: str | None = None
+    place_city: str | None = None
+    place_postal_code: str | None = None
+    identity_check_status: str | None = None
+    identity_check_detail: str | None = None
     error_message: str | None = None
     enriched_at: datetime | None = None
     created_at: datetime

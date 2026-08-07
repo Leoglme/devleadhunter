@@ -152,13 +152,20 @@ def context_from_prospect(prospect, enrichment=None) -> ResolutionContext:
     """Build the strategy input from a prospect row (+ optional enrichment).
 
     Source-agnostic on purpose: only persisted prospect/enrichment data is
-    used, whatever scraper discovered the prospect.
+    used, whatever scraper discovered the prospect. When the prospect address
+    carries no postal code, the Maps place identity persisted at enrichment
+    fills the geographic anchor — the place was itself validated against the
+    prospect, so registry matches become geo-confirmable.
     """
     postal_match = _POSTAL_CODE_RE.search(prospect.address or "")
+    postal_code = postal_match.group(1) if postal_match else None
+    city = prospect.city
     owner_responses: list[str] = []
     description: str | None = None
     if enrichment is not None:
         description = enrichment.description
+        postal_code = postal_code or enrichment.place_postal_code
+        city = city or enrichment.place_city
         for review in enrichment.reviews or []:
             if isinstance(review, dict):
                 reply = review.get("owner_response") or review.get("ownerResponse")
@@ -166,8 +173,8 @@ def context_from_prospect(prospect, enrichment=None) -> ResolutionContext:
                     owner_responses.append(str(reply))
     return ResolutionContext(
         company_name=prospect.name or "",
-        city=prospect.city,
-        postal_code=postal_match.group(1) if postal_match else None,
+        city=city,
+        postal_code=postal_code,
         website=prospect.website,
         phone=prospect.phone,
         owner_responses=owner_responses,

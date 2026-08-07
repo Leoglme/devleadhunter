@@ -65,6 +65,15 @@ class ProspectEnrichment(Base):
     # drawer display, threshold calibration and debugging.
     name_candidates: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
+    # Identity of the Maps place the data was actually read from (durable
+    # anchor — also feeds the cascade's geo when the address has no CP).
+    place_title: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    place_city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    place_postal_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # Cross-source check registry ↔ Maps place (IdentityCheckStatus + French detail).
+    identity_check_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    identity_check_detail: Mapped[str | None] = mapped_column(String(400), nullable=True)
+
     # Structured, editable collections (JSON)
     photos: Mapped[list | None] = mapped_column(JSON, nullable=True)
     reviews: Mapped[list | None] = mapped_column(JSON, nullable=True)

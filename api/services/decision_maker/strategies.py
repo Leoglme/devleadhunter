@@ -157,7 +157,11 @@ class RegistreGouvStrategy:
                 f"Registre officiel (SIRENE) : {result.get('nom_complet') or '?'}, "
                 f"SIREN {result.get('siren') or '?'} — {geo_note}"
             ),
-            raw={"siren": result.get("siren"), "nom_complet": result.get("nom_complet")},
+            raw={
+                "siren": result.get("siren"),
+                "nom_complet": result.get("nom_complet"),
+                "siege_postal_code": str((result.get("siege") or {}).get("code_postal") or "") or None,
+            },
         )
 
     @staticmethod
@@ -249,7 +253,10 @@ class PappersStrategy:
                         f"Pappers : {result.get('nom_entreprise') or '?'}, "
                         f"SIREN {result.get('siren') or '?'} — {geo_note}"
                     ),
-                    raw={"siren": result.get("siren")},
+                    raw={
+                        "siren": result.get("siren"),
+                        "siege_postal_code": str((result.get("siege") or {}).get("code_postal") or "") or None,
+                    },
                 )
             )
         return candidates
