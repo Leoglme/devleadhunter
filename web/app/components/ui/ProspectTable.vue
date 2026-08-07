@@ -68,6 +68,12 @@
             <span class="flex items-center gap-1.5">
               {{ prospect.name }}
               <UIcon
+                v-if="prospect.has_pending_contact_proposal"
+                name="i-lucide-user-round-search"
+                class="h-3.5 w-3.5 shrink-0 text-[var(--app-accent-ink)]"
+                title="Décisionnaire à confirmer — ouvrez la fiche pour valider ou rejeter le nom proposé"
+              />
+              <UIcon
                 v-if="isReservedByMe(prospect)"
                 name="i-lucide-lock-keyhole"
                 class="h-3 w-3 text-[var(--app-accent)]"

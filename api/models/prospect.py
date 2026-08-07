@@ -161,3 +161,7 @@ class Prospect(ProspectBase):
     reserved_at: datetime | None = Field(None, description="When the reservation was made")
     lighthouse_json: dict | None = Field(None, description="Latest Lighthouse audit of the prospect's existing website")
     lighthouse_at: datetime | None = Field(None, description="When the audit was run")
+    has_pending_contact_proposal: bool = Field(
+        False,
+        description="A decision-maker name awaits confirm/reject in the drawer (resolved server-side)",
+    )

@@ -6,6 +6,7 @@ import asyncio
 import logging
 import re
 
+from enums.website_status import WebsiteStatus
 from services.decision_maker.strategies import (
     LegalMentionsStrategy,
     LlmAggregateStrategy,
@@ -160,6 +161,11 @@ def context_from_prospect(prospect, enrichment=None) -> ResolutionContext:
     postal_match = _POSTAL_CODE_RE.search(prospect.address or "")
     postal_code = postal_match.group(1) if postal_match else None
     city = prospect.city
+    website = prospect.website
+    # A dead site only 404s; a directory mini-site names the DIRECTORY's
+    # publisher in its legal mentions — the wrong person by construction.
+    if prospect.website_status in (WebsiteStatus.DEAD.value, WebsiteStatus.PLACEHOLDER.value):
+        website = None
     owner_responses: list[str] = []
     description: str | None = None
     if enrichment is not None:
@@ -175,7 +181,7 @@ def context_from_prospect(prospect, enrichment=None) -> ResolutionContext:
         company_name=prospect.name or "",
         city=city,
         postal_code=postal_code,
-        website=prospect.website,
+        website=website,
         phone=prospect.phone,
         owner_responses=owner_responses,
         description=description,

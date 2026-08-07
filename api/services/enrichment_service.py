@@ -12,10 +12,7 @@ import asyncio
 import logging
 import re
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from services.decision_maker.types import NameCandidate
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -26,6 +23,7 @@ from models.prospect_db import ProspectDB
 from models.prospect_enrichment import ProspectEnrichment
 from scrappers import scrape_signals
 from scrappers.enrichment_scraper import EnrichmentData, enrichment_scraper
+from services.decision_maker.types import NameCandidate, NameResolution
 from services.enrichment_content import EnrichmentContentMapper
 from services.scraper_diagnostics_service import (
     STATUS_BLOCKED,
@@ -213,7 +211,6 @@ class EnrichmentService:
                 context_from_prospect,
                 decision_maker_resolver,
             )
-            from services.decision_maker.types import NameResolution
 
             resolution = await decision_maker_resolver.resolve(context_from_prospect(prospect, record))
             record.name_candidates = [candidate.to_persistable() for candidate in resolution.candidates]
@@ -244,7 +241,7 @@ class EnrichmentService:
                 category=prospect.category,
                 city=prospect.city,
                 results_count=1 if resolution.candidate is not None else 0,
-                error_message=None,
+                error_message=self._resolution_outcome_detail(status_to_apply, resolution.candidate),
                 html_snapshot=None,
                 user_id=prospect.user_id,
             )
@@ -418,6 +415,17 @@ class EnrichmentService:
         db.commit()
         db.refresh(record)
         return record
+
+    @staticmethod
+    def _resolution_outcome_detail(status: str, candidate: NameCandidate | None) -> str | None:
+        """French one-liner of the cascade outcome, shown on the monitoring page."""
+        if candidate is None:
+            return None
+        percent = round(candidate.confidence * 100)
+        name = " ".join(part for part in (candidate.first, candidate.last) if part)
+        if status == NameResolution.AUTO:
+            return f"Nom validé automatiquement : {name} ({candidate.source}, {percent} %)"
+        return f"Nom proposé à confirmation : {name} ({candidate.source}, {percent} %)"
 
     @staticmethod
     def _identity_check(record: ProspectEnrichment, candidate: NameCandidate | None) -> tuple[str | None, str | None]:

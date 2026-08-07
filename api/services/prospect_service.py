@@ -5,8 +5,10 @@ Prospect data service.
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
+from enums.contact_name_status import ProposedContactState
 from models.prospect import Prospect, ProspectCreate, ProspectUpdate
 from models.prospect_db import ProspectDB
+from models.prospect_enrichment import ProspectEnrichment
 from models.search import ProspectSearchRequest
 from models.user import User
 
@@ -114,18 +116,31 @@ class ProspectService:
 
     @staticmethod
     def _to_models_with_reservers(db: Session, db_prospects: list[ProspectDB]) -> list[Prospect]:
-        """Convert rows to Pydantic models, resolving ``reserved_by_name`` in one query."""
+        """Convert rows to Pydantic models, resolving ``reserved_by_name`` and
+        the pending decision-maker proposal flag in one query each."""
         reserver_ids = {p.reserved_by_user_id for p in db_prospects if p.reserved_by_user_id}
         names: dict[int, str] = {}
         if reserver_ids:
             rows = db.execute(select(User.id, User.name).where(User.id.in_(reserver_ids))).all()
             names = {row[0]: row[1] for row in rows}
 
+        prospect_ids = [p.id for p in db_prospects]
+        pending_proposal_ids: set[int] = set()
+        if prospect_ids:
+            pending_rows = db.execute(
+                select(ProspectEnrichment.prospect_id).where(
+                    ProspectEnrichment.prospect_id.in_(prospect_ids),
+                    ProspectEnrichment.proposed_state == ProposedContactState.PENDING.value,
+                )
+            ).all()
+            pending_proposal_ids = {row[0] for row in pending_rows}
+
         prospects: list[Prospect] = []
         for db_prospect in db_prospects:
             prospect = Prospect.model_validate(db_prospect)
             if prospect.reserved_by_user_id:
                 prospect.reserved_by_name = names.get(prospect.reserved_by_user_id)
+            prospect.has_pending_contact_proposal = db_prospect.id in pending_proposal_ids
             prospects.append(prospect)
         return prospects
 

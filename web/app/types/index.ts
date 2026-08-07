@@ -34,6 +34,7 @@ export type Prospect = {
   reserved_at?: string | null
   lighthouse_json?: ProspectLighthouseAudit | null
   lighthouse_at?: string | null
+  has_pending_contact_proposal?: boolean
 }
 
 /**

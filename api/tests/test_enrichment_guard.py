@@ -179,6 +179,7 @@ def test_context_uses_place_identity_when_address_has_no_postal_code() -> None:
         address=None,
         city=None,
         website=None,
+        website_status=None,
         phone=None,
     )
     enrichment = SimpleNamespace(
@@ -201,6 +202,7 @@ def test_context_prefers_the_prospect_own_address() -> None:
         address="12 rue des Forges, 35000 Rennes",
         city="Rennes",
         website=None,
+        website_status=None,
         phone=None,
     )
     enrichment = SimpleNamespace(
@@ -212,6 +214,26 @@ def test_context_prefers_the_prospect_own_address() -> None:
     context = context_from_prospect(prospect, enrichment)
     assert context.postal_code == "35000"
     assert context.city == "Rennes"
+
+
+def test_context_drops_dead_and_placeholder_websites() -> None:
+    """Legal mentions of a dead site or a directory mini-site name the wrong person."""
+    from services.decision_maker.resolver import context_from_prospect
+
+    def prospect_with_status(website_status: str | None) -> SimpleNamespace:
+        return SimpleNamespace(
+            name="Plomberie Vidal",
+            address=None,
+            city="Rennes",
+            website="https://plomberie-vidal.business.site",
+            website_status=website_status,
+            phone=None,
+        )
+
+    assert context_from_prospect(prospect_with_status("dead")).website is None
+    assert context_from_prospect(prospect_with_status("placeholder")).website is None
+    assert context_from_prospect(prospect_with_status("live")).website is not None
+    assert context_from_prospect(prospect_with_status(None)).website is not None
 
 
 # ── Raw-payload parsing (place identity extraction) ──────────────────────────
