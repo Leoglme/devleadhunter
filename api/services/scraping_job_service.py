@@ -14,6 +14,7 @@ from uuid import uuid4
 from core.database import SessionLocal
 from models.prospect import Prospect, ProspectCreate
 from models.scraping_job import JobStatus, ScrapingJob, ScrapingJobCreate
+from services.enrichment_service import enrichment_service
 from services.organization_service import organization_service
 from services.prospect_service import prospect_service
 from services.scrape_progress import ScrapeProgressReporter
@@ -145,6 +146,8 @@ class ScrapingJobService:
                 return
 
             saved_count += 1
+            # Decision-maker name resolves in the background while the job keeps scraping.
+            enrichment_service.schedule_contact_resolution([created.id])
             job.results.append(created.id)
             job.progress.current = saved_count
             job.progress.total = max(job.progress.total, job.max_results)

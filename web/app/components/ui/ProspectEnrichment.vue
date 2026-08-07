@@ -29,7 +29,7 @@
           </p>
           <span
             v-if="record?.contact_name_source"
-            class="rounded border border-[var(--app-line)] bg-[var(--app-surface)] px-1.5 py-0.5 text-[10px] text-[var(--app-ink-soft)]"
+            :class="['app-badge text-[10px]', contactConfidenceBadgeClass]"
             :title="`Confiance : ${Math.round((record?.contact_name_confidence ?? 0) * 100)} %`"
           >
             {{ contactSourceLabel }}
@@ -41,12 +41,15 @@
 
         <div
           v-if="hasPendingProposal"
-          class="mb-3 rounded border border-dashed border-[var(--app-ink-soft)]/50 bg-[var(--app-surface)] p-2.5"
+          class="mb-3 rounded border border-dashed border-[var(--app-accent)]/60 bg-[var(--app-accent-soft)] p-2.5"
         >
           <p class="flex items-center gap-1.5 text-[11px] font-medium text-[var(--app-ink)]">
-            <UIcon name="i-lucide-circle-help" class="h-3.5 w-3.5 shrink-0" />
+            <UIcon name="i-lucide-circle-help" class="h-3.5 w-3.5 shrink-0 text-[var(--app-accent-ink)]" />
             Décisionnaire probable : {{ proposedFullName }}
-            <span v-if="record?.proposed_confidence != null" class="text-[10px] font-normal text-[var(--app-ink-soft)]">
+            <span
+              v-if="record?.proposed_confidence != null"
+              class="text-[10px] font-normal text-[var(--app-accent-ink)]"
+            >
               · {{ Math.round((record?.proposed_confidence ?? 0) * 100) }} %
             </span>
           </p>
@@ -82,7 +85,7 @@
           v-if="record?.contact_name_provenance"
           class="mb-2 flex items-start gap-1.5 text-[10px] leading-relaxed text-[var(--app-ink-soft)]"
         >
-          <UIcon name="i-lucide-badge-check" class="mt-0.5 h-3 w-3 shrink-0" />
+          <UIcon name="i-lucide-badge-check" class="mt-0.5 h-3 w-3 shrink-0 text-[var(--app-green)]" />
           {{ record?.contact_name_provenance }}
         </p>
 
@@ -326,6 +329,11 @@ const CONTACT_SOURCE_LABELS: Record<string, string> = {
 const contactSourceLabel: ComputedRef<string> = computed(
   (): string =>
     CONTACT_SOURCE_LABELS[record.value?.contact_name_source ?? ''] ?? record.value?.contact_name_source ?? '',
+)
+
+/** Confidence badge tone: green when solid (≥ 80 %), amber when worth an eye. */
+const contactConfidenceBadgeClass: ComputedRef<string> = computed((): string =>
+  (record.value?.contact_name_confidence ?? 0) >= 0.8 ? 'app-badge--success' : 'app-badge--progress',
 )
 
 /** True when a name proposal awaits the user's confirm/reject decision. */

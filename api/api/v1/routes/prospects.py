@@ -23,6 +23,7 @@ from models.search import ProspectSearchRequest, ProspectSearchResponse
 from models.user import User
 from services.auth_service import require_auth
 from services.credit_service import credit_service
+from services.enrichment_service import enrichment_service
 from services.lighthouse_service import LighthouseAuditError, lighthouse_service
 from services.organization_service import OrganizationError, organization_service
 from services.prospect_enrichment_service import prospect_enrichment_service
@@ -179,6 +180,9 @@ async def search_prospects(
                     status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Failed to deduct credits. Please try again."
                 )
 
+        # Decision-maker names resolve in the background — already there when the drawer opens.
+        enrichment_service.schedule_contact_resolution([p.id for p in prospects])
+
         # Calculate statistics — a dead or placeholder website counts as "no website"
         has_website = sum(
             1
@@ -330,12 +334,14 @@ async def create_prospect(
     Returns:
         Created prospect with generated ID
     """
-    return await prospect_service.create_prospect(
+    created = await prospect_service.create_prospect(
         db=db,
         prospect=prospect,
         user_id=current_user.id,
         organization_id=organization_service.user_org_id(db, current_user.id),
     )
+    enrichment_service.schedule_contact_resolution([created.id])
+    return created
 
 
 @router.put(

@@ -8,6 +8,7 @@ site content (content_json → Storyblok) at build time.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from datetime import UTC, datetime
@@ -37,6 +38,9 @@ from services.validation_service import validation_service
 logger = logging.getLogger(__name__)
 
 _POSTAL_CODE_RE = re.compile(r"\b(\d{5})\b")
+
+# Registre/Pappers are shared rate-limited APIs — a scraping job must not fire dozens of lookups at once.
+_CONTACT_RESOLUTION_SEMAPHORE = asyncio.Semaphore(2)
 
 
 def _count_filled_fields(data: EnrichmentData | None) -> int:
@@ -311,6 +315,46 @@ class EnrichmentService:
         record.proposed_confidence = None
         record.proposed_provenance = None
         record.proposed_state = None
+
+    def schedule_contact_resolution(self, prospect_ids: list[int]) -> None:
+        """Fire-and-forget decision-maker resolution for freshly saved prospects.
+
+        Called right after a prospect is persisted (search, scraping job, manual
+        creation) so the name is already there when the drawer opens — no manual
+        « Rechercher automatiquement » click needed. Never blocks the caller.
+        """
+        if prospect_ids:
+            asyncio.create_task(self._resolve_contacts_in_background(list(prospect_ids)))
+
+    async def _resolve_contacts_in_background(self, prospect_ids: list[int]) -> None:
+        """Resolve decision-makers on a fresh DB session, throttled globally.
+
+        Prospects whose contact was already settled (manual, confirmed, auto,
+        pending/rejected proposal) are skipped — only untouched ones cost a
+        registry lookup.
+        """
+        from core.database import SessionLocal
+
+        for prospect_id in prospect_ids:
+            async with _CONTACT_RESOLUTION_SEMAPHORE:
+                db: Session = SessionLocal()
+                try:
+                    prospect = db.query(ProspectDB).filter(ProspectDB.id == prospect_id).first()
+                    if prospect is None:
+                        continue
+                    record = self.get_or_create(db, prospect.user_id, prospect.id)
+                    already_settled = (
+                        record.contact_name_manual
+                        or record.contact_name_status is not None
+                        or record.proposed_state is not None
+                    )
+                    if already_settled:
+                        continue
+                    await self._resolve_contact(db, prospect, record)
+                except Exception as exc:
+                    logger.warning("Background contact resolution failed for prospect %s: %s", prospect_id, exc)
+                finally:
+                    db.close()
 
     async def resolve_contact(self, db: Session, user_id: int, prospect: ProspectDB) -> ProspectEnrichment:
         """(Re)run only the decision-maker resolution for a prospect (on demand)."""
