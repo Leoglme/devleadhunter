@@ -53,4 +53,3 @@ curl -X POST http://localhost:8000/api/v1/prospects/search \
   -H "Content-Type: application/json" \
   -d '{"category":"restaurant","city":"Paris","max_results":10}'
 ```
-

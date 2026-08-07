@@ -4,8 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'demo-host/**'
-      - '.github/workflows/deploy-demo-host.yml'
+      - "demo-host/**"
+      - ".github/workflows/deploy-demo-host.yml"
   workflow_dispatch:
 
 jobs:
@@ -16,7 +16,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: '24'
+          node-version: "24"
           cache: npm
           cache-dependency-path: demo-host/package-lock.json
 

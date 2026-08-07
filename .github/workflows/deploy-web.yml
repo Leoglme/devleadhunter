@@ -3,11 +3,11 @@ on:
   push:
     branches: [main]
     paths:
-      - 'web/**'
+      - "web/**"
   pull_request:
     branches: [main]
     paths:
-      - 'web/**'
+      - "web/**"
   workflow_dispatch:
 
 jobs:
@@ -68,8 +68,8 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: 'web/.output/public/'
-          target: '/var/www/devleadhunter.dibodev.fr/html'
+          source: "web/.output/public/"
+          target: "/var/www/devleadhunter.dibodev.fr/html"
           strip_components: 3
 
       - name: 📤 Deploy Nitro server
@@ -80,8 +80,8 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: 'web/.output/server/'
-          target: '/var/www/devleadhunter.dibodev.fr/server'
+          source: "web/.output/server/"
+          target: "/var/www/devleadhunter.dibodev.fr/server"
           strip_components: 3
           tar_dereference: true
           overwrite: true
@@ -94,8 +94,8 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: 'web/.env'
-          target: '/var/www/devleadhunter.dibodev.fr/server'
+          source: "web/.env"
+          target: "/var/www/devleadhunter.dibodev.fr/server"
 
       - name: 🛠️ Start Nitro server
         if: github.event_name != 'pull_request'

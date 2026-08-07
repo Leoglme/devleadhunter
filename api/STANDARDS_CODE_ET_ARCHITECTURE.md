@@ -59,14 +59,14 @@ api/
 
 ## Couches & responsabilités
 
-| Couche | Rôle | Interdit |
-| ------ | ---- | -------- |
-| `routes/` | HTTP : validation entrée, auth, appel service, réponse | Logique métier lourde |
-| `schemas/` | Contrats Pydantic in/out | Requêtes SQL |
-| `models/` | Tables SQLAlchemy | Logique métier |
-| `services/` | Orchestration, règles métier, appels externes | Dépendance à `Request` FastAPI |
-| `scrappers/` | Extraction données externes | Persistance directe sans service |
-| `enums/` | Constantes typées partagées | Logique |
+| Couche       | Rôle                                                   | Interdit                         |
+| ------------ | ------------------------------------------------------ | -------------------------------- |
+| `routes/`    | HTTP : validation entrée, auth, appel service, réponse | Logique métier lourde            |
+| `schemas/`   | Contrats Pydantic in/out                               | Requêtes SQL                     |
+| `models/`    | Tables SQLAlchemy                                      | Logique métier                   |
+| `services/`  | Orchestration, règles métier, appels externes          | Dépendance à `Request` FastAPI   |
+| `scrappers/` | Extraction données externes                            | Persistance directe sans service |
+| `enums/`     | Constantes typées partagées                            | Logique                          |
 
 Flux standard : **Route → Service (classe) → Model/DB + intégrations**.
 
@@ -231,16 +231,16 @@ def resolve_demo_slug(demo_site: DemoSite | None, email_log: EmailLog | None) ->
 
 ## Règles hard
 
-| Règle | Statut |
-| ----- | ------ |
-| Requête sans scope `user_id` sur ressource privée | ❌ INTERDIT |
-| Logique métier lourde dans une route | ❌ INTERDIT |
-| `dict` / `Any` non justifié dans les schémas | ❌ INTERDIT |
-| Secrets en dur dans le code | ❌ INTERDIT |
+| Règle                                                   | Statut          |
+| ------------------------------------------------------- | --------------- |
+| Requête sans scope `user_id` sur ressource privée       | ❌ INTERDIT     |
+| Logique métier lourde dans une route                    | ❌ INTERDIT     |
+| `dict` / `Any` non justifié dans les schémas            | ❌ INTERDIT     |
+| Secrets en dur dans le code                             | ❌ INTERDIT     |
 | Fonctions éparses pour un domaine qui mérite une classe | 🟠 À refactorer |
-| Tags JSDoc (`@param`) dans une docstring Python | ❌ INTERDIT |
-| Docstring en français | ❌ INTERDIT |
-| Docstring sur classes et méthodes publiques | ✅ REQUIS |
-| Pydantic v2 pour les contrats API | ✅ REQUIS |
-| Enums dans `enums/` | ✅ REQUIS |
-| Services testables sans HTTP | ✅ REQUIS |
+| Tags JSDoc (`@param`) dans une docstring Python         | ❌ INTERDIT     |
+| Docstring en français                                   | ❌ INTERDIT     |
+| Docstring sur classes et méthodes publiques             | ✅ REQUIS       |
+| Pydantic v2 pour les contrats API                       | ✅ REQUIS       |
+| Enums dans `enums/`                                     | ✅ REQUIS       |
+| Services testables sans HTTP                            | ✅ REQUIS       |

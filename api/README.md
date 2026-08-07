@@ -76,9 +76,11 @@ Once the server is running, access the interactive API documentation:
 ## Endpoints
 
 ### Health Check
+
 - `GET /health` - Check API health status
 
 ### Prospects
+
 - `GET /api/v1/prospects` - List all prospects
 - `GET /api/v1/prospects/{id}` - Get prospect by ID
 - `POST /api/v1/prospects/search` - Search for prospects
@@ -111,4 +113,3 @@ pytest
 ## License
 
 MIT
-

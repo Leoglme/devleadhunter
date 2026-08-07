@@ -4,14 +4,14 @@ on:
   push:
     branches: [main]
     paths:
-      - 'api/**'
-      - 'api/requirements.txt'
-      - '.github/workflows/deploy-api.yml'
+      - "api/**"
+      - "api/requirements.txt"
+      - ".github/workflows/deploy-api.yml"
   pull_request:
     branches: [main]
     paths:
-      - 'api/**'
-      - 'api/requirements.txt'
+      - "api/**"
+      - "api/requirements.txt"
   workflow_dispatch:
 
 concurrency:

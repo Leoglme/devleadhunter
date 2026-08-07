@@ -9,7 +9,7 @@ services:
       MYSQL_USER: root
       MYSQL_PASSWORD: root
     ports:
-      - '3310:3306'
+      - "3310:3306"
     volumes:
       - database_data:/var/lib/mysql
     networks:
@@ -24,7 +24,7 @@ services:
       PMA_USER: root
       PMA_PASSWORD: root
     ports:
-      - '7500:80'
+      - "7500:80"
     networks:
       - app-network
 
@@ -47,4 +47,3 @@ volumes:
   database_data:
   app:
   node_modules:
-
