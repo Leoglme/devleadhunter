@@ -287,6 +287,10 @@ const props: UiProspectEnrichmentProps = defineProps({
     type: String,
     default: '',
   },
+  prospectGoogleMapsUrl: {
+    type: String,
+    default: '',
+  },
   open: {
     type: Boolean,
     required: true,
@@ -480,6 +484,7 @@ async function run(): Promise<void> {
       props.prospectId,
       props.prospectName,
       props.prospectCity,
+      props.prospectGoogleMapsUrl,
     )
     syncForm()
     toast.success('Données récupérées')

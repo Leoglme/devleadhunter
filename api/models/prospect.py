@@ -39,6 +39,14 @@ class ProspectBase(BaseModel):
             "placeholder (directory mini-site). None when no website or never checked."
         ),
     )
+    google_maps_url: str | None = Field(
+        None,
+        max_length=2048,
+        description=(
+            "Google Maps place URL captured at discovery — anchors enrichment on the "
+            "exact listing instead of re-searching by name (homonym safety)."
+        ),
+    )
     category: str = Field(..., description="Business category")
     source: Source = Field(..., description="Data source identifier")
     confidence: int = Field(

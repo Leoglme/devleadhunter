@@ -48,6 +48,9 @@ class SidecarEnrichmentRequest(BaseModel):
 
     business_name: str
     city: str | None = None
+    # Maps place URL persisted at discovery — anchors the scrape on the exact
+    # listing instead of re-searching by name (homonym safety).
+    google_maps_url: str | None = None
 
 
 async def close_transient_browsers() -> None:
@@ -241,6 +244,7 @@ async def enrichment(request: SidecarEnrichmentRequest) -> EnrichmentData:
         return await enrichment_scraper.enrich(
             business_name=request.business_name,
             city=request.city,
+            google_maps_url=request.google_maps_url,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

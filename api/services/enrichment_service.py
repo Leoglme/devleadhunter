@@ -157,6 +157,7 @@ class EnrichmentService:
             data = scraped_data or await enrichment_scraper.enrich(
                 business_name=prospect.name,
                 city=prospect.city,
+                google_maps_url=prospect.google_maps_url,
             )
             mismatch = self._place_mismatch(prospect, data)
             if mismatch is not None:

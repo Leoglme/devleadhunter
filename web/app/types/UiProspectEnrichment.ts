@@ -5,6 +5,7 @@ export type UiProspectEnrichmentProps = {
   open: boolean
   prospectName: string
   prospectCity: string
+  prospectGoogleMapsUrl: string
 }
 
 export type EnrichmentForm = {

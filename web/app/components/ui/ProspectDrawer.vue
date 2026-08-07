@@ -357,6 +357,7 @@
               :prospect-id="prospect.id"
               :prospect-name="prospect.name"
               :prospect-city="prospect.city ?? ''"
+              :prospect-google-maps-url="prospect.google_maps_url ?? ''"
               :open="open"
             />
 

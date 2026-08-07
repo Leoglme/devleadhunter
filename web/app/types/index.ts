@@ -22,6 +22,7 @@ export type Prospect = {
   email?: string
   website?: string
   website_status?: ProspectWebsiteStatus | null
+  google_maps_url?: string | null
   category: string
   source: ProspectSource
   confidence: number

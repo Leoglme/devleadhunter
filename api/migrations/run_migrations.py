@@ -73,6 +73,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_queue_skip_reason_and_follow_up_delay", "migrations.add_queue_skip_reason_and_follow_up_delay"),
     ("add_prospect_website_status", "migrations.add_prospect_website_status"),
     ("add_contact_proposal_tier", "migrations.add_contact_proposal_tier"),
+    ("add_prospect_google_maps_url", "migrations.add_prospect_google_maps_url"),
     # Charset drift must be repaired before anything compares strings on those tables.
     ("fix_utf8mb4_collation", "migrations.fix_utf8mb4_collation"),
     # Content rewrites run last, once every schema change is in place.

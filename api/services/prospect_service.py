@@ -175,6 +175,7 @@ class ProspectService:
             email=prospect.email,
             website=prospect.website,
             website_status=prospect.website_status.value if prospect.website_status is not None else None,
+            google_maps_url=prospect.google_maps_url,
             category=prospect.category,
             source=source_value,
             confidence=prospect.confidence,

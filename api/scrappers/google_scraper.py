@@ -380,7 +380,11 @@ class GoogleScraper(NodriverScraperMixin, BaseScraper):
             logger.error("Failed to extract Google Maps place details: %s", exc)
             return None
 
-    async def _build_prospect_from_details(self, details: dict[str, str | None]) -> ProspectCreate:
+    async def _build_prospect_from_details(
+        self,
+        details: dict[str, str | None],
+        google_maps_url: str | None = None,
+    ) -> ProspectCreate:
         """Build a ProspectCreate object from extracted Maps details."""
         name = details["name"] or "Entreprise"
         address = details.get("address") or ""
@@ -410,10 +414,17 @@ class GoogleScraper(NodriverScraperMixin, BaseScraper):
             email=email,
             website=website,
             website_status=website_status,
+            google_maps_url=google_maps_url,
             category=category,
             source=Source.GOOGLE,
             confidence=confidence,
         )
+
+    @staticmethod
+    def _place_url_from_tab(tab: object) -> str | None:
+        """Current tab URL when it points at a Maps place (the listing anchor)."""
+        url = NodriverDom.tab_url(tab)
+        return url if url and "/maps/place/" in url else None
 
     async def scrape_place_url(self, url: str) -> ProspectCreate | None:
         """Scrape a single Google Maps place from a direct business URL."""
@@ -442,7 +453,7 @@ class GoogleScraper(NodriverScraperMixin, BaseScraper):
                 details = await self._extract_current_place(tab, item_timeout_s=8.0)
                 if not details or not details.get("name"):
                     return None
-                return await self._build_prospect_from_details(details)
+                return await self._build_prospect_from_details(details, google_maps_url=normalized_url)
             finally:
                 pass
         finally:
@@ -622,7 +633,9 @@ class GoogleScraper(NodriverScraperMixin, BaseScraper):
 
                 details = await self._extract_current_place(tab, default_category="Entreprise", item_timeout_s=4.0)
                 if details and details.get("name"):
-                    return await self._build_prospect_from_details(details)
+                    return await self._build_prospect_from_details(
+                        details, google_maps_url=self._place_url_from_tab(tab)
+                    )
 
                 if not await NodriverDom.wait_for_selector(tab, "div[role='feed']", timeout_s=10.0):
                     return None
@@ -647,7 +660,7 @@ class GoogleScraper(NodriverScraperMixin, BaseScraper):
                 details = await self._extract_current_place(tab, default_category="Entreprise", item_timeout_s=8.0)
                 if not details or not details.get("name"):
                     return None
-                return await self._build_prospect_from_details(details)
+                return await self._build_prospect_from_details(details, google_maps_url=self._place_url_from_tab(tab))
             finally:
                 pass
         finally:
@@ -717,7 +730,9 @@ class GoogleScraper(NodriverScraperMixin, BaseScraper):
                         single_status = await website_liveness_service.check_website_status(single.get("website"))
                         if only_without_website and single_status is WebsiteStatus.LIVE:
                             return []
-                        prospect = await self._build_prospect_from_details(single)
+                        prospect = await self._build_prospect_from_details(
+                            single, google_maps_url=self._place_url_from_tab(tab)
+                        )
                         if progress:
                             await progress.prospect(prospect)
                         return [prospect]
@@ -814,6 +829,7 @@ class GoogleScraper(NodriverScraperMixin, BaseScraper):
                             email=email,
                             website=website,
                             website_status=website_status,
+                            google_maps_url=place_url,
                             category=extracted_category,
                             source=Source.GOOGLE,
                             confidence=confidence,
