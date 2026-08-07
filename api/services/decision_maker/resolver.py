@@ -13,16 +13,22 @@ from services.decision_maker.strategies import (
     PappersStrategy,
     RegistreGouvStrategy,
 )
-from services.decision_maker.types import NameCandidate, NameStrategy, ResolutionContext
+from services.decision_maker.types import NameCandidate, NameResolution, NameStrategy, ResolutionContext
 
 logger = logging.getLogger(__name__)
 
-#: Below this confidence, no personalisation at all (« Bonjour , » is banned;
-#: a wrong name is worse than no name).
+#: Automatic-use bar: below it a candidate is at best a human-reviewed proposal.
 CONFIDENCE_THRESHOLD: float = 0.7
+
+#: Proposal bar: below it a candidate is dropped entirely (neutral greeting).
+PROPOSED_FLOOR: float = 0.55
 
 #: Confidence boost when two INDEPENDENT sources agree on the same identity.
 _AGREEMENT_BOOST: float = 0.15
+
+#: A rival primary within this confidence margin of the best one is a real
+#: ambiguity (two authoritative identities) — trust neither.
+_PRIMARY_RIVAL_MARGIN: float = 0.1
 
 _POSTAL_CODE_RE = re.compile(r"\b(\d{5})\b")
 
@@ -40,8 +46,8 @@ class DecisionMakerResolver:
             LlmAggregateStrategy(),
         ]
 
-    async def resolve(self, context: ResolutionContext) -> NameCandidate | None:
-        """Return the best trusted candidate, or None (→ neutral greeting)."""
+    async def resolve(self, context: ResolutionContext) -> NameResolution:
+        """Run the cascade and classify the outcome (AUTO / PROPOSED / NONE)."""
         results = await asyncio.gather(
             *(strategy.resolve(context) for strategy in self.strategies),
             return_exceptions=True,
@@ -54,28 +60,74 @@ class DecisionMakerResolver:
             candidates.extend(c for c in result if c.has_name)
         return self.pick_best(candidates)
 
-    def pick_best(self, candidates: list[NameCandidate]) -> NameCandidate | None:
-        """Merge candidates and apply agreement boost + threshold (pure)."""
-        if not candidates:
-            return None
+    def pick_best(self, candidates: list[NameCandidate]) -> NameResolution:
+        """Merge candidates and classify the best one (pure).
 
-        # Cross-check: identical identity confirmed by another SOURCE → boost.
-        # A first-name-only candidate also confirms a full-name candidate that
-        # shares the same first name (e.g. owner-response « Léo » + registry
-        # « Léo Guillaume »).
+        Outcome rules (a wrong name is worse than no name):
+          - AUTO requires a PRIMARY source (registre/Pappers) whose company was
+            also matched geographically — supporting sources can never stack up
+            to automatic use, whatever their combined confidence.
+          - A rival primary that is NOT geo-confirmed while the best one is, is
+            the expected homonym-from-elsewhere noise → ignored entirely.
+          - Two geo-confirmed primaries naming different people → trust neither.
+          - Any other disagreeing candidate above the proposal floor demotes an
+            AUTO outcome to PROPOSED (human arbitration, never a sent email).
+        """
+        if not candidates:
+            return NameResolution(status=NameResolution.NONE, candidate=None, candidates=[])
+
+        boosted = self._apply_agreement_boost(candidates)
+        best = max(boosted, key=self._selection_key)
+        if best.confidence < PROPOSED_FLOOR:
+            return NameResolution(status=NameResolution.NONE, candidate=None, candidates=boosted)
+
+        rivals = [c for c in boosted if not c.agrees_with(best)]
+        # Homonyms from another département: a name-only registry match cannot
+        # rival a geo-confirmed one — the geography already disambiguated them.
+        if best.primary and best.geo_confirmed:
+            rivals = [r for r in rivals if not (r.primary and not r.geo_confirmed)]
+
+        # Two comparable-authority identities too close to call → trust neither.
+        # A supporting source tied with a primary is NOT a stalemate: the
+        # primary keeps the lead and the disagreement demotes it below.
+        primary_stalemate = any(
+            r.primary and r.geo_confirmed and best.primary and r.confidence >= best.confidence - _PRIMARY_RIVAL_MARGIN
+            for r in rivals
+        )
+        equal_stalemate = any(r.confidence == best.confidence and not (best.primary and not r.primary) for r in rivals)
+        if primary_stalemate or equal_stalemate:
+            return NameResolution(status=NameResolution.NONE, candidate=None, candidates=boosted)
+
+        demoted = any(r.confidence >= PROPOSED_FLOOR for r in rivals)
+        auto_eligible = best.primary and best.geo_confirmed and best.confidence >= CONFIDENCE_THRESHOLD and not demoted
+        status = NameResolution.AUTO if auto_eligible else NameResolution.PROPOSED
+        return NameResolution(status=status, candidate=best, candidates=boosted)
+
+    @staticmethod
+    def _selection_key(candidate: NameCandidate) -> tuple[float, bool, bool]:
+        """Ranking key: confidence, with authoritative geo-anchored sources ahead.
+
+        A geo-confirmed primary within a whisker of a supporting source must win
+        the pick (the registry beats a legal-page regex naming the web agency) —
+        the small bonus only orders the pick, it never touches stored confidence.
+        """
+        selection_score = candidate.confidence + (
+            _PRIMARY_RIVAL_MARGIN if candidate.primary and candidate.geo_confirmed else 0.0
+        )
+        return (selection_score, candidate.primary, bool(candidate.first and candidate.last))
+
+    @staticmethod
+    def _apply_agreement_boost(candidates: list[NameCandidate]) -> list[NameCandidate]:
+        """Boost identities confirmed by a source with a DIFFERENT evidence base.
+
+        Two candidates extracted from the same underlying text (owner replies
+        read by both the signature regex and the LLM) are one observation, not
+        two — they never corroborate each other.
+        """
         boosted: list[NameCandidate] = []
         for candidate in candidates:
             agreement = any(
-                other.source != candidate.source
-                and (
-                    other.identity_key() == candidate.identity_key()
-                    or (
-                        candidate.first
-                        and other.first
-                        and other.first.lower() == candidate.first.lower()
-                        and (not other.last or not candidate.last)
-                    )
-                )
+                other.evidence_group != candidate.evidence_group and other.agrees_with(candidate)
                 for other in candidates
             )
             confidence = min(1.0, candidate.confidence + (_AGREEMENT_BOOST if agreement else 0.0))
@@ -86,20 +138,14 @@ class DecisionMakerResolver:
                     gender=candidate.gender,
                     source=candidate.source,
                     confidence=round(confidence, 2),
+                    primary=candidate.primary,
+                    geo_confirmed=candidate.geo_confirmed,
+                    evidence_group=candidate.evidence_group,
+                    provenance=candidate.provenance,
                     raw=candidate.raw,
                 )
             )
-
-        best = max(boosted, key=lambda c: (c.confidence, bool(c.first and c.last)))
-        if best.confidence < CONFIDENCE_THRESHOLD:
-            return None
-
-        # Unresolvable disagreement at the top: two different identities with
-        # the same winning confidence → trust neither (golden rule).
-        rivals = [c for c in boosted if c.confidence == best.confidence and c.identity_key() != best.identity_key()]
-        if rivals:
-            return None
-        return best
+        return boosted
 
 
 def context_from_prospect(prospect, enrichment=None) -> ResolutionContext:

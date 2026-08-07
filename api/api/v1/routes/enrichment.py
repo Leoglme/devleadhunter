@@ -73,6 +73,46 @@ async def resolve_prospect_contact(
     return ProspectEnrichmentResponse.model_validate(record)
 
 
+@router.post("/{prospect_id}/enrichment/contact-proposal/confirm", response_model=ProspectEnrichmentResponse)
+async def confirm_contact_proposal(
+    prospect_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> ProspectEnrichmentResponse:
+    """Promote the « à confirmer » decision-maker name to the trusted contact."""
+    prospect = enrichment_service.get_prospect_for_user(db, current_user.id, prospect_id)
+    if not prospect:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    record = enrichment_service.get_for_prospect(db, current_user.id, prospect_id)
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No enrichment for this prospect")
+    try:
+        record = enrichment_service.confirm_proposed_contact(db, record)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return ProspectEnrichmentResponse.model_validate(record)
+
+
+@router.post("/{prospect_id}/enrichment/contact-proposal/reject", response_model=ProspectEnrichmentResponse)
+async def reject_contact_proposal(
+    prospect_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> ProspectEnrichmentResponse:
+    """Reject the « à confirmer » name — the same identity is never re-proposed."""
+    prospect = enrichment_service.get_prospect_for_user(db, current_user.id, prospect_id)
+    if not prospect:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    record = enrichment_service.get_for_prospect(db, current_user.id, prospect_id)
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No enrichment for this prospect")
+    try:
+        record = enrichment_service.reject_proposed_contact(db, record)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return ProspectEnrichmentResponse.model_validate(record)
+
+
 @router.post("/enrichment/bulk-run")
 async def run_bulk_enrichment(
     payload: BulkEnrichRequest,

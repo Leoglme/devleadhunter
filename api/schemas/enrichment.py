@@ -29,12 +29,25 @@ class ProspectEnrichmentResponse(BaseModel):
     contact_name_source: str | None = None
     contact_name_confidence: float | None = None
     contact_name_manual: bool = False
+    contact_name_status: str | None = None
+    contact_name_provenance: str | None = None
+    contact_siren: str | None = None
+    # « À confirmer » proposal — plausible name waiting for a human confirm/reject.
+    proposed_first_name: str | None = None
+    proposed_last_name: str | None = None
+    proposed_gender: str | None = None
+    proposed_source: str | None = None
+    proposed_confidence: float | None = None
+    proposed_provenance: str | None = None
+    proposed_state: str | None = None
+    # Every candidate of the last cascade run (drawer display + calibration).
+    name_candidates: list[dict[str, Any]] = Field(default_factory=list)
     error_message: str | None = None
     enriched_at: datetime | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
-    @field_validator("photos", "reviews", "opening_hours", "services", mode="before")
+    @field_validator("photos", "reviews", "opening_hours", "services", "name_candidates", mode="before")
     @classmethod
     def _none_to_empty_list(cls, value: Any) -> Any:
         """NULL collection columns from the DB are exposed as empty lists."""

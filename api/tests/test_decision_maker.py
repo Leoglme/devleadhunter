@@ -18,7 +18,7 @@ from services.decision_maker.strategies import (
     OwnerResponseStrategy,
     RegistreGouvStrategy,
 )
-from services.decision_maker.types import NameCandidate, ResolutionContext
+from services.decision_maker.types import NameCandidate, NameResolution, ResolutionContext
 
 # ── Greeting rules (Léo's decisions) ─────────────────────────────────────────
 
@@ -108,6 +108,48 @@ def test_registre_ei_gets_high_confidence() -> None:
     assert candidates[0].first == "Michel"
     assert candidates[0].last == "Dubois"
     assert candidates[0].confidence >= 0.8
+    assert candidates[0].primary is True
+    assert candidates[0].geo_confirmed is True
+    assert "SIREN 123456789" in candidates[0].provenance
+
+
+def test_registre_department_counts_as_geo_confirmation() -> None:
+    """An HQ one commune away (same département) still confirms the location."""
+    results = [
+        {
+            "nom_complet": "DUBOIS Michel",
+            "nom_raison_sociale": "PLOMBERIE DUBOIS",
+            "nature_juridique": "1000",
+            "siren": "123456789",
+            "siege": {"code_postal": "35400", "libelle_commune": "SAINT-MALO"},
+            "dirigeants": [
+                {"nom": "DUBOIS", "prenoms": "Michel", "qualite": "", "type_dirigeant": "personne physique"}
+            ],
+        }
+    ]
+    candidates = RegistreGouvStrategy().parse_results(results, _context())
+    assert candidates[0].geo_confirmed is True
+
+
+def test_registre_other_department_is_not_geo_confirmed() -> None:
+    """The seed-test homonym: same name, another département → no geo confirmation."""
+    results = [
+        {
+            "nom_complet": "DUBOIS Michel",
+            "nom_raison_sociale": "PLOMBERIE DUBOIS",
+            "nature_juridique": "1000",
+            "siren": "987654321",
+            "siege": {"code_postal": "59000", "libelle_commune": "LILLE"},
+            "dirigeants": [
+                {"nom": "DUBOIS", "prenoms": "Michel", "qualite": "", "type_dirigeant": "personne physique"}
+            ],
+        }
+    ]
+    candidates = RegistreGouvStrategy().parse_results(results, _context())
+    assert candidates[0].geo_confirmed is False
+    assert candidates[0].confidence >= 0.8  # still a strong-name match…
+    resolution = DecisionMakerResolver(strategies=[]).pick_best(candidates)
+    assert resolution.status == NameResolution.PROPOSED  # …but never used alone
 
 
 def test_registre_multi_dirigeants_scores_below_solo() -> None:
@@ -184,33 +226,161 @@ def test_llm_answer_rejected_without_literal_quote() -> None:
 # ── Resolver fusion rules ────────────────────────────────────────────────────
 
 
-def test_agreement_between_sources_boosts_confidence() -> None:
-    """Two independent sources agreeing push a borderline candidate over the bar."""
+def _registry(first: str, last: str, confidence: float, geo_confirmed: bool) -> NameCandidate:
+    return NameCandidate(
+        first=first,
+        last=last,
+        source="registre_gouv",
+        confidence=confidence,
+        primary=True,
+        geo_confirmed=geo_confirmed,
+        evidence_group="registry",
+    )
+
+
+def test_agreement_between_independent_sources_boosts_confidence() -> None:
+    """Two sources reading DIFFERENT documents agreeing boost each other."""
     resolver = DecisionMakerResolver(strategies=[])
     candidates = [
-        NameCandidate(first="Michel", last="Dubois", source="registre_gouv", confidence=0.6),
-        NameCandidate(first="Michel", last=None, source="owner_response", confidence=0.55),
+        NameCandidate(first="Michel", last="Dubois", source="registre_gouv", confidence=0.6, evidence_group="registry"),
+        NameCandidate(first="Michel", source="owner_response", confidence=0.55, evidence_group="scraped_text"),
     ]
-    best = resolver.pick_best(candidates)
-    assert best is not None
-    assert best.first == "Michel"
-    assert best.confidence >= 0.7
+    resolution = resolver.pick_best(candidates)
+    assert resolution.candidate is not None
+    assert resolution.candidate.first == "Michel"
+    assert resolution.candidate.confidence >= 0.7
 
 
-def test_below_threshold_yields_none() -> None:
-    """A single weak candidate is rejected — neutral greeting instead."""
+def test_same_document_sources_never_corroborate_each_other() -> None:
+    """The regex and the LLM both reading owner replies = ONE observation, no boost."""
     resolver = DecisionMakerResolver(strategies=[])
-    assert resolver.pick_best([NameCandidate(first="Paul", source="llm_aggregate", confidence=0.6)]) is None
+    candidates = [
+        NameCandidate(first="Marie", source="owner_response", confidence=0.55, evidence_group="scraped_text"),
+        NameCandidate(
+            first="Marie", last="Petit", source="llm_aggregate", confidence=0.6, evidence_group="scraped_text"
+        ),
+    ]
+    resolution = resolver.pick_best(candidates)
+    assert resolution.status == NameResolution.PROPOSED
+    assert resolution.candidate is not None
+    assert resolution.candidate.confidence == 0.6  # untouched — no fake independence
+
+
+def test_supporting_sources_alone_never_reach_auto() -> None:
+    """Whatever their stacked confidence, non-primary sources stay proposals."""
+    resolver = DecisionMakerResolver(strategies=[])
+    candidates = [
+        NameCandidate(first="Julien", last="Faure", source="legal_mentions", confidence=0.75, evidence_group="website"),
+        NameCandidate(first="Julien", source="owner_response", confidence=0.7, evidence_group="scraped_text"),
+    ]
+    resolution = resolver.pick_best(candidates)
+    assert resolution.status == NameResolution.PROPOSED
+    assert resolution.candidate is not None
+    assert resolution.candidate.confidence >= 0.85  # boosted, yet still not AUTO
+
+
+def test_geo_confirmed_primary_reaches_auto() -> None:
+    """Registry match + geo confirmation + threshold → used automatically."""
+    resolver = DecisionMakerResolver(strategies=[])
+    resolution = resolver.pick_best([_registry("Michel", "Dubois", 0.95, geo_confirmed=True)])
+    assert resolution.status == NameResolution.AUTO
+    assert resolution.candidate is not None
+    assert resolution.candidate.first == "Michel"
+
+
+def test_below_proposal_floor_yields_none() -> None:
+    """A candidate under the proposal floor is dropped — neutral greeting."""
+    resolver = DecisionMakerResolver(strategies=[])
+    resolution = resolver.pick_best(
+        [NameCandidate(first="Paul", source="llm_aggregate", confidence=0.5, evidence_group="scraped_text")]
+    )
+    assert resolution.status == NameResolution.NONE
+    assert resolution.candidate is None
+
+
+def test_weak_single_source_becomes_a_proposal_not_auto() -> None:
+    """The old auto-or-nothing 0.7 bar: 0.6 now surfaces as a human-reviewed proposal."""
+    resolver = DecisionMakerResolver(strategies=[])
+    resolution = resolver.pick_best(
+        [NameCandidate(first="Paul", source="llm_aggregate", confidence=0.6, evidence_group="scraped_text")]
+    )
+    assert resolution.status == NameResolution.PROPOSED
 
 
 def test_top_level_disagreement_yields_none() -> None:
     """Two different identities tied at the top → trust neither."""
     resolver = DecisionMakerResolver(strategies=[])
     candidates = [
-        NameCandidate(first="Michel", last="Dubois", source="registre_gouv", confidence=0.8),
-        NameCandidate(first="Paul", last="Martin", source="pappers", confidence=0.8),
+        NameCandidate(
+            first="Michel",
+            last="Dubois",
+            source="registre_gouv",
+            confidence=0.8,
+            primary=True,
+            evidence_group="registry",
+        ),
+        NameCandidate(
+            first="Paul", last="Martin", source="pappers", confidence=0.8, primary=True, evidence_group="pappers"
+        ),
     ]
-    assert resolver.pick_best(candidates) is None
+    resolution = resolver.pick_best(candidates)
+    assert resolution.status == NameResolution.NONE
+
+
+def test_homonym_from_another_department_cannot_rival_a_geo_confirmed_match() -> None:
+    """Name-only registry noise is ignored once geography disambiguated the company."""
+    resolver = DecisionMakerResolver(strategies=[])
+    candidates = [
+        _registry("Michel", "Dubois", 0.95, geo_confirmed=True),
+        _registry("Paul", "Martin", 0.95, geo_confirmed=False),
+    ]
+    resolution = resolver.pick_best(candidates)
+    assert resolution.status == NameResolution.AUTO
+    assert resolution.candidate is not None
+    assert resolution.candidate.first == "Michel"
+
+
+def test_two_geo_confirmed_primaries_disagreeing_yield_none() -> None:
+    """Two authoritative geo-anchored identities → genuine ambiguity, trust neither."""
+    resolver = DecisionMakerResolver(strategies=[])
+    candidates = [
+        _registry("Michel", "Dubois", 0.9, geo_confirmed=True),
+        NameCandidate(
+            first="Paul",
+            last="Martin",
+            source="pappers",
+            confidence=0.85,
+            primary=True,
+            geo_confirmed=True,
+            evidence_group="pappers",
+        ),
+    ]
+    resolution = resolver.pick_best(candidates)
+    assert resolution.status == NameResolution.NONE
+
+
+def test_supporting_contradiction_demotes_auto_to_proposed() -> None:
+    """A legal page naming someone else (the web agency?) forces a human look."""
+    resolver = DecisionMakerResolver(strategies=[])
+    candidates = [
+        _registry("Michel", "Dubois", 0.9, geo_confirmed=True),
+        NameCandidate(first="Jean", last="Agence", source="legal_mentions", confidence=0.75, evidence_group="website"),
+    ]
+    resolution = resolver.pick_best(candidates)
+    assert resolution.status == NameResolution.PROPOSED
+    assert resolution.candidate is not None
+    assert resolution.candidate.first == "Michel"  # the registry keeps the lead
+
+
+def test_all_candidates_are_kept_for_persistence() -> None:
+    """Every merged candidate survives in the resolution (drawer + calibration)."""
+    resolver = DecisionMakerResolver(strategies=[])
+    candidates = [
+        _registry("Michel", "Dubois", 0.9, geo_confirmed=True),
+        NameCandidate(first="Marie", source="owner_response", confidence=0.55, evidence_group="scraped_text"),
+    ]
+    resolution = resolver.pick_best(candidates)
+    assert len(resolution.candidates) == 2
 
 
 def test_owner_response_signature_detection() -> None:

@@ -14,6 +14,17 @@ export type EnrichmentOpeningHours = {
   hours?: string
 }
 
+/** One candidate of the decision-maker cascade (debug / provenance display). */
+export type ContactNameCandidate = {
+  first: string | null
+  last: string | null
+  source: string
+  confidence: number
+  primary: boolean
+  geo_confirmed: boolean
+  provenance: string
+}
+
 /** Rich enrichment data attached to a prospect. */
 export type ProspectEnrichment = {
   id: number
@@ -35,6 +46,17 @@ export type ProspectEnrichment = {
   contact_name_source: string | null
   contact_name_confidence: number | null
   contact_name_manual: boolean
+  contact_name_status: string | null
+  contact_name_provenance: string | null
+  contact_siren: string | null
+  proposed_first_name: string | null
+  proposed_last_name: string | null
+  proposed_gender: string | null
+  proposed_source: string | null
+  proposed_confidence: number | null
+  proposed_provenance: string | null
+  proposed_state: string | null
+  name_candidates: ContactNameCandidate[]
   error_message: string | null
   enriched_at: string | null
   created_at: string
@@ -119,6 +141,24 @@ export class EnrichmentService {
    */
   static async resolveProspectContact(prospectId: number): Promise<ProspectEnrichment> {
     return ApiClient.post<ProspectEnrichment>(`/api/v1/prospects/${prospectId}/enrichment/resolve-contact`, {})
+  }
+
+  /**
+   * Promote the « à confirmer » decision-maker name to the trusted contact.
+   * @param prospectId - Target prospect id.
+   * @returns The refreshed enrichment record (contact_* fields filled).
+   */
+  static async confirmContactProposal(prospectId: number): Promise<ProspectEnrichment> {
+    return ApiClient.post<ProspectEnrichment>(`/api/v1/prospects/${prospectId}/enrichment/contact-proposal/confirm`, {})
+  }
+
+  /**
+   * Reject the « à confirmer » name — the same identity is never re-proposed.
+   * @param prospectId - Target prospect id.
+   * @returns The refreshed enrichment record (proposal marked rejected).
+   */
+  static async rejectContactProposal(prospectId: number): Promise<ProspectEnrichment> {
+    return ApiClient.post<ProspectEnrichment>(`/api/v1/prospects/${prospectId}/enrichment/contact-proposal/reject`, {})
   }
 
   /**

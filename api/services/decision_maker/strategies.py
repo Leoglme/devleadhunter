@@ -31,6 +31,13 @@ _PAPPERS_URL = "https://api.pappers.fr/v2/recherche"
 # A company-name match below this similarity is considered a different business.
 _MIN_COMPANY_SIMILARITY = 0.45
 
+# Evidence groups — candidates extracted from the SAME underlying text are one
+# observation, not two (owner replies feed both the regex and the LLM).
+_GROUP_REGISTRY = "registry"
+_GROUP_PAPPERS = "pappers"
+_GROUP_WEBSITE = "website"
+_GROUP_SCRAPED_TEXT = "scraped_text"
+
 
 class RegistreGouvStrategy:
     """Tier 1 — the official (free, key-less) « Recherche d'entreprises » API.
@@ -68,6 +75,9 @@ class RegistreGouvStrategy:
             if similarity < _MIN_COMPANY_SIMILARITY:
                 continue
             city_ok = self._city_matches(result, context)
+            # Département-level match is enough geo confirmation: artisans are
+            # often registered at home, one commune away from where they work.
+            geo_confirmed = city_ok or self._department_matches(result, context)
             base = 0.5 + 0.25 * similarity + (0.15 if city_ok else 0.0)
 
             dirigeants = [
@@ -84,7 +94,7 @@ class RegistreGouvStrategy:
                     first = title_case_name(dirigeants[0].get("prenoms")) or first
                     last = title_case_name(dirigeants[0].get("nom")) or last
                 if first or last:
-                    candidates.append(self._candidate(first, last, min(0.95, base + 0.25), result))
+                    candidates.append(self._candidate(first, last, min(0.95, base + 0.25), result, geo_confirmed))
                 continue
 
             if len(dirigeants) == 1:
@@ -95,6 +105,7 @@ class RegistreGouvStrategy:
                         title_case_name(d.get("nom")),
                         min(0.9, base + 0.1),
                         result,
+                        geo_confirmed,
                     )
                 )
             elif len(dirigeants) > 1:
@@ -116,6 +127,7 @@ class RegistreGouvStrategy:
                             title_case_name(lead.get("nom")),
                             min(0.75, base),
                             result,
+                            geo_confirmed,
                         )
                     )
         return candidates
@@ -126,16 +138,25 @@ class RegistreGouvStrategy:
         last: str | None,
         confidence: float,
         result: dict[str, Any],
+        geo_confirmed: bool,
     ) -> NameCandidate:
         """Build a candidate carrying the matched SIREN for traceability."""
         # Registries may pack several first names (« Léo Jean Marc ») — keep the first.
         first_single = (first or "").split(" ")[0] or None
+        geo_note = "localisation confirmée" if geo_confirmed else "localisation NON confirmée"
         return NameCandidate(
             first=first_single,
             last=last,
             gender=infer_gender(first_single),
             source=self.name,
             confidence=round(confidence, 2),
+            primary=True,
+            geo_confirmed=geo_confirmed,
+            evidence_group=_GROUP_REGISTRY,
+            provenance=(
+                f"Registre officiel (SIRENE) : {result.get('nom_complet') or '?'}, "
+                f"SIREN {result.get('siren') or '?'} — {geo_note}"
+            ),
             raw={"siren": result.get("siren"), "nom_complet": result.get("nom_complet")},
         )
 
@@ -156,6 +177,15 @@ class RegistreGouvStrategy:
 
             return fold(str(siege.get("libelle_commune") or "")) == fold(context.city)
         return False
+
+    @staticmethod
+    def _department_matches(result: dict[str, Any], context: ResolutionContext) -> bool:
+        """True when the registry HQ sits in the prospect's département."""
+        siege = result.get("siege") or {}
+        siege_postal = str(siege.get("code_postal") or "")
+        if not context.postal_code or len(siege_postal) != 5:
+            return False
+        return siege_postal[:2] == context.postal_code[:2]
 
 
 class PappersStrategy:
@@ -200,7 +230,11 @@ class PappersStrategy:
             last = title_case_name(lead.get("nom"))
             if not (first or last):
                 continue
+            # The query itself filters on code_postal when the prospect has one,
+            # so returned matches are geo-scoped by construction.
+            geo_confirmed = bool(context.postal_code) or self._department_matches(result, context)
             confidence = min(0.9, 0.55 + 0.25 * similarity + (0.1 if len(representants) == 1 else 0.0))
+            geo_note = "localisation confirmée" if geo_confirmed else "localisation NON confirmée"
             candidates.append(
                 NameCandidate(
                     first=first,
@@ -208,10 +242,26 @@ class PappersStrategy:
                     gender=infer_gender(first),
                     source=self.name,
                     confidence=round(confidence, 2),
+                    primary=True,
+                    geo_confirmed=geo_confirmed,
+                    evidence_group=_GROUP_PAPPERS,
+                    provenance=(
+                        f"Pappers : {result.get('nom_entreprise') or '?'}, "
+                        f"SIREN {result.get('siren') or '?'} — {geo_note}"
+                    ),
                     raw={"siren": result.get("siren")},
                 )
             )
         return candidates
+
+    @staticmethod
+    def _department_matches(result: dict[str, Any], context: ResolutionContext) -> bool:
+        """True when the Pappers HQ sits in the prospect's département."""
+        siege = result.get("siege") or {}
+        siege_postal = str(siege.get("code_postal") or "")
+        if not context.postal_code or len(siege_postal) != 5:
+            return False
+        return siege_postal[:2] == context.postal_code[:2]
 
 
 # « Réponse du propriétaire » signatures: a line/dash followed by a short name.
@@ -250,6 +300,11 @@ class OwnerResponseStrategy:
                 gender=infer_gender(best),
                 source=self.name,
                 confidence=confidence,
+                primary=False,
+                evidence_group=_GROUP_SCRAPED_TEXT,
+                provenance=(
+                    f"Signature « {best} » dans {seen} réponse{'s' if seen > 1 else ''} du propriétaire aux avis Google"
+                ),
                 raw={"occurrences": seen},
             )
         ]
@@ -317,6 +372,7 @@ class LegalMentionsStrategy:
                 first, last = full or None, None
             if not first:
                 continue
+            declaration = re.sub(r"\s+", " ", match.group(0)).strip()
             return [
                 NameCandidate(
                     first=first,
@@ -324,6 +380,9 @@ class LegalMentionsStrategy:
                     gender=infer_gender(first),
                     source=self.name,
                     confidence=0.75,
+                    primary=False,
+                    evidence_group=_GROUP_WEBSITE,
+                    provenance=f"Mentions légales du site : « {declaration[:120]} »",
                     raw={},
                 )
             ]
@@ -383,6 +442,9 @@ class LlmAggregateStrategy:
                 gender=infer_gender(first),
                 source=self.name,
                 confidence=0.6,
+                primary=False,
+                evidence_group=_GROUP_SCRAPED_TEXT,
+                provenance=f"IA sur le texte public — citation : « {quote[:120]} »",
                 raw={"quote": quote[:200]},
             )
         ]

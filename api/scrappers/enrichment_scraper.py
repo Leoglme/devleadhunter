@@ -44,6 +44,12 @@ class EnrichmentData:
     opening_hours: list[dict[str, str]] = field(default_factory=list)
     services: list[str] = field(default_factory=list)
     social_links: dict[str, str] = field(default_factory=dict)
+    # Identity of the Maps place the data was ACTUALLY read from — lets the
+    # service reject a homonym's listing instead of silently absorbing it.
+    # None on payloads from older desktop sidecars (identity check skipped).
+    place_title: str | None = None
+    place_city: str | None = None
+    place_postal_code: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dict (matches the ProspectEnrichment columns)."""
@@ -58,6 +64,9 @@ class EnrichmentData:
             "opening_hours": self.opening_hours,
             "services": self.services,
             "social_links": self.social_links,
+            "place_title": self.place_title,
+            "place_city": self.place_city,
+            "place_postal_code": self.place_postal_code,
         }
 
 
@@ -66,9 +75,15 @@ _EXTRACT_JS = r"""
 (() => {
     const out = {
         rating: null, reviews_count: null, description: null,
-        photos: [], reviews: [], opening_hours: [], ld: [], social: {}
+        photos: [], reviews: [], opening_hours: [], ld: [], social: {},
+        place_title: null
     };
     const txt = (el) => (el ? (el.innerText || el.textContent || '').trim() : '');
+
+    // Title of the place panel — the name of the business the page is REALLY about.
+    try {
+        out.place_title = txt(document.querySelector('h1')) || null;
+    } catch (e) {}
 
     // JSON-LD (schema.org) — the most stable anchor; parsed in Python as a fallback
     // for description / rating / reviews_count when the DOM selectors miss.
@@ -353,6 +368,10 @@ class EnrichmentScraper:
             if ld_description and not validation_service.is_generic_platform_description(ld_description):
                 description = ld_description
 
+        place_title = (str(data["place_title"]).strip() if data.get("place_title") else None) or None
+        if place_title is None and business and business.get("name"):
+            place_title = str(business["name"]).strip() or None
+
         return EnrichmentData(
             source="google",
             rating=rating,
@@ -362,6 +381,11 @@ class EnrichmentScraper:
             reviews=reviews,
             opening_hours=hours,
             social_links=social,
+            place_title=place_title,
+            place_city=(str(business["city"]).strip() or None) if business and business.get("city") else None,
+            place_postal_code=(
+                (str(business["postal_code"]).strip() or None) if business and business.get("postal_code") else None
+            ),
         )
 
 

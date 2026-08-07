@@ -41,6 +41,29 @@ class ProspectEnrichment(Base):
     contact_name_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
     contact_name_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     contact_name_manual: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    # How the trusted name was established (ContactNameStatus: auto | confirmed | manual).
+    contact_name_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Human-readable justification of the trusted name (shown in the drawer).
+    contact_name_provenance: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # SIREN of the registry company the trusted name came from — pre-fills the
+    # billing drawer at sale time (Qonto requires the client's SIREN).
+    contact_siren: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # « À confirmer » proposal: a plausible but unproven name, waiting for a
+    # human confirm/reject in the drawer. NEVER read by email variables — only
+    # contact_* feeds « Bonjour {Prénom} ».
+    proposed_first_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    proposed_last_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    proposed_gender: Mapped[str | None] = mapped_column(String(1), nullable=True)  # 'M' | 'F'
+    proposed_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    proposed_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    proposed_provenance: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # ProposedContactState: pending | rejected (a rejected identity is never re-proposed).
+    proposed_state: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
+    # Every candidate of the last cascade run (source, confidence, provenance) —
+    # drawer display, threshold calibration and debugging.
+    name_candidates: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     # Structured, editable collections (JSON)
     photos: Mapped[list | None] = mapped_column(JSON, nullable=True)

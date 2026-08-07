@@ -158,6 +158,57 @@ class ValidationService:
             return True
         return bool(cls._significant_tokens(description) & expected_tokens)
 
+    @classmethod
+    def place_identity_mismatch(
+        cls,
+        prospect_name: str,
+        prospect_city: str | None,
+        prospect_postal_code: str | None,
+        place_title: str | None,
+        place_city: str | None,
+        place_postal_code: str | None,
+    ) -> str | None:
+        """Check that a scraped Maps place is really the prospect's business.
+
+        Without a stored Maps URL the scraper searches « nom + ville » and opens
+        the FIRST result — a homonym elsewhere in France silently fills the demo
+        site with someone else's photos/reviews. Name similarity catches a wrong
+        business; the geo comparison catches the same-name-other-town homonym.
+        Missing data on either side skips that check (old sidecars send none).
+
+        Args:
+            prospect_name: Business name stored on the prospect.
+            prospect_city: Prospect city, when known.
+            prospect_postal_code: Prospect postal code parsed from its address.
+            place_title: Title (h1) of the scraped Maps place.
+            place_city: City of the scraped place (JSON-LD address).
+            place_postal_code: Postal code of the scraped place (JSON-LD address).
+
+        Returns:
+            A human-readable French mismatch reason, or None when coherent.
+        """
+        from services.decision_maker.normalize import company_similarity, fold
+
+        def city_key(city: str) -> str:
+            """Alphanumeric-only comparison key (« Clermont-Ferrand » = « Clermont Ferrand »)."""
+            return re.sub(r"[^a-z0-9]", "", fold(city))
+
+        if place_title:
+            similarity = company_similarity(prospect_name, place_title)
+            if similarity < 0.2:
+                return f"La fiche Google Maps trouvée (« {place_title} ») ne correspond pas au nom du prospect"
+
+        if prospect_postal_code and place_postal_code and len(place_postal_code) == 5:
+            if place_postal_code[:2] != prospect_postal_code[:2]:
+                return (
+                    f"La fiche Google Maps trouvée est dans un autre département "
+                    f"({place_postal_code} au lieu de {prospect_postal_code}) — homonyme probable"
+                )
+        elif prospect_city and place_city and city_key(place_city) != city_key(prospect_city):
+            return f"La fiche Google Maps trouvée est à {place_city}, pas à {prospect_city} — homonyme probable"
+
+        return None
+
     @staticmethod
     def is_valid_email(email: str | None) -> bool:
         """

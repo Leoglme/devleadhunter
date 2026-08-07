@@ -9,11 +9,16 @@ site content (content_json → Storyblok) at build time.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from services.decision_maker.types import NameCandidate
 
 from sqlalchemy.orm import Session
 
+from enums.contact_name_status import ContactNameStatus, ProposedContactState
 from enums.enrichment_status import EnrichmentStatus
 from models.prospect_db import ProspectDB
 from models.prospect_enrichment import ProspectEnrichment
@@ -30,6 +35,8 @@ from services.scraper_diagnostics_service import (
 from services.validation_service import validation_service
 
 logger = logging.getLogger(__name__)
+
+_POSTAL_CODE_RE = re.compile(r"\b(\d{5})\b")
 
 
 def _count_filled_fields(data: EnrichmentData | None) -> int:
@@ -147,10 +154,19 @@ class EnrichmentService:
                 business_name=prospect.name,
                 city=prospect.city,
             )
-            self._apply_data(record, data)
-            record.status = EnrichmentStatus.COMPLETED.value
-            record.enriched_at = datetime.now(UTC)
-            self._record_diagnostic(prospect, data, error=None)
+            mismatch = self._place_mismatch(prospect, data)
+            if mismatch is not None:
+                # An explicit failure beats silently absorbing a homonym's
+                # photos/reviews into the prospect's demo site.
+                logger.warning("Enrichment identity mismatch for prospect_id=%s: %s", prospect.id, mismatch)
+                record.status = EnrichmentStatus.FAILED.value
+                record.error_message = f"{mismatch}. Données rejetées — relancez ou éditez manuellement."
+                self._record_diagnostic(prospect, None, error=mismatch)
+            else:
+                self._apply_data(record, data)
+                record.status = EnrichmentStatus.COMPLETED.value
+                record.enriched_at = datetime.now(UTC)
+                self._record_diagnostic(prospect, data, error=None)
         except Exception as exc:
             logger.exception("Enrichment failed for prospect_id=%s", prospect.id)
             record.status = EnrichmentStatus.FAILED.value
@@ -166,34 +182,47 @@ class EnrichmentService:
         return record
 
     async def _resolve_contact(self, db: Session, prospect: ProspectDB, record: ProspectEnrichment) -> None:
-        """Run the decision-maker cascade and store the trusted contact.
+        """Run the decision-maker cascade and persist its 3-way outcome.
 
-        Skipped when a human already set the contact (manual edits win). Any
-        failure is swallowed + surfaced as a monitoring diagnostic — a broken
-        resolution must never break enrichment or sending.
+        AUTO writes the trusted contact; PROPOSED fills the « à confirmer »
+        fields (never used in emails until confirmed); NONE clears a previous
+        machine-set name. A human-set or human-confirmed name always wins and
+        is never touched here. Any failure is swallowed + surfaced as a
+        monitoring diagnostic — a broken resolution must never break
+        enrichment or sending.
         """
-        if record.contact_name_manual:
+        if record.contact_name_manual or record.contact_name_status in (
+            ContactNameStatus.MANUAL.value,
+            ContactNameStatus.CONFIRMED.value,
+        ):
             return
         try:
             from services.decision_maker.resolver import (
                 context_from_prospect,
                 decision_maker_resolver,
             )
+            from services.decision_maker.types import NameResolution
 
-            candidate = await decision_maker_resolver.resolve(context_from_prospect(prospect, record))
-            if candidate is not None:
-                record.contact_first_name = candidate.first
-                record.contact_last_name = candidate.last
-                record.contact_gender = candidate.gender
-                record.contact_name_source = candidate.source
-                record.contact_name_confidence = candidate.confidence
+            resolution = await decision_maker_resolver.resolve(context_from_prospect(prospect, record))
+            record.name_candidates = [candidate.to_persistable() for candidate in resolution.candidates]
+
+            if resolution.status == NameResolution.AUTO and resolution.candidate is not None:
+                self._store_trusted_contact(record, resolution.candidate)
+            elif resolution.status == NameResolution.PROPOSED and resolution.candidate is not None:
+                self._store_proposed_contact(record, resolution.candidate)
+            else:
+                self._clear_machine_contact(record)
+                # The cascade no longer backs the pending proposal — withdraw it
+                # (a REJECTED marker survives so the identity never comes back).
+                if record.proposed_state == ProposedContactState.PENDING.value:
+                    self._clear_proposed_contact(record)
             db.commit()
             scraper_diagnostics_service.record(
                 source="decision_maker",
-                status=STATUS_OK if candidate is not None else STATUS_EMPTY,
+                status=STATUS_OK if resolution.candidate is not None else STATUS_EMPTY,
                 category=prospect.category,
                 city=prospect.city,
-                results_count=1 if candidate is not None else 0,
+                results_count=1 if resolution.candidate is not None else 0,
                 error_message=None,
                 html_snapshot=None,
                 user_id=prospect.user_id,
@@ -211,14 +240,136 @@ class EnrichmentService:
                 user_id=prospect.user_id,
             )
 
+    @staticmethod
+    def _store_trusted_contact(record: ProspectEnrichment, candidate: NameCandidate) -> None:
+        """Write an AUTO-grade candidate as the trusted contact (emails use it)."""
+        record.contact_first_name = candidate.first
+        record.contact_last_name = candidate.last
+        record.contact_gender = candidate.gender
+        record.contact_name_source = candidate.source
+        record.contact_name_confidence = candidate.confidence
+        record.contact_name_status = ContactNameStatus.AUTO.value
+        record.contact_name_provenance = candidate.provenance or None
+        record.contact_siren = EnrichmentService._candidate_siren(candidate)
+        EnrichmentService._clear_proposed_contact(record)
+
+    @staticmethod
+    def _store_proposed_contact(record: ProspectEnrichment, candidate: NameCandidate) -> None:
+        """Surface a PROPOSED-grade candidate for human confirm/reject.
+
+        A previously rejected identity is never re-proposed — the rejection
+        would otherwise reappear at every enrichment re-run. A previous
+        machine-trusted name is cleared: under the new rules it no longer
+        qualifies for automatic use.
+        """
+        already_rejected = (
+            record.proposed_state == ProposedContactState.REJECTED.value
+            and (record.proposed_first_name or "") == (candidate.first or "")
+            and (record.proposed_last_name or "") == (candidate.last or "")
+        )
+        EnrichmentService._clear_machine_contact(record)
+        if already_rejected:
+            return
+        record.proposed_first_name = candidate.first
+        record.proposed_last_name = candidate.last
+        record.proposed_gender = candidate.gender
+        record.proposed_source = candidate.source
+        record.proposed_confidence = candidate.confidence
+        record.proposed_provenance = candidate.provenance or None
+        record.proposed_state = ProposedContactState.PENDING.value
+        record.contact_siren = EnrichmentService._candidate_siren(candidate)
+
+    @staticmethod
+    def _candidate_siren(candidate: NameCandidate) -> str | None:
+        """SIREN of the registry company the candidate came from, when any."""
+        siren = str(candidate.raw.get("siren") or "") if candidate.raw else ""
+        return siren or None
+
+    @staticmethod
+    def _clear_machine_contact(record: ProspectEnrichment) -> None:
+        """Drop a machine-resolved trusted name (manual/confirmed never reach here).
+
+        The SIREN goes with it: it belonged to the discarded identity's company
+        and must not pre-fill a billing form for someone else.
+        """
+        record.contact_first_name = None
+        record.contact_last_name = None
+        record.contact_gender = None
+        record.contact_name_source = None
+        record.contact_name_confidence = None
+        record.contact_name_status = None
+        record.contact_name_provenance = None
+        record.contact_siren = None
+
+    @staticmethod
+    def _clear_proposed_contact(record: ProspectEnrichment) -> None:
+        """Wipe the proposal fields (after promotion, withdrawal or override)."""
+        record.proposed_first_name = None
+        record.proposed_last_name = None
+        record.proposed_gender = None
+        record.proposed_source = None
+        record.proposed_confidence = None
+        record.proposed_provenance = None
+        record.proposed_state = None
+
     async def resolve_contact(self, db: Session, user_id: int, prospect: ProspectDB) -> ProspectEnrichment:
         """(Re)run only the decision-maker resolution for a prospect (on demand)."""
         record = self.get_or_create(db, user_id, prospect.id)
-        # An explicit re-run overrides a previous manual lock on purpose.
+        # An explicit re-run overrides previous manual/confirmed/rejected locks on purpose.
         record.contact_name_manual = False
+        record.contact_name_status = None
+        record.proposed_state = None
         await self._resolve_contact(db, prospect, record)
         db.refresh(record)
         return record
+
+    def confirm_proposed_contact(self, db: Session, record: ProspectEnrichment) -> ProspectEnrichment:
+        """Promote the pending proposal to the trusted contact (human decision).
+
+        Raises:
+            ValueError: When no pending proposal exists on the record.
+        """
+        if record.proposed_state != ProposedContactState.PENDING.value or not (
+            record.proposed_first_name or record.proposed_last_name
+        ):
+            raise ValueError("Aucun décisionnaire « à confirmer » sur ce prospect")
+        record.contact_first_name = record.proposed_first_name
+        record.contact_last_name = record.proposed_last_name
+        record.contact_gender = record.proposed_gender
+        record.contact_name_source = record.proposed_source
+        record.contact_name_confidence = record.proposed_confidence
+        record.contact_name_status = ContactNameStatus.CONFIRMED.value
+        record.contact_name_provenance = record.proposed_provenance
+        self._clear_proposed_contact(record)
+        db.commit()
+        db.refresh(record)
+        return record
+
+    def reject_proposed_contact(self, db: Session, record: ProspectEnrichment) -> ProspectEnrichment:
+        """Reject the pending proposal (kept as rejected so it never comes back).
+
+        Raises:
+            ValueError: When no pending proposal exists on the record.
+        """
+        if record.proposed_state != ProposedContactState.PENDING.value:
+            raise ValueError("Aucun décisionnaire « à confirmer » sur ce prospect")
+        record.proposed_state = ProposedContactState.REJECTED.value
+        db.commit()
+        db.refresh(record)
+        return record
+
+    @staticmethod
+    def _place_mismatch(prospect: ProspectDB, data: EnrichmentData) -> str | None:
+        """Reject scraped data read from another business's Maps place."""
+        postal_match = _POSTAL_CODE_RE.search(prospect.address or "")
+        return validation_service.place_identity_mismatch(
+            prospect_name=prospect.name or "",
+            prospect_city=prospect.city,
+            prospect_postal_code=postal_match.group(1) if postal_match else None,
+            place_title=data.place_title,
+            place_city=data.place_city,
+            place_postal_code=data.place_postal_code,
+        )
 
     @staticmethod
     def _record_diagnostic(prospect: ProspectDB, data: EnrichmentData | None, error: str | None) -> None:
@@ -266,6 +417,10 @@ class EnrichmentService:
             record.contact_name_manual = True
             record.contact_name_source = "manual"
             record.contact_name_confidence = 1.0
+            record.contact_name_status = ContactNameStatus.MANUAL.value
+            record.contact_name_provenance = None
+            # Typing a name settles the question — drop any pending proposal.
+            self._clear_proposed_contact(record)
             from services.decision_maker.normalize import infer_gender
 
             record.contact_gender = infer_gender(record.contact_first_name)

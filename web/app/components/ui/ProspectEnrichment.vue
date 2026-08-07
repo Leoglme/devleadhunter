@@ -38,6 +38,54 @@
             </template>
           </span>
         </div>
+
+        <div
+          v-if="hasPendingProposal"
+          class="mb-3 rounded border border-dashed border-[var(--app-ink-soft)]/50 bg-[var(--app-surface)] p-2.5"
+        >
+          <p class="flex items-center gap-1.5 text-[11px] font-medium text-[var(--app-ink)]">
+            <UIcon name="i-lucide-circle-help" class="h-3.5 w-3.5 shrink-0" />
+            Décisionnaire probable : {{ proposedFullName }}
+            <span v-if="record?.proposed_confidence != null" class="text-[10px] font-normal text-[var(--app-ink-soft)]">
+              · {{ Math.round((record?.proposed_confidence ?? 0) * 100) }} %
+            </span>
+          </p>
+          <p v-if="record?.proposed_provenance" class="mt-1 text-[10px] leading-relaxed text-[var(--app-ink-soft)]">
+            {{ record?.proposed_provenance }}
+          </p>
+          <p class="mt-1 text-[10px] leading-relaxed text-[var(--app-ink-soft)]">
+            Ce nom n'entrera dans aucun email tant qu'il n'est pas confirmé — la salutation reste « Bonjour » neutre.
+          </p>
+          <div class="mt-2 flex gap-2">
+            <button
+              type="button"
+              class="btn-primary flex-1 text-xs"
+              :disabled="isDecidingProposal"
+              @click="confirmProposal"
+            >
+              <UIcon name="i-lucide-check" class="h-3.5 w-3.5" />
+              Confirmer
+            </button>
+            <button
+              type="button"
+              class="btn-secondary flex-1 text-xs"
+              :disabled="isDecidingProposal"
+              @click="rejectProposal"
+            >
+              <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
+              Rejeter
+            </button>
+          </div>
+        </div>
+
+        <p
+          v-if="record?.contact_name_provenance"
+          class="mb-2 flex items-start gap-1.5 text-[10px] leading-relaxed text-[var(--app-ink-soft)]"
+        >
+          <UIcon name="i-lucide-badge-check" class="mt-0.5 h-3 w-3 shrink-0" />
+          {{ record?.contact_name_provenance }}
+        </p>
+
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="mb-1 block text-[10px] text-[var(--app-ink-soft)]">Prénom</label>
@@ -249,6 +297,7 @@ const isLoading: Ref<boolean> = ref(false)
 const isRunning: Ref<boolean> = ref(false)
 const isSaving: Ref<boolean> = ref(false)
 const isResolving: Ref<boolean> = ref(false)
+const isDecidingProposal: Ref<boolean> = ref(false)
 const newPhotoUrl: Ref<string> = ref('')
 const newService: Ref<string> = ref('')
 
@@ -277,6 +326,18 @@ const CONTACT_SOURCE_LABELS: Record<string, string> = {
 const contactSourceLabel: ComputedRef<string> = computed(
   (): string =>
     CONTACT_SOURCE_LABELS[record.value?.contact_name_source ?? ''] ?? record.value?.contact_name_source ?? '',
+)
+
+/** True when a name proposal awaits the user's confirm/reject decision. */
+const hasPendingProposal: ComputedRef<boolean> = computed(
+  (): boolean =>
+    record.value?.proposed_state === 'pending' &&
+    Boolean(record.value?.proposed_first_name || record.value?.proposed_last_name),
+)
+
+/** Display name of the pending proposal (« Marie », « Marie Dubois »…). */
+const proposedFullName: ComputedRef<string> = computed((): string =>
+  [record.value?.proposed_first_name, record.value?.proposed_last_name].filter(Boolean).join(' '),
 )
 
 /** True when the contact inputs differ from the stored record (shows Save). */
@@ -339,6 +400,36 @@ async function saveContactOnly(): Promise<void> {
   }
 }
 
+/** Promote the pending name proposal to the trusted contact. */
+async function confirmProposal(): Promise<void> {
+  if (!props.prospectId) return
+  isDecidingProposal.value = true
+  try {
+    record.value = await EnrichmentService.confirmContactProposal(props.prospectId)
+    syncForm()
+    toast.success('Décisionnaire confirmé — utilisé dans les prochains emails')
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Échec de la confirmation')
+  } finally {
+    isDecidingProposal.value = false
+  }
+}
+
+/** Reject the pending name proposal (never re-proposed afterwards). */
+async function rejectProposal(): Promise<void> {
+  if (!props.prospectId) return
+  isDecidingProposal.value = true
+  try {
+    record.value = await EnrichmentService.rejectContactProposal(props.prospectId)
+    syncForm()
+    toast.success('Proposition rejetée — salutation neutre conservée')
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Échec du rejet')
+  } finally {
+    isDecidingProposal.value = false
+  }
+}
+
 /** (Re)run only the decision-maker name resolution. */
 async function resolveContact(): Promise<void> {
   if (!props.prospectId) return
@@ -346,11 +437,13 @@ async function resolveContact(): Promise<void> {
   try {
     record.value = await EnrichmentService.resolveProspectContact(props.prospectId)
     syncForm()
-    toast.success(
-      record.value?.contact_first_name || record.value?.contact_last_name
-        ? 'Décisionnaire trouvé'
-        : 'Aucun nom fiable trouvé — salutation neutre conservée',
-    )
+    if (record.value?.contact_first_name || record.value?.contact_last_name) {
+      toast.success('Décisionnaire trouvé (source officielle, localisation confirmée)')
+    } else if (record.value?.proposed_state === 'pending') {
+      toast.success('Nom probable trouvé — à confirmer ci-dessus avant usage')
+    } else {
+      toast.success('Aucun nom fiable trouvé — salutation neutre conservée')
+    }
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : 'Échec de la recherche du décisionnaire')
   } finally {
