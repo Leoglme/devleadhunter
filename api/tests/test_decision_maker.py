@@ -320,7 +320,7 @@ def test_top_level_disagreement_yields_none() -> None:
             evidence_group="registry",
         ),
         NameCandidate(
-            first="Paul", last="Martin", source="pappers", confidence=0.8, primary=True, evidence_group="pappers"
+            first="Paul", last="Martin", source="pappers", confidence=0.8, primary=True, evidence_group="registry"
         ),
     ]
     resolution = resolver.pick_best(candidates)
@@ -352,7 +352,7 @@ def test_two_geo_confirmed_primaries_disagreeing_yield_none() -> None:
             confidence=0.85,
             primary=True,
             geo_confirmed=True,
-            evidence_group="pappers",
+            evidence_group="registry",
         ),
     ]
     resolution = resolver.pick_best(candidates)

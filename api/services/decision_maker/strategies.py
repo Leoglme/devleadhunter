@@ -31,10 +31,10 @@ _PAPPERS_URL = "https://api.pappers.fr/v2/recherche"
 # A company-name match below this similarity is considered a different business.
 _MIN_COMPANY_SIMILARITY = 0.45
 
-# Evidence groups — candidates extracted from the SAME underlying text are one
-# observation, not two (owner replies feed both the regex and the LLM).
+# Evidence groups — candidates extracted from the SAME underlying data are one
+# observation, not two (owner replies feed both the regex and the LLM; the
+# registre and Pappers both resell SIRENE/RNE, so they never corroborate).
 _GROUP_REGISTRY = "registry"
-_GROUP_PAPPERS = "pappers"
 _GROUP_WEBSITE = "website"
 _GROUP_SCRAPED_TEXT = "scraped_text"
 
@@ -248,7 +248,7 @@ class PappersStrategy:
                     confidence=round(confidence, 2),
                     primary=True,
                     geo_confirmed=geo_confirmed,
-                    evidence_group=_GROUP_PAPPERS,
+                    evidence_group=_GROUP_REGISTRY,
                     provenance=(
                         f"Pappers : {result.get('nom_entreprise') or '?'}, "
                         f"SIREN {result.get('siren') or '?'} — {geo_note}"
