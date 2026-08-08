@@ -137,10 +137,12 @@
     <UiOrderDrawer
       :open="orderEntry !== null"
       :order="orderEntry?.order ?? null"
+      :mode="orderEntry?.mode ?? 'view'"
       :show-back="hasPrevious"
       @close="drawerStack.closeAll()"
       @back="drawerStack.back()"
       @updated="drawerStack.notifyOrderUpdated"
+      @created="handleOrderCreated"
       @deleted="handleOrderDeleted"
       @finalize="handleFinalizeSale"
     />
@@ -324,7 +326,16 @@ function handleUserSaved(): void {
 /** Stack the sale finalization on top of the order drawer. */
 function handleFinalizeSale(): void {
   const entry: OrderDrawerEntry | null = orderEntry.value
-  if (entry) drawerStack.push({ kind: 'finalize-sale', order: entry.order })
+  if (entry?.order) drawerStack.push({ kind: 'finalize-sale', order: entry.order })
+}
+
+/**
+ * New sale saved from the create drawer — refresh lists and show the created order.
+ * @param order - The freshly created order.
+ */
+function handleOrderCreated(order: Order): void {
+  drawerStack.notifyOrderUpdated(order)
+  drawerStack.push({ kind: 'order', order, mode: 'view' })
 }
 
 /**
@@ -452,7 +463,7 @@ async function handleMarkAsSold(prospect: Prospect): Promise<void> {
       customer_email: prospect.email ?? null,
     })
     toast.success(`Vente créée pour « ${prospect.name} »`)
-    drawerStack.push({ kind: 'order', order })
+    drawerStack.push({ kind: 'order', order, mode: 'view' })
     navigateTo('/dashboard/orders')
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : 'Erreur lors de la création de la vente')

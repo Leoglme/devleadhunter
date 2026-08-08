@@ -110,8 +110,8 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
    */
   function notifyOrderUpdated(order: Order): void {
     stack.value = stack.value.map((entry: DrawerStackEntry): DrawerStackEntry => {
-      if (entry.kind === 'order' && entry.order.id === order.id) {
-        return { ...entry, order }
+      if (entry.kind === 'order' && entry.order?.id === order.id) {
+        return { ...entry, order, mode: 'view' }
       }
       if (entry.kind === 'finalize-sale' && entry.order.id === order.id) {
         return { ...entry, order }
@@ -130,7 +130,8 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
   function notifyOrderDeleted(orderId: number): void {
     stack.value = stack.value.filter((entry: DrawerStackEntry): boolean => {
       const isSameOrder: boolean =
-        (entry.kind === 'order' || entry.kind === 'finalize-sale') && entry.order.id === orderId
+        (entry.kind === 'order' && entry.order?.id === orderId) ||
+        (entry.kind === 'finalize-sale' && entry.order.id === orderId)
       return !isSameOrder
     })
     lastOrderMutation.value = { type: 'deleted', orderId }

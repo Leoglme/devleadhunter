@@ -20,15 +20,8 @@
           <UIcon name="i-lucide-refresh-cw" :class="['h-3.5 w-3.5', isLoading && 'animate-spin']" />
           Actualiser
         </button>
-        <button
-          class="app-btn-primary h-9 shrink-0 px-4 text-xs whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="isCreating"
-          @click="handleCreate"
-        >
-          <UIcon
-            :name="isCreating ? 'i-lucide-loader-circle' : 'i-lucide-plus'"
-            :class="['h-3.5 w-3.5', isCreating && 'animate-spin']"
-          />
+        <button class="app-btn-primary h-9 shrink-0 px-4 text-xs whitespace-nowrap" @click="handleCreate">
+          <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" />
           Nouvelle vente
         </button>
       </div>
@@ -64,7 +57,7 @@
       description="Marquez un prospect comme vendu, ou créez une vente manuellement."
     >
       <template #action>
-        <button class="app-btn-primary" :disabled="isCreating" @click="handleCreate">
+        <button class="app-btn-primary" @click="handleCreate">
           <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" />
           Nouvelle vente
         </button>
@@ -136,7 +129,6 @@ const toast: UseToastReturn = useToast()
 const orders: Ref<Order[]> = ref([])
 const stats: Ref<OrderStats | null> = ref(null)
 const isLoading: Ref<boolean> = ref(false)
-const isCreating: Ref<boolean> = ref(false)
 
 const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 
@@ -196,18 +188,9 @@ async function loadAll(): Promise<void> {
   }
 }
 
-/** Create a new draft order then open it for editing. */
-async function handleCreate(): Promise<void> {
-  isCreating.value = true
-  try {
-    const order: Order = await OrdersService.createOrder({ product_type: 'website' })
-    orders.value.unshift(order)
-    openDrawer(order)
-  } catch (err: unknown) {
-    toast.error(err instanceof Error ? err.message : 'Erreur lors de la création')
-  } finally {
-    isCreating.value = false
-  }
+/** Create a new draft order then open its detail drawer. */
+function handleCreate(): void {
+  drawerStack.push({ kind: 'order', order: null, mode: 'create' })
 }
 
 /**
@@ -215,7 +198,7 @@ async function handleCreate(): Promise<void> {
  * @param order - The order to display.
  */
 function openDrawer(order: Order): void {
-  drawerStack.push({ kind: 'order', order })
+  drawerStack.push({ kind: 'order', order, mode: 'view' })
 }
 
 /** Apply the latest order mutation broadcast by a drawer to the list. */
@@ -226,7 +209,11 @@ function applyOrderMutation(): void {
     orders.value = orders.value.filter((order: Order): boolean => order.id !== notice.orderId)
   } else {
     const index: number = orders.value.findIndex((order: Order): boolean => order.id === notice.order.id)
-    if (index !== -1) orders.value.splice(index, 1, notice.order)
+    if (index !== -1) {
+      orders.value.splice(index, 1, notice.order)
+    } else {
+      orders.value.unshift(notice.order)
+    }
   }
   void refreshStats()
 }

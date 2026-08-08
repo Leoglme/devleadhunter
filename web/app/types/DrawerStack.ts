@@ -91,9 +91,12 @@ export type SendPolicyDrawerEntry = {
   kind: 'send-policy'
 }
 
+export type OrderDrawerMode = 'create' | 'view'
+
 export type OrderDrawerEntry = {
   kind: 'order'
-  order: Order
+  order: Order | null
+  mode: OrderDrawerMode
 }
 
 export type UserFormDrawerMode = 'create' | 'edit'

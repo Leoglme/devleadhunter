@@ -2,7 +2,7 @@
   <Teleport to="body">
     <Transition name="drawer-panel">
       <div
-        v-if="open && order"
+        v-if="open && (order || isCreateMode)"
         class="fixed top-0 right-0 z-50 flex h-dvh w-full max-w-[480px] flex-col border-l border-[var(--app-line)] bg-[var(--app-surface)] shadow-2xl"
       >
         <div class="flex items-start gap-3 border-b border-[var(--app-line)] px-5 py-4">
@@ -20,7 +20,7 @@
             <UIcon name="i-lucide-shopping-cart" class="h-4 w-4 text-[var(--app-ink-soft)]" />
           </div>
           <div class="min-w-0 flex-1">
-            <div class="mb-1 flex flex-wrap items-center gap-1.5">
+            <div v-if="!isCreateMode" class="mb-1 flex flex-wrap items-center gap-1.5">
               <span :class="['inline-flex items-center rounded px-2 py-0.5 text-[10px] font-medium', statusBadgeClass]">
                 {{ statusLabel }}
               </span>
@@ -31,9 +31,12 @@
               </span>
             </div>
             <h2 class="truncate text-base leading-tight font-semibold text-[var(--app-ink)]">
-              {{ order.business_name || order.customer_email || `Commande #${order.id}` }}
+              {{ drawerTitle }}
             </h2>
-            <p class="mt-0.5 text-sm font-semibold text-[var(--app-accent-ink)]">{{ amountLabel }}</p>
+            <p v-if="isCreateMode" class="mt-0.5 text-[11px] text-[var(--app-ink-soft)]">
+              La vente sera créée en brouillon à l'enregistrement.
+            </p>
+            <p v-else class="mt-0.5 text-sm font-semibold text-[var(--app-accent-ink)]">{{ amountLabel }}</p>
           </div>
           <button
             class="flex h-7 w-7 shrink-0 items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface)] hover:text-[var(--app-ink)]"
@@ -44,7 +47,7 @@
         </div>
 
         <div class="flex-1 overflow-y-auto">
-          <template v-if="!editMode">
+          <template v-if="!showForm && order">
             <div class="space-y-3 px-5 py-4">
               <p class="text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">Client</p>
               <div class="flex items-center gap-3">
@@ -100,6 +103,12 @@
           </template>
 
           <form v-else id="order-edit-form" class="space-y-4 p-5" @submit.prevent="handleSave">
+            <p
+              v-if="isCreateMode"
+              class="text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase"
+            >
+              Informations de la vente
+            </p>
             <div>
               <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
                 >Montant (€)</label
@@ -140,7 +149,7 @@
               <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
                 >Statut</label
               >
-              <UiSelectField v-model="editForm.status" :options="statusOptions" />
+              <UiSelectField v-model="editForm.status" :options="statusOptions" :disabled="isCreateMode" />
             </div>
             <div>
               <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
@@ -170,7 +179,7 @@
             </div>
           </div>
 
-          <div v-else-if="!editMode" class="space-y-2">
+          <div v-else-if="!showForm && order" class="space-y-2">
             <button v-if="!order.paid_at" class="btn-primary w-full" :disabled="isBusy" @click="$emit('finalize')">
               <UIcon name="i-lucide-file-text" class="h-4 w-4" />
               {{ order.invoice_id ? "Reprendre l'envoi au client" : 'Finaliser la vente' }}
@@ -201,12 +210,18 @@
             </div>
           </div>
 
-          <div v-else class="flex gap-2">
-            <button type="button" class="btn-secondary flex-1" :disabled="isBusy" @click="editMode = false">
+          <div v-else-if="showForm" class="flex gap-2">
+            <button
+              type="button"
+              class="btn-secondary flex-1"
+              :disabled="isBusy"
+              @click="isCreateMode ? emit('close') : (editMode = false)"
+            >
               Annuler
             </button>
             <button type="submit" form="order-edit-form" class="btn-primary flex-1" :disabled="isBusy">
-              <UIcon v-if="isBusy" name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />Enregistrer
+              <UIcon v-if="isBusy" name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
+              {{ isCreateMode ? 'Créer la vente' : 'Enregistrer' }}
             </button>
           </div>
         </div>
@@ -219,11 +234,15 @@
 import { formatShortMonthDateTime } from '~/utils/date'
 import type { UseToastReturn } from '~/types/Composables'
 import type { OrderEditForm, UiOrderDrawerEmits, UiOrderDrawerProps } from '~/types/UiOrderDrawer'
+import type { OrderDrawerMode } from '~/types/DrawerStack'
 import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
 import { ref, computed, watch } from 'vue'
 import type { Order, OrderPaymentCheckResult } from '~/services/ordersService'
 import { OrdersService } from '~/services/ordersService'
 import { useToast } from '~/composables/useToast'
+import { useUserStore } from '~/stores/user'
+
+const DEFAULT_SALE_PRICE_CENTS: number = 50000
 
 /** Order detail drawer for payment, deployment and client email. */
 const props: UiOrderDrawerProps = defineProps({
@@ -235,6 +254,10 @@ const props: UiOrderDrawerProps = defineProps({
     type: Object as PropType<Order | null>,
     default: null,
   },
+  mode: {
+    type: String as PropType<OrderDrawerMode>,
+    default: 'view',
+  },
   showBack: {
     type: Boolean,
     default: false,
@@ -244,6 +267,7 @@ const props: UiOrderDrawerProps = defineProps({
 const emit: EmitFn<UiOrderDrawerEmits> = defineEmits<UiOrderDrawerEmits>()
 
 const toast: UseToastReturn = useToast()
+const userStore: ReturnType<typeof useUserStore> = useUserStore()
 
 const editMode: Ref<boolean> = ref(false)
 const isBusy: Ref<boolean> = ref(false)
@@ -275,6 +299,17 @@ const PRODUCT_LABELS: Record<string, string> = {
   website: 'Site web',
   apple_wallet: 'Carte Apple Wallet',
 }
+
+const isCreateMode: ComputedRef<boolean> = computed((): boolean => props.mode === 'create')
+
+/** Whether the editable form is shown (new sale or edit an existing one). */
+const showForm: ComputedRef<boolean> = computed((): boolean => isCreateMode.value || editMode.value)
+
+const drawerTitle: ComputedRef<string> = computed((): string => {
+  if (isCreateMode.value) return 'Nouvelle vente'
+  if (!props.order) return 'Vente'
+  return props.order.business_name || props.order.customer_email || `Commande #${props.order.id}`
+})
 
 const statusLabel: ComputedRef<string> = computed(
   (): string => STATUS_LABELS[props.order?.status ?? ''] ?? props.order?.status ?? '',
@@ -311,15 +346,34 @@ const statusBadgeClass: ComputedRef<string> = computed((): string => {
 })
 
 watch(
-  () => [props.open, props.order?.id],
-  ([open]: (boolean | number | undefined)[]): void => {
-    if (open) return
-    setTimeout((): void => {
-      editMode.value = false
-      showDeleteConfirm.value = false
-    }, 250)
+  (): [boolean, OrderDrawerMode] => [props.open, props.mode],
+  ([open, mode]: [boolean, OrderDrawerMode]): void => {
+    if (open && mode === 'create') {
+      resetCreateForm()
+    }
+    if (!open) {
+      setTimeout((): void => {
+        editMode.value = false
+        showDeleteConfirm.value = false
+      }, 250)
+    }
   },
 )
+
+/**
+ * Prefill the create form with the user's default sale price.
+ */
+function resetCreateForm(): void {
+  const defaultCents: number = userStore.user?.site_sale_price_cents ?? DEFAULT_SALE_PRICE_CENTS
+  editForm.value = {
+    amount_euros: Math.round(defaultCents / 100),
+    business_name: '',
+    customer_email: '',
+    domain: '',
+    status: 'draft',
+    notes: '',
+  }
+}
 
 /** Copy the invoice payment page to the clipboard. */
 async function copyLink(): Promise<void> {
@@ -357,8 +411,12 @@ async function runAction(fn: () => Promise<Order>, successMsg: string): Promise<
   }
 }
 
-/** Persist edited fields. */
+/** Persist edited fields, or create a new sale when the drawer is in create mode. */
 async function handleSave(): Promise<void> {
+  if (isCreateMode.value) {
+    await handleCreate()
+    return
+  }
   if (!props.order) return
   const orderId: number = props.order.id
   await runAction(
@@ -374,6 +432,34 @@ async function handleSave(): Promise<void> {
     'Vente mise à jour',
   )
   editMode.value = false
+}
+
+/**
+ * Create a new draft sale from the form, then hand it to the host for display.
+ * @returns A promise resolved once the sale is created.
+ */
+async function handleCreate(): Promise<void> {
+  if (editForm.value.amount_euros <= 0) {
+    toast.error('Renseignez un montant')
+    return
+  }
+  isBusy.value = true
+  try {
+    const created: Order = await OrdersService.createOrder({
+      product_type: 'website',
+      amount_cents: Math.round(editForm.value.amount_euros * 100),
+      business_name: editForm.value.business_name.trim() || null,
+      customer_email: editForm.value.customer_email.trim() || null,
+      domain: editForm.value.domain.trim() || null,
+      notes: editForm.value.notes.trim() || null,
+    })
+    emit('created', created)
+    toast.success('Vente créée')
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Erreur lors de la création')
+  } finally {
+    isBusy.value = false
+  }
 }
 
 /** Mark the order as paid manually. */
