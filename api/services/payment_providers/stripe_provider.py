@@ -119,25 +119,28 @@ class StripePaymentProvider(PaymentProviderClient):
             The issued invoice (``payment_url`` is the Stripe-hosted, card-payable page).
         """
         currency = (request.currency or "eur").lower()
-        await asyncio.to_thread(
-            stripe.InvoiceItem.create,
-            customer=client_id,
-            amount=request.amount_cents,
-            currency=currency,
-            description=request.label,
-            stripe_account=self._connected_account_id,
-        )
         invoice_params: dict = {
             "customer": client_id,
             "collection_method": "send_invoice",
             "days_until_due": _INVOICE_DUE_DAYS,
-            # Stripe defaults to "exclude" — pending InvoiceItems would be dropped → 0 € invoice.
-            "pending_invoice_items_behavior": "include",
+            # Draft first — attach the line explicitly so orphaned pending items on the
+            # customer (e.g. from a previous failed finalize) are never rolled in.
+            "pending_invoice_items_behavior": "exclude",
+            "auto_advance": False,
             "stripe_account": self._connected_account_id,
         }
         if request.application_fee_amount and request.application_fee_amount > 0:
             invoice_params["application_fee_amount"] = request.application_fee_amount
         invoice = await asyncio.to_thread(stripe.Invoice.create, **invoice_params)
+        await asyncio.to_thread(
+            stripe.InvoiceItem.create,
+            customer=client_id,
+            invoice=invoice.id,
+            amount=request.amount_cents,
+            currency=currency,
+            description=request.label,
+            stripe_account=self._connected_account_id,
+        )
         finalized = await asyncio.to_thread(
             stripe.Invoice.finalize_invoice, invoice.id, stripe_account=self._connected_account_id
         )

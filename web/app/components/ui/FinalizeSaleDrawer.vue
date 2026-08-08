@@ -402,7 +402,7 @@ async function handleIssueInvoice(): Promise<void> {
       Math.round(form.value.amount_euros * 100),
     )
     emit('updated', updated)
-    if (updated.invoice_number) toast.success(`Facture ${updated.invoice_number} émise`)
+    if (updated.invoice_number) toast.success(`Facture ${updated.invoice_number} générée`)
     emailPreview.value = await OrdersService.previewOrderPaymentEmail(updated.id)
     step.value = 'email'
   } catch (err: unknown) {

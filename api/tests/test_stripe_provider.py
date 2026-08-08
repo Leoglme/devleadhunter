@@ -93,9 +93,15 @@ def test_ensure_client_creates_on_connected_account(monkeypatch: pytest.MonkeyPa
 
 
 def test_create_invoice_finalizes_and_parses(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The invoice item + invoice are created on the account, finalized, and parsed."""
+    """Draft invoice, attach one line item, finalize, and parse the response."""
     invoice_kwargs: dict = {}
-    monkeypatch.setattr(stripe_module.stripe.InvoiceItem, "create", lambda **_: _Obj(id="ii_1"))
+    invoice_item_kwargs: dict = {}
+
+    def _invoice_item_create(**kwargs: object) -> _Obj:
+        invoice_item_kwargs.update(kwargs)
+        return _Obj(id="ii_1")
+
+    monkeypatch.setattr(stripe_module.stripe.InvoiceItem, "create", _invoice_item_create)
 
     def _invoice_create(**kwargs: object) -> _Obj:
         invoice_kwargs.update(kwargs)
@@ -117,8 +123,12 @@ def test_create_invoice_finalizes_and_parses(monkeypatch: pytest.MonkeyPatch) ->
     assert issued.provider == "stripe"
     assert invoice_kwargs["stripe_account"] == "acct_1"
     assert invoice_kwargs["collection_method"] == "send_invoice"
-    assert invoice_kwargs["pending_invoice_items_behavior"] == "include"
+    assert invoice_kwargs["pending_invoice_items_behavior"] == "exclude"
+    assert invoice_kwargs["auto_advance"] is False
     assert "application_fee_amount" not in invoice_kwargs
+    assert invoice_item_kwargs["invoice"] == "in_1"
+    assert invoice_item_kwargs["amount"] == 50000
+    assert invoice_item_kwargs["description"] == "Site web"
 
 
 def test_create_invoice_passes_application_fee(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -140,7 +150,7 @@ def test_create_invoice_passes_application_fee(monkeypatch: pytest.MonkeyPatch) 
     )
     asyncio.run(_provider().create_invoice("cus_1", request))
     assert invoice_kwargs["application_fee_amount"] == 5000
-    assert invoice_kwargs["pending_invoice_items_behavior"] == "include"
+    assert invoice_kwargs["pending_invoice_items_behavior"] == "exclude"
 
 
 def test_get_invoice_pdf_downloads(monkeypatch: pytest.MonkeyPatch) -> None:
