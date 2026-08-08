@@ -18,10 +18,7 @@
       @keydown="handleKeydown"
     />
 
-    <ul
-      v-if="isOpen"
-      class="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] shadow-lg"
-    >
+    <ul v-if="isOpen" class="input-autocomplete-menu input-autocomplete-menu--wide">
       <li v-if="isSearching" class="flex items-center gap-2 px-3 py-2 text-sm text-[var(--app-ink-soft)]">
         <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
         Recherche…
@@ -34,14 +31,14 @@
           v-for="(suggestion, index) in suggestions"
           :key="`${modelValue}-${suggestion.nom}`"
           :class="[
-            'flex cursor-pointer items-baseline justify-between gap-3 px-3 py-2 text-sm text-[var(--app-ink)]',
+            'flex cursor-pointer items-center gap-3 px-3 py-2 text-sm text-[var(--app-ink)]',
             index === activeIndex ? 'bg-[var(--app-surface-2)]' : 'hover:bg-[var(--app-surface-2)]',
           ]"
           @mousedown.prevent="selectSuggestion(suggestion)"
           @mousemove="activeIndex = index"
         >
-          <span class="font-medium">{{ suggestion.nom }}</span>
-          <span class="text-xs text-[var(--app-ink-soft)]">{{ modelValue }}</span>
+          <span class="min-w-0 flex-1 leading-snug font-medium">{{ suggestion.nom }}</span>
+          <span class="shrink-0 text-xs text-[var(--app-ink-soft)] tabular-nums">{{ modelValue }}</span>
         </li>
       </template>
     </ul>

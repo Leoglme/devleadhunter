@@ -151,6 +151,20 @@
     @apply h-auto py-2;
   }
 
+  .input-autocomplete-menu {
+    @apply absolute left-0 z-50 mt-1 max-h-60 overflow-x-hidden overflow-y-auto rounded-lg border shadow-lg;
+    border-color: var(--app-line);
+    background-color: var(--app-surface);
+    width: max-content;
+    min-width: 100%;
+    max-width: min(calc(100vw - 2.5rem), 28rem);
+  }
+
+  .input-autocomplete-menu--wide {
+    min-width: max(100%, 18rem);
+    max-width: min(calc(100vw - 2.5rem), 32rem);
+  }
+
   .card {
     @apply rounded-xl border p-4 shadow-none;
     border-color: var(--app-line);

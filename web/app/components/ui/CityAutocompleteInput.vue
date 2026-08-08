@@ -22,10 +22,7 @@
       @keydown="handleKeydown"
     />
 
-    <ul
-      v-if="isOpen"
-      class="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] shadow-lg"
-    >
+    <ul v-if="isOpen" class="input-autocomplete-menu">
       <li v-if="isSearching" class="flex items-center gap-2 px-3 py-2 text-sm text-[var(--app-ink-soft)]">
         <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
         Recherche…

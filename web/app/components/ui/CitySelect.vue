@@ -12,11 +12,7 @@
       @focus="open = items.length > 0"
       @keydown="onKeydown"
     />
-    <ul
-      v-if="open && items.length > 0"
-      class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] py-1 shadow-lg"
-      role="listbox"
-    >
+    <ul v-if="open && items.length > 0" class="input-autocomplete-menu py-1" role="listbox">
       <li
         v-for="(city, index) in items"
         :key="city"

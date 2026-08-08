@@ -12,10 +12,7 @@
       @blur="handleBlur"
     />
 
-    <ul
-      v-if="isOpen"
-      class="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] shadow-lg"
-    >
+    <ul v-if="isOpen" class="input-autocomplete-menu">
       <li v-if="isSearching" class="px-3 py-2 text-sm text-[var(--app-ink-soft)]">Recherche en cours…</li>
       <li v-else-if="searchTerm.trim().length < minQueryLength" class="px-3 py-2 text-sm text-[var(--app-ink-soft)]">
         Saisissez au moins {{ minQueryLength }} caractères
