@@ -82,6 +82,22 @@ export type ProspectEnrichmentUpdate = {
   contact_last_name?: string | null
 }
 
+/** Enrichment fields carried by a rich prospect import (mirror of the server `EnrichmentData`). */
+export type ImportedEnrichmentPayload = {
+  logo_url?: string | null
+  rating?: number | null
+  reviews_count?: number | null
+  description?: string | null
+  photos?: string[]
+  reviews?: EnrichmentReview[]
+  opening_hours?: EnrichmentOpeningHours[]
+  services?: string[]
+  social_links?: Record<string, string>
+  place_title?: string | null
+  place_city?: string | null
+  place_postal_code?: string | null
+}
+
 /** Per-prospect outcome of a bulk enrichment run. */
 export type BulkEnrichItemResult = {
   prospect_id: number
@@ -189,5 +205,23 @@ export class EnrichmentService {
     payload: ProspectEnrichmentUpdate,
   ): Promise<ProspectEnrichment> {
     return ApiClient.patch<ProspectEnrichment>(`/api/v1/prospects/${prospectId}/enrichment`, payload)
+  }
+
+  /**
+   * Persist enrichment carried by a rich JSON import — no scraping involved.
+   * Reuses the desktop "post an already-scraped result" endpoint, so the record
+   * is marked completed and the decision-maker cascade + identity guard run.
+   * @param prospectId - Target prospect id.
+   * @param data - Enrichment fields read from the imported JSON.
+   * @returns The persisted enrichment record.
+   */
+  static async applyImportedEnrichment(
+    prospectId: number,
+    data: ImportedEnrichmentPayload,
+  ): Promise<ProspectEnrichment> {
+    return ApiClient.post<ProspectEnrichment>(`/api/v1/prospects/${prospectId}/enrichment/run`, {
+      source: 'import',
+      ...data,
+    })
   }
 }

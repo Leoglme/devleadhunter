@@ -686,6 +686,7 @@ async function handleImportFile(event: Event): Promise<void> {
     }
 
     let created: number = 0
+    let enriched: number = 0
     let failed: number = 0
     for (const item of valid) {
       try {
@@ -696,12 +697,21 @@ async function handleImportFile(event: Event): Promise<void> {
           phone: item.phone || null,
           email: item.email || null,
           website: item.website || null,
+          google_maps_url: item.google_maps_url || null,
           category: item.category ?? 'Entreprise',
           source: 'manual',
           confidence: 1,
         })
         handleProspectUpdated(prospect)
         created += 1
+        if (item.enrichment) {
+          try {
+            await EnrichmentService.applyImportedEnrichment(prospect.id, item.enrichment)
+            enriched += 1
+          } catch {
+            // The prospect stays created; its enrichment can be re-run from the drawer.
+          }
+        }
       } catch {
         failed += 1
       }
@@ -709,8 +719,10 @@ async function handleImportFile(event: Event): Promise<void> {
 
     const skipped: number = errors.length + failed
     if (created > 0) {
+      const enrichedNote: string = enriched > 0 ? `, dont ${enriched} enrichi${enriched > 1 ? 's' : ''}` : ''
+      const skippedNote: string = skipped ? ` (${skipped} ignoré${skipped > 1 ? 's' : ''})` : ''
       toast.success(
-        `${created} prospect${created > 1 ? 's' : ''} importé${created > 1 ? 's' : ''}${skipped ? ` (${skipped} ignoré${skipped > 1 ? 's' : ''})` : ''}`,
+        `${created} prospect${created > 1 ? 's' : ''} importé${created > 1 ? 's' : ''}${enrichedNote}${skippedNote}`,
       )
     } else {
       toast.error('Import terminé sans création — vérifiez le contenu du fichier.')

@@ -127,6 +127,7 @@ export type ProspectCreatePayload = {
   phone?: string | null
   email?: string | null
   website?: string | null
+  google_maps_url?: string | null
   category: string
   source: ProspectSource
   confidence: number
