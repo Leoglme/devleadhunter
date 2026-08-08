@@ -131,6 +131,8 @@ class StripePaymentProvider(PaymentProviderClient):
             "customer": client_id,
             "collection_method": "send_invoice",
             "days_until_due": _INVOICE_DUE_DAYS,
+            # Stripe defaults to "exclude" — pending InvoiceItems would be dropped → 0 € invoice.
+            "pending_invoice_items_behavior": "include",
             "stripe_account": self._connected_account_id,
         }
         if request.application_fee_amount and request.application_fee_amount > 0:

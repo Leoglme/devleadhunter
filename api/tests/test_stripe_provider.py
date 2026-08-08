@@ -117,6 +117,7 @@ def test_create_invoice_finalizes_and_parses(monkeypatch: pytest.MonkeyPatch) ->
     assert issued.provider == "stripe"
     assert invoice_kwargs["stripe_account"] == "acct_1"
     assert invoice_kwargs["collection_method"] == "send_invoice"
+    assert invoice_kwargs["pending_invoice_items_behavior"] == "include"
     assert "application_fee_amount" not in invoice_kwargs
 
 
@@ -139,6 +140,7 @@ def test_create_invoice_passes_application_fee(monkeypatch: pytest.MonkeyPatch) 
     )
     asyncio.run(_provider().create_invoice("cus_1", request))
     assert invoice_kwargs["application_fee_amount"] == 5000
+    assert invoice_kwargs["pending_invoice_items_behavior"] == "include"
 
 
 def test_get_invoice_pdf_downloads(monkeypatch: pytest.MonkeyPatch) -> None:
