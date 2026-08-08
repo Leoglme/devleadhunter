@@ -120,12 +120,11 @@
             </div>
             <div>
               <label class="text-muted mb-1.5 block text-xs font-medium" for="draft-address">Adresse</label>
-              <input
-                id="draft-address"
-                v-model="prospectDraft.address"
-                type="text"
-                class="input-field"
+              <UiAddressAutocompleteInput
+                v-model="draftAddress"
+                input-id="draft-address"
                 placeholder="12 rue des Artisans"
+                @select="handleAddressSelect"
               />
             </div>
             <div class="grid grid-cols-2 gap-3">
@@ -189,6 +188,7 @@
 <script lang="ts" setup>
 import type { UseToastReturn } from '~/types/Composables'
 import type { AddProspectPrefillForm, UiAddProspectDrawerEmits } from '~/types/UiAddProspectDrawer'
+import type { AddressSuggestion } from '~/types/AddressAutocompleteInput'
 import type { ComputedRef, EmitFn, Ref } from 'vue'
 import { computed, ref, watch } from 'vue'
 import type { Prospect, ProspectCreatePayload, ProspectSearchSuggestion } from '~/types'
@@ -234,6 +234,14 @@ const draftCity: WritableComputedRef<string> = computed({
   },
 })
 
+/** The address field is nullable on the payload but the autocomplete binds a plain string. */
+const draftAddress: WritableComputedRef<string> = computed({
+  get: (): string => prospectDraft.value.address ?? '',
+  set: (value: string): void => {
+    prospectDraft.value.address = value
+  },
+})
+
 /** Whether the Google prefill can run (name or Maps link present). */
 const canEnrichProspect: ComputedRef<boolean> = computed((): boolean => {
   return Boolean(addForm.value.business_name.trim() || addForm.value.google_maps_url.trim())
@@ -260,6 +268,14 @@ function createEmptyProspectDraft(): ProspectCreatePayload {
     source: 'manual',
     confidence: 1,
   }
+}
+
+/**
+ * Prefill the city when the user picks a BAN address suggestion.
+ * @param suggestion - Selected street address.
+ */
+function handleAddressSelect(suggestion: AddressSuggestion): void {
+  prospectDraft.value.city = suggestion.city
 }
 
 /**

@@ -1,21 +1,17 @@
 <template>
   <div class="relative w-full">
-    <UIcon
-      v-if="showIcon"
-      name="i-lucide-map-pin"
-      class="pointer-events-none absolute top-1/2 left-3 z-10 h-3.5 w-3.5 -translate-y-1/2 text-[var(--app-faint)]"
-    />
     <input
       :id="inputId"
       :value="modelValue"
       type="text"
+      inputmode="numeric"
       :placeholder="placeholder"
       :required="required"
       :disabled="disabled"
-      autocomplete="off"
+      autocomplete="postal-code"
       role="combobox"
       :aria-expanded="isOpen"
-      :class="['input-field', showIcon && 'pl-9']"
+      class="input-field"
       @input="handleInput"
       @focus="handleFocus"
       @blur="handleBlur"
@@ -31,12 +27,12 @@
         Recherche…
       </li>
       <li v-else-if="suggestions.length === 0" class="px-3 py-2 text-sm text-[var(--app-ink-soft)]">
-        Aucune ville trouvée
+        Aucune ville trouvée pour ce code postal
       </li>
       <template v-else>
         <li
           v-for="(suggestion, index) in suggestions"
-          :key="suggestion.code"
+          :key="`${modelValue}-${suggestion.nom}`"
           :class="[
             'flex cursor-pointer items-baseline justify-between gap-3 px-3 py-2 text-sm text-[var(--app-ink)]',
             index === activeIndex ? 'bg-[var(--app-surface-2)]' : 'hover:bg-[var(--app-surface-2)]',
@@ -45,9 +41,7 @@
           @mousemove="activeIndex = index"
         >
           <span class="font-medium">{{ suggestion.nom }}</span>
-          <span v-if="suggestion.codeDepartement" class="text-xs text-[var(--app-ink-soft)]">
-            {{ suggestion.codeDepartement }}
-          </span>
+          <span class="text-xs text-[var(--app-ink-soft)]">{{ modelValue }}</span>
         </li>
       </template>
     </ul>
@@ -56,26 +50,25 @@
 
 <script lang="ts" setup>
 import type { UseDebounceFnReturn } from '@vueuse/core'
-import type { UiCityAutocompleteInputEmits } from '~/types/UiCityAutocompleteInput'
+import type { UiPostalCodeAutocompleteInputEmits } from '~/types/UiPostalCodeAutocompleteInput'
 import type { EmitFn, Ref } from 'vue'
 import { ref } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
-import type { CityAutocompleteInputProps, CitySuggestion } from '~/types/CityAutocompleteInput'
+import type { PostalCodeAutocompleteInputProps, PostalCodeCitySuggestion } from '~/types/PostalCodeAutocompleteInput'
+import { POSTAL_CODE_LOOKUP_LENGTH, searchCitiesByPostalCode } from '~/services/franceGeoAutocompleteService'
 
-const minQueryLength: number = 2
 const debounceDelayMs: number = 300
-const maxResults: number = 6
 const blurCloseDelayMs: number = 150
 
-/** City autocomplete backed by geo.api.gouv.fr. */
-const props: CityAutocompleteInputProps = defineProps({
+/** Postal code field with commune lookup to prefill the matching city. */
+const props: PostalCodeAutocompleteInputProps = defineProps({
   modelValue: {
     type: String,
     required: true,
   },
   placeholder: {
     type: String,
-    default: 'Paris, Lyon, Rennes…',
+    default: '35000',
   },
   inputId: {
     type: String,
@@ -85,19 +78,15 @@ const props: CityAutocompleteInputProps = defineProps({
     type: Boolean,
     default: false,
   },
-  showIcon: {
-    type: Boolean,
-    default: false,
-  },
   disabled: {
     type: Boolean,
     default: false,
   },
 })
 
-const emit: EmitFn<UiCityAutocompleteInputEmits> = defineEmits<UiCityAutocompleteInputEmits>()
+const emit: EmitFn<UiPostalCodeAutocompleteInputEmits> = defineEmits<UiPostalCodeAutocompleteInputEmits>()
 
-const suggestions: Ref<CitySuggestion[]> = ref([])
+const suggestions: Ref<PostalCodeCitySuggestion[]> = ref([])
 const isSearching: Ref<boolean> = ref(false)
 const isOpen: Ref<boolean> = ref(false)
 const activeIndex: Ref<number> = ref(-1)
@@ -105,15 +94,14 @@ let searchRequestId: number = 0
 let blurTimeoutId: ReturnType<typeof setTimeout> | null = null
 
 /**
- * Recherche les communes françaises correspondant à la saisie via geo.api.gouv.fr
- * (API publique, sans clé), triées par population.
- * @param query - Début du nom de ville saisi.
- * @returns Une promesse résolue une fois les suggestions mises à jour.
+ * Fetch communes for a complete five-digit postal code.
+ * @param postalCode - Digits typed by the user.
+ * @returns A promise resolved once suggestions are updated.
  */
-const fetchSuggestions: UseDebounceFnReturn<(query: string) => Promise<void>> = useDebounceFn(
-  async (query: string): Promise<void> => {
-    const trimmedQuery: string = query.trim()
-    if (trimmedQuery.length < minQueryLength) {
+const fetchSuggestions: UseDebounceFnReturn<(postalCode: string) => Promise<void>> = useDebounceFn(
+  async (postalCode: string): Promise<void> => {
+    const trimmedCode: string = postalCode.trim()
+    if (trimmedCode.length < POSTAL_CODE_LOOKUP_LENGTH) {
       suggestions.value = []
       isOpen.value = false
       return
@@ -124,18 +112,14 @@ const fetchSuggestions: UseDebounceFnReturn<(query: string) => Promise<void>> = 
     isOpen.value = true
 
     try {
-      const results: CitySuggestion[] = await $fetch<CitySuggestion[]>('https://geo.api.gouv.fr/communes', {
-        query: {
-          nom: trimmedQuery,
-          fields: 'nom,codesPostaux,codeDepartement',
-          boost: 'population',
-          limit: maxResults,
-        },
-      })
+      const results: PostalCodeCitySuggestion[] = await searchCitiesByPostalCode(trimmedCode)
       if (requestId !== searchRequestId) {
         return
       }
       suggestions.value = results
+      if (results.length === 1) {
+        selectSuggestion(results[0] as PostalCodeCitySuggestion)
+      }
     } catch {
       if (requestId !== searchRequestId) {
         return
@@ -152,28 +136,31 @@ const fetchSuggestions: UseDebounceFnReturn<(query: string) => Promise<void>> = 
 )
 
 /**
- * Propage la saisie au v-model et déclenche la recherche de suggestions.
- * @param event - Événement input natif.
+ * Keep only digits in the postal code and trigger a lookup once five digits are present.
+ * @param event - Native input event.
  */
 function handleInput(event: Event): void {
   if (props.disabled) {
     return
   }
-  const value: string = (event.target as HTMLInputElement).value
-  emit('update:modelValue', value)
-  if (value.trim().length >= minQueryLength) {
+  const rawValue: string = (event.target as HTMLInputElement).value
+  const digitsOnly: string = rawValue.replace(/\D/g, '').slice(0, POSTAL_CODE_LOOKUP_LENGTH)
+  emit('update:modelValue', digitsOnly)
+
+  if (digitsOnly.length === POSTAL_CODE_LOOKUP_LENGTH) {
     isSearching.value = true
     isOpen.value = true
-  } else {
-    suggestions.value = []
-    isSearching.value = false
-    isOpen.value = false
+    void fetchSuggestions(digitsOnly)
+    return
   }
-  void fetchSuggestions(value)
+
+  suggestions.value = []
+  isSearching.value = false
+  isOpen.value = false
 }
 
 /**
- * Rouvre la liste de suggestions quand le champ reprend le focus.
+ * Reopen the dropdown when the field regains focus.
  */
 function handleFocus(): void {
   if (props.disabled) {
@@ -183,13 +170,13 @@ function handleFocus(): void {
     clearTimeout(blurTimeoutId)
     blurTimeoutId = null
   }
-  if (props.modelValue.trim().length >= minQueryLength && suggestions.value.length > 0) {
+  if (props.modelValue.trim().length === POSTAL_CODE_LOOKUP_LENGTH && suggestions.value.length > 1) {
     isOpen.value = true
   }
 }
 
 /**
- * Ferme la liste après un court délai pour laisser le clic sur une suggestion aboutir.
+ * Close the dropdown after a short delay so mousedown on a suggestion can fire.
  */
 function handleBlur(): void {
   blurTimeoutId = setTimeout((): void => {
@@ -199,9 +186,8 @@ function handleBlur(): void {
 }
 
 /**
- * Navigation clavier dans la liste : flèches pour se déplacer, Entrée pour
- * sélectionner, Échap pour fermer.
- * @param event - Événement clavier natif.
+ * Keyboard navigation inside the suggestion list.
+ * @param event - Native keydown event.
  */
 function handleKeydown(event: KeyboardEvent): void {
   if (!isOpen.value || suggestions.value.length === 0) {
@@ -215,7 +201,7 @@ function handleKeydown(event: KeyboardEvent): void {
     activeIndex.value = activeIndex.value <= 0 ? suggestions.value.length - 1 : activeIndex.value - 1
   } else if (event.key === 'Enter' && activeIndex.value >= 0) {
     event.preventDefault()
-    const suggestion: CitySuggestion | undefined = suggestions.value[activeIndex.value]
+    const suggestion: PostalCodeCitySuggestion | undefined = suggestions.value[activeIndex.value]
     if (suggestion) {
       selectSuggestion(suggestion)
     }
@@ -225,11 +211,10 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 /**
- * Applique la ville sélectionnée dans la liste.
- * @param suggestion - Commune choisie.
+ * Notify the parent of the commune linked to the postal code.
+ * @param suggestion - Commune picked (or auto-selected when unique).
  */
-function selectSuggestion(suggestion: CitySuggestion): void {
-  emit('update:modelValue', suggestion.nom)
+function selectSuggestion(suggestion: PostalCodeCitySuggestion): void {
   emit('select', suggestion)
   isOpen.value = false
   activeIndex.value = -1

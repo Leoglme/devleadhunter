@@ -113,12 +113,11 @@
                 <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
                   >Adresse</label
                 >
-                <input
+                <UiAddressAutocompleteInput
                   v-model="form.address"
-                  type="text"
-                  class="input-field"
                   placeholder="12 rue de la Paix"
                   :disabled="isInvoiceIssued"
+                  @select="handleAddressSelect"
                 />
               </div>
               <div class="grid grid-cols-3 gap-3">
@@ -126,25 +125,18 @@
                   <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
                     >Code postal</label
                   >
-                  <input
+                  <UiPostalCodeAutocompleteInput
                     v-model="form.zip_code"
-                    type="text"
-                    class="input-field"
                     placeholder="35000"
                     :disabled="isInvoiceIssued"
+                    @select="handlePostalCodeSelect"
                   />
                 </div>
                 <div class="col-span-2">
                   <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
                     >Ville</label
                   >
-                  <input
-                    v-model="form.city"
-                    type="text"
-                    class="input-field"
-                    placeholder="Rennes"
-                    :disabled="isInvoiceIssued"
-                  />
+                  <UiCityAutocompleteInput v-model="form.city" placeholder="Rennes" :disabled="isInvoiceIssued" />
                 </div>
               </div>
               <div>
@@ -271,6 +263,8 @@ import type {
   UiFinalizeSaleDrawerEmits,
   UiFinalizeSaleDrawerProps,
 } from '~/types/UiFinalizeSaleDrawer'
+import type { AddressSuggestion } from '~/types/AddressAutocompleteInput'
+import type { PostalCodeCitySuggestion } from '~/types/PostalCodeAutocompleteInput'
 import type {
   Order,
   OrderBillingDetails,
@@ -438,6 +432,23 @@ async function copyPaymentLink(): Promise<void> {
   if (!paymentUrl.value) return
   await navigator.clipboard.writeText(paymentUrl.value)
   toast.success('Lien copié')
+}
+
+/**
+ * Prefill postal code and city when the user picks a BAN address suggestion.
+ * @param suggestion - Selected street address.
+ */
+function handleAddressSelect(suggestion: AddressSuggestion): void {
+  form.value.zip_code = suggestion.postcode
+  form.value.city = suggestion.city
+}
+
+/**
+ * Prefill the city when the user picks a commune for the typed postal code.
+ * @param suggestion - Commune linked to the postal code.
+ */
+function handlePostalCodeSelect(suggestion: PostalCodeCitySuggestion): void {
+  form.value.city = suggestion.nom
 }
 
 watch(

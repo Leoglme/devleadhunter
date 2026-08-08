@@ -414,7 +414,11 @@
               <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase">
                 Adresse
               </label>
-              <input v-model="editForm.address" type="text" class="input-field" placeholder="12 Rue de la Paix" />
+              <UiAddressAutocompleteInput
+                v-model="editForm.address"
+                placeholder="12 Rue de la Paix"
+                @select="handleAddressSelect"
+              />
             </div>
 
             <div class="grid grid-cols-2 gap-3">
@@ -498,6 +502,7 @@ import type {
   UiProspectDrawerEmits,
   UiProspectDrawerProps,
 } from '~/types/UiProspectDrawer'
+import type { AddressSuggestion } from '~/types/AddressAutocompleteInput'
 import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
 import { ref, computed, watch } from 'vue'
 import type { Prospect, ProspectUpdatePayload } from '~/types'
@@ -749,6 +754,14 @@ function startEdit(): void {
 /** Exit edit mode without saving. */
 function cancelEdit(): void {
   editMode.value = false
+}
+
+/**
+ * Prefill the city when the user picks a BAN address suggestion.
+ * @param suggestion - Selected street address.
+ */
+function handleAddressSelect(suggestion: AddressSuggestion): void {
+  editForm.value.city = suggestion.city
 }
 
 /**
