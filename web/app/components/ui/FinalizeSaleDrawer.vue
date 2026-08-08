@@ -58,12 +58,27 @@
               <p class="text-xs font-medium text-[var(--app-ink)]">Aucun compte d'encaissement connecté</p>
               <p class="mt-0.5 text-[11px] text-[var(--app-ink-soft)]">
                 La vente reste possible (virement, espèces) mais aucune facture ne sera émise. Connectez Qonto ou Stripe
-                dans Paramètres
-                <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> Facturation.
+                dans
+                <NuxtLink
+                  to="/dashboard/settings/billing"
+                  class="font-medium text-[var(--app-blue)] underline underline-offset-2 transition-opacity hover:opacity-80"
+                  @click="emit('close')"
+                  >Facturation &amp; paiement</NuxtLink
+                >.
               </p>
             </div>
 
             <form id="finalize-sale-form" class="space-y-4 p-5" @submit.prevent="handleIssueInvoice">
+              <div>
+                <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase">
+                  SIREN / SIRET (facultatif)
+                </label>
+                <UiTaxIdLookupInput v-model="form.tax_id" :disabled="isInvoiceIssued" @prefill="applyRegistryPrefill" />
+                <p v-if="isTaxIdRequired" class="mt-1 text-[11px] text-[var(--app-ink-soft)]">
+                  Exigé par Qonto pour émettre la facture.
+                </p>
+              </div>
+
               <div>
                 <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
                   >Montant (€)</label
@@ -138,21 +153,6 @@
                   >
                   <UiCityAutocompleteInput v-model="form.city" placeholder="Rennes" :disabled="isInvoiceIssued" />
                 </div>
-              </div>
-              <div>
-                <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase">
-                  SIREN / SIRET {{ isTaxIdRequired ? '' : '(facultatif)' }}
-                </label>
-                <input
-                  v-model="form.tax_id"
-                  type="text"
-                  class="input-field"
-                  placeholder="9 chiffres"
-                  :disabled="isInvoiceIssued"
-                />
-                <p v-if="isTaxIdRequired" class="mt-1 text-[11px] text-[var(--app-ink-soft)]">
-                  Exigé par Qonto pour émettre la facture.
-                </p>
               </div>
               <div>
                 <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
@@ -264,6 +264,7 @@ import type {
   UiFinalizeSaleDrawerProps,
 } from '~/types/UiFinalizeSaleDrawer'
 import type { AddressSuggestion } from '~/types/AddressAutocompleteInput'
+import type { CompanyBillingPrefill } from '~/types/CompanyRegistryLookup'
 import type { PostalCodeCitySuggestion } from '~/types/PostalCodeAutocompleteInput'
 import type {
   Order,
@@ -432,6 +433,21 @@ async function copyPaymentLink(): Promise<void> {
   if (!paymentUrl.value) return
   await navigator.clipboard.writeText(paymentUrl.value)
   toast.success('Lien copié')
+}
+
+/**
+ * Prefill billing fields from a registry lookup triggered by SIREN/SIRET.
+ * @param prefill - Company data returned by recherche-entreprises.api.gouv.fr.
+ */
+function applyRegistryPrefill(prefill: CompanyBillingPrefill): void {
+  form.value.name = prefill.name
+  form.value.address = prefill.address
+  form.value.zip_code = prefill.zip_code
+  form.value.city = prefill.city
+  form.value.tax_id = prefill.tax_id
+  if (prefill.vat_number) {
+    form.value.vat_number = prefill.vat_number
+  }
 }
 
 /**
