@@ -120,8 +120,9 @@ class StripePaymentProvider(PaymentProviderClient):
         The offered payment methods are pinned on the invoice so every connected
         account exposes the same set — card (Apple Pay and Google Pay ride on it),
         Link, and SEPA credit transfer — instead of inheriting each account's own
-        dashboard configuration. An account that can't offer the bank transfer
-        falls back to card and Link so the sale is never blocked.
+        dashboard configuration. A connected account whose country can't offer the
+        bank transfer reissues the invoice with card and Link only, so a sale is
+        never blocked.
 
         Args:
             client_id: Stripe customer id from :meth:`ensure_client`.
@@ -130,6 +131,37 @@ class StripePaymentProvider(PaymentProviderClient):
 
         Returns:
             The issued invoice (``payment_url`` is the Stripe-hosted, card-payable page).
+        """
+        try:
+            return await self._issue_invoice(client_id, request, _PREFERRED_PAYMENT_METHODS)
+        except stripe.error.InvalidRequestError as error:
+            # Stripe rejects customer_balance (bank transfer) as early as creation when the
+            # connected account's country doesn't support it — reissue without it.
+            if "customer_balance" not in str(error):
+                raise
+            logger.warning(
+                "Bank transfer unavailable on connected account %s; reissuing with card + Link only: %s",
+                self._connected_account_id,
+                error,
+            )
+            return await self._issue_invoice(client_id, request, _FALLBACK_PAYMENT_METHODS)
+
+    async def _issue_invoice(
+        self, client_id: str, request: InvoiceRequest, payment_method_types: list[str]
+    ) -> IssuedInvoice:
+        """
+        Draft, attach the line, finalize and parse an invoice for one method set.
+
+        A draft left behind by a failure after creation is deleted so the caller's
+        retry with another method set never rolls in an orphaned invoice.
+
+        Args:
+            client_id: Stripe customer id from :meth:`ensure_client`.
+            request: The invoice details.
+            payment_method_types: The payment methods to offer on the invoice.
+
+        Returns:
+            The issued invoice.
         """
         currency = (request.currency or "eur").lower()
         invoice_params: dict = {
@@ -140,22 +172,28 @@ class StripePaymentProvider(PaymentProviderClient):
             # customer (e.g. from a previous failed finalize) are never rolled in.
             "pending_invoice_items_behavior": "exclude",
             "auto_advance": False,
-            "payment_settings": self._payment_settings(_PREFERRED_PAYMENT_METHODS),
+            "payment_settings": self._payment_settings(payment_method_types),
             "stripe_account": self._connected_account_id,
         }
         if request.application_fee_amount and request.application_fee_amount > 0:
             invoice_params["application_fee_amount"] = request.application_fee_amount
         invoice = await asyncio.to_thread(stripe.Invoice.create, **invoice_params)
-        await asyncio.to_thread(
-            stripe.InvoiceItem.create,
-            customer=client_id,
-            invoice=invoice.id,
-            amount=request.amount_cents,
-            currency=currency,
-            description=request.label,
-            stripe_account=self._connected_account_id,
-        )
-        finalized = await self._finalize_with_fallback(invoice.id)
+        try:
+            await asyncio.to_thread(
+                stripe.InvoiceItem.create,
+                customer=client_id,
+                invoice=invoice.id,
+                amount=request.amount_cents,
+                currency=currency,
+                description=request.label,
+                stripe_account=self._connected_account_id,
+            )
+            finalized = await asyncio.to_thread(
+                stripe.Invoice.finalize_invoice, invoice.id, stripe_account=self._connected_account_id
+            )
+        except stripe.error.StripeError:
+            await self._discard_draft(invoice.id)
+            raise
         return IssuedInvoice(
             provider=self.provider.value,
             invoice_id=finalized.id,
@@ -190,40 +228,17 @@ class StripePaymentProvider(PaymentProviderClient):
             }
         return payment_settings
 
-    async def _finalize_with_fallback(self, invoice_id: str) -> stripe.Invoice:
+    async def _discard_draft(self, invoice_id: str) -> None:
         """
-        Finalize the invoice, dropping bank transfer if the account can't offer it.
-
-        SEPA credit transfer needs the connected account to support it; when it
-        doesn't, finalization raises and we retry with card and Link only so the
-        sale still goes through.
+        Delete a draft invoice, swallowing errors so the original failure surfaces.
 
         Args:
-            invoice_id: The draft invoice id to finalize.
-
-        Returns:
-            The finalized Stripe invoice object.
+            invoice_id: The draft invoice id to delete.
         """
         try:
-            return await asyncio.to_thread(
-                stripe.Invoice.finalize_invoice, invoice_id, stripe_account=self._connected_account_id
-            )
-        except stripe.error.InvalidRequestError as error:
-            logger.warning(
-                "Finalize failed for invoice %s on connected account %s; retrying without bank transfer: %s",
-                invoice_id,
-                self._connected_account_id,
-                error,
-            )
-            await asyncio.to_thread(
-                stripe.Invoice.modify,
-                invoice_id,
-                payment_settings=self._payment_settings(_FALLBACK_PAYMENT_METHODS),
-                stripe_account=self._connected_account_id,
-            )
-            return await asyncio.to_thread(
-                stripe.Invoice.finalize_invoice, invoice_id, stripe_account=self._connected_account_id
-            )
+            await asyncio.to_thread(stripe.Invoice.delete, invoice_id, stripe_account=self._connected_account_id)
+        except stripe.error.StripeError:
+            logger.warning("Could not delete draft invoice %s after a failed issue attempt", invoice_id)
 
     async def get_invoice_pdf(self, invoice_id: str) -> bytes:
         """

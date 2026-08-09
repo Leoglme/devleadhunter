@@ -158,37 +158,60 @@ def test_create_invoice_passes_application_fee(monkeypatch: pytest.MonkeyPatch) 
     assert invoice_kwargs["pending_invoice_items_behavior"] == "exclude"
 
 
-def test_create_invoice_falls_back_without_bank_transfer(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A connected account that can't offer bank transfer finalizes with card + Link only."""
+def test_create_invoice_falls_back_when_bank_transfer_unsupported(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A customer_balance rejection at creation reissues the invoice with card + Link only."""
+    create_calls: list[dict] = []
+
+    def _invoice_create(**kwargs: object) -> _Obj:
+        create_calls.append(kwargs)
+        if len(create_calls) == 1:
+            raise stripe_module.stripe.error.InvalidRequestError(
+                "The `customer_balance` payment_method_type is not supported for the country of your account.", None
+            )
+        return _Obj(id="in_2")
+
+    monkeypatch.setattr(stripe_module.stripe.Invoice, "create", _invoice_create)
     monkeypatch.setattr(stripe_module.stripe.InvoiceItem, "create", lambda **_: _Obj(id="ii_1"))
-    monkeypatch.setattr(stripe_module.stripe.Invoice, "create", lambda **_: _Obj(id="in_1"))
+    monkeypatch.setattr(
+        stripe_module.stripe.Invoice,
+        "finalize_invoice",
+        lambda _id, **_: _Obj(id="in_2", number="ABC-003", hosted_invoice_url="https://pay.stripe.com/i/in_2"),
+    )
+
+    request = InvoiceRequest(client=BillingClient(name="X"), amount_cents=50000, currency="eur", label="Site web")
+    issued = asyncio.run(_provider().create_invoice("cus_1", request))
+
+    assert len(create_calls) == 2
+    assert create_calls[0]["payment_settings"]["payment_method_types"] == ["card", "link", "customer_balance"]
+    assert create_calls[1]["payment_settings"]["payment_method_types"] == ["card", "link"]
+    assert "payment_method_options" not in create_calls[1]["payment_settings"]
+    assert issued.invoice_number == "ABC-003"
+
+
+def test_create_invoice_discards_draft_when_finalize_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A draft left by a failed finalize is deleted before the invoice is reissued."""
+    created_ids = iter(["in_1", "in_2"])
+    monkeypatch.setattr(stripe_module.stripe.Invoice, "create", lambda **_: _Obj(id=next(created_ids)))
+    monkeypatch.setattr(stripe_module.stripe.InvoiceItem, "create", lambda **_: _Obj(id="ii_1"))
 
     finalize_calls: dict = {"count": 0}
 
     def _finalize(_id: str, **_: object) -> _Obj:
         finalize_calls["count"] += 1
         if finalize_calls["count"] == 1:
-            raise stripe_module.stripe.error.InvalidRequestError("bank transfer not available", None)
-        return _Obj(id="in_1", number="ABC-003", hosted_invoice_url="https://pay.stripe.com/i/in_1")
+            raise stripe_module.stripe.error.InvalidRequestError("customer_balance not available", None)
+        return _Obj(id="in_2", number="ABC-004", hosted_invoice_url="https://pay.stripe.com/i/in_2")
 
     monkeypatch.setattr(stripe_module.stripe.Invoice, "finalize_invoice", _finalize)
 
-    modify_kwargs: dict = {}
-
-    def _modify(_id: str, **kwargs: object) -> _Obj:
-        modify_kwargs.update(kwargs)
-        return _Obj(id="in_1")
-
-    monkeypatch.setattr(stripe_module.stripe.Invoice, "modify", _modify)
+    deleted: list[str] = []
+    monkeypatch.setattr(stripe_module.stripe.Invoice, "delete", lambda _id, **_: deleted.append(_id))
 
     request = InvoiceRequest(client=BillingClient(name="X"), amount_cents=50000, currency="eur", label="Site web")
     issued = asyncio.run(_provider().create_invoice("cus_1", request))
 
-    assert finalize_calls["count"] == 2
-    assert issued.invoice_number == "ABC-003"
-    assert modify_kwargs["payment_settings"]["payment_method_types"] == ["card", "link"]
-    assert "payment_method_options" not in modify_kwargs["payment_settings"]
-    assert modify_kwargs["stripe_account"] == "acct_1"
+    assert deleted == ["in_1"]
+    assert issued.invoice_number == "ABC-004"
 
 
 def test_get_invoice_pdf_downloads(monkeypatch: pytest.MonkeyPatch) -> None:
