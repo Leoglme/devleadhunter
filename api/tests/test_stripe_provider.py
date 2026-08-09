@@ -129,6 +129,11 @@ def test_create_invoice_finalizes_and_parses(monkeypatch: pytest.MonkeyPatch) ->
     assert invoice_item_kwargs["invoice"] == "in_1"
     assert invoice_item_kwargs["amount"] == 50000
     assert invoice_item_kwargs["description"] == "Site web"
+    assert invoice_kwargs["payment_settings"]["payment_method_types"] == ["card", "link", "customer_balance"]
+    assert (
+        invoice_kwargs["payment_settings"]["payment_method_options"]["customer_balance"]["bank_transfer"]["type"]
+        == "eu_bank_transfer"
+    )
 
 
 def test_create_invoice_passes_application_fee(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -151,6 +156,39 @@ def test_create_invoice_passes_application_fee(monkeypatch: pytest.MonkeyPatch) 
     asyncio.run(_provider().create_invoice("cus_1", request))
     assert invoice_kwargs["application_fee_amount"] == 5000
     assert invoice_kwargs["pending_invoice_items_behavior"] == "exclude"
+
+
+def test_create_invoice_falls_back_without_bank_transfer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A connected account that can't offer bank transfer finalizes with card + Link only."""
+    monkeypatch.setattr(stripe_module.stripe.InvoiceItem, "create", lambda **_: _Obj(id="ii_1"))
+    monkeypatch.setattr(stripe_module.stripe.Invoice, "create", lambda **_: _Obj(id="in_1"))
+
+    finalize_calls: dict = {"count": 0}
+
+    def _finalize(_id: str, **_: object) -> _Obj:
+        finalize_calls["count"] += 1
+        if finalize_calls["count"] == 1:
+            raise stripe_module.stripe.error.InvalidRequestError("bank transfer not available", None)
+        return _Obj(id="in_1", number="ABC-003", hosted_invoice_url="https://pay.stripe.com/i/in_1")
+
+    monkeypatch.setattr(stripe_module.stripe.Invoice, "finalize_invoice", _finalize)
+
+    modify_kwargs: dict = {}
+
+    def _modify(_id: str, **kwargs: object) -> _Obj:
+        modify_kwargs.update(kwargs)
+        return _Obj(id="in_1")
+
+    monkeypatch.setattr(stripe_module.stripe.Invoice, "modify", _modify)
+
+    request = InvoiceRequest(client=BillingClient(name="X"), amount_cents=50000, currency="eur", label="Site web")
+    issued = asyncio.run(_provider().create_invoice("cus_1", request))
+
+    assert finalize_calls["count"] == 2
+    assert issued.invoice_number == "ABC-003"
+    assert modify_kwargs["payment_settings"]["payment_method_types"] == ["card", "link"]
+    assert "payment_method_options" not in modify_kwargs["payment_settings"]
+    assert modify_kwargs["stripe_account"] == "acct_1"
 
 
 def test_get_invoice_pdf_downloads(monkeypatch: pytest.MonkeyPatch) -> None:

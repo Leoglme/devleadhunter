@@ -29,6 +29,13 @@ logger = logging.getLogger(__name__)
 
 _INVOICE_DUE_DAYS = 30
 
+# Payment methods pinned on every connected account's invoice, so the checkout is the same
+# everywhere instead of inheriting each account's dashboard (wallets ride on card).
+_PREFERRED_PAYMENT_METHODS = ["card", "link", "customer_balance"]
+_FALLBACK_PAYMENT_METHODS = ["card", "link"]
+# SEPA credit transfer mints a virtual IBAN in this country; every target is French.
+_BANK_TRANSFER_COUNTRY = "FR"
+
 
 class StripeConnectError(RuntimeError):
     """Raised when a Stripe operation is attempted on an unusable connected account."""
@@ -110,6 +117,12 @@ class StripePaymentProvider(PaymentProviderClient):
         """
         Create, finalize and return a sendable Stripe invoice.
 
+        The offered payment methods are pinned on the invoice so every connected
+        account exposes the same set — card (Apple Pay and Google Pay ride on it),
+        Link, and SEPA credit transfer — instead of inheriting each account's own
+        dashboard configuration. An account that can't offer the bank transfer
+        falls back to card and Link so the sale is never blocked.
+
         Args:
             client_id: Stripe customer id from :meth:`ensure_client`.
             request: The invoice details (its ``application_fee_amount`` becomes
@@ -127,6 +140,7 @@ class StripePaymentProvider(PaymentProviderClient):
             # customer (e.g. from a previous failed finalize) are never rolled in.
             "pending_invoice_items_behavior": "exclude",
             "auto_advance": False,
+            "payment_settings": self._payment_settings(_PREFERRED_PAYMENT_METHODS),
             "stripe_account": self._connected_account_id,
         }
         if request.application_fee_amount and request.application_fee_amount > 0:
@@ -141,15 +155,75 @@ class StripePaymentProvider(PaymentProviderClient):
             description=request.label,
             stripe_account=self._connected_account_id,
         )
-        finalized = await asyncio.to_thread(
-            stripe.Invoice.finalize_invoice, invoice.id, stripe_account=self._connected_account_id
-        )
+        finalized = await self._finalize_with_fallback(invoice.id)
         return IssuedInvoice(
             provider=self.provider.value,
             invoice_id=finalized.id,
             invoice_number=finalized.get("number"),
             payment_url=finalized.get("hosted_invoice_url"),
         )
+
+    @staticmethod
+    def _payment_settings(payment_method_types: list[str]) -> dict:
+        """
+        Build the invoice ``payment_settings`` for the given method types.
+
+        Adds the SEPA credit-transfer options whenever ``customer_balance`` is
+        offered, so the hosted invoice exposes a French virtual IBAN.
+
+        Args:
+            payment_method_types: The payment methods to expose on the invoice.
+
+        Returns:
+            The ``payment_settings`` payload for the Stripe invoice.
+        """
+        payment_settings: dict = {"payment_method_types": payment_method_types}
+        if "customer_balance" in payment_method_types:
+            payment_settings["payment_method_options"] = {
+                "customer_balance": {
+                    "funding_type": "bank_transfer",
+                    "bank_transfer": {
+                        "type": "eu_bank_transfer",
+                        "eu_bank_transfer": {"country": _BANK_TRANSFER_COUNTRY},
+                    },
+                }
+            }
+        return payment_settings
+
+    async def _finalize_with_fallback(self, invoice_id: str) -> stripe.Invoice:
+        """
+        Finalize the invoice, dropping bank transfer if the account can't offer it.
+
+        SEPA credit transfer needs the connected account to support it; when it
+        doesn't, finalization raises and we retry with card and Link only so the
+        sale still goes through.
+
+        Args:
+            invoice_id: The draft invoice id to finalize.
+
+        Returns:
+            The finalized Stripe invoice object.
+        """
+        try:
+            return await asyncio.to_thread(
+                stripe.Invoice.finalize_invoice, invoice_id, stripe_account=self._connected_account_id
+            )
+        except stripe.error.InvalidRequestError as error:
+            logger.warning(
+                "Finalize failed for invoice %s on connected account %s; retrying without bank transfer: %s",
+                invoice_id,
+                self._connected_account_id,
+                error,
+            )
+            await asyncio.to_thread(
+                stripe.Invoice.modify,
+                invoice_id,
+                payment_settings=self._payment_settings(_FALLBACK_PAYMENT_METHODS),
+                stripe_account=self._connected_account_id,
+            )
+            return await asyncio.to_thread(
+                stripe.Invoice.finalize_invoice, invoice_id, stripe_account=self._connected_account_id
+            )
 
     async def get_invoice_pdf(self, invoice_id: str) -> bytes:
         """
