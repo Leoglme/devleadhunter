@@ -14,6 +14,7 @@ import pytest
 
 from enums.order_status import OrderStatus
 from enums.payment_provider import PaymentProvider
+from models.order import Order
 from services.order_service import OrderService, _split_postal_address
 from services.payment_providers.base import IssuedInvoice
 
@@ -351,3 +352,47 @@ def test_check_and_mark_paid_noop_when_unpaid(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(service, "_resolve_provider", _fake_resolve)
     assert asyncio.run(service.check_and_mark_paid(_FakeDB(), SimpleNamespace(id=1), order)) is False
+
+
+class _ReconcileQuery:
+    """Returns canned rows for the reconciliation queries (orders via all, user via first)."""
+
+    def __init__(self, rows: list, one: object) -> None:
+        self._rows = rows
+        self._one = one
+
+    def filter(self, *_conditions: object) -> "_ReconcileQuery":
+        return self
+
+    def all(self) -> list:
+        return self._rows
+
+    def first(self) -> object:
+        return self._one
+
+
+class _ReconcileDB:
+    """Serves the pending orders for an Order query and the owner for a User query."""
+
+    def __init__(self, orders: list, user: object) -> None:
+        self._orders = orders
+        self._user = user
+
+    def query(self, entity: object) -> _ReconcileQuery:
+        if entity is Order:
+            return _ReconcileQuery(self._orders, None)
+        return _ReconcileQuery([], self._user)
+
+
+def test_reconcile_pending_orders_returns_newly_paid_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The pass marks paid only the orders whose provider confirms payment."""
+    service = OrderService()
+    paid = _order(id=1, user_id=9, invoice_id="inv_1", payment_provider="stripe", paid_at=None)
+    unpaid = _order(id=2, user_id=9, invoice_id="inv_2", payment_provider="stripe", paid_at=None)
+    db = _ReconcileDB([paid, unpaid], SimpleNamespace(id=9))
+
+    async def _fake_check(_db: object, _user: object, order: SimpleNamespace) -> bool:
+        return order.id == 1
+
+    monkeypatch.setattr(service, "check_and_mark_paid", _fake_check)
+    assert asyncio.run(service.reconcile_pending_orders(db)) == [1]

@@ -52,6 +52,7 @@ from services.acquisition_orchestrator import acquisition_orchestrator
 from services.demo_site_cleanup_service import run_demo_site_cleanup_loop
 from services.email_queue_worker import email_queue_worker
 from services.order_fulfillment_recovery_service import run_order_fulfillment_recovery_loop
+from services.order_payment_reconciliation_service import run_order_payment_reconciliation_loop
 from services.scraper_service import scraper_service
 
 ensure_proactor_event_loop()
@@ -144,6 +145,7 @@ async def startup_event() -> None:
     asyncio.create_task(run_demo_site_cleanup_loop())
     asyncio.create_task(email_queue_worker.run_forever())
     asyncio.create_task(run_order_fulfillment_recovery_loop())
+    asyncio.create_task(run_order_payment_reconciliation_loop())
     asyncio.create_task(acquisition_orchestrator.run_forever())
     asyncio.create_task(_warmup_maps_autocomplete())
 

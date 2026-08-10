@@ -548,6 +548,47 @@ class OrderService:
             return True
         return False
 
+    async def reconcile_pending_orders(self, db: Session) -> list[int]:
+        """
+        Mark paid every payment-pending order whose provider reports the invoice paid.
+
+        Provider-agnostic auto-detection driven by the background loop: the Stripe
+        invoice flow emits no webhook we handle and Qonto none at all, so without this
+        a paid sale would sit at "payment pending" until someone clicks "Vérifier le
+        paiement".
+
+        Args:
+            db: Active database session.
+
+        Returns:
+            The ids of the orders this pass transitioned to paid.
+        """
+        pending = (
+            db.query(Order)
+            .filter(
+                Order.status == OrderStatus.PAYMENT_PENDING.value,
+                Order.paid_at.is_(None),
+                Order.invoice_id.isnot(None),
+                Order.payment_provider.isnot(None),
+            )
+            .all()
+        )
+        owners: dict[int, User] = {}
+        newly_paid: list[int] = []
+        for order in pending:
+            owner = owners.get(order.user_id)
+            if owner is None:
+                owner = db.query(User).filter(User.id == order.user_id).first()
+                if owner is None:
+                    continue
+                owners[order.user_id] = owner
+            try:
+                if await self.check_and_mark_paid(db, owner, order):
+                    newly_paid.append(order.id)
+            except Exception as exc:
+                logger.warning("Payment reconciliation failed for order %s: %s", order.id, exc)
+        return newly_paid
+
     # ------------------------------------------------------------------ #
     # Payment-link email (with preview)
     # ------------------------------------------------------------------ #

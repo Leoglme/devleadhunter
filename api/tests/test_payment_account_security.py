@@ -106,3 +106,51 @@ def test_stripe_provider_refuses_environment_mismatch(monkeypatch: pytest.Monkey
     account = SimpleNamespace(stripe_account_id="acct_1", stripe_charges_enabled=True, environment="sandbox")
     with pytest.raises(StripeConnectError):
         StripePaymentProvider(account)
+
+
+class _StripeObj(dict):
+    """Dict with attribute access, mimicking a Stripe SDK Account object."""
+
+    def __getattr__(self, name: str) -> object:
+        return self[name]
+
+
+def test_refresh_stripe_status_requests_sepa_bank_transfer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """After onboarding, refreshing status requests the SEPA bank-transfer capability."""
+    import stripe
+
+    monkeypatch.setattr(settings, "stripe_secret_key", "sk_test_x")
+    connected = _StripeObj(id="acct_1", charges_enabled=True, details_submitted=True, capabilities={})
+    monkeypatch.setattr(stripe.Account, "retrieve", lambda _id, **_: connected)
+    modify_calls: dict = {}
+    monkeypatch.setattr(stripe.Account, "modify", lambda _id, **kwargs: modify_calls.update({"id": _id, **kwargs}))
+
+    account = SimpleNamespace(stripe_account_id="acct_1")
+    db = SimpleNamespace(commit=lambda: None, refresh=lambda _obj: None)
+    PaymentAccountService().refresh_stripe_status(db, account)
+
+    assert modify_calls["id"] == "acct_1"
+    assert modify_calls["capabilities"] == {"sepa_bank_transfer_payments": {"requested": True}}
+
+
+def test_refresh_stripe_status_skips_request_when_capability_active(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An already-active SEPA capability is not re-requested."""
+    import stripe
+
+    monkeypatch.setattr(settings, "stripe_secret_key", "sk_test_x")
+    connected = _StripeObj(
+        id="acct_1",
+        charges_enabled=True,
+        details_submitted=True,
+        capabilities={"sepa_bank_transfer_payments": "active"},
+    )
+    monkeypatch.setattr(stripe.Account, "retrieve", lambda _id, **_: connected)
+
+    def _must_not_modify(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("must not re-request an active capability")
+
+    monkeypatch.setattr(stripe.Account, "modify", _must_not_modify)
+
+    account = SimpleNamespace(stripe_account_id="acct_1")
+    db = SimpleNamespace(commit=lambda: None, refresh=lambda _obj: None)
+    PaymentAccountService().refresh_stripe_status(db, account)

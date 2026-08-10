@@ -409,6 +409,8 @@ class PaymentAccountService:
         account.stripe_charges_enabled = bool(connected.charges_enabled)
         account.stripe_details_submitted = bool(connected.details_submitted)
         account.is_connected = account.stripe_charges_enabled
+        if account.stripe_details_submitted:
+            self._ensure_sepa_bank_transfer_requested(connected)
         db.commit()
         db.refresh(account)
         return account
@@ -423,6 +425,29 @@ class PaymentAccountService:
         if settings.stripe_secret_key.startswith("sk_test"):
             return PaymentEnvironment.SANDBOX.value
         return PaymentEnvironment.PRODUCTION.value
+
+    @staticmethod
+    def _ensure_sepa_bank_transfer_requested(connected: object) -> None:
+        """
+        Request the SEPA bank-transfer capability so virement is offered without a manual step.
+
+        Direct charges require the connected account to carry the capability; requesting it here
+        (idempotent — skipped when already active or pending) means a user only completes Stripe
+        onboarding and the virement follows once Stripe approves its review. Best-effort: a failure
+        never breaks the status refresh.
+
+        Args:
+            connected: The retrieved Stripe ``Account`` object.
+        """
+        import stripe
+
+        capabilities = connected.get("capabilities") or {}
+        if capabilities.get("sepa_bank_transfer_payments") in ("active", "pending"):
+            return
+        try:
+            stripe.Account.modify(connected.id, capabilities={"sepa_bank_transfer_payments": {"requested": True}})
+        except Exception as error:
+            logger.warning("Could not request SEPA bank transfer for %s: %s", connected.id, error)
 
 
 payment_account_service = PaymentAccountService()
