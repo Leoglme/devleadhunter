@@ -18,6 +18,8 @@ from typing import Any
 
 from services.templates.site_content import (  # noqa: F401 — re-exported for the registry
     SITE_CONTENT_SCHEMAS,
+    format_rating_value,
+    format_review_count,
     map_prospect_and_enrichment,
     to_storyblok_site_content,
 )
@@ -56,7 +58,7 @@ def default_subtitle(area: str) -> str:
     Returns:
         A food-truck subtitle.
     """
-    return f"Street food maison à {area} — burgers, wings et classics préparés à la minute, sur place ou à emporter."
+    return f"Cuisine de rue faite maison à {area}, préparée minute — sur place ou à emporter."
 
 
 _SITE_ABOUT_DEFAULT: str = (
@@ -131,6 +133,25 @@ _EDITORIAL_DEFAULTS: dict[str, Any] = {
 }
 
 
+def _apply_real_food_stats(site: dict[str, Any], enrichment: dict[str, Any] | None) -> None:
+    """Replace the two hero-collage stats with the prospect's real Google rating and review count.
+
+    The template ships a "4,9/5" placeholder and a fabricated "12K+ / Sur Instagram"; a real
+    review count (e.g. 2 227) is both truthful and a stronger proof point than an invented follower
+    number. Each stat falls back to its editorial default when the matching figure is missing.
+    """
+    enr = enrichment or {}
+    rating_value = format_rating_value(enr.get("rating"))
+    count_value = format_review_count(enr.get("reviews_count"))
+    stats = site.get("trustItems")
+    if not isinstance(stats, list):
+        return
+    if rating_value and len(stats) >= 1:
+        stats[0] = {"value": rating_value, "label": "Avis Google"}
+    if count_value and len(stats) >= 2:
+        stats[1] = {"value": count_value, "label": "Avis clients"}
+
+
 def build_site_content(
     *,
     business_name: str,
@@ -168,4 +189,5 @@ def build_site_content(
     site["services"] = scraped or FOOD_SERVICES
     site["faq"] = FOOD_FAQ
     site.update(_EDITORIAL_DEFAULTS)
+    _apply_real_food_stats(site, enrichment)
     return site

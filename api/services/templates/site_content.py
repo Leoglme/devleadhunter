@@ -20,7 +20,9 @@ remaining boilerplate (section headings, etc.).
 
 from __future__ import annotations
 
+import re
 import uuid
+from datetime import datetime
 from typing import Any
 
 from services.validation_service import validation_service
@@ -112,6 +114,88 @@ def _uid() -> str:
     return str(uuid.uuid4())
 
 
+def _dedupe_preserve_order(urls: list[str]) -> list[str]:
+    """Drop duplicate URLs while keeping first-seen order.
+
+    A prospect's Google gallery often repeats the same shot; reusing it across hero, about and
+    gallery slots is what makes generated sites look templated. Deduping keeps every slot distinct.
+    """
+    seen: set[str] = set()
+    unique: list[str] = []
+    for url in urls:
+        if url in seen:
+            continue
+        seen.add(url)
+        unique.append(url)
+    return unique
+
+
+def format_rating_value(rating: Any) -> str | None:
+    """Format a Google rating the French way (``"4,5/5"``), or None when missing/unparseable."""
+    if not isinstance(rating, (int, float)):
+        return None
+    return f"{float(rating):.1f}".replace(".", ",") + "/5"
+
+
+def format_review_count(count: Any) -> str | None:
+    """Format a review count with a French thin-space thousands separator (``"2 227"``).
+
+    Returns None when the count is absent or not positive.
+    """
+    if not isinstance(count, (int, float)) or int(count) <= 0:
+        return None
+    # The separator replacing the comma is a narrow no-break space (U+202F), the French convention.
+    return f"{int(count):,}".replace(",", " ")
+
+
+_RATING_VALUE_RE = re.compile(r"^\d(?:[.,]\d)?\s*/\s*5$")
+
+
+def apply_real_rating_trust(site: dict[str, Any], enrichment: dict[str, Any] | None) -> None:
+    """Overwrite the placeholder rating repère with the prospect's real Google rating + review count.
+
+    Called by a template's ``build_site_content`` AFTER ``_EDITORIAL_DEFAULTS`` so the scraped
+    numbers win over the hardcoded "4,9/5". Targets the first trust item that already shows a star
+    rating (value like "4,9/5") or whose label mentions "avis"; mutates ``site`` in place.
+
+    Args:
+        site: The flat SiteContent being built (its ``trustItems`` are mutated).
+        enrichment: Scraped enrichment dict, or None — a no-op when no rating was scraped.
+    """
+    enr = enrichment or {}
+    rating_value = format_rating_value(enr.get("rating"))
+    if not rating_value:
+        return
+    items = site.get("trustItems")
+    if not isinstance(items, list):
+        return
+    count = format_review_count(enr.get("reviews_count"))
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        value = str(item.get("value", "")).strip()
+        label = str(item.get("label", "")).lower()
+        if _RATING_VALUE_RE.match(value) or "avis" in label:
+            item["value"] = rating_value
+            item["label"] = f"{count} avis" if count else "Avis Google"
+            return
+
+
+def experience_years_from_text(text: Any) -> int | None:
+    """Derive years in business from a "depuis 2012" mention in free text, or None.
+
+    Only an explicit founding year is trusted, and only when the elapsed span is a sane 1-80 range,
+    so a stray number never invents a fake seniority.
+    """
+    if not isinstance(text, str):
+        return None
+    match = re.search(r"depuis\s+(?:le\s+)?((?:19|20)\d{2})", text.lower())
+    if not match:
+        return None
+    years = datetime.now().year - int(match.group(1))
+    return years if 1 <= years <= 80 else None
+
+
 def map_prospect_and_enrichment(
     *,
     business_name: str,
@@ -136,7 +220,9 @@ def map_prospect_and_enrichment(
     """
     enrichment = enrichment or {}
 
-    photos: list[str] = [p for p in enrichment.get("photos", []) if isinstance(p, str) and p.strip()]
+    photos: list[str] = _dedupe_preserve_order(
+        [p.strip() for p in enrichment.get("photos", []) if isinstance(p, str) and p.strip()]
+    )
     raw_reviews: list[dict] = [r for r in enrichment.get("reviews", []) if isinstance(r, dict)]
     raw_hours: list[dict] = [h for h in enrichment.get("opening_hours", []) if isinstance(h, dict)]
     description = enrichment.get("description")
@@ -179,10 +265,18 @@ def map_prospect_and_enrichment(
     logo_raw = enrichment.get("logo_url")
     logo = logo_raw.strip() if isinstance(logo_raw, str) and logo_raw.strip() else ""
 
+    address_raw = enrichment.get("address")
+    address = address_raw.strip() if isinstance(address_raw, str) and address_raw.strip() else ""
+    latitude = enrichment.get("lat")
+    longitude = enrichment.get("lng")
+    rating = enrichment.get("rating")
+    reviews_count = enrichment.get("reviews_count")
+
     return {
         "businessName": business_name,
         "phone": phone or "",
         "email": email or "",
+        "address": address,
         "city": site_city,
         "area": area_label,
         "subtitle": subtitle,
@@ -191,6 +285,12 @@ def map_prospect_and_enrichment(
         "heroImage": photos[0] if len(photos) > 0 else "",
         "aboutImage": photos[1] if len(photos) > 1 else "",
         "gallery": [{"url": url, "alt": ""} for url in photos[2:]],
+        "rating": float(rating) if isinstance(rating, (int, float)) else None,
+        "reviewsCount": (
+            int(reviews_count) if isinstance(reviews_count, (int, float)) and int(reviews_count) > 0 else None
+        ),
+        "lat": float(latitude) if isinstance(latitude, (int, float)) else None,
+        "lng": float(longitude) if isinstance(longitude, (int, float)) else None,
         "palette": {
             "primary": palette.get("primary", ""),
             "secondary": palette.get("secondary", ""),

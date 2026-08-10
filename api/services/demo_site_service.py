@@ -92,7 +92,8 @@ class DemoSiteService:
         if not prospect_id:
             return None
         record = enrichment_service.get_for_prospect(db, demo_site.user_id, prospect_id)
-        return enrichment_service.to_dict(record)
+        prospect = enrichment_service.get_prospect_for_user(db, demo_site.user_id, prospect_id)
+        return self._with_prospect_location(enrichment_service.to_dict(record), prospect)
 
     async def _resolve_enrichment_for_creation(self, db: Session, user_id: int, prospect_id: int | None) -> dict | None:
         """Fetch (and run on demand if missing) the prospect enrichment before generation."""
@@ -103,10 +104,46 @@ class DemoSiteService:
             if not prospect:
                 return None
             record = await enrichment_service.ensure_enriched(db, user_id, prospect)
-            return enrichment_service.to_dict(record)
+            return self._with_prospect_location(enrichment_service.to_dict(record), prospect)
         except Exception:
             logger.warning("Enrichment resolution failed for prospect_id=%s", prospect_id, exc_info=True)
             return None
+
+    _MAPS_COORDS_RE = re.compile(r"@(-?\d+\.\d+),(-?\d+\.\d+)")
+
+    @classmethod
+    def _coords_from_maps_url(cls, url: object) -> tuple[float, float] | None:
+        """Extract ``(lat, lng)`` from a Google Maps URL's ``@lat,lng`` segment, or None.
+
+        A scraped place URL embeds its coordinates (``…/@47.39,0.68,17z/…``); these centre the
+        "nous trouver" map on the business instead of the template's default city.
+        """
+        if not isinstance(url, str):
+            return None
+        match = cls._MAPS_COORDS_RE.search(url)
+        if not match:
+            return None
+        return float(match.group(1)), float(match.group(2))
+
+    @classmethod
+    def _with_prospect_location(cls, enrichment: dict | None, prospect: object) -> dict | None:
+        """Fold the prospect's real street address + map coordinates into the enrichment dict.
+
+        The street address and Google Maps URL live on the prospect, not the enrichment record,
+        yet the templates need them for the contact block and the map. Returns an augmented copy
+        (the record's dict is never mutated); may return a fresh dict even without enrichment so the
+        location still reaches generation.
+        """
+        if prospect is None:
+            return enrichment
+        data: dict = dict(enrichment or {})
+        address = getattr(prospect, "address", None)
+        if isinstance(address, str) and address.strip():
+            data["address"] = address.strip()
+        coords = cls._coords_from_maps_url(getattr(prospect, "google_maps_url", None))
+        if coords:
+            data["lat"], data["lng"] = coords
+        return data or None
 
     def _build_content_for_site(self, db: Session, demo_site: DemoSite) -> dict:
         """Build Storyblok content JSON from the demo site record."""

@@ -12,10 +12,10 @@ export default defineNuxtConfig({
     'github:DevLeadHunter/devleadhunter-template-plumber-atelier#v1.3.2',
     'github:DevLeadHunter/devleadhunter-template-plumber-cuivre#v1.2.2',
     'github:DevLeadHunter/devleadhunter-template-electrician-lumen#v1.2.2',
-    'github:DevLeadHunter/devleadhunter-template-mechanic-pitlane#v1.3.2',
+    'github:DevLeadHunter/devleadhunter-template-mechanic-pitlane#v1.3.3',
     'github:DevLeadHunter/devleadhunter-template-dental#v1.1.4',
-    'github:DevLeadHunter/devleadhunter-template-food#v1.0.6',
-    'github:DevLeadHunter/devleadhunter-template-barber#v1.1.5',
+    'github:DevLeadHunter/devleadhunter-template-food#v1.0.7',
+    'github:DevLeadHunter/devleadhunter-template-barber#v1.1.6',
     'github:DevLeadHunter/devleadhunter-template-landscaper-verdure#v1.1.2',
   ],
 
