@@ -291,7 +291,13 @@ class ProspectService:
 
     async def delete_prospect(self, db: Session, prospect_id: int) -> bool:
         """
-        Delete a prospect.
+        Delete a prospect and the enrichment it owns.
+
+        The enrichment row is removed first, explicitly: its foreign key to
+        ``prospects`` carries no ``ON DELETE`` rule in prod (RESTRICT), so a bare
+        prospect delete raises an IntegrityError there — it only works locally,
+        where the constraint happens to cascade. Interactions, campaign links and
+        queued emails already cascade at the database level.
 
         Args:
             db: Database session
@@ -301,11 +307,14 @@ class ProspectService:
             True if deleted, False if not found
         """
         db_prospect = db.query(ProspectDB).filter(ProspectDB.id == prospect_id).first()
-        if db_prospect:
-            db.delete(db_prospect)
-            db.commit()
-            return True
-        return False
+        if not db_prospect:
+            return False
+        db.query(ProspectEnrichment).filter(ProspectEnrichment.prospect_id == prospect_id).delete(
+            synchronize_session=False
+        )
+        db.delete(db_prospect)
+        db.commit()
+        return True
 
     async def get_prospects_count(self, db: Session, user_id: int | None = None) -> int:
         """
