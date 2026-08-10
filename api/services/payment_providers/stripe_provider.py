@@ -282,23 +282,105 @@ class StripePaymentProvider(PaymentProviderClient):
 
     async def refund(self, invoice_id: str) -> None:
         """
-        Refund the card payment of a paid invoice on the connected account.
+        Refund the payment of a paid invoice on the connected account.
 
-        Reads the invoice for its PaymentIntent, then issues a full refund.
+        Since the 2025-03-31 API the Invoice no longer carries ``payment_intent`` or
+        ``charge``; the payment is read from ``payments.data.payment.payment_intent``
+        and refunded by PaymentIntent (Stripe's recommended reference). Older accounts
+        and edge cases fall back to the invoice charge, looked up via the customer when
+        the Invoice no longer exposes it — covering card and bank transfer alike.
 
         Args:
             invoice_id: The Stripe invoice id.
 
         Raises:
-            StripeConnectError: When the invoice carries no payment to refund yet.
+            StripeConnectError: When no refundable payment is found for the invoice.
         """
+        payment_intent_id = await self._invoice_payment_intent_id(invoice_id)
+        if payment_intent_id:
+            await asyncio.to_thread(
+                stripe.Refund.create, payment_intent=payment_intent_id, stripe_account=self._connected_account_id
+            )
+            return
         invoice = await asyncio.to_thread(
             stripe.Invoice.retrieve, invoice_id, stripe_account=self._connected_account_id
         )
-        payment_intent = invoice.get("payment_intent")
-        intent_id = payment_intent.get("id") if isinstance(payment_intent, dict) else payment_intent
-        if not intent_id:
-            raise StripeConnectError(f"Stripe invoice {invoice_id} has no payment to refund yet.")
-        await asyncio.to_thread(
-            stripe.Refund.create, payment_intent=intent_id, stripe_account=self._connected_account_id
+        charge_id = self._object_id(invoice.get("charge")) or await self._find_invoice_charge_id(
+            self._object_id(invoice.get("customer")), invoice_id
         )
+        if not charge_id:
+            raise StripeConnectError(f"Stripe invoice {invoice_id} has no refundable payment.")
+        await asyncio.to_thread(stripe.Refund.create, charge=charge_id, stripe_account=self._connected_account_id)
+
+    async def _invoice_payment_intent_id(self, invoice_id: str) -> str | None:
+        """
+        Return the PaymentIntent id that settled an invoice, via the current payments API.
+
+        Expands ``payments.data.payment.payment_intent`` — where an invoice's payment
+        lives since the 2025-03-31 API — and returns ``None`` on older versions that
+        lack it (the caller then falls back to the charge).
+
+        Args:
+            invoice_id: The Stripe invoice id.
+
+        Returns:
+            The PaymentIntent id, or ``None``.
+        """
+        try:
+            invoice = await asyncio.to_thread(
+                stripe.Invoice.retrieve,
+                invoice_id,
+                expand=["payments.data.payment.payment_intent"],
+                stripe_account=self._connected_account_id,
+            )
+        except stripe.error.InvalidRequestError:
+            return None
+        direct = self._object_id(invoice.get("payment_intent"))
+        if direct:
+            return direct
+        payments = invoice.get("payments") or {}
+        entries = payments.get("data", []) if isinstance(payments, dict) else []
+        for entry in entries or []:
+            payment = entry.get("payment") or {}
+            payment_intent_id = self._object_id(payment.get("payment_intent"))
+            if payment_intent_id:
+                return payment_intent_id
+        return None
+
+    @staticmethod
+    def _object_id(value: object) -> str | None:
+        """
+        Return the id of a Stripe field that is either an id string or an expanded object.
+
+        Args:
+            value: The raw field value.
+
+        Returns:
+            The id, or ``None`` when absent.
+        """
+        if isinstance(value, dict):
+            return value.get("id")
+        return value if isinstance(value, str) else None
+
+    async def _find_invoice_charge_id(self, customer_id: str | None, invoice_id: str) -> str | None:
+        """
+        Find the paid, un-refunded charge that settled an invoice, via its customer.
+
+        Needed because recent API versions no longer expose ``charge`` on the Invoice.
+
+        Args:
+            customer_id: The invoice's customer id.
+            invoice_id: The invoice whose charge is wanted.
+
+        Returns:
+            The refundable charge id, or ``None``.
+        """
+        if not customer_id:
+            return None
+        charges = await asyncio.to_thread(
+            stripe.Charge.list, customer=customer_id, limit=100, stripe_account=self._connected_account_id
+        )
+        for charge in charges.get("data", []) or []:
+            if charge.get("invoice") == invoice_id and charge.get("paid") and not charge.get("refunded"):
+                return charge.get("id")
+        return None

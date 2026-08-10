@@ -231,9 +231,10 @@ def test_check_paid_maps_status(monkeypatch: pytest.MonkeyPatch) -> None:
     assert state.raw_status == "paid"
 
 
-def test_refund_reads_intent_and_refunds_on_connected_account(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Refund reads the invoice's PaymentIntent and refunds it on the connected account."""
-    monkeypatch.setattr(stripe_module.stripe.Invoice, "retrieve", lambda _id, **_: _Obj(payment_intent="pi_1"))
+def test_refund_uses_payment_intent_from_invoice_payments(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Refund reads the PaymentIntent from invoice.payments (2025-03-31 API) and refunds it."""
+    invoice = _Obj(payment_intent=None, payments=_Obj(data=[_Obj(payment=_Obj(payment_intent="pi_1"))]))
+    monkeypatch.setattr(stripe_module.stripe.Invoice, "retrieve", lambda _id, **_: invoice)
     refund_kwargs: dict = {}
     monkeypatch.setattr(
         stripe_module.stripe.Refund, "create", lambda **kwargs: refund_kwargs.update(kwargs) or _Obj(id="re_1")
@@ -243,8 +244,39 @@ def test_refund_reads_intent_and_refunds_on_connected_account(monkeypatch: pytes
     assert refund_kwargs["stripe_account"] == "acct_1"
 
 
+def test_refund_falls_back_to_charge_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With no PaymentIntent on the invoice, the paid charge is found via the customer."""
+    monkeypatch.setattr(
+        stripe_module.stripe.Invoice,
+        "retrieve",
+        lambda _id, **_: _Obj(payment_intent=None, charge=None, customer="cus_1", payments=_Obj(data=[])),
+    )
+    monkeypatch.setattr(
+        stripe_module.stripe.Charge,
+        "list",
+        lambda **_: _Obj(
+            data=[
+                _Obj(id="ch_other", invoice="in_other", paid=True, refunded=False),
+                _Obj(id="ch_1", invoice="in_1", paid=True, refunded=False),
+            ]
+        ),
+    )
+    refund_kwargs: dict = {}
+    monkeypatch.setattr(
+        stripe_module.stripe.Refund, "create", lambda **kwargs: refund_kwargs.update(kwargs) or _Obj(id="re_1")
+    )
+    asyncio.run(_provider().refund("in_1"))
+    assert refund_kwargs["charge"] == "ch_1"
+    assert refund_kwargs["stripe_account"] == "acct_1"
+
+
 def test_refund_without_payment_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An invoice with no PaymentIntent has nothing to refund."""
-    monkeypatch.setattr(stripe_module.stripe.Invoice, "retrieve", lambda _id, **_: _Obj(payment_intent=None))
+    """An invoice with no PaymentIntent, charge or matching customer charge can't be refunded."""
+    monkeypatch.setattr(
+        stripe_module.stripe.Invoice,
+        "retrieve",
+        lambda _id, **_: _Obj(payment_intent=None, charge=None, customer="cus_1"),
+    )
+    monkeypatch.setattr(stripe_module.stripe.Charge, "list", lambda **_: _Obj(data=[]))
     with pytest.raises(StripeConnectError):
         asyncio.run(_provider().refund("in_1"))
