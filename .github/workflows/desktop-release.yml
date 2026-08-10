@@ -5,6 +5,17 @@ on:
     branches: [main]
     paths:
       - "web/**"
+      # The scraping sidecar is built from api/ (build_scraper_sidecar.py → PyInstaller
+      # over scraper_sidecar.py), so its sources must retrigger the desktop build —
+      # otherwise scraper/enrichment fixes never reach the bundled sidecar.
+      - "api/scrappers/**"
+      - "api/services/**"
+      - "api/models/**"
+      - "api/enums/**"
+      - "api/core/**"
+      - "api/scraper_sidecar.py"
+      - "api/build_scraper_sidecar.py"
+      - "api/requirements.txt"
       - ".github/workflows/desktop-release.yml"
   workflow_dispatch:
 
