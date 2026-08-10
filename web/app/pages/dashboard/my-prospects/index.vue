@@ -700,7 +700,7 @@ async function handleImportFile(event: Event): Promise<void> {
           google_maps_url: item.google_maps_url || null,
           category: item.category ?? 'Entreprise',
           source: 'manual',
-          confidence: 1,
+          confidence: item.confidence ?? 4,
         })
         handleProspectUpdated(prospect)
         created += 1
@@ -710,6 +710,17 @@ async function handleImportFile(event: Event): Promise<void> {
             enriched += 1
           } catch {
             // The prospect stays created; its enrichment can be re-run from the drawer.
+          }
+        }
+        if (item.contact_first_name || item.contact_last_name) {
+          try {
+            // Posted after enrichment so the manual name wins over the cascade result.
+            await EnrichmentService.updateProspectEnrichment(prospect.id, {
+              contact_first_name: item.contact_first_name ?? null,
+              contact_last_name: item.contact_last_name ?? null,
+            })
+          } catch {
+            // Decision-maker stays unresolved; the neutral greeting fallback applies.
           }
         }
       } catch {

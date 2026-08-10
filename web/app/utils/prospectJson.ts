@@ -12,7 +12,10 @@ export type ProspectJsonItem = {
   email?: string
   website?: string
   category?: string
+  confidence?: number
   google_maps_url?: string
+  contact_first_name?: string
+  contact_last_name?: string
   enrichment?: ImportedEnrichmentPayload
 }
 
@@ -54,6 +57,7 @@ export function downloadProspectsJson(prospects: Prospect[]): void {
       website: prospect.website ?? '',
       google_maps_url: prospect.google_maps_url ?? '',
       category: prospect.category,
+      confidence: prospect.confidence,
     }
   })
   const date: string = new Date().toISOString().slice(0, 10)
@@ -75,7 +79,10 @@ export function downloadProspectTemplateJson(): void {
       email: 'contact@plomberie-dupont.fr',
       website: '',
       category: 'plombier',
+      confidence: 4,
       google_maps_url: 'https://www.google.com/maps/place/...',
+      contact_first_name: 'Jean',
+      contact_last_name: 'Dupont',
       enrichment: {
         logo_url: 'https://exemple.fr/logo.png',
         rating: 4.8,
@@ -132,6 +139,18 @@ function optionalString(value: unknown): string | undefined {
  */
 function optionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+/**
+ * Return an integer confidence score bounded to 1-4, or undefined when absent/out of range.
+ * @param value - Raw JSON value.
+ * @returns The clamped score, or undefined.
+ */
+function optionalConfidence(value: unknown): number | undefined {
+  const score: number | undefined = optionalNumber(value)
+  if (score === undefined) return undefined
+  const rounded: number = Math.round(score)
+  return rounded >= 1 && rounded <= 4 ? rounded : undefined
 }
 
 /**
@@ -296,8 +315,14 @@ export function parseProspectsJson(text: string): ProspectJsonParseResult {
       website: cleanString(record.website),
       category: cleanString(record.category) || 'Entreprise',
     }
+    const confidence: number | undefined = optionalConfidence(record.confidence)
+    if (confidence !== undefined) item.confidence = confidence
     const googleMapsUrl: string | undefined = optionalString(record.google_maps_url)
     if (googleMapsUrl !== undefined) item.google_maps_url = googleMapsUrl
+    const contactFirstName: string | undefined = optionalString(record.contact_first_name)
+    if (contactFirstName !== undefined) item.contact_first_name = contactFirstName
+    const contactLastName: string | undefined = optionalString(record.contact_last_name)
+    if (contactLastName !== undefined) item.contact_last_name = contactLastName
     const enrichment: ImportedEnrichmentPayload | undefined = parseEnrichment(record.enrichment)
     if (enrichment !== undefined) item.enrichment = enrichment
     valid.push(item)
