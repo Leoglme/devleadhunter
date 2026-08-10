@@ -167,7 +167,7 @@
               <p class="text-muted text-xs">{{ account.name }}</p>
             </div>
           </div>
-          <button class="btn-danger text-xs" title="Déconnecter ce compte" @click="deleteGmailAccount(account)">
+          <button class="btn-danger text-xs" title="Déconnecter ce compte" @click="askDeleteGmailAccount(account)">
             <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />
           </button>
         </div>
@@ -177,6 +177,15 @@
         </button>
       </div>
     </section>
+
+    <UiConfirmModal
+      ref="disconnectModalRef"
+      title="Déconnecter le compte"
+      :message="accountToDisconnect ? `Déconnecter le compte « ${accountToDisconnect.email} » ?` : ''"
+      confirm-text="Déconnecter"
+      cancel-text="Annuler"
+      @confirm="deleteGmailAccount"
+    />
   </div>
 </template>
 
@@ -202,6 +211,8 @@ const TABS: UiTab[] = [
 
 const identity: Ref<SendingIdentityResponse | null> = ref(null)
 const gmailAccounts: Ref<EmailAccount[]> = ref([])
+const accountToDisconnect: Ref<EmailAccount | null> = ref(null)
+const disconnectModalRef: Ref<{ open: () => void } | null> = ref(null)
 const viewProvider: Ref<SendingProvider> = ref('resend')
 
 const isSavingResend: Ref<boolean> = ref(false)
@@ -322,12 +333,21 @@ async function connectGmail(): Promise<void> {
 }
 
 /**
- * Disconnect a connected Gmail account after confirmation.
+ * Open the confirmation modal for disconnecting a Gmail account.
  * @param account - The Gmail account to remove.
+ */
+function askDeleteGmailAccount(account: EmailAccount): void {
+  accountToDisconnect.value = account
+  disconnectModalRef.value?.open()
+}
+
+/**
+ * Disconnect the Gmail account selected in the confirmation modal.
  * @returns A promise that resolves once the account is deleted.
  */
-async function deleteGmailAccount(account: EmailAccount): Promise<void> {
-  if (!confirm(`Déconnecter le compte ${account.email} ?`)) return
+async function deleteGmailAccount(): Promise<void> {
+  const account: EmailAccount | null = accountToDisconnect.value
+  if (!account) return
   try {
     await EmailAccountsService.deleteEmailAccount(account.id)
     gmailAccounts.value = gmailAccounts.value.filter((a: EmailAccount): boolean => a.id !== account.id)

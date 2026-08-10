@@ -100,7 +100,7 @@
                     type="button"
                     class="text-muted cursor-pointer transition-colors hover:text-[var(--app-red)]"
                     title="Retirer ce membre"
-                    @click="handleRemove(member.user_id, member.name)"
+                    @click="askRemoveMember(member.user_id, member.name)"
                   >
                     <UIcon name="i-lucide-user-round-x" class="h-4 w-4" />
                   </button>
@@ -137,7 +137,7 @@
                 </template>
                 <template v-else>Quitter l'organisation rend vos prospects à nouveau personnels.</template>
               </p>
-              <button type="button" class="btn-danger w-full" :disabled="isSubmitting" @click="handleLeaveOrDelete">
+              <button type="button" class="btn-danger w-full" :disabled="isSubmitting" @click="leaveModalRef?.open()">
                 {{ isOwner ? "Supprimer l'organisation" : "Quitter l'organisation" }}
               </button>
             </div>
@@ -145,6 +145,31 @@
         </div>
       </div>
     </Transition>
+
+    <UiConfirmModal
+      ref="removeMemberModalRef"
+      title="Retirer le membre"
+      :message="
+        memberToRemoveId !== null
+          ? `Retirer ${memberToRemoveName} de l'organisation ? Ses prospects redeviendront personnels.`
+          : ''
+      "
+      confirm-text="Retirer"
+      cancel-text="Annuler"
+      @confirm="handleRemove"
+    />
+    <UiConfirmModal
+      ref="leaveModalRef"
+      :title="isOwner ? `Supprimer l'organisation` : `Quitter l'organisation`"
+      :message="
+        isOwner
+          ? `Supprimer définitivement l'organisation ? Les prospects de chaque membre redeviendront personnels.`
+          : `Quitter l'organisation ? Vos prospects redeviendront personnels.`
+      "
+      :confirm-text="isOwner ? 'Supprimer' : 'Quitter'"
+      cancel-text="Annuler"
+      @confirm="handleLeaveOrDelete"
+    />
   </Teleport>
 </template>
 
@@ -181,6 +206,10 @@ const isLoading: Ref<boolean> = ref(true)
 const isSubmitting: Ref<boolean> = ref(false)
 const createName: Ref<string> = ref('')
 const inviteEmail: Ref<string> = ref('')
+const memberToRemoveId: Ref<number | null> = ref(null)
+const memberToRemoveName: Ref<string> = ref('')
+const removeMemberModalRef: Ref<{ open: () => void } | null> = ref(null)
+const leaveModalRef: Ref<{ open: () => void } | null> = ref(null)
 
 /** Current user id (0 while the store hydrates). */
 const currentUserId: ComputedRef<number> = computed((): number => userStore.user?.id ?? 0)
@@ -253,15 +282,24 @@ async function handleInvite(): Promise<void> {
 }
 
 /**
- * Remove a member (owner action) after confirmation.
+ * Open the confirmation modal for removing a member (owner action).
  * @param memberUserId - Member to remove.
- * @param memberName - Display name (confirmation message).
+ * @param memberName - Display name shown in the confirmation.
+ */
+function askRemoveMember(memberUserId: number, memberName: string): void {
+  memberToRemoveId.value = memberUserId
+  memberToRemoveName.value = memberName
+  removeMemberModalRef.value?.open()
+}
+
+/**
+ * Remove the member selected in the confirmation modal (owner action).
  * @returns A promise resolved once removed.
  */
-async function handleRemove(memberUserId: number, memberName: string): Promise<void> {
-  if (!confirm(`Retirer ${memberName} de l'organisation ? Ses prospects redeviendront personnels.`)) {
-    return
-  }
+async function handleRemove(): Promise<void> {
+  const memberUserId: number | null = memberToRemoveId.value
+  if (memberUserId === null) return
+  const memberName: string = memberToRemoveName.value
   isSubmitting.value = true
   try {
     await OrganizationsService.removeMember(memberUserId)
@@ -280,12 +318,6 @@ async function handleRemove(memberUserId: number, memberName: string): Promise<v
  */
 async function handleLeaveOrDelete(): Promise<void> {
   const wasOwner: boolean = isOwner.value
-  const message: string = wasOwner
-    ? "Supprimer définitivement l'organisation ? Les prospects de chaque membre redeviendront personnels."
-    : "Quitter l'organisation ? Vos prospects redeviendront personnels."
-  if (!confirm(message)) {
-    return
-  }
   isSubmitting.value = true
   try {
     if (wasOwner) {
