@@ -291,13 +291,14 @@ class ProspectService:
 
     async def delete_prospect(self, db: Session, prospect_id: int) -> bool:
         """
-        Delete a prospect and the enrichment it owns.
+        Delete a prospect together with the data it owns.
 
-        The enrichment row is removed first, explicitly: its foreign key to
-        ``prospects`` carries no ``ON DELETE`` rule in prod (RESTRICT), so a bare
-        prospect delete raises an IntegrityError there — it only works locally,
-        where the constraint happens to cascade. Interactions, campaign links and
-        queued emails already cascade at the database level.
+        Its non-delivered demo sites are soft-deleted first (Storyblok space and
+        video files cleaned up); a delivered one is left untouched — it is sold and
+        lives on the client's domain. The enrichment is then removed explicitly:
+        its foreign key to ``prospects`` has no ``ON DELETE`` rule in prod
+        (RESTRICT), so a bare prospect delete raises an IntegrityError there.
+        Interactions, campaign links and queued emails already cascade in the database.
 
         Args:
             db: Database session
@@ -306,9 +307,22 @@ class ProspectService:
         Returns:
             True if deleted, False if not found
         """
+        from enums.demo_site_status import DemoSiteStatus
+        from models.demo_site import DemoSite
+        from services.demo_site_service import demo_site_service
+
         db_prospect = db.query(ProspectDB).filter(ProspectDB.id == prospect_id).first()
         if not db_prospect:
             return False
+
+        demo_sites = (
+            db.query(DemoSite)
+            .filter(DemoSite.prospect_id == prospect_id, DemoSite.status != DemoSiteStatus.DELIVERED.value)
+            .all()
+        )
+        for demo_site in demo_sites:
+            await demo_site_service.delete_demo_site(db, demo_site)
+
         db.query(ProspectEnrichment).filter(ProspectEnrichment.prospect_id == prospect_id).delete(
             synchronize_session=False
         )

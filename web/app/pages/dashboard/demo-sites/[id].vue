@@ -118,10 +118,19 @@
               type="button"
               class="btn-secondary w-full text-xs text-[var(--app-red)]"
               :disabled="deleting"
-              @click="handleDelete"
+              @click="deleteSiteModalRef?.open()"
             >
               {{ deleting ? 'Suppression…' : 'Supprimer' }}
             </button>
+
+            <UiConfirmModal
+              ref="deleteSiteModalRef"
+              title="Supprimer le site"
+              :message="`Supprimer le site « ${site?.business_name} » ? La démo et son espace CMS seront retirés. Cette action est irréversible.`"
+              confirm-text="Supprimer"
+              cancel-text="Annuler"
+              @confirm="handleDelete"
+            />
           </div>
 
           <div class="rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-4">
@@ -367,6 +376,7 @@ const exporting: Ref<boolean> = ref(false)
 const generatingVideo: Ref<boolean> = ref(false)
 const deletingVideo: Ref<boolean> = ref(false)
 const deleteVideoModalRef: Ref<{ open: () => void } | null> = ref(null)
+const deleteSiteModalRef: Ref<{ open: () => void } | null> = ref(null)
 let videoPollTimer: ReturnType<typeof setInterval> | null = null
 
 const templateLabel: ComputedRef<string> = computed(() => {
@@ -565,7 +575,7 @@ async function handleExport(): Promise<void> {
  * Delete the demo site after user confirmation.
  */
 async function handleDelete(): Promise<void> {
-  if (!site.value || !confirm(`Supprimer le site "${site.value.business_name}" ?`)) return
+  if (!site.value) return
   deleting.value = true
   try {
     await DemoSiteService.deleteDemoSite(demoSiteId)
