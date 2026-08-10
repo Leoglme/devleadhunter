@@ -103,6 +103,20 @@ class EnrichmentService:
         db.refresh(record)
         return record
 
+    @staticmethod
+    def _all_days_closed(hours: list) -> bool:
+        """True when every scraped opening-hours row reads « fermé »/« closed ».
+
+        That is the signal of a temporary holiday shutdown, not a real weekly
+        schedule — so the caller keeps the existing hours rather than overwriting
+        them with a misleading « closed 7/7 » on the demo site. A schedule that
+        merely closes a few days a week has other rows filled, so it returns False.
+        """
+        rows = [h for h in hours if isinstance(h, dict) and h.get("hours")]
+        if not rows:
+            return False
+        return all(("ferm" in str(h["hours"]).lower() or "closed" in str(h["hours"]).lower()) for h in rows)
+
     def _apply_data(self, record: ProspectEnrichment, data: EnrichmentData) -> None:
         """Copy scraped data onto the record without wiping manual edits with blanks."""
         record.source = data.source or record.source
@@ -119,7 +133,7 @@ class EnrichmentService:
             record.photos = data.photos
         if data.reviews:
             record.reviews = data.reviews
-        if data.opening_hours:
+        if data.opening_hours and not self._all_days_closed(data.opening_hours):
             record.opening_hours = data.opening_hours
         if data.services:
             record.services = data.services

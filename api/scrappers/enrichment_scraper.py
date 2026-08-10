@@ -13,6 +13,7 @@ could be gathered. Selectors may need tuning over time against live Maps.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -107,18 +108,21 @@ _EXTRACT_JS = r"""
     try {
         const block = document.querySelector('div.F7nice');
         if (block) {
-            const spans = block.querySelectorAll('span');
-            const ratingTxt = spans[0] ? txt(spans[0]).replace(',', '.') : '';
-            const r = parseFloat(ratingTxt);
-            if (!isNaN(r)) out.rating = r;
-            const countMatch = txt(block).match(/\(?\s*([\d\s.,]+)\s*\)?\s*(avis|reviews)?/i);
+            const blockTxt = txt(block);
+            const ratingM = blockTxt.match(/(\d+[.,]\d+)/);
+            if (ratingM) { const r = parseFloat(ratingM[1].replace(',', '.')); if (!isNaN(r)) out.rating = r; }
             const aria = block.querySelector('[aria-label]');
-            const ariaTxt = aria ? aria.getAttribute('aria-label') : '';
-            const numMatch = (ariaTxt + ' ' + txt(block)).match(/([\d][\d\s.,]*)\s*(avis|reviews)/i);
-            if (numMatch) {
-                const n = parseInt(numMatch[1].replace(/[^\d]/g, ''), 10);
-                if (!isNaN(n)) out.reviews_count = n;
+            const ariaTxt = aria ? (aria.getAttribute('aria-label') || '') : '';
+            // The count lives in parentheses ("(132)") — take it first; fall back to
+            // the aria-label ("132 avis"). The old code only matched the aria form.
+            let n = null;
+            const parenM = blockTxt.match(/\(([\d\s.,  ]+)\)/);
+            if (parenM) n = parseInt(parenM[1].replace(/[^\d]/g, ''), 10);
+            if (n === null || isNaN(n)) {
+                const ariaM = ariaTxt.match(/([\d][\d\s.,  ]*)\s*(avis|reviews|review)/i);
+                if (ariaM) n = parseInt(ariaM[1].replace(/[^\d]/g, ''), 10);
             }
+            if (n !== null && !isNaN(n)) out.reviews_count = n;
         }
     } catch (e) {}
 
@@ -140,7 +144,7 @@ _EXTRACT_JS = r"""
             src = src.replace(/=w\d+-h\d+.*$/, '=w1200-h800').replace(/=s\d+.*$/, '=s1200');
             if (!seen.has(src)) { seen.add(src); out.photos.push(src); }
         });
-        out.photos = out.photos.slice(0, 12);
+        out.photos = out.photos.slice(0, 20);
     } catch (e) {}
 
     // Opening hours (table rows: day + hours)
@@ -186,7 +190,7 @@ _EXTRACT_JS = r"""
             } catch (e) {}
             if (text) out.reviews.push({ author: author || 'Client', text, rating, owner_response: ownerResponse });
         });
-        out.reviews = out.reviews.slice(0, 6);
+        out.reviews = out.reviews.slice(0, 12);
     } catch (e) {}
 
     return out;
@@ -294,6 +298,15 @@ class EnrichmentScraper:
             # Best-effort: try to reveal the full opening-hours table.
             try:
                 await NodriverDom.click_by_text(tab, "button", "horaires")
+            except Exception:
+                pass
+
+            # Scroll the place panel so lazy-loaded photos and reviews render before
+            # extraction — without this the panel often yields a single photo.
+            try:
+                for _ in range(5):
+                    await NodriverDom.scroll_element(tab, "div[role='main']", 1400)
+                    await asyncio.sleep(0.5)
             except Exception:
                 pass
 

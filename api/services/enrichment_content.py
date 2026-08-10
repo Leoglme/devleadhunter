@@ -11,8 +11,8 @@ import copy
 from dataclasses import dataclass
 from typing import Any
 
-MAX_GALLERY_PHOTOS = 8
-MAX_REVIEWS = 6
+MAX_GALLERY_PHOTOS = 12
+MAX_REVIEWS = 8
 DEFAULT_REVIEW_RATING = 5
 GOOGLE_RATING_LABEL = "Avis Google"
 
