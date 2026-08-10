@@ -40,6 +40,7 @@ class EnrichmentData:
     rating: float | None = None
     reviews_count: int | None = None
     description: str | None = None
+    website: str | None = None
     photos: list[str] = field(default_factory=list)
     reviews: list[dict[str, Any]] = field(default_factory=list)
     opening_hours: list[dict[str, str]] = field(default_factory=list)
@@ -60,6 +61,7 @@ class EnrichmentData:
             "rating": self.rating,
             "reviews_count": self.reviews_count,
             "description": self.description,
+            "website": self.website,
             "photos": self.photos,
             "reviews": self.reviews,
             "opening_hours": self.opening_hours,
@@ -75,7 +77,7 @@ class EnrichmentData:
 _EXTRACT_JS = r"""
 (() => {
     const out = {
-        rating: null, reviews_count: null, description: null,
+        rating: null, reviews_count: null, description: null, website: null,
         photos: [], reviews: [], opening_hours: [], ld: [], social: {},
         place_title: null
     };
@@ -130,6 +132,15 @@ _EXTRACT_JS = r"""
     try {
         const meta = document.querySelector('meta[name="description"], meta[property="og:description"]');
         if (meta) out.description = (meta.getAttribute('content') || '').trim() || null;
+    } catch (e) {}
+
+    // Website link on the panel (data-item-id="authority", a stable semantic hook):
+    // a real site means the prospect is NOT a « no website » target — surfaced so the
+    // enrichment can double-check what the search scrapers may have missed.
+    try {
+        const site = document.querySelector('a[data-item-id="authority"]');
+        const href = site ? (site.getAttribute('href') || '') : '';
+        if (href && !/google\.[a-z.]+\/maps/i.test(href)) out.website = href.trim() || null;
     } catch (e) {}
 
     // Photos (large googleusercontent images, deduplicated)
@@ -352,6 +363,7 @@ class EnrichmentScraper:
         reviews = [r for r in data.get("reviews", []) if isinstance(r, dict)]
         hours = [h for h in data.get("opening_hours", []) if isinstance(h, dict)]
         social = {str(k): str(v) for k, v in (data.get("social") or {}).items() if isinstance(v, str) and v.strip()}
+        website = (str(data["website"]).strip() if data.get("website") else None) or None
 
         # JSON-LD fallback (Google Maps place pages sometimes ship schema.org data).
         business = parse_ld_json_blocks(data.get("ld"))
@@ -390,6 +402,7 @@ class EnrichmentScraper:
             rating=rating,
             reviews_count=reviews_count,
             description=description,
+            website=website,
             photos=photos,
             reviews=reviews,
             opening_hours=hours,

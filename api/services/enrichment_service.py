@@ -188,6 +188,12 @@ class EnrichmentService:
                 self._record_diagnostic(prospect, None, error=mismatch)
             else:
                 self._apply_data(record, data)
+                # Double-check for a website: one on the Maps listing means the prospect
+                # isn't the « no website » target after all — fill it in when we had none.
+                if data.website and not (prospect.website or "").strip():
+                    prospect.website = data.website
+                    db.add(prospect)
+                    logger.info("Enrichment found a website for prospect_id=%s: %s", prospect.id, data.website)
                 record.status = EnrichmentStatus.COMPLETED.value
                 record.enriched_at = datetime.now(UTC)
                 self._record_diagnostic(prospect, data, error=None)
