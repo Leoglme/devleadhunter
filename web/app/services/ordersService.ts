@@ -209,4 +209,13 @@ export class OrdersService {
   static async deployOrder(orderId: number): Promise<Order> {
     return ApiClient.post<Order>(`/api/v1/orders/${orderId}/deploy`, {})
   }
+
+  /**
+   * Refund a paid order through its provider and mark it refunded.
+   * @param orderId - Target order id.
+   * @returns The updated order.
+   */
+  static async refundOrder(orderId: number): Promise<Order> {
+    return ApiClient.post<Order>(`/api/v1/orders/${orderId}/refund`, {})
+  }
 }

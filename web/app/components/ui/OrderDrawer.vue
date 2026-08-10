@@ -38,12 +38,33 @@
             </p>
             <p v-else class="mt-0.5 text-sm font-semibold text-[var(--app-accent-ink)]">{{ amountLabel }}</p>
           </div>
-          <button
-            class="flex h-7 w-7 shrink-0 items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface)] hover:text-[var(--app-ink)]"
-            @click="$emit('close')"
-          >
-            <UIcon name="i-lucide-x" class="h-4 w-4" />
-          </button>
+          <div class="flex shrink-0 items-center gap-0.5">
+            <button
+              v-if="!showForm && order"
+              class="flex h-7 w-7 items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
+              title="Modifier cette vente"
+              aria-label="Modifier cette vente"
+              @click="startEdit"
+            >
+              <UIcon name="i-lucide-square-pen" class="h-4 w-4" />
+            </button>
+            <button
+              v-if="!showForm && order"
+              class="flex h-7 w-7 items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-red-soft)] hover:text-[var(--app-red)]"
+              title="Supprimer cette vente"
+              aria-label="Supprimer cette vente"
+              @click="deleteConfirmModal?.open()"
+            >
+              <UIcon name="i-lucide-trash-2" class="h-4 w-4" />
+            </button>
+            <button
+              class="flex h-7 w-7 items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface)] hover:text-[var(--app-ink)]"
+              aria-label="Fermer"
+              @click="$emit('close')"
+            >
+              <UIcon name="i-lucide-x" class="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         <div class="flex-1 overflow-y-auto">
@@ -166,20 +187,7 @@
         </div>
 
         <div class="border-t border-[var(--app-line)] px-5 py-4">
-          <div v-if="showDeleteConfirm" class="rounded-lg border border-[var(--app-red)]/40 bg-[var(--app-red)]/10 p-4">
-            <p class="mb-0.5 text-sm font-medium text-[var(--app-ink)]">Supprimer cette vente ?</p>
-            <p class="mb-3 text-xs text-[var(--app-ink-soft)]">
-              Une facture déjà émise reste chez votre banque : à annuler de son côté.
-            </p>
-            <div class="flex gap-2">
-              <button class="btn-secondary flex-1 text-xs" :disabled="isBusy" @click="showDeleteConfirm = false">
-                Annuler
-              </button>
-              <button class="btn-danger flex-1 text-xs" :disabled="isBusy" @click="handleDelete">Confirmer</button>
-            </div>
-          </div>
-
-          <div v-else-if="!showForm && order" class="space-y-2">
+          <div v-if="!showForm && order" class="space-y-2">
             <button v-if="!order.paid_at" class="btn-primary w-full" :disabled="isBusy" @click="$emit('finalize')">
               <UIcon name="i-lucide-file-text" class="h-4 w-4" />
               {{ order.invoice_id ? "Reprendre l'envoi au client" : 'Finaliser la vente' }}
@@ -200,14 +208,14 @@
                 <UIcon name="i-lucide-rocket" class="h-4 w-4" />Mettre en ligne
               </button>
             </div>
-            <div class="flex gap-2">
-              <button class="btn-secondary flex-1" @click="startEdit">
-                <UIcon name="i-lucide-square-pen" class="h-4 w-4" />Modifier
-              </button>
-              <button class="btn-danger flex-1" @click="showDeleteConfirm = true">
-                <UIcon name="i-lucide-trash-2" class="h-4 w-4" />Supprimer
-              </button>
-            </div>
+            <button
+              v-if="order.paid_at && order.status !== 'refunded'"
+              class="btn-secondary w-full"
+              :disabled="isBusy"
+              @click="refundConfirmModal?.open()"
+            >
+              <UIcon name="i-lucide-rotate-ccw" class="h-4 w-4" />Rembourser le paiement
+            </button>
           </div>
 
           <div v-else-if="showForm" class="flex gap-2">
@@ -227,6 +235,23 @@
         </div>
       </div>
     </Transition>
+
+    <UiConfirmModal
+      ref="deleteConfirmModal"
+      title="Supprimer cette vente"
+      message="Une facture déjà émise reste chez votre banque : à annuler de son côté."
+      confirm-text="Supprimer"
+      cancel-text="Annuler"
+      @confirm="handleDelete"
+    />
+    <UiConfirmModal
+      ref="refundConfirmModal"
+      title="Rembourser le paiement"
+      :message="refundMessage"
+      confirm-text="Rembourser"
+      cancel-text="Annuler"
+      @confirm="handleRefund"
+    />
   </Teleport>
 </template>
 
@@ -271,7 +296,8 @@ const userStore: ReturnType<typeof useUserStore> = useUserStore()
 
 const editMode: Ref<boolean> = ref(false)
 const isBusy: Ref<boolean> = ref(false)
-const showDeleteConfirm: Ref<boolean> = ref(false)
+const deleteConfirmModal: Ref<{ open: () => void } | null> = ref(null)
+const refundConfirmModal: Ref<{ open: () => void } | null> = ref(null)
 
 const editForm: Ref<OrderEditForm> = ref({
   amount_euros: 0,
@@ -329,6 +355,10 @@ const amountLabel: ComputedRef<string> = computed((): string => {
   return `${euros % 1 === 0 ? euros.toFixed(0) : euros.toFixed(2)} €`
 })
 
+const refundMessage: ComputedRef<string> = computed(
+  (): string => `Le montant de ${amountLabel.value} sera remboursé au client via le provider. Action irréversible.`,
+)
+
 const statusBadgeClass: ComputedRef<string> = computed((): string => {
   switch (props.order?.status) {
     case 'paid':
@@ -354,7 +384,6 @@ watch(
     if (!open) {
       setTimeout((): void => {
         editMode.value = false
-        showDeleteConfirm.value = false
       }, 250)
     }
   },
@@ -493,6 +522,12 @@ async function handleDeploy(): Promise<void> {
   await runAction(() => OrdersService.deployOrder(props.order!.id), 'Mise en ligne lancée')
 }
 
+/** Refund the paid order through its provider, then mark it refunded. */
+async function handleRefund(): Promise<void> {
+  if (!props.order) return
+  await runAction(() => OrdersService.refundOrder(props.order!.id), 'Paiement remboursé')
+}
+
 /** Delete (cancel) the order. */
 async function handleDelete(): Promise<void> {
   if (!props.order) return
@@ -506,7 +541,6 @@ async function handleDelete(): Promise<void> {
     toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression')
   } finally {
     isBusy.value = false
-    showDeleteConfirm.value = false
   }
 }
 </script>

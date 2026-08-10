@@ -279,3 +279,26 @@ class StripePaymentProvider(PaymentProviderClient):
         )
         status = invoice.get("status")
         return PaymentState(is_paid=status == "paid", raw_status=status)
+
+    async def refund(self, invoice_id: str) -> None:
+        """
+        Refund the card payment of a paid invoice on the connected account.
+
+        Reads the invoice for its PaymentIntent, then issues a full refund.
+
+        Args:
+            invoice_id: The Stripe invoice id.
+
+        Raises:
+            StripeConnectError: When the invoice carries no payment to refund yet.
+        """
+        invoice = await asyncio.to_thread(
+            stripe.Invoice.retrieve, invoice_id, stripe_account=self._connected_account_id
+        )
+        payment_intent = invoice.get("payment_intent")
+        intent_id = payment_intent.get("id") if isinstance(payment_intent, dict) else payment_intent
+        if not intent_id:
+            raise StripeConnectError(f"Stripe invoice {invoice_id} has no payment to refund yet.")
+        await asyncio.to_thread(
+            stripe.Refund.create, payment_intent=intent_id, stripe_account=self._connected_account_id
+        )

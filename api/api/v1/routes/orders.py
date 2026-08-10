@@ -231,6 +231,23 @@ async def check_order_payment(
     return OrderPaymentCheckResponse(newly_paid=newly_paid, order=OrderResponse.model_validate(order))
 
 
+@router.post("/{order_id}/refund", response_model=OrderResponse)
+async def refund_order(
+    order_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> OrderResponse:
+    """Refund a paid order through its provider and mark it refunded."""
+    order = _get_order_or_404(db, current_user.id, order_id)
+    try:
+        refunded = await order_service.refund_order(db, current_user, order)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return OrderResponse.model_validate(refunded)
+
+
 @router.post("/{order_id}/deploy", response_model=OrderResponse)
 async def deploy_order(
     order_id: int,

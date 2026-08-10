@@ -126,3 +126,22 @@ class PaymentProviderClient(ABC):
         Returns:
             The normalized payment state.
         """
+
+    async def refund(self, invoice_id: str) -> None:
+        """
+        Refund the payment collected for an issued invoice.
+
+        Default: unsupported. A provider whose payment can't be refunded through the
+        API (e.g. Qonto bank transfer) inherits this, so the caller surfaces a clear
+        "refund it manually" message rather than silently doing nothing.
+
+        Args:
+            invoice_id: Provider-side invoice id.
+
+        Raises:
+            ValueError: When the provider offers no API refund.
+        """
+        raise ValueError(
+            "Le remboursement automatique n'est pas disponible pour ce moyen d'encaissement — "
+            "remboursez le paiement manuellement."
+        )

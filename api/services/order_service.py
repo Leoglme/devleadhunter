@@ -589,6 +589,33 @@ class OrderService:
                 logger.warning("Payment reconciliation failed for order %s: %s", order.id, exc)
         return newly_paid
 
+    async def refund_order(self, db: Session, user: User, order: Order) -> Order:
+        """
+        Refund a paid order through its provider, then mark it refunded.
+
+        Args:
+            db: Active database session.
+            user: Owner of the order (holds the connected provider).
+            order: The order to refund.
+
+        Returns:
+            The refunded order.
+
+        Raises:
+            ValueError: When the order isn't refundable, or the provider can't refund.
+        """
+        if order.status == OrderStatus.REFUNDED.value:
+            return order
+        if not order.paid_at:
+            raise ValueError("Cette vente n'est pas payée — il n'y a rien à rembourser.")
+        if not order.invoice_id or not order.payment_provider:
+            raise ValueError("Aucune facture rattachée à cette vente — remboursement impossible.")
+        provider = await self._resolve_provider(db, user)
+        if provider is None:
+            raise ValueError("Aucun moyen d'encaissement connecté pour rembourser cette vente.")
+        await provider.refund(order.invoice_id)
+        return self.mark_refunded(db, order)
+
     # ------------------------------------------------------------------ #
     # Payment-link email (with preview)
     # ------------------------------------------------------------------ #

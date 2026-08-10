@@ -396,3 +396,33 @@ def test_reconcile_pending_orders_returns_newly_paid_ids(monkeypatch: pytest.Mon
 
     monkeypatch.setattr(service, "check_and_mark_paid", _fake_check)
     assert asyncio.run(service.reconcile_pending_orders(db)) == [1]
+
+
+def test_refund_order_refunds_via_provider_and_marks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A paid order is refunded through its provider, then marked refunded."""
+    service = OrderService()
+    order = _order(invoice_id="inv_1", payment_provider="stripe", paid_at="now", status="paid")
+    refunded: dict[str, bool] = {"provider": False}
+
+    async def _fake_resolve(_db: object, _user: object) -> SimpleNamespace:
+        async def _refund(_invoice_id: str) -> None:
+            refunded["provider"] = True
+
+        return SimpleNamespace(refund=_refund)
+
+    def _fake_mark_refunded(_db: object, target: SimpleNamespace) -> SimpleNamespace:
+        target.status = "refunded"
+        return target
+
+    monkeypatch.setattr(service, "_resolve_provider", _fake_resolve)
+    monkeypatch.setattr(service, "mark_refunded", _fake_mark_refunded)
+    result = asyncio.run(service.refund_order(_FakeDB(), SimpleNamespace(id=1), order))
+    assert refunded["provider"] is True
+    assert result.status == "refunded"
+
+
+def test_refund_order_rejects_unpaid() -> None:
+    """An unpaid order has nothing to refund."""
+    order = _order(invoice_id="inv_1", payment_provider="stripe", paid_at=None, status="payment_pending")
+    with pytest.raises(ValueError):
+        asyncio.run(OrderService().refund_order(_FakeDB(), SimpleNamespace(id=1), order))

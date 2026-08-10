@@ -229,3 +229,22 @@ def test_check_paid_maps_status(monkeypatch: pytest.MonkeyPatch) -> None:
     state = asyncio.run(_provider().check_paid("in_1"))
     assert state.is_paid is True
     assert state.raw_status == "paid"
+
+
+def test_refund_reads_intent_and_refunds_on_connected_account(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Refund reads the invoice's PaymentIntent and refunds it on the connected account."""
+    monkeypatch.setattr(stripe_module.stripe.Invoice, "retrieve", lambda _id, **_: _Obj(payment_intent="pi_1"))
+    refund_kwargs: dict = {}
+    monkeypatch.setattr(
+        stripe_module.stripe.Refund, "create", lambda **kwargs: refund_kwargs.update(kwargs) or _Obj(id="re_1")
+    )
+    asyncio.run(_provider().refund("in_1"))
+    assert refund_kwargs["payment_intent"] == "pi_1"
+    assert refund_kwargs["stripe_account"] == "acct_1"
+
+
+def test_refund_without_payment_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An invoice with no PaymentIntent has nothing to refund."""
+    monkeypatch.setattr(stripe_module.stripe.Invoice, "retrieve", lambda _id, **_: _Obj(payment_intent=None))
+    with pytest.raises(StripeConnectError):
+        asyncio.run(_provider().refund("in_1"))
