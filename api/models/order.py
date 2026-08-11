@@ -56,6 +56,8 @@ class Order(Base):
     payment_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     invoice_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     invoice_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Attached payment-link id (Qonto): its status flags a card/Apple Pay payment before settlement.
+    payment_link_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
 
     # Deployment / delivery
     domain: Mapped[str | None] = mapped_column(String(255), nullable=True)

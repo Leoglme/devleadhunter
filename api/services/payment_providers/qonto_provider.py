@@ -32,6 +32,9 @@ _INVOICE_DUE_DAYS = 30
 # Offered on the invoice's pay page. Transfer is listed alongside the card methods
 # so attaching a payment link adds ways to pay instead of replacing the transfer.
 _PAYMENT_METHODS = ["bank_transfer", "credit_card", "apple_pay"]
+# Payment-link statuses meaning the buyer has paid: "processing" = a card/Apple Pay
+# payment cleared by the buyer but not yet settled by Mollie onto the invoice.
+_PAID_LINK_STATUSES = frozenset({"paid", "processing"})
 _VAT_RATE = "0"
 _VAT_EXEMPTION_REASON = "S293B"
 # The invoice PDF is generated asynchronously by Qonto — poll for its attachment.
@@ -243,15 +246,16 @@ class QontoPaymentProvider(PaymentProviderClient):
             ],
         }
         invoice = (await self._request("POST", "/client_invoices", json=body))["client_invoice"]
-        await self._enable_card_payment(invoice, request)
+        payment_link_id = await self._enable_card_payment(invoice, request)
         return IssuedInvoice(
             provider=self.provider.value,
             invoice_id=invoice["id"],
             invoice_number=invoice.get("number"),
             payment_url=invoice.get("invoice_url"),
+            payment_link_id=payment_link_id,
         )
 
-    async def _enable_card_payment(self, invoice: dict, request: InvoiceRequest) -> None:
+    async def _enable_card_payment(self, invoice: dict, request: InvoiceRequest) -> str | None:
         """
         Best-effort: attach a card payment link to the invoice's pay page.
 
@@ -262,6 +266,9 @@ class QontoPaymentProvider(PaymentProviderClient):
         Args:
             invoice: The issued invoice as returned by Qonto.
             request: The invoice details (amount and debtor of the link).
+
+        Returns:
+            The created payment link's id, or None when none could be attached.
         """
         currency = (request.currency or "EUR").upper()
         body = {
@@ -274,9 +281,11 @@ class QontoPaymentProvider(PaymentProviderClient):
             }
         }
         try:
-            await self._request("POST", "/payment_links", json=body)
+            created = await self._request("POST", "/payment_links", json=body)
         except Exception:
             logger.info("Qonto card payment link not created for invoice %s — transfer only.", invoice["id"])
+            return None
+        return (created.get("payment_link") or {}).get("id")
 
     async def get_invoice_pdf(self, invoice_id: str) -> bytes:
         """
@@ -320,16 +329,49 @@ class QontoPaymentProvider(PaymentProviderClient):
                 await asyncio.sleep(_PDF_POLL_DELAY_SECONDS)
         raise RuntimeError(f"Qonto invoice {invoice_id} PDF not ready after {_PDF_POLL_ATTEMPTS} attempts.")
 
-    async def check_paid(self, invoice_id: str) -> PaymentState:
+    async def check_paid(self, invoice_id: str, payment_link_id: str | None = None) -> PaymentState:
         """
-        Read the invoice status from Qonto.
+        Read the payment status, treating a buyer-paid card/Apple Pay link as paid.
+
+        A card/Apple Pay payment only flips the invoice to "paid" once Mollie settles
+        it (up to ~2 weeks for a first payout), so the buyer would otherwise wait for
+        delivery. When the invoice is still unpaid the attached payment link is read:
+        a "processing" (buyer paid, settling) or "paid" link means it's paid. Bank
+        transfers settle straight onto the invoice, so they never need this.
 
         Args:
             invoice_id: The Qonto invoice id.
+            payment_link_id: The attached payment link id, when one was created.
 
         Returns:
-            The normalized payment state (``paid`` → paid).
+            The normalized payment state.
         """
         invoice = (await self._request("GET", f"/client_invoices/{invoice_id}"))["client_invoice"]
         status = invoice.get("status")
-        return PaymentState(is_paid=status == "paid", raw_status=status)
+        if status == "paid":
+            return PaymentState(is_paid=True, raw_status=status)
+        if payment_link_id:
+            link_status = await self._payment_link_status(payment_link_id)
+            if link_status in _PAID_LINK_STATUSES:
+                return PaymentState(is_paid=True, raw_status=f"link:{link_status}")
+        return PaymentState(is_paid=False, raw_status=status)
+
+    async def _payment_link_status(self, payment_link_id: str) -> str | None:
+        """
+        Read a payment link's status, returning None when it can't be fetched.
+
+        Degrades gracefully: a lookup failure falls back to the invoice status
+        (settlement) rather than breaking reconciliation.
+
+        Args:
+            payment_link_id: The Qonto payment link id.
+
+        Returns:
+            The link status, or None on failure.
+        """
+        try:
+            response = await self._request("GET", f"/payment_links/{payment_link_id}")
+        except Exception as error:
+            logger.warning("Qonto payment link %s status unavailable: %s", payment_link_id, error)
+            return None
+        return (response.get("payment_link") or {}).get("status")

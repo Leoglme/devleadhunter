@@ -264,12 +264,14 @@ class StripePaymentProvider(PaymentProviderClient):
             response.raise_for_status()
             return response.content
 
-    async def check_paid(self, invoice_id: str) -> PaymentState:
+    async def check_paid(self, invoice_id: str, payment_link_id: str | None = None) -> PaymentState:
         """
         Read the invoice status on the connected account.
 
         Args:
             invoice_id: The Stripe invoice id.
+            payment_link_id: Unused — Stripe settles card payments onto the invoice
+                directly, so the invoice status alone is authoritative.
 
         Returns:
             The normalized payment state (``paid`` status → paid).

@@ -184,6 +184,7 @@ def test_create_invoice_builds_finalized_body_and_parses_result() -> None:
     assert issued.invoice_number == "F-2026-006"
     assert issued.payment_url == "https://pay.qonto.com/invoices/inv_1"
     assert issued.provider == "qonto"
+    assert issued.payment_link_id == "pl_1"
 
     body = _last_call("POST", "/client_invoices")["json"]
     assert body["status"] == "unpaid"
@@ -239,5 +240,35 @@ def test_check_paid_maps_status() -> None:
     """A ``paid`` invoice status maps to is_paid=True."""
     _FakeAsyncClient.routes = {("GET", "/client_invoices/inv_1"): {"client_invoice": {"status": "paid"}}}
     state = asyncio.run(_provider().check_paid("inv_1"))
+    assert state.is_paid is True
+    assert state.raw_status == "paid"
+
+
+def test_check_paid_reads_link_when_invoice_unpaid() -> None:
+    """An unpaid invoice whose card/Apple Pay link is settling counts as paid."""
+    _FakeAsyncClient.routes = {
+        ("GET", "/client_invoices/inv_1"): {"client_invoice": {"status": "unpaid"}},
+        ("GET", "/payment_links/pl_1"): {"payment_link": {"status": "processing"}},
+    }
+    state = asyncio.run(_provider().check_paid("inv_1", "pl_1"))
+    assert state.is_paid is True
+    assert state.raw_status == "link:processing"
+
+
+def test_check_paid_stays_unpaid_when_link_is_open() -> None:
+    """An unpaid invoice whose link nobody has paid stays unpaid."""
+    _FakeAsyncClient.routes = {
+        ("GET", "/client_invoices/inv_1"): {"client_invoice": {"status": "unpaid"}},
+        ("GET", "/payment_links/pl_1"): {"payment_link": {"status": "open"}},
+    }
+    state = asyncio.run(_provider().check_paid("inv_1", "pl_1"))
+    assert state.is_paid is False
+    assert state.raw_status == "unpaid"
+
+
+def test_check_paid_ignores_link_when_invoice_already_paid() -> None:
+    """A paid invoice is authoritative — the link is never fetched (no route for it)."""
+    _FakeAsyncClient.routes = {("GET", "/client_invoices/inv_1"): {"client_invoice": {"status": "paid"}}}
+    state = asyncio.run(_provider().check_paid("inv_1", "pl_1"))
     assert state.is_paid is True
     assert state.raw_status == "paid"

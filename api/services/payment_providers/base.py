@@ -63,6 +63,7 @@ class IssuedInvoice:
     invoice_number: str | None
     payment_url: str | None
     pdf_url: str | None = None
+    payment_link_id: str | None = None
 
 
 @dataclass
@@ -116,12 +117,14 @@ class PaymentProviderClient(ABC):
         """
 
     @abstractmethod
-    async def check_paid(self, invoice_id: str) -> PaymentState:
+    async def check_paid(self, invoice_id: str, payment_link_id: str | None = None) -> PaymentState:
         """
         Read the current payment status of an issued invoice.
 
         Args:
             invoice_id: Provider-side invoice id.
+            payment_link_id: Attached payment-link id, when one exists — lets a provider
+                treat a buyer-paid link as paid before the invoice settles.
 
         Returns:
             The normalized payment state.

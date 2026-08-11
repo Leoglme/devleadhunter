@@ -80,6 +80,7 @@ def _order(**overrides: object) -> SimpleNamespace:
         "status": OrderStatus.DRAFT.value,
         "invoice_id": None,
         "invoice_number": None,
+        "payment_link_id": None,
         "payment_provider": None,
         "payment_url": None,
         "stripe_payment_url": None,
@@ -337,7 +338,7 @@ def test_check_and_mark_paid_marks_when_provider_reports_paid(monkeypatch: pytes
     order = _order(invoice_id="inv_1", payment_provider="qonto", paid_at=None)
 
     async def _fake_resolve(_db: object, _user: object) -> SimpleNamespace:
-        async def _check_paid(_invoice_id: str) -> SimpleNamespace:
+        async def _check_paid(_invoice_id: str, _payment_link_id: str | None = None) -> SimpleNamespace:
             return SimpleNamespace(is_paid=True, raw_status="paid")
 
         return SimpleNamespace(check_paid=_check_paid)
@@ -361,7 +362,7 @@ def test_check_and_mark_paid_noop_when_unpaid(monkeypatch: pytest.MonkeyPatch) -
     order = _order(invoice_id="inv_1", payment_provider="qonto", paid_at=None)
 
     async def _fake_resolve(_db: object, _user: object) -> SimpleNamespace:
-        async def _check_paid(_invoice_id: str) -> SimpleNamespace:
+        async def _check_paid(_invoice_id: str, _payment_link_id: str | None = None) -> SimpleNamespace:
             return SimpleNamespace(is_paid=False, raw_status="unpaid")
 
         return SimpleNamespace(check_paid=_check_paid)

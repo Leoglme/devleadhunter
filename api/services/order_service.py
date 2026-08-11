@@ -523,6 +523,7 @@ class OrderService:
         order.payment_provider = issued.provider
         order.invoice_id = issued.invoice_id
         order.invoice_number = issued.invoice_number
+        order.payment_link_id = issued.payment_link_id
         order.payment_url = issued.payment_url
         if order.status == OrderStatus.DRAFT.value:
             order.status = OrderStatus.PAYMENT_PENDING.value
@@ -563,7 +564,7 @@ class OrderService:
         provider = await self._resolve_provider(db, user)
         if provider is None:
             return False
-        state = await provider.check_paid(order.invoice_id)
+        state = await provider.check_paid(order.invoice_id, order.payment_link_id)
         if state.is_paid:
             self.mark_paid(db, order)
             return True
