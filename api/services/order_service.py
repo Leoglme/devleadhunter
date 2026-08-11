@@ -22,6 +22,7 @@ from enums.product_type import PRODUCT_DEFAULT_AMOUNT_CENTS, PRODUCT_LABELS, Pro
 from models.order import Order
 from models.prospect_db import ProspectDB
 from models.user import User
+from services.decision_maker.normalize import title_case_name
 from services.pricing_service import PricingService
 
 if TYPE_CHECKING:
@@ -43,6 +44,26 @@ _TERMINAL_STATUSES: tuple[str, ...] = (
     OrderStatus.CANCELLED.value,
 )
 _FRENCH_ZIP_PATTERN: re.Pattern[str] = re.compile(r"\b(\d{5})\b")
+
+
+def _format_business_name_for_display(name: str) -> str:
+    """
+    Soften a business name shouted in full caps to title case, else keep it as-is.
+
+    Registry and scraping names often arrive shouting ("PLOMBERIE DURAND"); only
+    those are re-cased through the person-name normaliser (which already handles
+    French particles and hyphens), so a name typed cleanly ("L'Atelier du Bois")
+    is left untouched.
+
+    Args:
+        name: The raw business name.
+
+    Returns:
+        The display-ready business name.
+    """
+    if not name.isupper():
+        return name
+    return title_case_name(name) or name
 
 
 def _split_postal_address(address: str | None, city: str | None) -> tuple[str | None, str | None, str | None]:
@@ -637,10 +658,12 @@ class OrderService:
             The rendered ``subject`` and ``body_html``.
         """
         # Escaped: the scraped business name must not inject markup into the email.
-        business = html.escape(order.business_name or "votre entreprise")
+        business = html.escape(_format_business_name_for_display(order.business_name or "votre entreprise"))
         sender = html.escape(sender_name)
         amount = format_amount(order.amount_cents, order.currency)
+        # PRODUCT_LABELS capitalises the label for standalone use; here it sits mid-sentence.
         product = PRODUCT_LABELS.get(order.product_type, "site web")
+        product = product[:1].lower() + product[1:]
         url = html.escape(order.payment_url or order.stripe_payment_url or "#", quote=True)
         attachment_note = " Vous trouverez la facture en pièce jointe." if order.invoice_id else ""
         # Naming the invoice ties the button to the attached PDF — a reference an

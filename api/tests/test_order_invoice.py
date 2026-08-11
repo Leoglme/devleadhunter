@@ -15,7 +15,7 @@ import pytest
 from enums.order_status import OrderStatus
 from enums.payment_provider import PaymentProvider
 from models.order import Order
-from services.order_service import OrderService, _split_postal_address
+from services.order_service import OrderService, _format_business_name_for_display, _split_postal_address
 from services.payment_providers.base import IssuedInvoice
 
 
@@ -313,6 +313,22 @@ def test_build_payment_email_omits_attachment_note_without_invoice() -> None:
     order = _order(payment_url="https://buy.stripe.com/x")
     body = OrderService().build_payment_email(order, sender_name="Léo")["body_html"]
     assert "pièce jointe" not in body
+
+
+def test_build_payment_email_softens_a_shouted_business_name() -> None:
+    """A full-caps registry name is re-cased and the product label reads mid-sentence."""
+    order = _order(business_name="PLOMBERIE DURAND", invoice_id="inv_1")
+    rendered = OrderService().build_payment_email(order, sender_name="Léo")
+
+    assert "Votre site web est prêt" in rendered["subject"]
+    assert "le <strong>site web</strong> de <strong>Plomberie Durand</strong>" in rendered["body_html"]
+    assert "PLOMBERIE DURAND" not in rendered["body_html"]
+
+
+def test_format_business_name_for_display_recases_only_shouted_names() -> None:
+    """Full-caps names get title case with lowercase linking words; clean names are kept."""
+    assert _format_business_name_for_display("GARAGE DE LA GARE") == "Garage de la Gare"
+    assert _format_business_name_for_display("L'Atelier du Bois") == "L'Atelier du Bois"
 
 
 def test_check_and_mark_paid_marks_when_provider_reports_paid(monkeypatch: pytest.MonkeyPatch) -> None:
