@@ -340,7 +340,7 @@ import type { LocationQueryValue } from 'vue-router'
 import type { UseToastReturn } from '~/types/Composables'
 import { ref, computed, watch, onMounted } from 'vue'
 import type { ComputedRef, Ref } from 'vue'
-import type { Prospect, ProspectWebsiteFilter } from '~/types'
+import type { Prospect } from '~/types'
 import { ProspectsService } from '~/services/prospectsService'
 import { downloadProspectsJson, downloadProspectTemplateJson, parseProspectsJson } from '~/utils/prospectJson'
 import { ProspectWebsite } from '~/utils/prospectWebsite'
@@ -348,6 +348,7 @@ import { EnrichmentService } from '~/services/enrichmentService'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import type { BulkGenerateResult } from '~/services/demoSiteService'
 import { useToast } from '~/composables/useToast'
+import { useMyProspectsFilters } from '~/composables/useMyProspectsFilters'
 
 definePageMeta({
   layout: 'dashboard',
@@ -361,11 +362,14 @@ const selectedProspects: Ref<string[]> = ref([])
 const bulkCampaignOpen: Ref<boolean> = ref(false)
 const bulkGenerateOpen: Ref<boolean> = ref(false)
 const bulkBusy: Ref<boolean> = ref(false)
-const searchQuery: Ref<string> = ref('')
-const filterCategory: Ref<string> = ref('')
-const filterCity: Ref<string> = ref('')
-const filterWebsite: Ref<ProspectWebsiteFilter> = ref('no')
-const activeTab: Ref<'not_contacted' | 'contacted'> = ref('not_contacted')
+const {
+  searchQuery,
+  filterCategory,
+  filterCity,
+  filterWebsite,
+  activeTab,
+  clearFilters: resetFilters,
+}: ReturnType<typeof useMyProspectsFilters> = useMyProspectsFilters()
 
 const websiteFilterOptions: { value: string; label: string }[] = [
   { value: 'all', label: 'Tous' },
@@ -512,10 +516,7 @@ function refreshProspects(): void {
  * Reset all list filters to their defaults.
  */
 function clearFilters(): void {
-  searchQuery.value = ''
-  filterCity.value = ''
-  filterCategory.value = ''
-  filterWebsite.value = 'no'
+  resetFilters()
   currentPage.value = 1
 }
 
