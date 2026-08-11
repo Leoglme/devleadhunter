@@ -47,6 +47,14 @@ class ProspectBase(BaseModel):
             "exact listing instead of re-searching by name (homonym safety)."
         ),
     )
+    facebook_url: str | None = Field(
+        None,
+        max_length=2048,
+        description=(
+            "Facebook page URL — enrichment anchor used when the prospect has no Google "
+            "listing. Google Maps stays the source of truth when both are present."
+        ),
+    )
     category: str = Field(..., description="Business category")
     source: Source = Field(..., description="Data source identifier")
     confidence: int = Field(
@@ -120,6 +128,7 @@ class ProspectUpdate(BaseModel):
     email: EmailStr | None = Field(None, description="Email address")
     website: str | None = Field(None, description="Website URL")
     website_status: WebsiteStatus | None = Field(None, description="Liveness of the website URL")
+    facebook_url: str | None = Field(None, max_length=2048, description="Facebook page URL")
     category: str | None = Field(None, description="Business category")
     source: Source | None = Field(None, description="Data source identifier")
     confidence: int | None = Field(None, ge=1, le=4, description="Confidence score 1-4")

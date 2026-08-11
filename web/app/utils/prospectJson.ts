@@ -14,6 +14,7 @@ export type ProspectJsonItem = {
   category?: string
   confidence?: number
   google_maps_url?: string
+  facebook_url?: string
   contact_first_name?: string
   contact_last_name?: string
   enrichment?: ImportedEnrichmentPayload
@@ -56,6 +57,7 @@ export function downloadProspectsJson(prospects: Prospect[]): void {
       email: prospect.email ?? '',
       website: prospect.website ?? '',
       google_maps_url: prospect.google_maps_url ?? '',
+      facebook_url: prospect.facebook_url ?? '',
       category: prospect.category,
       confidence: prospect.confidence,
     }
@@ -81,6 +83,7 @@ export function downloadProspectTemplateJson(): void {
       category: 'plombier',
       confidence: 4,
       google_maps_url: 'https://www.google.com/maps/place/...',
+      facebook_url: 'https://www.facebook.com/votre-page',
       contact_first_name: 'Jean',
       contact_last_name: 'Dupont',
       enrichment: {
@@ -319,6 +322,8 @@ export function parseProspectsJson(text: string): ProspectJsonParseResult {
     if (confidence !== undefined) item.confidence = confidence
     const googleMapsUrl: string | undefined = optionalString(record.google_maps_url)
     if (googleMapsUrl !== undefined) item.google_maps_url = googleMapsUrl
+    const facebookUrl: string | undefined = optionalString(record.facebook_url)
+    if (facebookUrl !== undefined) item.facebook_url = facebookUrl
     const contactFirstName: string | undefined = optionalString(record.contact_first_name)
     if (contactFirstName !== undefined) item.contact_first_name = contactFirstName
     const contactLastName: string | undefined = optionalString(record.contact_last_name)

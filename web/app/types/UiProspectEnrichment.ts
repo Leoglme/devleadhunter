@@ -6,6 +6,7 @@ export type UiProspectEnrichmentProps = {
   prospectName: string
   prospectCity: string
   prospectGoogleMapsUrl: string
+  prospectFacebookUrl: string
 }
 
 export type EnrichmentForm = {

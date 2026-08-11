@@ -23,6 +23,7 @@ export type Prospect = {
   website?: string
   website_status?: ProspectWebsiteStatus | null
   google_maps_url?: string | null
+  facebook_url?: string | null
   category: string
   source: ProspectSource
   confidence: number
@@ -113,6 +114,7 @@ export type ProspectUpdatePayload = {
   phone?: string | null
   email?: string | null
   website?: string | null
+  facebook_url?: string | null
   category?: string
   contacted?: boolean
 }
@@ -128,6 +130,7 @@ export type ProspectCreatePayload = {
   email?: string | null
   website?: string | null
   google_maps_url?: string | null
+  facebook_url?: string | null
   category: string
   source: ProspectSource
   confidence: number

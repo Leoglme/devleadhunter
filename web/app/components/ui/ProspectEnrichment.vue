@@ -305,6 +305,10 @@ const props: UiProspectEnrichmentProps = defineProps({
     type: String,
     default: '',
   },
+  prospectFacebookUrl: {
+    type: String,
+    default: '',
+  },
   open: {
     type: Boolean,
     required: true,
@@ -504,6 +508,7 @@ async function run(): Promise<void> {
       props.prospectName,
       props.prospectCity,
       props.prospectGoogleMapsUrl,
+      props.prospectFacebookUrl,
     )
     syncForm()
     toast.success('Données récupérées')

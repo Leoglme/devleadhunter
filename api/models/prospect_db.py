@@ -50,6 +50,8 @@ class ProspectDB(Base):
     # Google Maps place URL captured at discovery — anchors enrichment on the
     # exact listing instead of re-searching by name (homonym safety).
     google_maps_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    # Facebook page URL — enrichment anchor used when the prospect has no Google listing (Google wins when present).
+    facebook_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     category: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     source: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     confidence: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

@@ -240,8 +240,10 @@ class EnrichmentService:
                 business_name=prospect.name,
                 city=prospect.city,
                 google_maps_url=prospect.google_maps_url,
+                facebook_url=prospect.facebook_url,
             )
-            mismatch = self._place_mismatch(prospect, data)
+            # Facebook data comes from the URL pasted for THIS prospect — a direct anchor, so the homonym guard is skipped.
+            mismatch = None if (data.source or "").startswith("facebook") else self._place_mismatch(prospect, data)
             if mismatch is not None:
                 # An explicit failure beats silently absorbing a homonym's
                 # photos/reviews into the prospect's demo site.

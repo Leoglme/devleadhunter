@@ -699,6 +699,7 @@ async function handleImportFile(event: Event): Promise<void> {
           email: item.email || null,
           website: item.website || null,
           google_maps_url: item.google_maps_url || null,
+          facebook_url: item.facebook_url || null,
           category: item.category ?? 'Entreprise',
           source: 'manual',
           confidence: item.confidence ?? 4,

@@ -280,14 +280,24 @@ class EnrichmentScraper:
         business_name: str,
         city: str | None = None,
         google_maps_url: str | None = None,
+        facebook_url: str | None = None,
     ) -> EnrichmentData:
         """Fetch enrichment for a business: Google Maps (rich) + OpenStreetMap (stable gap-filler).
 
         Google is the primary source (photos, reviews, rating); OpenStreetMap fills the fields
         Google is weak/blocked on (opening hours, social links, description) via a plain HTTP API.
         OSM runs even when nodriver is unavailable, so enrichment degrades gracefully instead of
-        returning nothing.
+        returning nothing. With no Google listing but a Facebook page, the read is delegated to the
+        Facebook scraper instead — Google wins whenever its URL is present.
         """
+        # No Google listing to anchor on → read the Facebook page instead (many artisans only have one).
+        if not (google_maps_url or "").strip() and (facebook_url or "").strip():
+            from scrappers.facebook_enrichment_scraper import facebook_enrichment_scraper
+
+            return await facebook_enrichment_scraper.enrich(
+                business_name=business_name, facebook_url=facebook_url or ""
+            )
+
         data = EnrichmentData()
         if NODRIVER_AVAILABLE:
 

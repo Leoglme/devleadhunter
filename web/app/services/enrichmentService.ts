@@ -138,6 +138,7 @@ export class EnrichmentService {
    * @param businessName - Business name the scraper looks up.
    * @param city - City narrowing the lookup.
    * @param googleMapsUrl - Maps place URL anchoring the scrape on the exact listing.
+   * @param facebookUrl - Facebook page URL used when the prospect has no Google listing.
    * @returns The refreshed enrichment record.
    */
   static async runProspectEnrichment(
@@ -145,12 +146,14 @@ export class EnrichmentService {
     businessName: string,
     city: string,
     googleMapsUrl: string = '',
+    facebookUrl: string = '',
   ): Promise<ProspectEnrichment> {
     const scrapedData: unknown = businessName
       ? await postToScraperSidecar<unknown>('/scraper/enrichment', {
           business_name: businessName,
           city: city || null,
           google_maps_url: googleMapsUrl || null,
+          facebook_url: facebookUrl || null,
         })
       : null
     // `null` et non `{}` : chaque champ d'EnrichmentData a un défaut, donc un objet
