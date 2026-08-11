@@ -77,16 +77,17 @@
           </div>
         </div>
 
+        <UiDrawerBrowseNav
+          v-if="!editMode"
+          :position-label="browsePositionLabel"
+          :can-previous="canBrowsePrevious"
+          :can-next="canBrowseNext"
+          @previous="$emit('browsePrevious')"
+          @next="$emit('browseNext')"
+        />
+
         <div class="flex-1 overflow-y-auto">
           <template v-if="!editMode">
-            <UiDrawerBrowseNav
-              :position-label="browsePositionLabel"
-              :can-previous="canBrowsePrevious"
-              :can-next="canBrowseNext"
-              @previous="$emit('browsePrevious')"
-              @next="$emit('browseNext')"
-            />
-
             <div v-if="prospect.organization_id" class="px-5 pt-4">
               <div
                 v-if="isReservedByMe"
