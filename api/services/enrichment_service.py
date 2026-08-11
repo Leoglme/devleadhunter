@@ -117,6 +117,69 @@ class EnrichmentService:
             return False
         return all(("ferm" in str(h["hours"]).lower() or "closed" in str(h["hours"]).lower()) for h in rows)
 
+    @staticmethod
+    def _valid_hour_rows(hours: list | None) -> list[dict[str, str]]:
+        """Keep only well-formed opening-hours rows."""
+        if not hours:
+            return []
+        return [
+            {"day": str(row["day"]).strip(), "hours": str(row["hours"]).strip()}
+            for row in hours
+            if isinstance(row, dict) and row.get("day") and row.get("hours")
+        ]
+
+    @staticmethod
+    def _should_apply_opening_hours(existing: list | None, incoming: list) -> bool:
+        """True when incoming hours are usable and at least as complete as existing."""
+        if EnrichmentService._all_days_closed(incoming):
+            return False
+        incoming_rows: list[dict[str, str]] = EnrichmentService._valid_hour_rows(incoming)
+        if not incoming_rows:
+            return False
+        existing_rows: list[dict[str, str]] = EnrichmentService._valid_hour_rows(existing)
+        if not existing_rows:
+            return True
+        return len(incoming_rows) >= len(existing_rows)
+
+    @staticmethod
+    def _review_dedupe_key(review: dict[str, Any]) -> str:
+        """Stable key to deduplicate review snippets."""
+        text: str = str(review.get("text") or "").strip().lower()
+        author: str = str(review.get("author") or "").strip().lower()
+        return text or author
+
+    @staticmethod
+    def _merge_reviews(existing: list | None, incoming: list) -> list[dict[str, Any]]:
+        """Append new review snippets without dropping existing ones."""
+        merged: list[dict[str, Any]] = [row for row in (existing or []) if isinstance(row, dict)]
+        seen: set[str] = {
+            EnrichmentService._review_dedupe_key(row) for row in merged if EnrichmentService._review_dedupe_key(row)
+        }
+        for review in incoming:
+            if not isinstance(review, dict):
+                continue
+            key: str = EnrichmentService._review_dedupe_key(review)
+            if not key or key in seen:
+                continue
+            merged.append(review)
+            seen.add(key)
+        return merged
+
+    @staticmethod
+    def _merge_photos(existing: list | None, incoming: list[str]) -> list[str]:
+        """Union photo URLs, preserving existing order first."""
+        merged: list[str] = [url for url in (existing or []) if isinstance(url, str) and url.strip()]
+        seen: set[str] = set(merged)
+        for url in incoming:
+            if not isinstance(url, str):
+                continue
+            cleaned: str = url.strip()
+            if not cleaned or cleaned in seen:
+                continue
+            merged.append(cleaned)
+            seen.add(cleaned)
+        return merged[:20]
+
     def _apply_data(self, record: ProspectEnrichment, data: EnrichmentData) -> None:
         """Copy scraped data onto the record without wiping manual edits with blanks."""
         record.source = data.source or record.source
@@ -130,11 +193,11 @@ class EnrichmentService:
         if data.logo_url:
             record.logo_url = data.logo_url
         if data.photos:
-            record.photos = data.photos
+            record.photos = self._merge_photos(record.photos, data.photos)
         if data.reviews:
-            record.reviews = data.reviews
-        if data.opening_hours and not self._all_days_closed(data.opening_hours):
-            record.opening_hours = data.opening_hours
+            record.reviews = self._merge_reviews(record.reviews, data.reviews)
+        if data.opening_hours and self._should_apply_opening_hours(record.opening_hours, data.opening_hours):
+            record.opening_hours = self._valid_hour_rows(data.opening_hours)
         if data.services:
             record.services = data.services
         if data.social_links:

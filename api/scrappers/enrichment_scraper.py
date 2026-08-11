@@ -158,19 +158,24 @@ _EXTRACT_JS = r"""
         out.photos = out.photos.slice(0, 20);
     } catch (e) {}
 
-    // Opening hours (table rows: day + hours)
+    // Opening hours (table rows: day + hours, then div-based fallback)
     try {
-        const rows = document.querySelectorAll('table tr');
-        rows.forEach((tr) => {
+        const pushHour = (day, hours) => {
+            if (!day || !hours || day.length >= 24 || hours.length >= 48) return;
+            const key = day.toLowerCase();
+            if (out.opening_hours.some((row) => row.day.toLowerCase() === key)) return;
+            out.opening_hours.push({ day, hours });
+        };
+        document.querySelectorAll('table tr').forEach((tr) => {
             const cells = tr.querySelectorAll('td, th');
-            if (cells.length >= 2) {
-                const day = txt(cells[0]);
-                const hours = txt(cells[1]);
-                if (day && hours && day.length < 20 && hours.length < 40) {
-                    out.opening_hours.push({ day, hours });
-                }
-            }
+            if (cells.length >= 2) pushHour(txt(cells[0]), txt(cells[1]));
         });
+        if (out.opening_hours.length < 5) {
+            document.querySelectorAll('[role="row"], li').forEach((row) => {
+                const parts = txt(row).split('\\n').map((p) => p.trim()).filter(Boolean);
+                if (parts.length >= 2) pushHour(parts[0], parts.slice(1).join(' '));
+            });
+        }
         out.opening_hours = out.opening_hours.slice(0, 7);
     } catch (e) {}
 
@@ -207,6 +212,63 @@ _EXTRACT_JS = r"""
     return out;
 })()
 """
+
+# Lightweight readiness probe — wave-2 hydration (review count + weekly hours).
+_HYDRATION_READY_JS = r"""
+(() => {
+    const txt = (el) => (el ? (el.innerText || el.textContent || '').trim() : '');
+    let hasReviewCount = false;
+    const block = document.querySelector('div.F7nice');
+    if (block) {
+        const blockTxt = txt(block);
+        hasReviewCount = /\([\d\s.,]+/.test(blockTxt);
+        if (!hasReviewCount) {
+            const aria = block.querySelector('[aria-label]');
+            const ariaTxt = aria ? (aria.getAttribute('aria-label') || '') : '';
+            hasReviewCount = /\d+\s*(avis|reviews|review)/i.test(ariaTxt);
+        }
+    }
+    let hourRowCount = 0;
+    document.querySelectorAll('table tr').forEach((tr) => {
+        const cells = tr.querySelectorAll('td, th');
+        if (cells.length >= 2 && txt(cells[0]) && txt(cells[1])) hourRowCount++;
+    });
+    let hasReviewsTab = false;
+    for (const el of document.querySelectorAll('[role="tab"], button, [role="button"]')) {
+        const label = txt(el).toLowerCase();
+        if (label === 'avis' || label.startsWith('avis ') || label.includes('reviews')) {
+            hasReviewsTab = true;
+            break;
+        }
+    }
+    return { hasReviewCount, hourRowCount, hasReviewsTab };
+})()
+"""
+
+# Expand the weekly hours table and open the reviews tab before extraction.
+_PREPARE_PANEL_JS = r"""
+(() => {
+    const txt = (el) => (el ? (el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim() : '');
+    const clickNeedle = (needles) => {
+        for (const el of document.querySelectorAll('button, [role="tab"], [role="button"], div[role="button"]')) {
+            const label = txt(el).toLowerCase();
+            if (needles.some((needle) => label.includes(needle))) {
+                el.click();
+                return true;
+            }
+        }
+        return false;
+    };
+    return {
+        hours: clickNeedle(['horaire', 'hours', 'opening']),
+        reviews: clickNeedle(['avis', 'review']),
+    };
+})()
+"""
+
+_ENRICHMENT_MAX_ATTEMPTS: int = 4
+_ENRICHMENT_POLL_INTERVAL_S: float = 1.5
+_ENRICHMENT_MIN_HOUR_ROWS: int = 5
 
 
 class EnrichmentScraper:
@@ -281,7 +343,7 @@ class EnrichmentScraper:
             # If we landed on a results feed, open the first place.
             current = NodriverDom.tab_url(tab)
             if "/maps/place/" not in current:
-                await NodriverDom.evaluate(
+                opened = await NodriverDom.evaluate(
                     tab,
                     """
                     (() => {
@@ -292,6 +354,8 @@ class EnrichmentScraper:
                     """,
                     by_value=True,
                 )
+                if opened is True:
+                    await asyncio.sleep(1.0)
 
             if not await NodriverDom.wait_for_selector(tab, "h1", timeout_s=12.0):
                 logger.info("Enrichment: place panel not found for %s", business_name)
@@ -306,29 +370,144 @@ class EnrichmentScraper:
                 )
                 return EnrichmentData()
 
-            # Best-effort: try to reveal the full opening-hours table.
-            try:
-                await NodriverDom.click_by_text(tab, "button", "horaires")
-            except Exception:
-                pass
-
-            # Scroll the place panel so lazy-loaded photos and reviews render before
-            # extraction — without this the panel often yields a single photo.
-            try:
-                for _ in range(5):
-                    await NodriverDom.scroll_element(tab, "div[role='main']", 1400)
-                    await asyncio.sleep(0.5)
-            except Exception:
-                pass
-
-            raw = await NodriverDom.evaluate(tab, f"JSON.stringify({_EXTRACT_JS})", by_value=True)
-            data = json.loads(raw) if isinstance(raw, str) else {}
-            return self._build_from_raw(data, business_name=business_name, city=city)
+            await self._wait_for_maps_hydration(tab)
+            return await self._extract_with_retries(tab, business_name=business_name, city=city)
         except Exception as exc:
             logger.warning("Enrichment scrape failed for %s: %s", business_name, exc)
             return EnrichmentData()
         finally:
             await browser.close()
+
+    async def _wait_for_maps_hydration(self, tab: Any, *, timeout_s: float = 18.0) -> None:
+        """Wait until Google Maps wave-2 data (review count / weekly hours) appears."""
+        deadline = asyncio.get_running_loop().time() + timeout_s
+        while asyncio.get_running_loop().time() < deadline:
+            status = await self._read_hydration_status(tab)
+            if status.get("hasReviewCount") and status.get("hourRowCount", 0) >= _ENRICHMENT_MIN_HOUR_ROWS:
+                return
+            await asyncio.sleep(0.5)
+
+    async def _read_hydration_status(self, tab: Any) -> dict[str, Any]:
+        """Return the current hydration markers from the place panel."""
+        raw = await NodriverDom.evaluate(tab, f"JSON.stringify({_HYDRATION_READY_JS})", by_value=True)
+        if not isinstance(raw, str):
+            return {}
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+
+    async def _prepare_panel_for_extraction(self, tab: Any) -> None:
+        """Expand hours, open the reviews tab, and scroll lazy-loaded content."""
+        try:
+            await NodriverDom.evaluate(tab, _PREPARE_PANEL_JS, by_value=True)
+            await asyncio.sleep(0.8)
+        except Exception:
+            pass
+
+        try:
+            for _ in range(6):
+                await NodriverDom.scroll_element(tab, "div[role='main']", 1400)
+                await asyncio.sleep(0.45)
+        except Exception:
+            pass
+
+    async def _extract_raw(self, tab: Any) -> dict[str, Any]:
+        """Run the in-page extraction script once."""
+        raw = await NodriverDom.evaluate(tab, f"JSON.stringify({_EXTRACT_JS})", by_value=True)
+        if not isinstance(raw, str):
+            return {}
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+
+    @staticmethod
+    def _is_extraction_ready(data: EnrichmentData) -> bool:
+        """True when wave-2 data looks complete enough to stop retrying."""
+        has_review_count: bool = data.reviews_count is not None
+        has_weekly_hours: bool = len(data.opening_hours) >= _ENRICHMENT_MIN_HOUR_ROWS
+        return has_review_count and has_weekly_hours
+
+    @staticmethod
+    def _merge_attempt_data(current: EnrichmentData, incoming: EnrichmentData) -> EnrichmentData:
+        """Keep the richest fields seen across extraction attempts."""
+        merged_reviews: list[dict[str, Any]] = list(current.reviews)
+        seen_reviews: set[str] = {
+            str(review.get("text") or review.get("author") or "").strip().lower()
+            for review in merged_reviews
+            if isinstance(review, dict)
+        }
+        for review in incoming.reviews:
+            if not isinstance(review, dict):
+                continue
+            key: str = str(review.get("text") or review.get("author") or "").strip().lower()
+            if not key or key in seen_reviews:
+                continue
+            merged_reviews.append(review)
+            seen_reviews.add(key)
+
+        merged_photos: list[str] = [url for url in current.photos if url]
+        seen_photos: set[str] = set(merged_photos)
+        for url in incoming.photos:
+            if url and url not in seen_photos:
+                merged_photos.append(url)
+                seen_photos.add(url)
+
+        merged_hours: list[dict[str, str]] = current.opening_hours
+        if len(incoming.opening_hours) > len(merged_hours):
+            merged_hours = incoming.opening_hours
+
+        return EnrichmentData(
+            source=incoming.source or current.source,
+            logo_url=incoming.logo_url or current.logo_url,
+            rating=incoming.rating if incoming.rating is not None else current.rating,
+            reviews_count=incoming.reviews_count if incoming.reviews_count is not None else current.reviews_count,
+            description=incoming.description or current.description,
+            website=incoming.website or current.website,
+            photos=merged_photos[:20],
+            reviews=merged_reviews[:12],
+            opening_hours=merged_hours,
+            services=incoming.services or current.services,
+            social_links={**(current.social_links or {}), **(incoming.social_links or {})},
+            place_title=incoming.place_title or current.place_title,
+            place_city=incoming.place_city or current.place_city,
+            place_postal_code=incoming.place_postal_code or current.place_postal_code,
+        )
+
+    async def _extract_with_retries(
+        self,
+        tab: Any,
+        *,
+        business_name: str,
+        city: str | None,
+    ) -> EnrichmentData:
+        """Poll extraction until wave-2 hydration is complete or attempts are exhausted."""
+        best: EnrichmentData = EnrichmentData()
+        for attempt in range(_ENRICHMENT_MAX_ATTEMPTS):
+            await self._prepare_panel_for_extraction(tab)
+            raw = await self._extract_raw(tab)
+            candidate = self._build_from_raw(raw, business_name=business_name, city=city)
+            best = self._merge_attempt_data(best, candidate)
+            if self._is_extraction_ready(best):
+                logger.info("Enrichment ready for %s after %s attempt(s)", business_name, attempt + 1)
+                return best
+            if attempt + 1 < _ENRICHMENT_MAX_ATTEMPTS:
+                logger.info(
+                    "Enrichment incomplete for %s (attempt %s/%s) — retrying",
+                    business_name,
+                    attempt + 1,
+                    _ENRICHMENT_MAX_ATTEMPTS,
+                )
+                await asyncio.sleep(_ENRICHMENT_POLL_INTERVAL_S)
+        logger.info(
+            "Enrichment for %s finished with partial data after %s attempts",
+            business_name,
+            _ENRICHMENT_MAX_ATTEMPTS,
+        )
+        return best
 
     @staticmethod
     def _build_from_raw(
