@@ -180,15 +180,104 @@
 
         <div>
           <label class="mb-1 block text-[10px] text-[var(--app-ink-soft)]">Photos ({{ form.photos.length }})</label>
-          <div v-if="form.photos.length" class="mb-2 grid grid-cols-3 gap-2">
-            <div v-for="(photo, i) in form.photos" :key="i" class="group relative">
-              <img :src="photo" alt="" class="h-16 w-full rounded border border-[var(--app-line)] object-cover" />
-              <button
-                class="absolute top-0.5 right-0.5 flex h-5 w-5 items-center justify-center rounded bg-[var(--app-overlay)] text-white opacity-0 transition-opacity group-hover:opacity-100"
-                @click="removePhoto(i)"
+          <p class="mb-2 text-[10px] leading-relaxed text-[var(--app-ink-soft)]">
+            Les premières photos sont les plus visibles sur le site. Glissez la poignée ou utilisez les flèches pour
+            réordonner.
+          </p>
+          <div
+            v-if="form.photos.length"
+            class="mb-2 grid grid-cols-3 gap-2"
+            role="list"
+            aria-label="Photos du prospect, ordonnées pour le site"
+          >
+            <div
+              v-for="(photo, i) in form.photos"
+              :key="`${photo}-${i}`"
+              role="listitem"
+              :class="[
+                'group relative rounded border bg-[var(--app-surface)] transition-[border-color,box-shadow,opacity] duration-200 ease-out',
+                photoDropTargetIndex === i
+                  ? 'border-[var(--app-accent)] shadow-[0_0_0_1px_var(--app-accent)]'
+                  : i === 0
+                    ? 'border-[var(--app-accent)]'
+                    : i === 1
+                      ? 'border-[var(--app-accent)]/50'
+                      : 'border-[var(--app-line)]',
+                photoDragIndex === i ? 'opacity-50' : 'opacity-100',
+              ]"
+              @dragover.prevent="onPhotoDragOver($event, i)"
+              @dragleave="onPhotoDragLeave(i)"
+              @drop.prevent="onPhotoDrop(i)"
+            >
+              <img
+                :src="photo"
+                alt=""
+                :class="['w-full rounded-t object-cover', i === 0 ? 'h-20' : i === 1 ? 'h-[4.5rem]' : 'h-16']"
+                draggable="false"
+              />
+              <span
+                class="pointer-events-none absolute top-1 left-1 flex h-5 min-w-5 items-center justify-center rounded bg-[var(--app-overlay)] px-1 text-[10px] font-semibold text-white tabular-nums"
+                aria-hidden="true"
               >
-                <UIcon name="i-lucide-x" class="h-3 w-3" />
-              </button>
+                {{ i + 1 }}
+              </span>
+              <div
+                class="absolute top-1 right-1 flex h-7 w-7 cursor-grab items-center justify-center rounded bg-[var(--app-overlay)] text-white opacity-100 transition-opacity duration-150 active:cursor-grabbing md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+                role="button"
+                tabindex="0"
+                :aria-label="`Déplacer la photo ${i + 1}`"
+                title="Glisser pour réordonner"
+                draggable="true"
+                @dragstart="onPhotoDragStart($event, i)"
+                @dragend="onPhotoDragEnd"
+              >
+                <UIcon name="i-lucide-grip-vertical" class="h-3.5 w-3.5" />
+              </div>
+              <div class="flex items-center justify-between gap-0.5 border-t border-[var(--app-line)] px-0.5 py-0.5">
+                <div class="flex items-center">
+                  <button
+                    type="button"
+                    class="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors duration-150 hover:bg-[var(--app-bg)] hover:text-[var(--app-ink)] disabled:cursor-not-allowed disabled:opacity-35"
+                    :disabled="i === 0"
+                    :aria-label="`Monter la photo ${i + 1}`"
+                    title="Monter"
+                    @click="movePhoto(i, i - 1)"
+                  >
+                    <UIcon name="i-lucide-chevron-up" class="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    class="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors duration-150 hover:bg-[var(--app-bg)] hover:text-[var(--app-ink)] disabled:cursor-not-allowed disabled:opacity-35"
+                    :disabled="i >= form.photos.length - 1"
+                    :aria-label="`Descendre la photo ${i + 1}`"
+                    title="Descendre"
+                    @click="movePhoto(i, i + 1)"
+                  >
+                    <UIcon name="i-lucide-chevron-down" class="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div class="flex items-center">
+                  <button
+                    type="button"
+                    class="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors duration-150 hover:bg-[var(--app-bg)] hover:text-[var(--app-accent-ink)] disabled:cursor-not-allowed disabled:opacity-35"
+                    :disabled="i === 0"
+                    :aria-label="`Mettre la photo ${i + 1} en premier`"
+                    title="Mettre en premier"
+                    @click="movePhotoToFront(i)"
+                  >
+                    <UIcon name="i-lucide-pin" class="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    class="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors duration-150 hover:bg-[var(--app-bg)] hover:text-[var(--app-red)]"
+                    :aria-label="`Supprimer la photo ${i + 1}`"
+                    title="Supprimer"
+                    @click="removePhoto(i)"
+                  >
+                    <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
           <div class="flex gap-2">
@@ -325,6 +414,10 @@ const isResolving: Ref<boolean> = ref(false)
 const isDecidingProposal: Ref<boolean> = ref(false)
 const newPhotoUrl: Ref<string> = ref('')
 const newService: Ref<string> = ref('')
+/** Index of the photo currently dragged from the grip handle, or null. */
+const photoDragIndex: Ref<number | null> = ref(null)
+/** Index of the photo currently highlighted as a drop target, or null. */
+const photoDropTargetIndex: Ref<number | null> = ref(null)
 
 const form: Ref<EnrichmentForm> = ref({
   rating: null,
@@ -564,6 +657,60 @@ function addPhoto(): void {
 /** Remove a photo by index. */
 function removePhoto(index: number): void {
   form.value.photos.splice(index, 1)
+}
+
+/** Move a photo from one index to another, keeping array order for site generation. */
+function movePhoto(fromIndex: number, toIndex: number): void {
+  const photos: string[] = form.value.photos
+  if (fromIndex < 0 || fromIndex >= photos.length) return
+  if (toIndex < 0 || toIndex >= photos.length) return
+  if (fromIndex === toIndex) return
+  const moved: string | undefined = photos.splice(fromIndex, 1)[0]
+  if (!moved) return
+  photos.splice(toIndex, 0, moved)
+}
+
+/** Promote a photo to index 0 (most visible slot on the generated site). */
+function movePhotoToFront(index: number): void {
+  if (index <= 0) return
+  movePhoto(index, 0)
+}
+
+/** Start dragging a photo from its grip handle. */
+function onPhotoDragStart(event: DragEvent, index: number): void {
+  photoDragIndex.value = index
+  photoDropTargetIndex.value = null
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(index))
+  }
+}
+
+/** Highlight the drop target while dragging over a photo tile. */
+function onPhotoDragOver(event: DragEvent, index: number): void {
+  if (photoDragIndex.value === null || photoDragIndex.value === index) return
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  photoDropTargetIndex.value = index
+}
+
+/** Clear drop highlight when leaving a tile (ignore child leave flicker). */
+function onPhotoDragLeave(index: number): void {
+  if (photoDropTargetIndex.value === index) photoDropTargetIndex.value = null
+}
+
+/** Drop the dragged photo onto the target index. */
+function onPhotoDrop(targetIndex: number): void {
+  const fromIndex: number | null = photoDragIndex.value
+  photoDragIndex.value = null
+  photoDropTargetIndex.value = null
+  if (fromIndex === null) return
+  movePhoto(fromIndex, targetIndex)
+}
+
+/** Reset drag state if the drag is cancelled. */
+function onPhotoDragEnd(): void {
+  photoDragIndex.value = null
+  photoDropTargetIndex.value = null
 }
 
 /** Add a service to the list. */
