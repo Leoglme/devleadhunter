@@ -1,4 +1,4 @@
-import type { SiteContent } from '@devleadhunter/website-content'
+import type { SiteContent, SiteContentEditable } from '@devleadhunter/website-content'
 
 /** A Storyblok blok object: arbitrary content fields plus `component` / `_uid`. */
 type Blok = Record<string, unknown>
@@ -130,6 +130,27 @@ export class StoryblokSiteContentBridge {
   }
 
   /**
+   * Collect each section's Storyblok `_editable` marker, keyed by section suffix (Visual Editor only).
+   *
+   * @param raw - Resolved content (page-wrapped or bare).
+   * @returns A `{ hero, about, … }` map of `_editable` strings; empty on `content_json` (public site).
+   */
+  private static collectEditableMap(raw: Blok): SiteContentEditable {
+    const map: SiteContentEditable = {}
+    const sections: Blok[] = this.isContentBlok(raw?.component)
+      ? [raw]
+      : this.readBlokList(raw.body).filter((blok: Blok): boolean => this.isContentBlok(blok?.component))
+    sections.forEach((blok: Blok): void => {
+      const component: unknown = blok.component
+      const editable: unknown = blok._editable
+      if (typeof component === 'string' && component.startsWith('section_') && typeof editable === 'string') {
+        map[component.slice('section_'.length) as keyof SiteContentEditable] = editable
+      }
+    })
+    return map
+  }
+
+  /**
    * Flatten the Storyblok-native representation into the `SiteContent` a template layer renders.
    *
    * The section bloks are merged, nested blok lists lose their `_uid` / `component`, the palette is
@@ -218,6 +239,8 @@ export class StoryblokSiteContentBridge {
           url: this.readString(item.url),
         }))
         .filter((link: Blok): boolean => Boolean(link.url)),
+      // Per-section click-to-edit markers — empty on the public site, so binding them is a no-op there.
+      _editable: this.collectEditableMap(raw as Blok),
     }
   }
 }
