@@ -33,7 +33,8 @@ pub fn run() {
         .manage(scraper_sidecar::SidecarState::default())
         .invoke_handler(tauri::generate_handler![
             sync_dev_database_from_prod,
-            scraper_sidecar::scraper_sidecar_info
+            scraper_sidecar::scraper_sidecar_info,
+            scraper_sidecar::prepare_scraper_for_update
         ])
         .setup(|_app| {
             // Sans ça, `getUserMedia` (enregistrement du clip de prospection)
@@ -56,8 +57,13 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
-            if let tauri::RunEvent::ExitRequested { .. } = event {
-                scraper_sidecar::stop(app_handle);
+            // ExitRequested can be cancelled; Exit is the last chance before the
+            // process dies. Kill on both so a Windows update never races a live sidecar.
+            match event {
+                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+                    scraper_sidecar::stop(app_handle);
+                }
+                _ => {}
             }
         });
 }

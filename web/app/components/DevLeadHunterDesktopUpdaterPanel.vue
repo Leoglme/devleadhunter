@@ -189,6 +189,9 @@ async function installUpdate(): Promise<void> {
     status.value = 'downloading'
     errorMessage.value = null
     resetDownloadProgress()
+    // Windows refuses to overwrite a live sidecar exe — kill it (and orphans) first.
+    const { invoke }: { invoke: (command: string) => Promise<void> } = await import('@tauri-apps/api/core')
+    await invoke('prepare_scraper_for_update')
     await pendingUpdate.value.downloadAndInstall(onDownloadEvent)
     status.value = 'installed'
   } catch (error) {

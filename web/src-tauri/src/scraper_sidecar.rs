@@ -7,10 +7,15 @@
 
 use std::net::TcpListener;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
+
+/// Process image name of the bundled scraping sidecar on Windows.
+#[cfg(windows)]
+const WINDOWS_SIDECAR_IMAGE: &str = "devleadhunter-scraper.exe";
 
 /// Where the web layer should send scraping calls, and how to authenticate them.
 #[derive(Clone, serde::Serialize)]
@@ -78,15 +83,60 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Stop the sidecar; called when the app exits so no orphan process survives.
-pub fn stop(app: &AppHandle) {
+/// Stop the managed sidecar child process when present.
+fn kill_managed_child(app: &AppHandle) {
     if let Some(state) = app.try_state::<SidecarState>() {
         if let Ok(mut guard) = state.child.lock() {
             if let Some(child) = guard.take() {
                 let _ = child.kill();
             }
         }
+        if let Ok(mut info) = state.info.lock() {
+            *info = None;
+        }
     }
+}
+
+/// Force-kill every scraper image on Windows, including PyInstaller orphans.
+///
+/// `CommandChild::kill` only hits the process we spawned. PyInstaller onefile
+/// and previous crashed sessions can leave extra `devleadhunter-scraper.exe`
+/// processes that still lock the binary — NSIS then fails with
+/// "Error opening file for writing".
+#[cfg(windows)]
+fn kill_windows_sidecar_images() {
+    use std::os::windows::process::CommandExt;
+    use std::process::{Command, Stdio};
+
+    // CREATE_NO_WINDOW — avoid a flashing console during update shutdown.
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let _ = Command::new("taskkill")
+        .args(["/F", "/T", "/IM", WINDOWS_SIDECAR_IMAGE])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .status();
+}
+
+#[cfg(not(windows))]
+fn kill_windows_sidecar_images() {}
+
+/// Stop the sidecar; called when the app exits so no orphan process survives.
+pub fn stop(app: &AppHandle) {
+    kill_managed_child(app);
+    kill_windows_sidecar_images();
+}
+
+/// Stop every scraper process and wait until Windows releases the exe handle.
+///
+/// Must run before the NSIS updater copies `devleadhunter-scraper.exe`. The
+/// plain `RunEvent::Exit` kill races the installer and is not enough on its own.
+#[tauri::command]
+pub fn prepare_scraper_for_update(app: AppHandle) -> Result<(), String> {
+    stop(&app);
+    // Give the kernel a moment to drop file locks after taskkill returns.
+    std::thread::sleep(Duration::from_millis(1200));
+    Ok(())
 }
 
 /// Expose the sidecar's port and token to the web layer.
