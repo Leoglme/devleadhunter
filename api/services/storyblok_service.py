@@ -271,6 +271,85 @@ class StoryblokService:
             return None
         return int(stories[0]["id"])
 
+    async def _upload_asset(self, client: httpx.AsyncClient, space_id: int, source_url: str) -> dict[str, Any] | None:
+        """Upload one external image into the space's asset library (sign → S3 → finish).
+
+        Returns ``{id, filename}`` (the real Storyblok CDN asset) or None on any failure, so the caller
+        can fall back to the external URL.
+        """
+        try:
+            image = await client.get(source_url, follow_redirects=True, timeout=30.0)
+            if image.status_code != 200 or not image.content:
+                return None
+            content_type: str = image.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+            extension: str = {"image/png": "png", "image/webp": "webp", "image/gif": "gif"}.get(content_type, "jpg")
+            filename: str = f"{secrets.token_hex(8)}.{extension}"
+            sign = await self._storyblok_request(
+                client, "POST", f"{self._base_url}/spaces/{space_id}/assets/", json={"filename": filename}
+            )
+            if sign.status_code not in (200, 201):
+                return None
+            signed: dict[str, Any] = sign.json()
+            asset_id: int = int(signed["id"])
+            upload = await client.post(
+                signed["post_url"],
+                data=signed.get("fields", {}),
+                files={"file": (filename, image.content, content_type)},
+                timeout=60.0,
+            )
+            if upload.status_code not in (200, 201, 204):
+                return None
+            finish = await self._storyblok_request(
+                client, "GET", f"{self._base_url}/spaces/{space_id}/assets/{asset_id}/finish_upload"
+            )
+            filename_url: Any = finish.json().get("filename") if finish.status_code == 200 else None
+            if not isinstance(filename_url, str) or not filename_url:
+                return None
+            return {"id": asset_id, "filename": filename_url}
+        except (httpx.HTTPError, ValueError, KeyError):
+            return None
+
+    async def _upload_external_assets(self, client: httpx.AsyncClient, space_id: int, content: dict[str, Any]) -> None:
+        """Upload every external-URL asset in the story content into the space library, in place.
+
+        Storyblok can't preview an extension-less external URL (Google photos) and its picker stays
+        empty; uploading each photo makes it a real library asset (CDN URL + extension) so the client
+        sees a thumbnail and "Replace" works. Best-effort — a failed upload keeps the external URL.
+        """
+        asset_nodes: list[dict[str, Any]] = []
+
+        def _walk(node: Any) -> None:
+            if isinstance(node, dict):
+                filename = node.get("filename")
+                if node.get("fieldtype") == "asset" and isinstance(filename, str) and filename.strip():
+                    asset_nodes.append(node)
+                for value in node.values():
+                    _walk(value)
+            elif isinstance(node, list):
+                for item in node:
+                    _walk(item)
+
+        _walk(content)
+        external_urls: set[str] = {
+            node["filename"] for node in asset_nodes if not node["filename"].startswith("https://a.storyblok.com/")
+        }
+        if not external_urls:
+            return
+
+        semaphore = asyncio.Semaphore(4)
+
+        async def _upload_one(url: str) -> tuple[str, dict[str, Any] | None]:
+            async with semaphore:
+                return url, await self._upload_asset(client, space_id, url)
+
+        results = await asyncio.gather(*(_upload_one(url) for url in external_urls))
+        uploaded: dict[str, dict[str, Any]] = {url: asset for url, asset in results if asset is not None}
+        for node in asset_nodes:
+            replacement = uploaded.get(node["filename"])
+            if replacement is not None:
+                node["id"] = replacement["id"]
+                node["filename"] = replacement["filename"]
+
     async def _publish_home_story(
         self,
         client: httpx.AsyncClient,
@@ -282,6 +361,7 @@ class StoryblokService:
     ) -> None:
         """Create or update the home story and publish it."""
         storyblok_content = self._to_storyblok_content(content_json, template_id)
+        await self._upload_external_assets(client, space_id, storyblok_content)
         if story_id is None:
             story_id = await self._find_home_story_id(client, space_id)
 
