@@ -292,6 +292,8 @@ class StoryblokService:
             "story": {
                 "name": "Home",
                 "slug": "home",
+                # Real path so the Visual Editor previews the home at the space root, not ``/home``.
+                "path": "/",
                 "content": storyblok_content,
             },
             "publish": 1,
@@ -688,8 +690,21 @@ class StoryblokService:
                         f"{self._base_url}/spaces/{space_id}/components/",
                         json={"component": component},
                     )
-                if response.status_code not in (200, 201, 422):
-                    response.raise_for_status()
+                    # A 422 here is almost always "name already taken" from a concurrent
+                    # create or a stale listing — re-list and PUT so the rich schema still
+                    # lands. Swallowing every 422 (the old behaviour) let a genuine schema
+                    # rejection pass silently, leaving the client an empty placeholder blok.
+                    if response.status_code == 422:
+                        refreshed: dict[str, int] = await self._list_component_ids(client, space_id)
+                        existing_id: int | None = refreshed.get(name)
+                        if existing_id is not None:
+                            response = await self._storyblok_request(
+                                client,
+                                "PUT",
+                                f"{self._base_url}/spaces/{space_id}/components/{existing_id}",
+                                json={"component": component},
+                            )
+                response.raise_for_status()
 
         await asyncio.gather(*(_upsert(component) for component in components))
 

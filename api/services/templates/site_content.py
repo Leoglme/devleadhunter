@@ -304,7 +304,8 @@ def map_prospect_and_enrichment(
 
 # Native Storyblok blok schemas for the ``site_content`` representation. The flat SiteContent
 # expressed as editable bloks so the Visual Editor reaches every field: scalars as text/textarea,
-# image URLs as text (external URLs), arrays as nested bloks. Template-agnostic — registered once.
+# images as asset fields (upload widget), the gallery as a multiasset, arrays as nested bloks.
+# Template-agnostic — registered once.
 # Field labels/descriptions are in FRENCH: they are what the CLIENT sees in his
 # Storyblok editor — the editing experience is part of the product promise.
 SITE_CONTENT_SCHEMAS: list[dict[str, Any]] = [
@@ -379,19 +380,19 @@ SITE_CONTENT_SCHEMAS: list[dict[str, Any]] = [
             "contactHeading": {"type": "text", "pos": 17, "display_name": "Titre de la section Contact"},
             # ── Médias ────────────────────────────────────────────────────
             "logo": {
-                "type": "text",
+                "type": "asset",
+                "filetypes": ["images"],
                 "pos": 18,
-                "display_name": "Logo (URL)",
+                "display_name": "Logo",
                 "description": "Logo de l'entreprise — utilisé comme favicon du site",
             },
-            "heroImage": {"type": "text", "pos": 19, "display_name": "Photo principale (URL)"},
-            "aboutImage": {"type": "text", "pos": 20, "display_name": "Photo « à propos » (URL)"},
+            "heroImage": {"type": "asset", "filetypes": ["images"], "pos": 19, "display_name": "Photo principale"},
+            "aboutImage": {"type": "asset", "filetypes": ["images"], "pos": 20, "display_name": "Photo « à propos »"},
             "gallery": {
-                "type": "bloks",
+                "type": "multiasset",
+                "filetypes": ["images"],
                 "pos": 21,
                 "display_name": "Galerie photos",
-                "restrict_components": True,
-                "component_whitelist": ["site_content_gallery_item"],
             },
             "beforeAfter": {
                 "type": "bloks",
@@ -496,19 +497,11 @@ SITE_CONTENT_SCHEMAS: list[dict[str, Any]] = [
         },
     },
     {
-        "name": "site_content_gallery_item",
-        "display_name": "Photo de galerie",
-        "schema": {
-            "url": {"type": "text", "pos": 0, "display_name": "URL de la photo"},
-            "alt": {"type": "text", "pos": 1, "display_name": "Description (référencement)"},
-        },
-    },
-    {
         "name": "site_content_before_after",
         "display_name": "Avant / après",
         "schema": {
-            "before": {"type": "text", "pos": 0, "display_name": "Photo avant (URL)"},
-            "after": {"type": "text", "pos": 1, "display_name": "Photo après (URL)"},
+            "before": {"type": "asset", "filetypes": ["images"], "pos": 0, "display_name": "Photo avant"},
+            "after": {"type": "asset", "filetypes": ["images"], "pos": 1, "display_name": "Photo après"},
             "label": {"type": "text", "pos": 2, "display_name": "Légende"},
         },
     },
@@ -541,12 +534,22 @@ def _items_to_bloks(items: Any, component: str, keys: tuple[str, ...]) -> list[d
     return result
 
 
+def _asset(url: Any, alt: str = "") -> dict[str, Any]:
+    """Wrap an (external) image URL into a Storyblok ``asset`` object for an ``asset`` field.
+
+    Scraped Google photo URLs are pushed as external-URL assets so the Visual Editor shows each
+    one and the client can replace it with a real upload. An empty URL yields an empty asset field.
+    """
+    filename = url.strip() if isinstance(url, str) else ""
+    return {"fieldtype": "asset", "filename": filename, "alt": alt, "name": "", "title": "", "focus": "", "id": None}
+
+
 def to_storyblok_site_content(site_content: dict[str, Any]) -> dict[str, Any]:
     """Wrap a flat ``SiteContent`` into the native Storyblok ``site_content`` blok.
 
-    Scalars stay as-is; image URLs stay text; each array becomes a list of nested item bloks;
-    the palette becomes a ``theme_palette`` blok. Every field is editable in the Visual Editor.
-    Template-agnostic (the SiteContent shape is shared).
+    Scalars stay as-is; image URLs become asset objects (gallery = multiasset); each other array
+    becomes a list of nested item bloks; the palette becomes a ``theme_palette`` blok. Every field
+    is editable in the Visual Editor. Template-agnostic (the SiteContent shape is shared).
 
     Args:
         site_content: The flat ``SiteContent`` dict from a template's ``build_site_content``.
@@ -583,9 +586,9 @@ def to_storyblok_site_content(site_content: dict[str, Any]) -> dict[str, Any]:
         "faqHeading": site_content.get("faqHeading", ""),
         "aboutHeading": site_content.get("aboutHeading", ""),
         "contactHeading": site_content.get("contactHeading", ""),
-        "logo": site_content.get("logo", ""),
-        "heroImage": site_content.get("heroImage", ""),
-        "aboutImage": site_content.get("aboutImage", ""),
+        "logo": _asset(site_content.get("logo", "")),
+        "heroImage": _asset(site_content.get("heroImage", "")),
+        "aboutImage": _asset(site_content.get("aboutImage", "")),
         "palette": {
             "_uid": _uid(),
             "component": "theme_palette",
@@ -593,14 +596,26 @@ def to_storyblok_site_content(site_content: dict[str, Any]) -> dict[str, Any]:
             "secondary": str(palette.get("secondary", "")),
             "accent": str(palette.get("accent", "")),
         },
-        "gallery": _items_to_bloks(site_content.get("gallery"), "site_content_gallery_item", ("url", "alt")),
+        "gallery": [
+            _asset(item.get("url", ""), str(item.get("alt", "") or ""))
+            for item in site_content.get("gallery") or []
+            if isinstance(item, dict) and str(item.get("url", "")).strip()
+        ],
         "services": _items_to_bloks(site_content.get("services"), "site_content_service", ("title", "description")),
         "reviews": _items_to_bloks(site_content.get("reviews"), "site_content_review", ("author", "rating", "text")),
         "faq": _items_to_bloks(site_content.get("faq"), "site_content_faq", ("question", "answer")),
         "openingHours": _items_to_bloks(site_content.get("openingHours"), "site_content_hours", ("day", "hours")),
-        "beforeAfter": _items_to_bloks(
-            site_content.get("beforeAfter"), "site_content_before_after", ("before", "after", "label")
-        ),
+        "beforeAfter": [
+            {
+                "_uid": _uid(),
+                "component": "site_content_before_after",
+                "before": _asset(item.get("before", "")),
+                "after": _asset(item.get("after", "")),
+                "label": item.get("label", ""),
+            }
+            for item in site_content.get("beforeAfter") or []
+            if isinstance(item, dict)
+        ],
         "social": _items_to_bloks(site_content.get("social"), "site_content_social", ("network", "url")),
     }
 
@@ -608,6 +623,17 @@ def to_storyblok_site_content(site_content: dict[str, Any]) -> dict[str, Any]:
 def _clean_str(value: Any) -> str:
     """Return the value as a stripped string, or ``""`` when absent/not a string."""
     return value.strip() if isinstance(value, str) else ""
+
+
+def _asset_url(value: Any) -> str:
+    """Extract the URL from a Storyblok ``asset`` field (``{filename}``), or from a plain string.
+
+    Handles both our external-URL push and the object returned after a client uploads a new image,
+    and tolerates the pre-asset era where the field was a bare URL string.
+    """
+    if isinstance(value, dict):
+        return _clean_str(value.get("filename"))
+    return _clean_str(value)
 
 
 def _blok_list(value: Any) -> list[dict[str, Any]]:
@@ -654,9 +680,9 @@ def from_storyblok_site_content(raw: dict[str, Any]) -> dict[str, Any] | None:
     """Flatten a published Storyblok story back into the flat ``SiteContent`` shape.
 
     Inverse of ``to_storyblok_site_content`` and Python mirror of demo-host's
-    ``storyblokSiteContentToSiteContent.ts``: nested item bloks lose their
-    ``_uid``/``component``, the palette is read from the nested ``theme_palette``
-    blok, images stay plain URL strings. Used by the Storyblok publish webhook to
+    ``StoryblokSiteContentBridge``: nested item bloks lose their ``_uid``/``component``,
+    the palette is read from the nested ``theme_palette`` blok, asset fields are flattened
+    back to their URL (``filename``). Used by the Storyblok publish webhook to
     sync client edits into ``demo_site.content_json`` (what the public site renders).
 
     Args:
@@ -706,18 +732,18 @@ def from_storyblok_site_content(raw: dict[str, Any]) -> dict[str, Any] | None:
         "faqHeading": _clean_str(blok.get("faqHeading")),
         "aboutHeading": _clean_str(blok.get("aboutHeading")),
         "contactHeading": _clean_str(blok.get("contactHeading")),
-        "logo": _clean_str(blok.get("logo")),
-        "heroImage": _clean_str(blok.get("heroImage")),
-        "aboutImage": _clean_str(blok.get("aboutImage")),
+        "logo": _asset_url(blok.get("logo")),
+        "heroImage": _asset_url(blok.get("heroImage")),
+        "aboutImage": _asset_url(blok.get("aboutImage")),
         "palette": {
             "primary": _clean_str(palette.get("primary")),
             "secondary": _clean_str(palette.get("secondary")),
             "accent": _clean_str(palette.get("accent")),
         },
         "gallery": [
-            {"url": _clean_str(item.get("url")), "alt": _clean_str(item.get("alt"))}
+            {"url": _asset_url(item), "alt": _clean_str(item.get("alt"))}
             for item in _blok_list(blok.get("gallery"))
-            if _clean_str(item.get("url"))
+            if _asset_url(item)
         ],
         "services": [
             {"title": _clean_str(item.get("title")), "description": _clean_str(item.get("description"))}
@@ -735,12 +761,12 @@ def from_storyblok_site_content(raw: dict[str, Any]) -> dict[str, Any] | None:
         ],
         "beforeAfter": [
             {
-                "before": _clean_str(item.get("before")),
-                "after": _clean_str(item.get("after")),
+                "before": _asset_url(item.get("before")),
+                "after": _asset_url(item.get("after")),
                 "label": _clean_str(item.get("label")),
             }
             for item in _blok_list(blok.get("beforeAfter"))
-            if _clean_str(item.get("before")) or _clean_str(item.get("after"))
+            if _asset_url(item.get("before")) or _asset_url(item.get("after"))
         ],
         "social": [
             {"network": _clean_str(item.get("network")), "url": _clean_str(item.get("url"))}

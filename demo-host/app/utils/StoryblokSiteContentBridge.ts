@@ -22,6 +22,19 @@ export class StoryblokSiteContentBridge {
   }
 
   /**
+   * Read a Storyblok asset field, which arrives as an object carrying a `filename`.
+   *
+   * @param value - Raw field value (asset object, or a bare URL string from the `content_json` fallback / pre-asset era).
+   * @returns The image URL, or undefined when empty.
+   */
+  private static readAsset(value: unknown): string | undefined {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return this.readString((value as Blok).filename)
+    }
+    return this.readString(value)
+  }
+
+  /**
    * Read a repeatable blok field.
    *
    * @param value - Raw field value.
@@ -79,7 +92,7 @@ export class StoryblokSiteContentBridge {
    * Flatten the Storyblok-native representation into the `SiteContent` a template layer renders.
    *
    * Nested blok lists lose their `_uid` / `component`, the palette is read from its own blok,
-   * and images stay plain URL strings.
+   * and asset fields are flattened back to their image URL (`filename`).
    *
    * @param raw - Resolved content (page-wrapped or bare `site_content` blok).
    * @returns A flat `SiteContent` — absent keys mean hidden sections.
@@ -114,9 +127,9 @@ export class StoryblokSiteContentBridge {
       faqHeading: this.readString(blok.faqHeading),
       aboutHeading: this.readString(blok.aboutHeading),
       contactHeading: this.readString(blok.contactHeading),
-      logo: this.readString(blok.logo),
-      heroImage: this.readString(blok.heroImage),
-      aboutImage: this.readString(blok.aboutImage),
+      logo: this.readAsset(blok.logo),
+      heroImage: this.readAsset(blok.heroImage),
+      aboutImage: this.readAsset(blok.aboutImage),
       palette: {
         primary: this.readString(palette.primary),
         secondary: this.readString(palette.secondary),
@@ -124,7 +137,7 @@ export class StoryblokSiteContentBridge {
       },
       gallery: this.readBlokList(blok.gallery)
         .map((item: Blok): { url?: string; alt?: string } => ({
-          url: this.readString(item.url),
+          url: this.readAsset(item),
           alt: this.readString(item.alt),
         }))
         .filter((image: Blok): boolean => Boolean(image.url)),
@@ -151,8 +164,8 @@ export class StoryblokSiteContentBridge {
         .filter((entry: Blok): boolean => Boolean(entry.day) || Boolean(entry.hours)),
       beforeAfter: this.readBlokList(blok.beforeAfter)
         .map((item: Blok): { before?: string; after?: string; label?: string } => ({
-          before: this.readString(item.before),
-          after: this.readString(item.after),
+          before: this.readAsset(item.before),
+          after: this.readAsset(item.after),
           label: this.readString(item.label),
         }))
         .filter((pair: Blok): boolean => Boolean(pair.before) || Boolean(pair.after)),
