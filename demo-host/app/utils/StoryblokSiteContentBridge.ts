@@ -35,6 +35,23 @@ export class StoryblokSiteContentBridge {
   }
 
   /**
+   * Read a Storyblok `number` field, which comes back as a numeric string.
+   *
+   * @param value - Raw field value (number or numeric string).
+   * @returns The parsed number, or undefined when empty or not numeric.
+   */
+  private static readNumber(value: unknown): number | undefined {
+    if (typeof value === 'number') {
+      return value
+    }
+    if (typeof value === 'string' && value.trim()) {
+      const parsed: number = Number(value)
+      return Number.isNaN(parsed) ? undefined : parsed
+    }
+    return undefined
+  }
+
+  /**
    * Read a repeatable blok field.
    *
    * @param value - Raw field value.
@@ -148,7 +165,7 @@ export class StoryblokSiteContentBridge {
       reviews: this.readBlokList(blok.reviews).map(
         (item: Blok): { author?: string; rating?: number; text?: string } => ({
           author: this.readString(item.author),
-          rating: typeof item.rating === 'number' ? item.rating : undefined,
+          rating: this.readNumber(item.rating),
           text: this.readString(item.text),
         }),
       ),

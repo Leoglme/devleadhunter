@@ -382,15 +382,29 @@ SITE_CONTENT_SCHEMAS: list[dict[str, Any]] = [
             "logo": {
                 "type": "asset",
                 "filetypes": ["images"],
+                "allow_external_url": True,
                 "pos": 18,
                 "display_name": "Logo",
                 "description": "Logo de l'entreprise — utilisé comme favicon du site",
             },
-            "heroImage": {"type": "asset", "filetypes": ["images"], "pos": 19, "display_name": "Photo principale"},
-            "aboutImage": {"type": "asset", "filetypes": ["images"], "pos": 20, "display_name": "Photo « à propos »"},
+            "heroImage": {
+                "type": "asset",
+                "filetypes": ["images"],
+                "allow_external_url": True,
+                "pos": 19,
+                "display_name": "Photo principale",
+            },
+            "aboutImage": {
+                "type": "asset",
+                "filetypes": ["images"],
+                "allow_external_url": True,
+                "pos": 20,
+                "display_name": "Photo « à propos »",
+            },
             "gallery": {
                 "type": "multiasset",
                 "filetypes": ["images"],
+                "allow_external_url": True,
                 "pos": 21,
                 "display_name": "Galerie photos",
             },
@@ -500,8 +514,20 @@ SITE_CONTENT_SCHEMAS: list[dict[str, Any]] = [
         "name": "site_content_before_after",
         "display_name": "Avant / après",
         "schema": {
-            "before": {"type": "asset", "filetypes": ["images"], "pos": 0, "display_name": "Photo avant"},
-            "after": {"type": "asset", "filetypes": ["images"], "pos": 1, "display_name": "Photo après"},
+            "before": {
+                "type": "asset",
+                "filetypes": ["images"],
+                "allow_external_url": True,
+                "pos": 0,
+                "display_name": "Photo avant",
+            },
+            "after": {
+                "type": "asset",
+                "filetypes": ["images"],
+                "allow_external_url": True,
+                "pos": 1,
+                "display_name": "Photo après",
+            },
             "label": {"type": "text", "pos": 2, "display_name": "Légende"},
         },
     },
@@ -541,7 +567,17 @@ def _asset(url: Any, alt: str = "") -> dict[str, Any]:
     one and the client can replace it with a real upload. An empty URL yields an empty asset field.
     """
     filename = url.strip() if isinstance(url, str) else ""
-    return {"fieldtype": "asset", "filename": filename, "alt": alt, "name": "", "title": "", "focus": "", "id": None}
+    # Every asset key must be present — Storyblok disables the "replace/edit asset" dialog when any is missing.
+    return {
+        "fieldtype": "asset",
+        "filename": filename,
+        "alt": alt,
+        "copyright": "",
+        "name": "",
+        "title": "",
+        "focus": "",
+        "id": None,
+    }
 
 
 def to_storyblok_site_content(site_content: dict[str, Any]) -> dict[str, Any]:
@@ -604,7 +640,19 @@ def to_storyblok_site_content(site_content: dict[str, Any]) -> dict[str, Any]:
             if isinstance(item, dict) and str(item.get("url", "")).strip()
         ],
         "services": _items_to_bloks(site_content.get("services"), "site_content_service", ("title", "description")),
-        "reviews": _items_to_bloks(site_content.get("reviews"), "site_content_review", ("author", "rating", "text")),
+        # Storyblok ``number`` fields store their value as a STRING — an int fails the editor's
+        # save/publish validation ("must be a string with numbers"), so stringify the rating.
+        "reviews": [
+            {
+                "_uid": _uid(),
+                "component": "site_content_review",
+                "author": item.get("author", ""),
+                "text": item.get("text", ""),
+                "rating": str(item["rating"]) if isinstance(item.get("rating"), (int, float)) else "",
+            }
+            for item in site_content.get("reviews") or []
+            if isinstance(item, dict)
+        ],
         "faq": _items_to_bloks(site_content.get("faq"), "site_content_faq", ("question", "answer")),
         "openingHours": _items_to_bloks(site_content.get("openingHours"), "site_content_hours", ("day", "hours")),
         "beforeAfter": [

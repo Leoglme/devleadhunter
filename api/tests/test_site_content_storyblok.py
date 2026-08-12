@@ -38,6 +38,23 @@ def test_images_become_storyblok_asset_objects() -> None:
     # The palette is a single-blok field declared as ``bloks`` (maximum 1) → emitted as a list.
     assert isinstance(blok["palette"], list)
     assert blok["palette"][0]["component"] == "theme_palette"
+    # Every asset key must be present or Storyblok disables the replace/edit dialog.
+    assert set(blok["logo"]) == {"fieldtype", "filename", "alt", "copyright", "name", "title", "focus", "id"}
+
+
+def test_review_rating_is_pushed_as_string() -> None:
+    """Storyblok ``number`` fields validate against strings — an int rating fails save/publish."""
+    blok = sc.to_storyblok_site_content(
+        {
+            "businessName": "X",
+            "reviews": [{"author": "Jean", "rating": 5, "text": "Top"}, {"author": "Marie", "text": "Bien"}],
+        }
+    )
+
+    assert blok["reviews"][0]["rating"] == "5"
+    assert blok["reviews"][1]["rating"] == ""
+    # It survives the round-trip back to an int.
+    assert sc.from_storyblok_site_content(blok)["reviews"][0]["rating"] == 5
 
 
 def test_round_trip_preserves_image_urls() -> None:
