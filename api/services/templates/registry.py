@@ -152,8 +152,8 @@ def build_site_content(
     )
 
 
-def to_storyblok_site_content(template_id: str, site_content: dict[str, Any]) -> dict[str, Any]:
-    """Wrap a flat ``SiteContent`` into the template's native Storyblok ``site_content`` blok."""
+def to_storyblok_site_content(template_id: str, site_content: dict[str, Any]) -> list[dict[str, Any]]:
+    """Project a flat ``SiteContent`` into the template's Storyblok page ``body`` (list of section bloks)."""
     return get_module(template_id).to_storyblok_site_content(site_content)
 
 

@@ -21,7 +21,7 @@ import httpx
 from core.config import settings
 from services.enrichment_content import EnrichmentContentMapper
 from services.templates import registry as template_registry
-from services.templates.site_content import SITE_CONTENT_SCHEMAS
+from services.templates.site_content import SECTION_COMPONENT_NAMES, SITE_CONTENT_SCHEMAS
 
 logger = logging.getLogger(__name__)
 
@@ -191,11 +191,11 @@ class StoryblokService:
             and template_id
             and template_registry.uses_site_content(template_id)
         ):
-            site_content_blok = template_registry.to_storyblok_site_content(template_id, content_json)
+            section_bloks = template_registry.to_storyblok_site_content(template_id, content_json)
             return {
                 "component": "page",
                 "theme": [theme_block],
-                "body": [site_content_blok],
+                "body": section_bloks,
             }
 
         return {
@@ -661,8 +661,8 @@ class StoryblokService:
                     "body": {
                         "type": "bloks",
                         "restrict_components": True,
-                        # The flat SiteContent page carries one ``site_content`` blok.
-                        "component_whitelist": ["site_content"],
+                        # The flat SiteContent is split into small ``section_*`` bloks (readable editor).
+                        "component_whitelist": SECTION_COMPONENT_NAMES,
                     },
                 },
             },

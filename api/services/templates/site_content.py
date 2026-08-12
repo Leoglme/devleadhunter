@@ -5,13 +5,13 @@ same, template-AGNOSTIC pieces defined here:
 
 - ``map_prospect_and_enrichment`` — maps the prospect fields + the enrichment dict into the
   common ``SiteContent`` fields (identity, contact, media, palette, reviews, opening hours).
-- ``SITE_CONTENT_SCHEMAS`` — the native Storyblok blok schemas for ``site_content`` + its
-  nested item bloks, so the Visual Editor can edit every field.
-- ``to_storyblok_site_content`` — wraps a flat ``SiteContent`` into those native bloks.
+- ``SITE_CONTENT_SCHEMAS`` — the native Storyblok section blok schemas (``section_hero``,
+  ``section_about``…) + their nested item bloks, so the client's editor is a set of small forms.
+- ``to_storyblok_site_content`` — projects a flat ``SiteContent`` into the page ``body`` of section bloks.
 - ``from_storyblok_site_content`` — the inverse bridge (published story → flat ``SiteContent``),
   used by the Storyblok webhook to sync client edits back into ``demo_site.content_json``
   (the public site renders content_json, not Storyblok). Python mirror of demo-host's
-  ``storyblokSiteContentToSiteContent.ts``.
+  ``StoryblokSiteContentBridge``.
 
 A template's own ``build_site_content`` calls ``map_prospect_and_enrichment`` and adds its
 editorial ``services`` / ``faq`` (design copy, per trade). The demo-host layer supplies the
@@ -302,168 +302,159 @@ def map_prospect_and_enrichment(
     }
 
 
-# Native Storyblok blok schemas for the ``site_content`` representation. The flat SiteContent
-# expressed as editable bloks so the Visual Editor reaches every field: scalars as text/textarea,
-# images as asset fields (upload widget), the gallery as a multiasset, arrays as nested bloks.
-# Template-agnostic — registered once.
-# Field labels/descriptions are in FRENCH: they are what the CLIENT sees in his
-# Storyblok editor — the editing experience is part of the product promise.
-SITE_CONTENT_SCHEMAS: list[dict[str, Any]] = [
-    {
-        "name": "site_content",
-        "display_name": "Contenu du site",
-        "schema": {
-            # ── Identité & contact ────────────────────────────────────────
-            "businessName": {"type": "text", "pos": 0, "display_name": "Nom de l'entreprise"},
-            "phone": {"type": "text", "pos": 1, "display_name": "Téléphone"},
-            "email": {"type": "text", "pos": 2, "display_name": "Email de contact"},
-            "city": {"type": "text", "pos": 3, "display_name": "Ville"},
-            "area": {
-                "type": "text",
-                "pos": 4,
-                "display_name": "Secteur d'intervention",
-                "description": "Ex : « Lyon et ses alentours »",
-            },
-            # ── Textes principaux ─────────────────────────────────────────
-            "subtitle": {
-                "type": "textarea",
-                "pos": 5,
-                "display_name": "Phrase d'accroche",
-                "description": "Le texte principal en haut du site",
-            },
-            "about": {
-                "type": "textarea",
-                "pos": 6,
-                "display_name": "À propos",
-                "description": "Votre histoire, votre façon de travailler",
-            },
-            # ── Copie éditoriale (vide = texte par défaut du site) ────────
-            "heroBadge": {
-                "type": "text",
-                "pos": 7,
-                "display_name": "Badge d'en-tête",
-                "description": "Petit libellé au-dessus du titre (ex : « Artisan plombier »)",
-            },
-            "heroPoints": {
-                "type": "bloks",
-                "pos": 8,
-                "display_name": "Points forts d'en-tête",
-                "description": "3 arguments courts sous l'accroche",
-                "restrict_components": True,
-                "component_whitelist": ["site_content_hero_point"],
-            },
-            "ctaCallLabel": {
-                "type": "text",
-                "pos": 9,
-                "display_name": "Bouton « appeler »",
-                "description": "Texte du bouton d'appel",
-            },
-            "ctaQuoteLabel": {
-                "type": "text",
-                "pos": 10,
-                "display_name": "Bouton « devis »",
-                "description": "Texte du bouton de demande de devis",
-            },
-            "trustItems": {
-                "type": "bloks",
-                "pos": 11,
-                "display_name": "Repères de confiance",
-                "description": "Chiffres/garanties affichés sous l'en-tête (ex : 7j/7, Devis 0 €)",
-                "restrict_components": True,
-                "component_whitelist": ["site_content_trust_item"],
-            },
-            "servicesHeading": {"type": "text", "pos": 12, "display_name": "Titre de la section Services"},
-            "galleryHeading": {"type": "text", "pos": 13, "display_name": "Titre de la section Photos"},
-            "reviewsHeading": {"type": "text", "pos": 14, "display_name": "Titre de la section Avis"},
-            "faqHeading": {"type": "text", "pos": 15, "display_name": "Titre de la section Questions"},
-            "aboutHeading": {"type": "text", "pos": 16, "display_name": "Titre de la section À propos"},
-            "contactHeading": {"type": "text", "pos": 17, "display_name": "Titre de la section Contact"},
-            # ── Médias ────────────────────────────────────────────────────
-            "logo": {
-                "type": "asset",
-                "filetypes": ["images"],
-                "allow_external_url": True,
-                "pos": 18,
-                "display_name": "Logo",
-                "description": "Logo de l'entreprise — utilisé comme favicon du site",
-            },
-            "heroImage": {
-                "type": "asset",
-                "filetypes": ["images"],
-                "allow_external_url": True,
-                "pos": 19,
-                "display_name": "Photo principale",
-            },
-            "aboutImage": {
-                "type": "asset",
-                "filetypes": ["images"],
-                "allow_external_url": True,
-                "pos": 20,
-                "display_name": "Photo « à propos »",
-            },
-            "gallery": {
-                "type": "multiasset",
-                "filetypes": ["images"],
-                "allow_external_url": True,
-                "pos": 21,
-                "display_name": "Galerie photos",
-            },
-            "beforeAfter": {
-                "type": "bloks",
-                "pos": 22,
-                "display_name": "Réalisations avant/après",
-                "description": "Paires de photos avant travaux / après travaux",
-                "restrict_components": True,
-                "component_whitelist": ["site_content_before_after"],
-            },
-            # ── Contenu structuré ─────────────────────────────────────────
-            "services": {
-                "type": "bloks",
-                "pos": 23,
-                "display_name": "Services",
-                "restrict_components": True,
-                "component_whitelist": ["site_content_service"],
-            },
-            "reviews": {
-                "type": "bloks",
-                "pos": 24,
-                "display_name": "Avis clients",
-                "restrict_components": True,
-                "component_whitelist": ["site_content_review"],
-            },
-            "faq": {
-                "type": "bloks",
-                "pos": 25,
-                "display_name": "Questions fréquentes",
-                "restrict_components": True,
-                "component_whitelist": ["site_content_faq"],
-            },
-            "openingHours": {
-                "type": "bloks",
-                "pos": 26,
-                "display_name": "Horaires d'ouverture",
-                "restrict_components": True,
-                "component_whitelist": ["site_content_hours"],
-            },
-            "social": {
-                "type": "bloks",
-                "pos": 27,
-                "display_name": "Réseaux sociaux",
-                "description": "Liens Facebook, Instagram… affichés en pied de page",
-                "restrict_components": True,
-                "component_whitelist": ["site_content_social"],
-            },
-            # ── Design ────────────────────────────────────────────────────
-            "palette": {
-                "type": "bloks",
-                "pos": 28,
-                "display_name": "Couleurs du site",
-                "restrict_components": True,
-                "component_whitelist": ["theme_palette"],
-                "maximum": 1,
-            },
-        },
+# Native Storyblok schema for the site content. Instead of ONE big blok with ~29 fields (a jumble
+# for the client, and useless for click-to-edit), the page ``body`` is split into small SECTION
+# bloks (``section_hero``, ``section_about``…), each a short, focused form. The flat ``SiteContent``
+# stays unchanged — only this Storyblok projection is sectioned (``to_storyblok`` splits, the
+# bridges merge back). Field labels/descriptions are in FRENCH: it is the CLIENT's editor UI.
+
+# Field schema per flat ``SiteContent`` key (``pos`` is assigned within each section below).
+FIELD_SCHEMAS: dict[str, dict[str, Any]] = {
+    "heroBadge": {
+        "type": "text",
+        "display_name": "Badge d'en-tête",
+        "description": "Petit libellé au-dessus du titre (ex : « Artisan plombier »)",
     },
+    "subtitle": {
+        "type": "textarea",
+        "display_name": "Phrase d'accroche",
+        "description": "Le texte principal en haut du site",
+    },
+    "heroImage": {
+        "type": "asset",
+        "filetypes": ["images"],
+        "allow_external_url": True,
+        "display_name": "Photo principale",
+    },
+    "heroPoints": {
+        "type": "bloks",
+        "display_name": "Points forts d'en-tête",
+        "description": "3 arguments courts sous l'accroche",
+        "restrict_components": True,
+        "component_whitelist": ["site_content_hero_point"],
+    },
+    "ctaCallLabel": {"type": "text", "display_name": "Bouton « appeler »", "description": "Texte du bouton d'appel"},
+    "ctaQuoteLabel": {
+        "type": "text",
+        "display_name": "Bouton « devis »",
+        "description": "Texte du bouton de demande de devis",
+    },
+    "trustItems": {
+        "type": "bloks",
+        "display_name": "Repères de confiance",
+        "description": "Chiffres/garanties affichés sous l'en-tête (ex : 7j/7, Devis 0 €)",
+        "restrict_components": True,
+        "component_whitelist": ["site_content_trust_item"],
+    },
+    "aboutHeading": {"type": "text", "display_name": "Titre de la section"},
+    "about": {
+        "type": "textarea",
+        "display_name": "À propos",
+        "description": "Votre histoire, votre façon de travailler",
+    },
+    "aboutImage": {
+        "type": "asset",
+        "filetypes": ["images"],
+        "allow_external_url": True,
+        "display_name": "Photo « à propos »",
+    },
+    "servicesHeading": {"type": "text", "display_name": "Titre de la section"},
+    "services": {
+        "type": "bloks",
+        "display_name": "Services",
+        "restrict_components": True,
+        "component_whitelist": ["site_content_service"],
+    },
+    "galleryHeading": {"type": "text", "display_name": "Titre de la section"},
+    "gallery": {
+        "type": "multiasset",
+        "filetypes": ["images"],
+        "allow_external_url": True,
+        "display_name": "Galerie photos",
+    },
+    "reviewsHeading": {"type": "text", "display_name": "Titre de la section"},
+    "reviews": {
+        "type": "bloks",
+        "display_name": "Avis clients",
+        "restrict_components": True,
+        "component_whitelist": ["site_content_review"],
+    },
+    "faqHeading": {"type": "text", "display_name": "Titre de la section"},
+    "faq": {
+        "type": "bloks",
+        "display_name": "Questions fréquentes",
+        "restrict_components": True,
+        "component_whitelist": ["site_content_faq"],
+    },
+    "beforeAfter": {
+        "type": "bloks",
+        "display_name": "Réalisations avant/après",
+        "description": "Paires de photos avant travaux / après travaux",
+        "restrict_components": True,
+        "component_whitelist": ["site_content_before_after"],
+    },
+    "contactHeading": {"type": "text", "display_name": "Titre de la section"},
+    "businessName": {"type": "text", "display_name": "Nom de l'entreprise"},
+    "phone": {"type": "text", "display_name": "Téléphone"},
+    "email": {"type": "text", "display_name": "Email de contact"},
+    "city": {"type": "text", "display_name": "Ville"},
+    "area": {"type": "text", "display_name": "Secteur d'intervention", "description": "Ex : « Lyon et ses alentours »"},
+    "logo": {
+        "type": "asset",
+        "filetypes": ["images"],
+        "allow_external_url": True,
+        "display_name": "Logo",
+        "description": "Logo de l'entreprise — utilisé comme favicon du site",
+    },
+    "openingHours": {
+        "type": "bloks",
+        "display_name": "Horaires d'ouverture",
+        "restrict_components": True,
+        "component_whitelist": ["site_content_hours"],
+    },
+    "social": {
+        "type": "bloks",
+        "display_name": "Réseaux sociaux",
+        "description": "Liens Facebook, Instagram… affichés en pied de page",
+        "restrict_components": True,
+        "component_whitelist": ["site_content_social"],
+    },
+}
+
+# Ordered page sections: (component suffix, editor label, the flat ``SiteContent`` keys it owns).
+# This is the SINGLE source of truth — schema, ``to_storyblok`` split and the merge share it.
+SECTION_DEFINITIONS: list[tuple[str, str, list[str]]] = [
+    ("hero", "En-tête", ["heroBadge", "subtitle", "heroImage", "heroPoints", "ctaCallLabel", "ctaQuoteLabel"]),
+    ("trust", "Repères de confiance", ["trustItems"]),
+    ("about", "À propos", ["aboutHeading", "about", "aboutImage"]),
+    ("services", "Services", ["servicesHeading", "services"]),
+    ("gallery", "Photos", ["galleryHeading", "gallery"]),
+    ("reviews", "Avis clients", ["reviewsHeading", "reviews"]),
+    ("faq", "Questions fréquentes", ["faqHeading", "faq"]),
+    ("beforeAfter", "Avant / après", ["beforeAfter"]),
+    (
+        "contact",
+        "Contact & informations",
+        ["contactHeading", "businessName", "phone", "email", "city", "area", "logo", "openingHours", "social"],
+    ),
+]
+
+# Storyblok component names of the section bloks (page ``body`` whitelist).
+SECTION_COMPONENT_NAMES: list[str] = [f"section_{suffix}" for suffix, _, _ in SECTION_DEFINITIONS]
+
+
+def _section_component(suffix: str, display_name: str, field_keys: list[str]) -> dict[str, Any]:
+    """Build a ``section_*`` component schema from its field keys, assigning each a ``pos``."""
+    return {
+        "name": f"section_{suffix}",
+        "display_name": display_name,
+        "schema": {key: {**FIELD_SCHEMAS[key], "pos": index} for index, key in enumerate(field_keys)},
+    }
+
+
+SITE_CONTENT_SCHEMAS: list[dict[str, Any]] = [
+    _section_component(suffix, display_name, field_keys) for suffix, display_name, field_keys in SECTION_DEFINITIONS
+] + [
     {
         "name": "site_content_social",
         "display_name": "Réseau social",
@@ -580,25 +571,13 @@ def _asset(url: Any, alt: str = "") -> dict[str, Any]:
     }
 
 
-def to_storyblok_site_content(site_content: dict[str, Any]) -> dict[str, Any]:
-    """Wrap a flat ``SiteContent`` into the native Storyblok ``site_content`` blok.
+def _content_field_values(site_content: dict[str, Any]) -> dict[str, Any]:
+    """Build every Storyblok field value from the flat ``SiteContent`` (scalars, assets, item bloks).
 
-    Scalars stay as-is; image URLs become asset objects (gallery = multiasset); each other array
-    becomes a list of nested item bloks; the palette becomes a ``theme_palette`` blok. Every field
-    is editable in the Visual Editor. Template-agnostic (the SiteContent shape is shared).
-
-    Args:
-        site_content: The flat ``SiteContent`` dict from a template's ``build_site_content``.
-
-    Returns:
-        A ``site_content`` blok ready to drop into the page ``body``.
+    Keyed by the flat ``SiteContent`` key; ``to_storyblok_site_content`` then distributes these across
+    the section bloks (``SECTION_DEFINITIONS``). Palette is excluded — it lives on the page ``theme`` field.
     """
-    palette_raw = site_content.get("palette") or {}
-    palette: dict[str, Any] = palette_raw if isinstance(palette_raw, dict) else {}
-
     return {
-        "_uid": _uid(),
-        "component": "site_content",
         "businessName": site_content.get("businessName", ""),
         "phone": site_content.get("phone", ""),
         "email": site_content.get("email", ""),
@@ -606,7 +585,6 @@ def to_storyblok_site_content(site_content: dict[str, Any]) -> dict[str, Any]:
         "area": site_content.get("area", ""),
         "subtitle": site_content.get("subtitle", ""),
         "about": site_content.get("about", ""),
-        # Editorial copy (empty = template default)
         "heroBadge": site_content.get("heroBadge", ""),
         "heroPoints": [
             {"_uid": _uid(), "component": "site_content_hero_point", "text": str(point)}
@@ -625,15 +603,6 @@ def to_storyblok_site_content(site_content: dict[str, Any]) -> dict[str, Any]:
         "logo": _asset(site_content.get("logo", "")),
         "heroImage": _asset(site_content.get("heroImage", "")),
         "aboutImage": _asset(site_content.get("aboutImage", "")),
-        "palette": [
-            {
-                "_uid": _uid(),
-                "component": "theme_palette",
-                "primary": str(palette.get("primary", "")),
-                "secondary": str(palette.get("secondary", "")),
-                "accent": str(palette.get("accent", "")),
-            }
-        ],
         "gallery": [
             _asset(item.get("url", ""), str(item.get("alt", "") or ""))
             for item in site_content.get("gallery") or []
@@ -668,6 +637,29 @@ def to_storyblok_site_content(site_content: dict[str, Any]) -> dict[str, Any]:
         ],
         "social": _items_to_bloks(site_content.get("social"), "site_content_social", ("network", "url")),
     }
+
+
+def to_storyblok_site_content(site_content: dict[str, Any]) -> list[dict[str, Any]]:
+    """Project a flat ``SiteContent`` into the Storyblok page ``body`` — a list of SECTION bloks.
+
+    The page is split into small, focused sections (``section_hero``, ``section_about``…) instead of
+    one 29-field blok, so the client's editor stays readable and each section is a short form. The flat
+    ``SiteContent`` is unchanged; the palette lives on the page ``theme`` field, not in a section.
+
+    Args:
+        site_content: The flat ``SiteContent`` dict from a template's ``build_site_content``.
+
+    Returns:
+        The page ``body``: an ordered list of ``section_*`` bloks.
+    """
+    values = _content_field_values(site_content)
+    body: list[dict[str, Any]] = []
+    for suffix, _, field_keys in SECTION_DEFINITIONS:
+        section: dict[str, Any] = {"_uid": _uid(), "component": f"section_{suffix}"}
+        for key in field_keys:
+            section[key] = values[key]
+        body.append(section)
+    return body
 
 
 def _clean_str(value: Any) -> str:
@@ -706,45 +698,50 @@ def _single_blok(value: Any) -> dict[str, Any]:
     return {}
 
 
-def find_site_content_blok(raw: dict[str, Any]) -> dict[str, Any] | None:
-    """Locate the ``site_content`` blok inside a resolved story content object.
+def _collect_content_fields(raw: dict[str, Any]) -> dict[str, Any] | None:
+    """Merge the section bloks' fields into one flat dict (keys are unique across sections).
 
-    Handles both shapes: page-wrapped (``{component: 'page', body: [site_content]}``)
-    and the bare ``site_content`` blok itself.
-
-    Args:
-        raw: The story content (from the CDN API or content_json).
-
-    Returns:
-        The ``site_content`` blok, or None when absent.
+    Accepts the sectioned page (``body: [section_hero, section_about, …]``), a bare section blok,
+    or the legacy single ``site_content`` blok. Returns None when no content blok is present.
     """
-    if raw.get("component") == "site_content":
-        return raw
-    for blok in _blok_list(raw.get("body")):
-        if blok.get("component") == "site_content":
-            return blok
-    return None
+
+    def _is_content(component: Any) -> bool:
+        return component == "site_content" or (isinstance(component, str) and component.startswith("section_"))
+
+    if _is_content(raw.get("component")):
+        blocks: list[dict[str, Any]] = [raw]
+    else:
+        blocks = [blok for blok in _blok_list(raw.get("body")) if _is_content(blok.get("component"))]
+    if not blocks:
+        return None
+    merged: dict[str, Any] = {}
+    for blok in blocks:
+        for key, value in blok.items():
+            if key not in ("_uid", "component"):
+                merged[key] = value
+    return merged
 
 
 def from_storyblok_site_content(raw: dict[str, Any]) -> dict[str, Any] | None:
     """Flatten a published Storyblok story back into the flat ``SiteContent`` shape.
 
     Inverse of ``to_storyblok_site_content`` and Python mirror of demo-host's
-    ``StoryblokSiteContentBridge``: nested item bloks lose their ``_uid``/``component``,
-    the palette is read from the nested ``theme_palette`` blok, asset fields are flattened
-    back to their URL (``filename``). Used by the Storyblok publish webhook to
-    sync client edits into ``demo_site.content_json`` (what the public site renders).
+    ``StoryblokSiteContentBridge``: the section bloks are merged, nested item bloks lose their
+    ``_uid``/``component``, asset fields are flattened to their URL (``filename``), and the palette is
+    read from the page ``theme`` field. Used by the Storyblok publish webhook to sync client edits
+    into ``demo_site.content_json`` (what the public site renders).
 
     Args:
         raw: The story ``content`` object fetched from the Storyblok CDN API.
 
     Returns:
-        A flat ``SiteContent`` dict, or None when no ``site_content`` blok exists.
+        A flat ``SiteContent`` dict, or None when no content blok exists.
     """
-    blok = find_site_content_blok(raw)
+    blok = _collect_content_fields(raw)
     if blok is None:
         return None
-    palette = _single_blok(blok.get("palette"))
+    # Palette lives on the page ``theme`` field now; fall back to a legacy in-content palette.
+    palette = _single_blok(raw.get("theme")) or _single_blok(blok.get("palette"))
 
     reviews: list[dict[str, Any]] = []
     for item in _blok_list(blok.get("reviews")):

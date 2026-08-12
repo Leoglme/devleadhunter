@@ -83,40 +83,66 @@ export class StoryblokSiteContentBridge {
   }
 
   /**
-   * Locate the `site_content` blok, which arrives either page-wrapped (`{ component: 'page', body: [ … ] }`) or bare.
+   * Tell whether a component name is one of ours: the section bloks or the legacy single blok.
+   *
+   * @param component - A blok's `component` value.
+   * @returns Whether it is a `section_*` blok or the legacy `site_content` blok.
+   */
+  private static isContentBlok(component: unknown): boolean {
+    return component === 'site_content' || (typeof component === 'string' && component.startsWith('section_'))
+  }
+
+  /**
+   * Merge the section bloks' fields into one flat blok (keys are unique across sections).
+   *
+   * Accepts the sectioned page (`body: [section_hero, … ]`), a bare section, or the legacy single
+   * `site_content` blok, page-wrapped or not.
    *
    * @param raw - Resolved content (content_json, Storyblok draft, or live bridge edits).
-   * @returns The `site_content` blok, or undefined when none is present.
+   * @returns The merged fields, or undefined when no content blok is present.
    */
-  private static findSiteContentBlok(raw: Blok): Blok | undefined {
-    if (raw?.component === 'site_content') {
-      return raw
+  private static collectContentFields(raw: Blok): Blok | undefined {
+    const blocks: Blok[] = this.isContentBlok(raw?.component)
+      ? [raw]
+      : this.readBlokList(raw.body).filter((blok: Blok): boolean => this.isContentBlok(blok?.component))
+    if (blocks.length === 0) {
+      return undefined
     }
-    return this.readBlokList(raw.body).find((blok: Blok): boolean => blok?.component === 'site_content')
+    const merged: Blok = {}
+    blocks.forEach((blok: Blok): void => {
+      Object.keys(blok).forEach((key: string): void => {
+        if (key !== '_uid' && key !== 'component') {
+          merged[key] = blok[key]
+        }
+      })
+    })
+    return merged
   }
 
   /**
    * Tell whether a resolved content object is the Storyblok-native representation rather than flat `SiteContent`.
    *
    * @param raw - Resolved content object.
-   * @returns Whether the content carries a `site_content` blok.
+   * @returns Whether the content carries our section (or legacy) bloks.
    */
   static isStoryblokSiteContent(raw: Record<string, unknown>): boolean {
-    return this.findSiteContentBlok(raw as Blok) !== undefined
+    return this.collectContentFields(raw as Blok) !== undefined
   }
 
   /**
    * Flatten the Storyblok-native representation into the `SiteContent` a template layer renders.
    *
-   * Nested blok lists lose their `_uid` / `component`, the palette is read from its own blok,
-   * and asset fields are flattened back to their image URL (`filename`).
+   * The section bloks are merged, nested blok lists lose their `_uid` / `component`, the palette is
+   * read from the page `theme` field, and asset fields are flattened back to their image URL (`filename`).
    *
    * @param raw - Resolved content (page-wrapped or bare `site_content` blok).
    * @returns A flat `SiteContent` — absent keys mean hidden sections.
    */
   static toSiteContent(raw: Record<string, unknown>): SiteContent {
-    const blok: Blok = this.findSiteContentBlok(raw as Blok) ?? {}
-    const palette: Blok = this.readSingleBlok(blok.palette)
+    const blok: Blok = this.collectContentFields(raw as Blok) ?? {}
+    // Palette lives on the page `theme` field now; fall back to a legacy in-content palette.
+    const themePalette: Blok = this.readSingleBlok((raw as Blok).theme)
+    const palette: Blok = Object.keys(themePalette).length > 0 ? themePalette : this.readSingleBlok(blok.palette)
 
     return {
       businessName: this.readString(blok.businessName),
