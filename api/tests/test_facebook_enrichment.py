@@ -5,8 +5,11 @@ from scrappers.facebook_enrichment_scraper import (
     _clean_social_url,
     _dedupe_photos,
     _parse_about_stats,
+    _parse_bio_from_embedded_texts,
     _parse_intro_description,
+    _parse_og_description,
     _parse_reviews,
+    _parse_reviews_from_embedded_texts,
     _rating_from_pct,
 )
 
@@ -41,6 +44,12 @@ facebook.com/TacosMexicanosMaru
 Sièges en terrasse
 Recommandé par 96 % (22 avis)"""
 
+_OG_DESCRIPTION = (
+    "Food truck mexicain Tacos Maru, Châtellerault. 1 720 J’aime · 17 en parlent. "
+    "Food Truck Mexicain Tacos Maru  C’est un Food Truck qui vous fait découvrir "
+    "les spécialités et saveurs mexicaines. Des recettes faites maison..."
+)
+
 # Real text captured from the same page's « Avis » panel (several reviews after login dismiss + scroll).
 _REVIEWS_TEXT = """Recommandé par 96 % (22 avis)
 Fox Emmanuel  recommande Food truck mexicain Tacos Maru.
@@ -72,6 +81,24 @@ Pas convaincue
 Toutes les réactions :
 0"""
 
+# Relay JSON often lists the body before the « X recommande » header — mirrors live HTML order.
+_EMBEDDED_TEXTS = [
+    "Recommandé par 96 % (22 avis)",
+    "Copieux et délicieux on n'en demande pas plus et ça fait passer une très bonne soirée\nMerci beaucoup",
+    "Fox Emmanuel  recommande Food truck mexicain Tacos Maru.",
+    "Les commentaires ont été désactivés pour cette publication.",
+    "Dégustation de 4 tacos si bons....!!! Assaisonnement parfait qui fait voyager instantanément. Jamais goûté de si délicieux tacos.",
+    "Marie Breton  recommande Food truck mexicain Tacos Maru.",
+    "Des plats tous aussi bons les un que les autres, du personnel au top du top !",
+    "Guillaume Fournier  recommande Food truck mexicain Tacos Maru.",
+]
+
+_PAGE_EMBEDDED_BIO = [
+    "1,7 K followers",
+    "Food Truck Mexicain Tacos Maru  C’est un Food Truck qui vous fait découvrir les spécialités et saveurs mexicaines. \nDes recettes faites maison dans les traditions du Mexique\nQui apportant les saveurs traditionnelles, faite de manière artisanale",
+    "Page · Food truck",
+]
+
 
 def test_rating_from_pct_converts_and_clamps() -> None:
     """A recommendation rate maps to /5, clamped to [0, 5]; None stays None."""
@@ -98,6 +125,22 @@ def test_parse_intro_description_keeps_blurb_and_stops_at_contacts() -> None:
     assert "instagram.com" not in description
 
 
+def test_parse_og_description_strips_likes_prefix() -> None:
+    """og:description drops the « X J'aime · Y en parlent » prefix."""
+    description = _parse_og_description(_OG_DESCRIPTION)
+    assert description is not None
+    assert "J’aime" not in description
+    assert "spécialités et saveurs mexicaines" in description
+
+
+def test_parse_bio_from_embedded_texts_keeps_full_intro() -> None:
+    """Relay page-bio text is preferred when og:description is truncated."""
+    bio = _parse_bio_from_embedded_texts(_PAGE_EMBEDDED_BIO)
+    assert bio is not None
+    assert "faite de manière artisanale" in bio
+    assert "followers" not in bio.lower()
+
+
 def test_parse_reviews_extracts_multiple_authors_and_bodies() -> None:
     """Several reviews keep author + body, drop dates and reaction footers."""
     reviews = _parse_reviews(_REVIEWS_TEXT)
@@ -113,6 +156,18 @@ def test_parse_reviews_extracts_multiple_authors_and_bodies() -> None:
     assert reviews[2]["author"] == "Guillaume Fournier"
     assert reviews[3]["author"] == "Mélissa Lambelin"
     assert reviews[3]["rating"] == 2
+
+
+def test_parse_reviews_from_embedded_texts_pairs_headers_with_bodies() -> None:
+    """Embedded Relay texts yield multiple reviews even when the DOM shows one."""
+    reviews = _parse_reviews_from_embedded_texts(_EMBEDDED_TEXTS)
+    assert len(reviews) >= 3
+    authors = {review["author"] for review in reviews}
+    assert "Fox Emmanuel" in authors
+    assert "Marie Breton" in authors
+    assert "Guillaume Fournier" in authors
+    marie = next(review for review in reviews if review["author"] == "Marie Breton")
+    assert "Assaisonnement parfait" in marie["text"]
 
 
 def test_parse_reviews_marks_a_non_recommendation_lower() -> None:
@@ -156,7 +211,9 @@ def test_build_from_raw_produces_facebook_enrichment() -> None:
     dom = {
         "place_title": "Food truck mexicain Tacos Maru",
         "about_text": _ABOUT_TEXT,
-        "intro_text": _INTRO_TEXT,
+        "intro_text": "",  # Intro card missing — fall back to embedded bio / og.
+        "og_description": _OG_DESCRIPTION,
+        "embedded_texts": _PAGE_EMBEDDED_BIO,
         "social": {
             "facebook": "https://www.facebook.com/TacosMexicanosMaru/",
             "instagram": "https://www.instagram.com/food_truck_mexicano_tacos_maru?igsh=abc",
@@ -168,14 +225,21 @@ def test_build_from_raw_produces_facebook_enrichment() -> None:
         "https://static.xx.fbcdn.net/rsrc.php/icon.webp",
         "https://scontent.xx.fbcdn.net/v/t1/photo.jpg",
     ]
-    data = FacebookEnrichmentScraper._build_from_raw(dom, _REVIEWS_TEXT, gallery)
+    data = FacebookEnrichmentScraper._build_from_raw(dom, "Fox only", gallery, _EMBEDDED_TEXTS)
     assert data.source == "facebook"
     assert data.rating == 4.8
     assert data.reviews_count == 22
     assert data.description is not None
     assert "saveurs mexicaines" in data.description
+    assert "faite de manière artisanale" in data.description
+    assert "Des..." not in data.description
     assert data.social_links["tiktok"].endswith("food.truck.mexicai")
     assert "igsh=" not in data.social_links["instagram"]
     assert data.website is None
     assert data.photos == ["https://scontent.xx.fbcdn.net/v/t1/photo.jpg"]
-    assert len(data.reviews) == 4
+    assert len(data.reviews) >= 3
+    authors = {review["author"] for review in data.reviews}
+    assert "Marie Breton" in authors
+    assert "Guillaume Fournier" in authors
+    # Disabled-comments chrome must never become a review body.
+    assert all("commentaires ont été désactivés" not in review["text"].lower() for review in data.reviews)

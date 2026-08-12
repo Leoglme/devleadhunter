@@ -195,7 +195,12 @@ class EnrichmentService:
         if data.photos:
             record.photos = self._merge_photos(record.photos, data.photos)
         if data.reviews:
-            record.reviews = self._merge_reviews(record.reviews, data.reviews)
+            # Facebook re-scrapes often start from a single stale DOM review; prefer
+            # a fuller incoming list instead of forever appending the first one.
+            if (data.source or "").startswith("facebook") and len(data.reviews) >= len(record.reviews or []):
+                record.reviews = data.reviews
+            else:
+                record.reviews = self._merge_reviews(record.reviews, data.reviews)
         if data.opening_hours and self._should_apply_opening_hours(record.opening_hours, data.opening_hours):
             record.opening_hours = self._valid_hour_rows(data.opening_hours)
         if data.services:

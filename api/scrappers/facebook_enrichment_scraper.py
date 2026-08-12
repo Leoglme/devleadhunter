@@ -94,14 +94,14 @@ _TRACKING_QUERY_KEYS = frozenset(
     }
 )
 
-# Dismiss the login gate + strip leftover overlays so the DOM behind (already loaded) stays readable; we only read.
+# Soft-dismiss only: clicking Fermer. Removing dialog nodes breaks React hydration
+# and Facebook then never paints the rest of the reviews list.
 _DISMISS_LOGIN_JS = r"""
 (() => {
     let closed = false;
     for (const el of document.querySelectorAll('[aria-label="Fermer"], [aria-label="Close"]')) {
         try { el.click(); closed = true; break; } catch (e) {}
     }
-    document.querySelectorAll('div[role="dialog"]').forEach((d) => { try { d.remove(); } catch (e) {} });
     try {
         document.body.style.overflow = 'visible';
         document.documentElement.style.overflow = 'visible';
@@ -110,11 +110,28 @@ _DISMISS_LOGIN_JS = r"""
 })()
 """
 
-# Public page home: title, Intro blurb, panel text (stats), socials. No photo scrape here —
-# the home feed mixes posts, cover, and UI; photos come from /photos_by + /photos_of.
+# Expand truncated Intro / about blurbs when Facebook collapses them behind « En voir plus ».
+_EXPAND_SEE_MORE_JS = r"""
+(() => {
+    let clicked = 0;
+    for (const el of document.querySelectorAll('div[role="button"], span')) {
+        const label = ((el.innerText || el.textContent || '') + ' ' + (el.getAttribute('aria-label') || '')).trim().toLowerCase();
+        if (!/^(en )?voir plus|see more|voir la suite$/.test(label) && !label.includes('en voir plus')) continue;
+        try { el.click(); clicked += 1; } catch (e) {}
+        if (clicked >= 4) break;
+    }
+    return clicked;
+})()
+"""
+
+# Public page home: title, Intro blurb, og:description + embedded bio, socials.
+# Photos come from /photos_by + /photos_of — the home feed mixes posts and UI.
 _FB_PAGE_JS = r"""
 (() => {
-    const out = { place_title: null, intro_text: '', about_text: '', social: {}, website: null };
+    const out = {
+        place_title: null, intro_text: '', about_text: '', og_description: null,
+        embedded_texts: [], social: {}, website: null
+    };
     const txt = (el) => (el ? (el.innerText || el.textContent || '').trim() : '');
     try { out.place_title = txt(document.querySelector('h1')) || null; } catch (e) {}
     try {
@@ -122,13 +139,17 @@ _FB_PAGE_JS = r"""
         out.about_text = (main ? main.innerText : (document.body ? document.body.innerText : '')) || '';
     } catch (e) { out.about_text = ''; }
     try {
+        const og = document.querySelector('meta[property="og:description"], meta[name="description"]');
+        out.og_description = og ? ((og.getAttribute('content') || '').trim() || null) : null;
+    } catch (e) {}
+    try {
         let intro = '';
         for (const heading of document.querySelectorAll('h2')) {
             if (!/^intro$/i.test(txt(heading))) continue;
             let root = heading.parentElement;
-            for (let depth = 0; depth < 10 && root; depth += 1) {
+            for (let depth = 0; depth < 12 && root; depth += 1) {
                 const block = txt(root);
-                if (block.length > 80 && /intro/i.test(block)) {
+                if (block.length > 40 && /^intro\b/i.test(block)) {
                     intro = block;
                     break;
                 }
@@ -138,6 +159,23 @@ _FB_PAGE_JS = r"""
         }
         out.intro_text = intro;
     } catch (e) { out.intro_text = ''; }
+    // Full page bio often lives in Relay JSON even when the Intro card / og:description
+    // are truncated behind the login wall or cut with « … ».
+    try {
+        const html = document.documentElement ? (document.documentElement.innerHTML || '') : '';
+        const re = /"text":"((?:\\.|[^"\\])*)"/g;
+        const seen = new Set();
+        let match;
+        while ((match = re.exec(html))) {
+            let decoded = '';
+            try { decoded = JSON.parse('"' + match[1] + '"'); } catch (e) { continue; }
+            decoded = (decoded || '').trim();
+            if (!decoded || seen.has(decoded)) continue;
+            seen.add(decoded);
+            out.embedded_texts.push(decoded);
+            if (out.embedded_texts.length >= 80) break;
+        }
+    } catch (e) {}
     const unwrap = (href) => {
         const m = (href || '').match(/[?&]u=([^&]+)/);
         if (m) { try { return decodeURIComponent(m[1]); } catch (e) {} }
@@ -189,11 +227,30 @@ _FB_PHOTOS_JS = r"""
 })()
 """
 
-# Reviews tab: return the panel text; the review blocks are parsed in Python.
+# Reviews tab: visible text is often truncated to 1 review behind the login wall.
+# The full recommendations still live in the Relay JSON embedded in the HTML —
+# extract those `"text"` payloads so we do not depend on lazy DOM hydration.
 _FB_REVIEWS_JS = r"""
 (() => {
+    const out = { reviews_text: '', embedded_texts: [] };
     const main = document.querySelector('div[role="main"]');
-    return { reviews_text: (main ? main.innerText : (document.body ? document.body.innerText : '')) || '' };
+    out.reviews_text = (main ? main.innerText : (document.body ? document.body.innerText : '')) || '';
+    try {
+        const html = document.documentElement ? (document.documentElement.innerHTML || '') : '';
+        const re = /"text":"((?:\\.|[^"\\])*)"/g;
+        const seen = new Set();
+        let match;
+        while ((match = re.exec(html))) {
+            let decoded = '';
+            try { decoded = JSON.parse('"' + match[1] + '"'); } catch (e) { continue; }
+            decoded = (decoded || '').trim();
+            if (!decoded || seen.has(decoded)) continue;
+            seen.add(decoded);
+            out.embedded_texts.push(decoded);
+            if (out.embedded_texts.length >= 100) break;
+        }
+    } catch (e) {}
+    return out;
 })()
 """
 
@@ -207,6 +264,24 @@ _SCROLL_REVIEWS_JS = r"""
     return true;
 })()
 """
+
+# Chrome strings that appear as `"text"` payloads but are not review bodies.
+_REVIEW_CHROME_RE = re.compile(
+    r"^(recommand[ée]?s?\s+par\b|toutes les réactions|j['’]aime|commenter|partager|"
+    r"publications|à propos|reels|photos|followers|suivi|"
+    r"les commentaires ont [ée]t[ée] d[ée]sactiv[ée]s|comments are turned off)",
+    re.IGNORECASE,
+)
+# Page-bio candidates from Relay JSON (avoid review headers / UI chrome).
+_BIO_NOISE_RE = re.compile(
+    r"recommande\b|j['’]aime|followers|publication|commentaire|commenter|partager|"
+    r"toutes les réactions|en voir plus|see more",
+    re.IGNORECASE,
+)
+_OG_LIKES_PREFIX_RE = re.compile(
+    r"^[^.]*\.\s*\d[\d\s ]*j['’]aime\s*·\s*\d[\d\s ]*en parlent\.\s*",
+    re.IGNORECASE,
+)
 
 
 def _rating_from_pct(pct: int | None) -> float | None:
@@ -266,6 +341,36 @@ def _parse_intro_description(intro_text: str) -> str | None:
         body.append(line)
     description = " ".join(body).strip()
     return description or None
+
+
+def _parse_og_description(og_description: str | None) -> str | None:
+    """Clean Facebook's og:description into a usable business blurb.
+
+    Args:
+        og_description: Raw Open Graph description, or None.
+
+    Returns:
+        A cleaned description without the « X J'aime · Y en parlent » prefix,
+        or None when empty / too short.
+    """
+    if not (og_description or "").strip():
+        return None
+    text = _OG_LIKES_PREFIX_RE.sub("", og_description.strip()).strip()
+    text = re.sub(r"\s*\.\.\.\s*$", "", text).strip()
+    text = re.sub(r"\s+", " ", text)
+    return text if len(text) >= 40 else None
+
+
+def _is_review_chrome(text: str) -> bool:
+    """True for UI / stats strings that are not a review body."""
+    first = text.splitlines()[0].strip() if text else ""
+    if not first:
+        return True
+    if _REVIEW_CHROME_RE.match(first):
+        return True
+    if _DATE_RE.match(first):
+        return True
+    return bool(first.replace(" ", "").isdigit())
 
 
 def _clean_social_url(url: str) -> str:
@@ -335,6 +440,90 @@ def _parse_reviews(text: str) -> list[dict[str, Any]]:
     return reviews
 
 
+def _parse_reviews_from_embedded_texts(texts: list[str]) -> list[dict[str, Any]]:
+    """Build reviews from Relay ``text`` payloads embedded in the page HTML.
+
+    The login wall often paints a single review in the DOM while the full list
+    still sits in the prefetched JSON. Headers look like
+    ``\"Fox Emmanuel  recommande …\"``; bodies are the neighbouring long texts.
+    Relay often emits the body *before* the header — prefer that order, and
+    never reuse the same body for two authors.
+
+    Args:
+        texts: Decoded ``text`` payloads, in document order.
+
+    Returns:
+        Up to ``_MAX_REVIEWS`` review rows.
+    """
+    headers: list[tuple[int, str, bool]] = []
+    bodies: list[tuple[int, str]] = []
+    for index, text in enumerate(texts):
+        first_line = text.splitlines()[0].strip()
+        header = _REVIEW_HEADER_RE.match(first_line)
+        if header is not None:
+            author = header.group(1).strip()
+            recommends = "ne recommande pas" not in first_line.lower()
+            if author:
+                headers.append((index, author, recommends))
+            continue
+        if _is_review_chrome(text) or len(text) < 20:
+            continue
+        bodies.append((index, " ".join(part.strip() for part in text.splitlines() if part.strip())))
+
+    reviews: list[dict[str, Any]] = []
+    seen_authors: set[str] = set()
+    used_body_indexes: set[int] = set()
+    for header_index, author, recommends in headers:
+        author_key = author.lower()
+        if author_key in seen_authors:
+            continue
+        best_body: str | None = None
+        best_body_index: int | None = None
+        best_score: int | None = None
+        for body_index, body in bodies:
+            if body_index in used_body_indexes:
+                continue
+            delta = body_index - header_index
+            # Prefer body immediately before the header (common Relay order),
+            # then body right after (DOM-like order).
+            if -4 <= delta < 0:
+                score = abs(delta)
+            elif 0 < delta <= 8:
+                score = 10 + delta
+            else:
+                continue
+            if best_score is None or score < best_score:
+                best_score = score
+                best_body = body
+                best_body_index = body_index
+        if not best_body or best_body_index is None:
+            continue
+        used_body_indexes.add(best_body_index)
+        seen_authors.add(author_key)
+        reviews.append({"author": author, "text": best_body, "rating": 5 if recommends else 2})
+        if len(reviews) >= _MAX_REVIEWS:
+            break
+    return reviews
+
+
+def _merge_review_lists(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Union review rows by author+text, preserving first-seen order."""
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for group in groups:
+        for review in group:
+            author = str(review.get("author") or "").strip().lower()
+            text = str(review.get("text") or "").strip().lower()
+            key = f"{author}|{text}"
+            if not text or key in seen:
+                continue
+            seen.add(key)
+            merged.append(review)
+            if len(merged) >= _MAX_REVIEWS:
+                return merged
+    return merged
+
+
 def _dedupe_photos(urls: list[str]) -> list[str]:
     """Keep photo URLs unique while preserving order, capped at ``_MAX_PHOTOS``."""
     seen: set[str] = set()
@@ -353,6 +542,55 @@ def _dedupe_photos(urls: list[str]) -> list[str]:
         if len(out) >= _MAX_PHOTOS:
             break
     return out
+
+
+def _parse_bio_from_embedded_texts(texts: list[str]) -> str | None:
+    """Pick the longest Relay ``text`` that looks like the page Intro bio.
+
+    Args:
+        texts: Decoded ``text`` payloads from the page HTML.
+
+    Returns:
+        A multi-sentence bio, or None when nothing usable is found.
+    """
+    candidates: list[str] = []
+    for text in texts:
+        cleaned = " ".join(part.strip() for part in text.splitlines() if part.strip())
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        if len(cleaned) < 60:
+            continue
+        if _BIO_NOISE_RE.search(cleaned):
+            continue
+        if _REVIEW_HEADER_RE.match(cleaned.splitlines()[0] if cleaned else ""):
+            continue
+        # Prefer blurbs that read like a business intro (multi-sentence / « Food Truck »…).
+        if cleaned.count(".") + cleaned.count("!") + cleaned.count("?") < 1 and len(cleaned) < 120:
+            continue
+        candidates.append(cleaned)
+    if not candidates:
+        return None
+    return max(candidates, key=len)
+
+
+def _pick_description(
+    *,
+    intro_text: str,
+    about_text: str,
+    og_description: str | None,
+    embedded_texts: list[str] | None = None,
+) -> str | None:
+    """Prefer Intro card / embedded bio, then og:description, then about text."""
+    candidates = [
+        _parse_intro_description(intro_text),
+        _parse_bio_from_embedded_texts(embedded_texts or []),
+        _parse_og_description(og_description),
+        _parse_intro_description(about_text),
+    ]
+    # Longest non-empty wins — og:description is often truncated with « … ».
+    picked = [item for item in candidates if item]
+    if not picked:
+        return None
+    return max(picked, key=len)
 
 
 class FacebookEnrichmentScraper:
@@ -389,8 +627,8 @@ class FacebookEnrichmentScraper:
                 return EnrichmentData(source="facebook")
             page = await self._extract_json(tab, _FB_PAGE_JS)
             photos = await self._extract_photos(tab, facebook_url)
-            reviews_text = await self._extract_reviews(tab, facebook_url)
-            return self._build_from_raw(page, reviews_text, photos)
+            reviews_text, embedded_texts = await self._extract_reviews(tab, facebook_url)
+            return self._build_from_raw(page, reviews_text, photos, embedded_texts)
         except Exception as exc:
             logger.warning("Facebook enrichment failed for %s: %s", business_name, exc)
             return EnrichmentData(source="facebook")
@@ -421,17 +659,22 @@ class FacebookEnrichmentScraper:
         return f"{cls._base_url(facebook_url)}/reviews"
 
     async def _dismiss_login_gate(self, tab: Any) -> None:
-        """Close the login modal and strip leftover overlays (best-effort)."""
+        """Close the login modal with a soft click (best-effort)."""
         try:
             await NodriverDom.evaluate(tab, _DISMISS_LOGIN_JS, by_value=True)
         except Exception:
             pass
 
     async def _prepare_tab(self, tab: Any) -> None:
-        """Dismiss the login wall and give the public DOM a moment to settle."""
+        """Dismiss the login wall, expand truncated blurbs, let the public DOM settle."""
         await self._dismiss_login_gate(tab)
-        await asyncio.sleep(0.6)
+        await asyncio.sleep(0.8)
         await self._dismiss_login_gate(tab)
+        try:
+            await NodriverDom.evaluate(tab, _EXPAND_SEE_MORE_JS, by_value=True)
+        except Exception:
+            pass
+        await asyncio.sleep(0.4)
 
     async def _extract_json(self, tab: Any, script: str) -> dict[str, Any]:
         """Evaluate a JS IIFE and coerce the JSON payload to a dict."""
@@ -459,35 +702,40 @@ class FacebookEnrichmentScraper:
                 logger.info("Facebook photos tab not readable (%s): %s", url, exc)
         return _dedupe_photos(collected)
 
-    async def _extract_reviews(self, tab: Any, facebook_url: str) -> str:
-        """Open the reviews tab, scroll lazy rows into view, return visible text."""
+    async def _extract_reviews(self, tab: Any, facebook_url: str) -> tuple[str, list[str]]:
+        """Open the reviews tab and return visible text + embedded Relay text payloads."""
         try:
-            await NodriverDom.navigate(tab, self._reviews_url(facebook_url), sleep_s=1.2)
+            await NodriverDom.navigate(tab, self._reviews_url(facebook_url), sleep_s=1.4)
             await self._prepare_tab(tab)
-            # Without dismissing + scrolling, Facebook only paints the first review
-            # behind the login wall — the rest hydrate after close + scroll.
-            for _ in range(4):
+            for _ in range(5):
                 try:
                     await NodriverDom.evaluate(tab, _SCROLL_REVIEWS_JS, by_value=True)
                 except Exception:
                     break
-                await asyncio.sleep(0.45)
+                await asyncio.sleep(0.5)
                 await self._dismiss_login_gate(tab)
             payload = await self._extract_json(tab, _FB_REVIEWS_JS)
-            return str(payload.get("reviews_text") or "")
+            reviews_text = str(payload.get("reviews_text") or "")
+            embedded_raw = payload.get("embedded_texts") or []
+            embedded_texts = [str(item).strip() for item in embedded_raw if isinstance(item, str) and item.strip()]
+            return reviews_text, embedded_texts
         except Exception as exc:
             logger.info("Facebook reviews tab not readable: %s", exc)
-        return ""
+        return "", []
 
     @staticmethod
     def _build_from_raw(
         dom: dict[str, Any],
         reviews_text: str,
         photos: list[str] | None = None,
+        embedded_texts: list[str] | None = None,
     ) -> EnrichmentData:
-        """Coerce the raw page payload + reviews text into a typed ``EnrichmentData``."""
+        """Coerce the raw page payload + reviews into a typed ``EnrichmentData``."""
         about_text = str(dom.get("about_text") or "")
         intro_text = str(dom.get("intro_text") or "")
+        og_description = str(dom["og_description"]).strip() if dom.get("og_description") else None
+        page_embedded_raw = dom.get("embedded_texts") or []
+        page_embedded = [str(item).strip() for item in page_embedded_raw if isinstance(item, str) and item.strip()]
         rating_pct, reviews_count = _parse_about_stats(f"{about_text}\n{intro_text}\n{reviews_text}")
         social = {
             str(network): _clean_social_url(str(url))
@@ -499,7 +747,16 @@ class FacebookEnrichmentScraper:
         )
         website = str(dom["website"]).strip() if dom.get("website") else None
         place_title = str(dom["place_title"]).strip() if dom.get("place_title") else None
-        description = _parse_intro_description(intro_text) or _parse_intro_description(about_text)
+        description = _pick_description(
+            intro_text=intro_text,
+            about_text=about_text,
+            og_description=og_description,
+            embedded_texts=page_embedded,
+        )
+        reviews = _merge_review_lists(
+            _parse_reviews_from_embedded_texts(embedded_texts or []),
+            _parse_reviews(reviews_text),
+        )
         return EnrichmentData(
             source="facebook",
             rating=_rating_from_pct(rating_pct),
@@ -507,7 +764,7 @@ class FacebookEnrichmentScraper:
             description=description,
             website=website or None,
             photos=photo_urls,
-            reviews=_parse_reviews(reviews_text),
+            reviews=reviews,
             social_links=social,
             place_title=place_title or None,
         )
