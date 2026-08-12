@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import re
 import secrets
 import string
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -65,6 +67,11 @@ class StoryblokService:
         self._token: str | None = settings.storyblok_management_token
         self._region: str = settings.storyblok_region
         self._base_url: str = "https://mapi.storyblok.com/v1"
+        # The Management API caps at ~6 req/s. The sectioned schema registers ~19 components (plus the
+        # per-image asset uploads), so we pace request STARTS below that to avoid a fatal 429.
+        self._rate_lock: asyncio.Lock = asyncio.Lock()
+        self._min_request_interval: float = 0.18
+        self._next_request_at: float = 0.0
 
     @property
     def is_configured(self) -> bool:
@@ -210,20 +217,34 @@ class StoryblokService:
         method: str,
         url: str,
         *,
-        retries: int = 4,
+        retries: int = 6,
         **kwargs: Any,
     ) -> httpx.Response:
-        """Perform a Storyblok request with basic retry on rate limits."""
-        delay_seconds: float = 0.35
+        """Perform a Storyblok request, paced under the rate limit and retrying on 429.
+
+        Request STARTS are spaced by ``_min_request_interval`` (shared across concurrent calls) to stay
+        below the ~6 req/s cap; a 429 is still retried, honouring ``Retry-After`` then exponential backoff.
+        """
         last_response: httpx.Response | None = None
 
         for attempt in range(retries):
-            if attempt:
-                await asyncio.sleep(delay_seconds * attempt)
+            async with self._rate_lock:
+                wait: float = self._next_request_at - time.monotonic()
+                if wait > 0:
+                    await asyncio.sleep(wait)
+                self._next_request_at = time.monotonic() + self._min_request_interval
+
             response = await client.request(method, url, headers=self._headers(), **kwargs)
             last_response = response
             if response.status_code != 429:
                 return response
+
+            retry_after: str | None = response.headers.get("Retry-After")
+            try:
+                backoff: float = float(retry_after) if retry_after else min(2.0**attempt, 8.0)
+            except ValueError:
+                backoff = min(2.0**attempt, 8.0)
+            await asyncio.sleep(backoff + random.uniform(0.0, 0.3))
 
         assert last_response is not None
         return last_response
