@@ -41,6 +41,9 @@ TEMPLATE_META: dict[str, object] = {
 BODY_COMPONENTS: list[str] = []
 COMPONENT_SCHEMAS: list[dict[str, Any]] = []
 
+# Sections this template renders — drives the client's Storyblok editor so it shows no dead sections.
+USED_SECTIONS: list[str] = ["hero", "trust", "about", "services", "gallery", "reviews", "faq", "contact"]
+
 
 def build_content(
     *,

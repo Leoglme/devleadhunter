@@ -21,6 +21,9 @@ from typing import Any
 
 TEMPLATE_ID: str = "electrician-lumen"
 
+# Sections this template renders — drives the client's Storyblok editor so it shows no dead sections.
+USED_SECTIONS: list[str] = ["hero", "trust", "about", "services", "gallery", "reviews", "faq", "contact"]
+
 TEMPLATE_META: dict[str, object] = {
     "id": TEMPLATE_ID,
     "name": "Électricien Lumen",
