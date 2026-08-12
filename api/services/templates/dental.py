@@ -45,6 +45,9 @@ TEMPLATE_META: dict[str, object] = {
 BODY_COMPONENTS: list[str] = []
 COMPONENT_SCHEMAS: list[dict[str, Any]] = []
 
+# Sections this template renders — drives the client's Storyblok editor so it shows no dead sections.
+USED_SECTIONS: list[str] = ["hero", "trust", "about", "services", "gallery", "reviews", "contact"]
+
 
 def default_subtitle(area: str) -> str:
     """Dental-aware default hero subtitle when the prospect has no description.

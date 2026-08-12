@@ -639,7 +639,7 @@ def _content_field_values(site_content: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def to_storyblok_site_content(site_content: dict[str, Any]) -> list[dict[str, Any]]:
+def to_storyblok_site_content(site_content: dict[str, Any], sections: list[str] | None = None) -> list[dict[str, Any]]:
     """Project a flat ``SiteContent`` into the Storyblok page ``body`` — a list of SECTION bloks.
 
     The page is split into small, focused sections (``section_hero``, ``section_about``…) instead of
@@ -648,13 +648,19 @@ def to_storyblok_site_content(site_content: dict[str, Any]) -> list[dict[str, An
 
     Args:
         site_content: The flat ``SiteContent`` dict from a template's ``build_site_content``.
+        sections: The section suffixes the template actually renders, in ``SECTION_DEFINITIONS`` order;
+            ``None`` emits every section. Sections a template never renders are dropped so the client's
+            editor shows no dead sections (safe: an unrendered section carries nothing to lose).
 
     Returns:
         The page ``body``: an ordered list of ``section_*`` bloks.
     """
+    allowed: set[str] | None = set(sections) if sections is not None else None
     values = _content_field_values(site_content)
     body: list[dict[str, Any]] = []
     for suffix, _, field_keys in SECTION_DEFINITIONS:
+        if allowed is not None and suffix not in allowed:
+            continue
         section: dict[str, Any] = {"_uid": _uid(), "component": f"section_{suffix}"}
         for key in field_keys:
             section[key] = values[key]

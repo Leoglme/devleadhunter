@@ -63,6 +63,13 @@ def test_body_is_split_into_section_bloks() -> None:
     assert set(contact["logo"]) == {"fieldtype", "filename", "alt", "copyright", "name", "title", "focus", "id"}
 
 
+def test_used_sections_drop_unrendered_sections() -> None:
+    """A template's ``USED_SECTIONS`` keeps only the sections it renders, in order — no dead sections."""
+    body = sc.to_storyblok_site_content(_flat_site(), ["hero", "gallery", "contact"])
+
+    assert [blok["component"] for blok in body] == ["section_hero", "section_gallery", "section_contact"]
+
+
 def test_review_rating_is_pushed_as_string() -> None:
     """Storyblok ``number`` fields validate against strings — an int rating fails save/publish."""
     body = sc.to_storyblok_site_content(

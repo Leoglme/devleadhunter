@@ -153,8 +153,14 @@ def build_site_content(
 
 
 def to_storyblok_site_content(template_id: str, site_content: dict[str, Any]) -> list[dict[str, Any]]:
-    """Project a flat ``SiteContent`` into the template's Storyblok page ``body`` (list of section bloks)."""
-    return get_module(template_id).to_storyblok_site_content(site_content)
+    """Project a flat ``SiteContent`` into the template's Storyblok page ``body`` (list of section bloks).
+
+    A template may declare ``USED_SECTIONS`` (the sections it actually renders) so its client editor
+    shows no dead sections; a template without it gets every section.
+    """
+    module = get_module(template_id)
+    used_sections: list[str] | None = getattr(module, "USED_SECTIONS", None)
+    return module.to_storyblok_site_content(site_content, used_sections)
 
 
 def body_components() -> list[str]:
