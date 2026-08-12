@@ -20,6 +20,7 @@ def _flat_site() -> dict:
         "beforeAfter": [
             {"before": "https://img.example/b.jpg", "after": "https://img.example/a.jpg", "label": "Salon"}
         ],
+        "palette": {"primary": "#121212", "secondary": "#f8f5ef", "accent": "#dec7a6"},
     }
 
 
@@ -34,6 +35,9 @@ def test_images_become_storyblok_asset_objects() -> None:
         "https://img.example/g2.jpg",
     ]
     assert blok["beforeAfter"][0]["before"]["filename"] == "https://img.example/b.jpg"
+    # The palette is a single-blok field declared as ``bloks`` (maximum 1) → emitted as a list.
+    assert isinstance(blok["palette"], list)
+    assert blok["palette"][0]["component"] == "theme_palette"
 
 
 def test_round_trip_preserves_image_urls() -> None:
@@ -54,6 +58,7 @@ def test_round_trip_preserves_image_urls() -> None:
         "after": "https://img.example/a.jpg",
         "label": "Salon",
     }
+    assert flat["palette"] == {"primary": "#121212", "secondary": "#f8f5ef", "accent": "#dec7a6"}
 
 
 def test_flatten_tolerates_legacy_plain_url_strings() -> None:

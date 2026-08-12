@@ -194,13 +194,13 @@ class StoryblokService:
             site_content_blok = template_registry.to_storyblok_site_content(template_id, content_json)
             return {
                 "component": "page",
-                "theme": theme_block,
+                "theme": [theme_block],
                 "body": [site_content_blok],
             }
 
         return {
             "component": "page",
-            "theme": theme_block,
+            "theme": [theme_block],
             "body": content_json.get("body", []),
         }
 
@@ -653,7 +653,7 @@ class StoryblokService:
                 "is_nestable": False,
                 "schema": {
                     "theme": {
-                        "type": "blok",
+                        "type": "bloks",
                         "restrict_components": True,
                         "component_whitelist": ["theme_palette"],
                         "maximum": 1,

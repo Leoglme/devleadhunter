@@ -441,7 +441,7 @@ SITE_CONTENT_SCHEMAS: list[dict[str, Any]] = [
             },
             # ── Design ────────────────────────────────────────────────────
             "palette": {
-                "type": "blok",
+                "type": "bloks",
                 "pos": 28,
                 "display_name": "Couleurs du site",
                 "restrict_components": True,
@@ -589,13 +589,15 @@ def to_storyblok_site_content(site_content: dict[str, Any]) -> dict[str, Any]:
         "logo": _asset(site_content.get("logo", "")),
         "heroImage": _asset(site_content.get("heroImage", "")),
         "aboutImage": _asset(site_content.get("aboutImage", "")),
-        "palette": {
-            "_uid": _uid(),
-            "component": "theme_palette",
-            "primary": str(palette.get("primary", "")),
-            "secondary": str(palette.get("secondary", "")),
-            "accent": str(palette.get("accent", "")),
-        },
+        "palette": [
+            {
+                "_uid": _uid(),
+                "component": "theme_palette",
+                "primary": str(palette.get("primary", "")),
+                "secondary": str(palette.get("secondary", "")),
+                "accent": str(palette.get("accent", "")),
+            }
+        ],
         "gallery": [
             _asset(item.get("url", ""), str(item.get("alt", "") or ""))
             for item in site_content.get("gallery") or []
