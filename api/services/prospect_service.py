@@ -12,6 +12,7 @@ from models.prospect_enrichment import ProspectEnrichment
 from models.search import ProspectSearchRequest
 from models.user import User
 from services.prospect_emails import sync_prospect_emails
+from services.validation_service import ValidationService
 
 
 def _org_visibility_filter(user_id: int, organization_id: int | None):
@@ -161,6 +162,29 @@ class ProspectService:
             return Prospect.model_validate(db_prospect)
         return None
 
+    @staticmethod
+    def _demote_social_website(
+        website: str | None, website_status: str | None, facebook_url: str | None
+    ) -> tuple[str | None, str | None, str | None]:
+        """Demote a social page wrongly saved as a website: a Facebook page becomes ``facebook_url``, then cleared.
+
+        A Facebook/Instagram page is never a real website, so it must not mark the prospect as "has a site"
+        (which would hide it from the without-a-site targeting). Import and manual edits both flow through here.
+
+        Args:
+            website: The raw website URL to check.
+            website_status: The liveness status, cleared when the URL is social.
+            facebook_url: The existing Facebook URL, filled from the website only when empty and the URL is Facebook.
+
+        Returns:
+            The corrected ``(website, website_status, facebook_url)`` triple.
+        """
+        if website and ValidationService.is_social_url(website):
+            if "facebook.com" in website.lower() and not (facebook_url or "").strip():
+                facebook_url = website
+            return None, None, facebook_url
+        return website, website_status, facebook_url
+
     async def create_prospect(
         self,
         db: Session,
@@ -183,6 +207,12 @@ class ProspectService:
         # Convert Source enum to string
         source_value = prospect.source.value if hasattr(prospect.source, "value") else str(prospect.source)
 
+        website, website_status, facebook_url = self._demote_social_website(
+            prospect.website,
+            prospect.website_status.value if prospect.website_status is not None else None,
+            prospect.facebook_url,
+        )
+
         db_prospect = ProspectDB(
             name=prospect.name,
             address=prospect.address,
@@ -190,10 +220,10 @@ class ProspectService:
             phone=prospect.phone,
             email=prospect.email,
             emails=[prospect.email] if prospect.email else None,
-            website=prospect.website,
-            website_status=prospect.website_status.value if prospect.website_status is not None else None,
+            website=website,
+            website_status=website_status,
             google_maps_url=prospect.google_maps_url,
-            facebook_url=prospect.facebook_url,
+            facebook_url=facebook_url,
             category=prospect.category,
             source=source_value,
             confidence=prospect.confidence,
@@ -281,6 +311,17 @@ class ProspectService:
         # A manually corrected URL invalidates the liveness verdict of the old one.
         if "website" in update_dict and "website_status" not in update_dict:
             update_dict["website_status"] = None
+        # A social page (Facebook…) set as the website is demoted — it never counts as a real site.
+        if "website" in update_dict:
+            website, website_status, facebook_url = self._demote_social_website(
+                update_dict.get("website"),
+                update_dict.get("website_status"),
+                update_dict.get("facebook_url") or db_prospect.facebook_url,
+            )
+            update_dict["website"] = website
+            update_dict["website_status"] = website_status
+            if facebook_url and not (db_prospect.facebook_url or "").strip():
+                update_dict["facebook_url"] = facebook_url
         for field, value in update_dict.items():
             if field in ("source", "website_status") and value is not None:
                 # Convert enum to its stored string value

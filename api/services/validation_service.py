@@ -31,8 +31,34 @@ class ValidationService:
         {"les", "des", "sur", "sous", "chez", "sarl", "sas", "eurl", "ets", "saint", "sainte"}
     )
 
-    @staticmethod
-    def is_valid_website(url: str | None) -> bool:
+    # Social pages a business may list as its "website" — never a real website.
+    _SOCIAL_DOMAINS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "facebook.com",
+            "fb.com",
+            "instagram.com",
+            "twitter.com",
+            "x.com",
+            "linkedin.com",
+            "youtube.com",
+            "pinterest.com",
+            "tiktok.com",
+            "snapchat.com",
+        }
+    )
+
+    @classmethod
+    def is_social_url(cls, url: str | None) -> bool:
+        """Whether a URL points to a social-media page (Facebook, Instagram…), never a real website."""
+        if not url:
+            return False
+        cleaned = url.lower().replace("http://", "").replace("https://", "").replace("www.", "").strip()
+        host = cleaned.split("/")[0]
+        # Match the host exactly or as a subdomain, so "x.com" never matches "max.com".
+        return any(host == domain or host.endswith("." + domain) for domain in cls._SOCIAL_DOMAINS)
+
+    @classmethod
+    def is_valid_website(cls, url: str | None) -> bool:
         """
         Check if a website URL is valid (not a social media platform).
 
@@ -58,39 +84,15 @@ class ValidationService:
         if not url:
             return False
 
-        # Remove protocol if present
+        if cls.is_social_url(url):
+            return False
+
         url_clean = url.replace("http://", "").replace("https://", "").replace("www.", "").strip()
-
-        # List of invalid domains (social media platforms)
-        invalid_domains = [
-            "facebook.com",
-            "instagram.com",
-            "twitter.com",
-            "linkedin.com",
-            "youtube.com",
-            "pinterest.com",
-            "tiktok.com",
-            "snapchat.com",
-        ]
-
-        # Check if URL contains any invalid domain
-        for domain in invalid_domains:
-            if domain in url_clean:
-                return False
-
-        # Check if it's a real website (contains a dot and not just a domain name)
-        if "." in url_clean and not url_clean.startswith("www."):
-            # Basic validation: should have at least domain name
-            parts = url_clean.split("/")
-            domain = parts[0]
-
-            # Domain should have at least one dot (e.g., example.com)
-            if domain.count(".") >= 1:
-                # Split domain and check parts
-                domain_parts = domain.split(".")
-                # Should have at least 2 parts (name and extension)
-                if len(domain_parts) >= 2 and len(domain_parts[0]) > 0:
-                    return True
+        if "." in url_clean:
+            domain = url_clean.split("/")[0]
+            domain_parts = domain.split(".")
+            if len(domain_parts) >= 2 and len(domain_parts[0]) > 0:
+                return True
 
         return False
 

@@ -451,7 +451,7 @@ const selectedProspectIds: Ref<string[]> = ref([])
 
 // Filters
 const searchQuery: Ref<string> = ref('')
-const filterWebsite: Ref<'all' | 'yes' | 'no'> = ref('no')
+const filterWebsite: Ref<'all' | 'yes' | 'no'> = ref('all')
 const filterCity: Ref<string> = ref('')
 const filterCategory: Ref<string> = ref('')
 const currentPage: Ref<number> = ref(1)
@@ -785,7 +785,7 @@ function clearFilters(): void {
   searchQuery.value = ''
   filterCity.value = ''
   filterCategory.value = ''
-  filterWebsite.value = 'no'
+  filterWebsite.value = 'all'
   currentPage.value = 1
 }
 
