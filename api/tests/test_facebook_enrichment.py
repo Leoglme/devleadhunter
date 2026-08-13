@@ -133,6 +133,17 @@ def test_parse_og_description_strips_likes_prefix() -> None:
     assert "spécialités et saveurs mexicaines" in description
 
 
+def test_parse_og_description_strips_bare_likes_prefix() -> None:
+    """« {name}. {X} J'aime. {category} » (no « en parlent ») is stripped; weak pages return None."""
+    # Weak page: nothing but name + likes + category survives → drop it (better empty than noise).
+    assert _parse_og_description("Sawadee Thaï Foodtruck. 1 795 J’aime. Produit/service") is None
+    # Real copy after the likes prefix is kept, and the « X J'aime » noise is gone.
+    kept = _parse_og_description("Tasty Korea. 4 J’aime. Food Truck à Poitiers, spécialité poulet frit coréen")
+    assert kept is not None
+    assert "J’aime" not in kept
+    assert "poulet frit coréen" in kept
+
+
 def test_parse_bio_from_embedded_texts_keeps_full_intro() -> None:
     """Relay page-bio text is preferred when og:description is truncated."""
     bio = _parse_bio_from_embedded_texts(_PAGE_EMBEDDED_BIO)

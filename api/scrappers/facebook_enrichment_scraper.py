@@ -38,8 +38,9 @@ from scrappers.nodriver_executor import run_nodriver_task
 
 logger = logging.getLogger(__name__)
 
-# Cap aligned with the Google enrichment merge (photos 20 / reviews 12).
-_MAX_PHOTOS = 20
+# Cap aligned with the Google enrichment merge (photos 30 / reviews 12). More photos than we show:
+# Google's come first, Facebook's are appended as a secondary pool, and the user picks the best.
+_MAX_PHOTOS = 30
 _MAX_REVIEWS = 12
 
 # `\s` matches the thin/no-break spaces Facebook puts before « % », so « 96 % » / « 22 avis » parse verbatim.
@@ -220,18 +221,20 @@ _FB_PAGE_JS = r"""
             if (!out.website && /^https?:\/\//i.test(href) && !isSocial(low)) out.website = href;
         }
     } catch (e) {}
-    // Profile photo (logo candidate): only the scontent image whose alt/aria-label names the page,
-    // so we never mistake a cover photo or a post for the logo — no match means no logo (template fallback).
+    // Profile photo (logo candidate). Facebook renders it as an <svg role="img"><image xlink:href>
+    // with a circular mask, and its URL lives on the `t39.30808-1` CDN path (posts use `-6`). Accept
+    // it when the URL is on that profile path OR when the element's alt/aria-label names the page — so
+    // a cover photo or a post is never mistaken for the logo (no match → no logo → template fallback).
     try {
         const title = (out.place_title || '').toLowerCase().slice(0, 14);
-        if (title) {
-            for (const el of document.querySelectorAll('image, img')) {
-                const src = el.getAttribute('xlink:href') || el.getAttribute('href') || el.getAttribute('src') || '';
-                if (!/scontent/i.test(src)) continue;
-                const holder = el.closest('[aria-label]');
-                const label = ((el.getAttribute('alt') || '') + ' ' + (holder ? holder.getAttribute('aria-label') || '' : '')).toLowerCase();
-                if (label.includes(title)) { out.profile_photo = src; break; }
-            }
+        for (const el of document.querySelectorAll('image, img')) {
+            const src = el.getAttribute('xlink:href') || el.getAttribute('href') || el.getAttribute('src') || '';
+            if (!/scontent/i.test(src)) continue;
+            const holder = el.closest('[aria-label]');
+            const label = ((el.getAttribute('alt') || '') + ' ' + (holder ? holder.getAttribute('aria-label') || '' : '')).toLowerCase();
+            const isProfilePath = /\/t39\.30808-1\//.test(src);
+            const namesPage = title && label.includes(title);
+            if (isProfilePath || namesPage) { out.profile_photo = src; break; }
         }
     } catch (e) {}
     return out;
@@ -259,7 +262,7 @@ _FB_PHOTOS_JS = r"""
             const height = img.naturalHeight || img.height || 0;
             if (width > 0 && height > 0 && (width < minPx || height < minPx)) continue;
             push(src);
-            if (out.photos.length >= 20) break;
+            if (out.photos.length >= 30) break;
         }
     } catch (e) {}
     return out;
@@ -395,6 +398,9 @@ def _parse_og_description(og_description: str | None) -> str | None:
     if not (og_description or "").strip():
         return None
     text = _OG_LIKES_PREFIX_RE.sub("", og_description.strip()).strip()
+    # Weak pages give « {name}. {X} J'aime. {category} » with no « en parlent » — strip that shape too,
+    # so what's left is real copy (or nothing). Spaces cover the French thin/no-break number separators.
+    text = re.sub(r"^[^.]*\.\s*\d[\d\s  ]*j['’]aime\.\s*", "", text, flags=re.IGNORECASE).strip()
     text = re.sub(r"\s*\.\.\.\s*$", "", text).strip()
     text = re.sub(r"\s+", " ", text)
     return text if len(text) >= 40 else None

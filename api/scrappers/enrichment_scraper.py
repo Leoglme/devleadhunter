@@ -361,6 +361,17 @@ class EnrichmentScraper:
             data.description = facebook.description
         if facebook.emails:
             data.emails = [*data.emails, *facebook.emails]
+        # Photos: keep Google's first (most relevant), then APPEND Facebook's as a secondary source —
+        # better too many than too few; the enrichment panel lets the user reorder / pick the best.
+        if facebook.photos:
+            seen: set[str] = {url for url in data.photos if url}
+            for url in facebook.photos:
+                if url and url not in seen and len(data.photos) < 30:
+                    data.photos.append(url)
+                    seen.add(url)
+        # Logo: Google Maps never exposes one, so the Facebook profile photo fills it when present.
+        if not (data.logo_url or "").strip() and (facebook.logo_url or "").strip():
+            data.logo_url = facebook.logo_url
         if "facebook" not in data.source:
             data.source = f"{data.source}+facebook"
 
