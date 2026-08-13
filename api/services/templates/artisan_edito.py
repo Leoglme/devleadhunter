@@ -44,6 +44,8 @@ TEMPLATE_META: dict[str, object] = {
         "secondary": "#6B6355",
         "accent": "#E8A33C",
     },
+    # Édito's action colour is the amber accent (its primary is the dark editorial ink).
+    "brand_color_key": "accent",
 }
 
 # This template only uses the shared base bloks.

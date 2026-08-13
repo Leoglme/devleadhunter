@@ -38,7 +38,9 @@ def test_blank_url_yields_none() -> None:
 
 
 def test_brand_color_key_per_template() -> None:
-    # Barber's action colour is the gold accent; the others drive actions from primary.
+    # Barber and artisan-edito drive actions from the accent; the others from primary.
     assert registry.brand_color_key("barber") == "accent"
+    assert registry.brand_color_key("artisan-edito") == "accent"
     assert registry.brand_color_key("mechanic-pitlane") == "primary"
     assert registry.brand_color_key("food") == "primary"
+    assert registry.brand_color_key("plumber-cuivre") == "primary"
