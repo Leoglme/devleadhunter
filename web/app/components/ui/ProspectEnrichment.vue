@@ -180,12 +180,28 @@
 
         <div>
           <label class="mb-1 block text-[10px] text-[var(--app-ink-soft)]">Logo (URL)</label>
-          <input
-            v-model="form.logo_url"
-            type="url"
-            class="input-field"
-            placeholder="https://… — sa couleur de marque personnalise l'action du site généré"
-          />
+          <div class="flex items-start gap-2">
+            <div
+              v-if="trimmedLogoUrl && !hasLogoPreviewError"
+              class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--app-line)] bg-[var(--app-surface)]"
+            >
+              <img
+                :src="trimmedLogoUrl"
+                alt="Aperçu du logo"
+                class="h-full w-full object-contain"
+                @error="hasLogoPreviewError = true"
+              />
+            </div>
+            <input
+              v-model="form.logo_url"
+              type="url"
+              class="input-field min-w-0 flex-1"
+              placeholder="https://… — sa couleur de marque personnalise l'action du site généré"
+            />
+          </div>
+          <p v-if="trimmedLogoUrl && hasLogoPreviewError" class="mt-1 text-[10px] text-[var(--app-danger)]">
+            Image introuvable à cette URL.
+          </p>
         </div>
 
         <div>
@@ -428,6 +444,8 @@ const newService: Ref<string> = ref('')
 const photoDragIndex: Ref<number | null> = ref(null)
 /** Index of the photo currently highlighted as a drop target, or null. */
 const photoDropTargetIndex: Ref<number | null> = ref(null)
+/** True once the logo URL fails to load, so the broken-image preview is hidden. */
+const hasLogoPreviewError: Ref<boolean> = ref(false)
 
 const form: Ref<EnrichmentForm> = ref({
   rating: null,
@@ -466,6 +484,9 @@ const contactConfidenceBadgeClass: ComputedRef<string> = computed((): string =>
 const isIdentityConflict: ComputedRef<boolean> = computed(
   (): boolean => record.value?.identity_check_status === 'conflict',
 )
+
+/** URL du logo nettoyée : conditionne l'affichage de l'aperçu (vide → pas d'aperçu). */
+const trimmedLogoUrl: ComputedRef<string> = computed((): string => form.value.logo_url.trim())
 
 /** True when a name proposal awaits the user's confirm/reject decision. */
 const hasPendingProposal: ComputedRef<boolean> = computed(
@@ -758,5 +779,13 @@ watch(
     }
   },
   { immediate: true },
+)
+
+// Une nouvelle URL de logo réinitialise l'état d'erreur : on retente l'aperçu.
+watch(
+  (): string => form.value.logo_url,
+  (): void => {
+    hasLogoPreviewError.value = false
+  },
 )
 </script>
