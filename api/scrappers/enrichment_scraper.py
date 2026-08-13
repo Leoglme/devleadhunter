@@ -315,7 +315,45 @@ class EnrichmentScraper:
             logger.info("OSM enrichment failed for %s: %s", business_name, exc)
             osm = {}
         self._merge_osm(data, osm)
+
+        # Complementary Facebook read: the Maps listing often links a Facebook page that carries
+        # opening hours / social links (and, once multi-email lands, a contact email) Google doesn't
+        # expose. The FB URL comes from THIS listing, so it's the same business — gaps are safe to fill.
+        facebook_url = self._facebook_url_from_data(data)
+        if facebook_url and NODRIVER_AVAILABLE:
+            try:
+                from scrappers.facebook_enrichment_scraper import facebook_enrichment_scraper
+
+                facebook = await facebook_enrichment_scraper.enrich(
+                    business_name=business_name, facebook_url=facebook_url
+                )
+                self._merge_facebook(data, facebook)
+            except Exception as exc:
+                logger.info("Facebook complementary enrichment failed for %s: %s", business_name, exc)
+
         return data
+
+    @staticmethod
+    def _facebook_url_from_data(data: EnrichmentData) -> str | None:
+        """Return a Facebook page URL discovered on the Maps listing (a social link, or the "website"
+        link when it points to ``facebook.com``), or None."""
+        candidate = (data.social_links or {}).get("facebook")
+        if not candidate and "facebook.com/" in (data.website or "").lower():
+            candidate = data.website
+        candidate = (candidate or "").strip()
+        return candidate or None
+
+    @staticmethod
+    def _merge_facebook(data: EnrichmentData, facebook: EnrichmentData) -> None:
+        """Fill gaps in the Google-sourced data with the linked Facebook page (Google wins where present)."""
+        if not data.opening_hours and facebook.opening_hours:
+            data.opening_hours = facebook.opening_hours
+        if facebook.social_links:
+            data.social_links = {**facebook.social_links, **(data.social_links or {})}
+        if not data.description and facebook.description:
+            data.description = facebook.description
+        if "facebook" not in data.source:
+            data.source = f"{data.source}+facebook"
 
     @staticmethod
     def _merge_osm(data: EnrichmentData, osm: dict[str, Any]) -> None:
