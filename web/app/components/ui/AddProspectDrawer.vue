@@ -163,6 +163,36 @@
                 placeholder="Laissez vide si le prospect n'a pas de site"
               />
             </div>
+            <div>
+              <label class="text-muted mb-1.5 block text-xs font-medium" for="draft-gmaps">
+                Fiche Google Maps (URL)
+              </label>
+              <input
+                id="draft-gmaps"
+                v-model="prospectDraft.google_maps_url"
+                type="url"
+                class="input-field"
+                placeholder="https://www.google.com/maps/place/…"
+              />
+              <p class="text-muted mt-1 text-[10px] leading-relaxed">
+                La vraie URL de la fiche (pas une recherche) : l'enrichissement l'ouvre directement.
+              </p>
+            </div>
+            <div>
+              <label class="text-muted mb-1.5 block text-xs font-medium" for="draft-facebook">
+                Page Facebook (URL)
+              </label>
+              <input
+                id="draft-facebook"
+                v-model="prospectDraft.facebook_url"
+                type="url"
+                class="input-field"
+                placeholder="https://www.facebook.com/…"
+              />
+              <p class="text-muted mt-1 text-[10px] leading-relaxed">
+                Source d'enrichissement (avis, photos, email) — indispensable si le prospect n'a pas de fiche Google.
+              </p>
+            </div>
           </form>
         </div>
 
@@ -265,6 +295,8 @@ function createEmptyProspectDraft(): ProspectCreatePayload {
     email: '',
     website: '',
     category: '',
+    google_maps_url: '',
+    facebook_url: '',
     source: 'manual',
     confidence: 1,
   }
@@ -311,6 +343,8 @@ async function handleEnrichProspect(): Promise<void> {
       phone: result.phone ?? '',
       email: result.email ?? '',
       website: result.website ?? '',
+      google_maps_url: result.google_maps_url || addForm.value.google_maps_url.trim() || '',
+      facebook_url: result.facebook_url ?? '',
     }
   } catch (err: unknown) {
     enrichError.value = await describeScrapingFailure(err)
@@ -358,6 +392,8 @@ async function handleCreateProspect(): Promise<void> {
       email: prospectDraft.value.email?.trim() || null,
       website: prospectDraft.value.website?.trim() || null,
       category: prospectDraft.value.category.trim(),
+      google_maps_url: prospectDraft.value.google_maps_url?.trim() || null,
+      facebook_url: prospectDraft.value.facebook_url?.trim() || null,
       source: prospectDraft.value.source,
       confidence: prospectDraft.value.confidence,
     })
