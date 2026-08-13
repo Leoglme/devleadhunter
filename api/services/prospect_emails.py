@@ -34,6 +34,25 @@ def dedupe_emails(emails: list[object]) -> list[str]:
     return result
 
 
+def set_prospect_emails(prospect: ProspectDB, emails: list[object]) -> list[str]:
+    """Replace the prospect's whole email list with ``emails`` (deduped, order kept).
+
+    This is the human-edit path: the caller sends the full ordered list, so it covers reorder,
+    add and remove in one shot. ``emails[0]`` becomes the primary and ``email`` is synced to it.
+
+    Args:
+        prospect: The prospect to update in place.
+        emails: The new ordered list; the first entry becomes the primary.
+
+    Returns:
+        The cleaned, deduped list actually stored.
+    """
+    cleaned = dedupe_emails(emails)
+    prospect.emails = cleaned
+    prospect.email = cleaned[0] if cleaned else None
+    return cleaned
+
+
 def sync_prospect_emails(
     prospect: ProspectDB,
     *,

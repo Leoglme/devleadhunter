@@ -30,6 +30,7 @@ from enums.demo_site_status import DemoSiteStatus
 from enums.email_status import EmailStatus
 from models.demo_site import DemoSite
 from models.email_log import EmailLog
+from services.bounce_fallback_service import bounce_fallback_service
 from services.demo_identity import posthog_distinct_id, resolve_demo_slug
 from services.posthog_service import posthog_service
 from services.storyblok_service import storyblok_service
@@ -259,6 +260,10 @@ async def resend_webhook(
             email_log.provider_message_id = resend_message_id
         db.commit()
         logger.info("[Webhook] EmailLog %d: %s → %s", email_log.id, email_log.status, new_status)
+
+        # A hard bounce on the primary email → re-route to the prospect's next email (multi-email fallback).
+        if new_status == EmailStatus.BOUNCED.value:
+            bounce_fallback_service.handle_bounce(db, email_log)
 
         # Mirror the event into the PostHog event stream so it can be combined with
         # demo events in funnels. distinct_id = the prospect's demo slug → same person

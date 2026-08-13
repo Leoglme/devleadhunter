@@ -20,6 +20,7 @@ export type Prospect = {
   city?: string
   phone?: string
   email?: string
+  emails?: string[] | null
   website?: string
   website_status?: ProspectWebsiteStatus | null
   google_maps_url?: string | null

@@ -135,6 +135,18 @@ class ProspectUpdate(BaseModel):
     contacted: bool | None = Field(None, description="Whether this prospect has been contacted")
 
 
+class ProspectEmailsUpdate(BaseModel):
+    """Replace a prospect's full ordered email list (first entry = primary).
+
+    The client sends the whole list, so this single payload covers reorder, add and remove.
+    """
+
+    emails: list[EmailStr] = Field(
+        default_factory=list,
+        description="Ordered emails; the first one becomes the primary shown in the table and used to send.",
+    )
+
+
 class Prospect(ProspectBase):
     """Complete prospect model with ID and ownership metadata."""
 
@@ -159,6 +171,10 @@ class Prospect(ProspectBase):
     )
 
     id: int = Field(..., description="Unique prospect identifier")
+    emails: list[str] | None = Field(
+        None,
+        description="All known emails, ordered; emails[0] is the primary (mirrors the `email` field).",
+    )
     user_id: int = Field(..., description="User ID who saved this prospect")
     contacted: bool = Field(False, description="Whether this prospect has been contacted")
     created_at: datetime | None = Field(None, description="Timestamp when created")

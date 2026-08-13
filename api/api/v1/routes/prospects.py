@@ -13,6 +13,7 @@ from models.credit_settings import CreditSettings
 from models.prospect import (
     Prospect,
     ProspectCreate,
+    ProspectEmailsUpdate,
     ProspectEnrichRequest,
     ProspectSearchSuggestion,
     ProspectSearchSuggestionsRequest,
@@ -26,6 +27,7 @@ from services.credit_service import credit_service
 from services.enrichment_service import enrichment_service
 from services.lighthouse_service import LighthouseAuditError, lighthouse_service
 from services.organization_service import OrganizationError, organization_service
+from services.prospect_emails import set_prospect_emails
 from services.prospect_enrichment_service import prospect_enrichment_service
 from services.prospect_service import prospect_service
 from services.scraper_service import scraper_service
@@ -379,6 +381,42 @@ async def update_prospect(
     if not prospect:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Prospect {prospect_id} not found")
     return prospect
+
+
+@router.put(
+    "/{prospect_id}/emails",
+    response_model=Prospect,
+    summary="Replace a prospect's email list",
+    description="Set the full ordered email list (first = primary). Covers reorder, add and remove.",
+)
+async def update_prospect_emails(
+    prospect_id: int,
+    payload: ProspectEmailsUpdate,
+    current_user: User = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> Prospect:
+    """Replace a prospect's ordered email list; ``emails[0]`` becomes the primary.
+
+    Args:
+        prospect_id: Prospect to edit.
+        payload: The new ordered email list.
+        current_user: Authenticated caller.
+        db: Database session.
+
+    Returns:
+        The updated prospect.
+
+    Raises:
+        HTTPException: 404 when not visible, 403 when reserved by another member.
+    """
+    row = _get_visible_db_prospect(db, prospect_id, current_user)
+    _assert_not_reserved_by_other(db, current_user, row)
+
+    set_prospect_emails(row, list(payload.emails))
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return prospect_service._to_models_with_reservers(db, [row])[0]
 
 
 @router.delete(

@@ -11,6 +11,7 @@ from models.prospect_db import ProspectDB
 from models.prospect_enrichment import ProspectEnrichment
 from models.search import ProspectSearchRequest
 from models.user import User
+from services.prospect_emails import sync_prospect_emails
 
 
 def _org_visibility_filter(user_id: int, organization_id: int | None):
@@ -188,6 +189,7 @@ class ProspectService:
             city=prospect.city,
             phone=prospect.phone,
             email=prospect.email,
+            emails=[prospect.email] if prospect.email else None,
             website=prospect.website,
             website_status=prospect.website_status.value if prospect.website_status is not None else None,
             google_maps_url=prospect.google_maps_url,
@@ -284,6 +286,10 @@ class ProspectService:
                 # Convert enum to its stored string value
                 value = value.value if hasattr(value, "value") else str(value)
             setattr(db_prospect, field, value)
+
+        # Editing the primary email through the regular update keeps the multi-email list in sync.
+        if update_dict.get("email"):
+            sync_prospect_emails(db_prospect, primary=update_dict["email"])
 
         db.commit()
         db.refresh(db_prospect)

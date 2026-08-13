@@ -161,25 +161,17 @@
                 </a>
               </div>
 
-              <div class="flex items-center gap-3">
+              <div class="flex items-start gap-3">
                 <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--app-surface-2)]">
                   <UIcon name="i-lucide-mail" class="h-4 w-4 text-[var(--app-ink-soft)]" />
                 </div>
                 <div class="min-w-0 flex-1">
-                  <p class="text-[10px] text-[var(--app-ink-soft)]">Email</p>
-                  <p v-if="prospect.email" class="truncate text-sm font-medium text-[var(--app-ink)]">
-                    {{ prospect.email }}
-                  </p>
-                  <p v-else class="text-sm text-[var(--app-faint)]">—</p>
+                  <UiProspectEmails
+                    :prospect="prospect"
+                    :editable="canEditEmails"
+                    @updated="$emit('updated', $event)"
+                  />
                 </div>
-                <a
-                  v-if="prospect.email"
-                  :href="`mailto:${prospect.email}`"
-                  class="flex h-7 w-7 items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-accent-ink)]"
-                  title="Composer un email"
-                >
-                  <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5" />
-                </a>
               </div>
 
               <div class="flex items-center gap-3">
@@ -577,6 +569,9 @@ const isReservedByOther: ComputedRef<boolean> = computed(
   (): boolean =>
     props.prospect?.reserved_by_user_id != null && props.prospect.reserved_by_user_id !== currentUserId.value,
 )
+
+/** Emails stay editable unless another member currently holds the prospect. */
+const canEditEmails: ComputedRef<boolean> = computed((): boolean => !isReservedByOther.value)
 
 /** The four Lighthouse category gauges (red < 50, amber < 90, green otherwise). */
 const lighthouseGauges: ComputedRef<LighthouseGauge[]> = computed((): LighthouseGauge[] => {
