@@ -179,6 +179,16 @@
         </div>
 
         <div>
+          <label class="mb-1 block text-[10px] text-[var(--app-ink-soft)]">Logo (URL)</label>
+          <input
+            v-model="form.logo_url"
+            type="url"
+            class="input-field"
+            placeholder="https://… — sa couleur de marque personnalise l'action du site généré"
+          />
+        </div>
+
+        <div>
           <label class="mb-1 block text-[10px] text-[var(--app-ink-soft)]">Photos ({{ form.photos.length }})</label>
           <p class="mb-2 text-[10px] leading-relaxed text-[var(--app-ink-soft)]">
             Les premières photos sont les plus visibles sur le site. Glissez la poignée ou utilisez les flèches pour
@@ -423,6 +433,7 @@ const form: Ref<EnrichmentForm> = ref({
   rating: null,
   reviews_count: null,
   description: '',
+  logo_url: '',
   photos: [],
   services: [],
   reviews: [],
@@ -501,6 +512,7 @@ function syncForm(): void {
     rating: r?.rating ?? null,
     reviews_count: r?.reviews_count ?? null,
     description: r?.description ?? '',
+    logo_url: r?.logo_url ?? '',
     photos: [...(r?.photos ?? [])],
     services: [...(r?.services ?? [])],
     reviews: [...(r?.reviews ?? [])],
@@ -625,6 +637,7 @@ async function save(): Promise<void> {
       rating: form.value.rating,
       reviews_count: form.value.reviews_count,
       description: form.value.description || null,
+      logo_url: form.value.logo_url || null,
       photos: form.value.photos,
       services: form.value.services,
       reviews: form.value.reviews,

@@ -13,6 +13,7 @@ export type EnrichmentForm = {
   rating: number | null
   reviews_count: number | null
   description: string
+  logo_url: string
   photos: string[]
   services: string[]
   reviews: EnrichmentReview[]
