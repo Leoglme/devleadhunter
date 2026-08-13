@@ -7,16 +7,16 @@ export default defineNuxtConfig({
   // Website templates consumed as Nuxt layers from GitHub (public repos, no token),
   // pinned by tag. Each exposes one root component + relative-only sections.
   extends: [
-    'github:DevLeadHunter/devleadhunter-template-artisan-edito#v1.3.0',
-    'github:DevLeadHunter/devleadhunter-template-plumber-signature#v1.3.0',
-    'github:DevLeadHunter/devleadhunter-template-plumber-atelier#v1.4.0',
-    'github:DevLeadHunter/devleadhunter-template-plumber-cuivre#v1.3.0',
-    'github:DevLeadHunter/devleadhunter-template-electrician-lumen#v1.3.0',
+    'github:DevLeadHunter/devleadhunter-template-artisan-edito#v1.3.1',
+    'github:DevLeadHunter/devleadhunter-template-plumber-signature#v1.3.1',
+    'github:DevLeadHunter/devleadhunter-template-plumber-atelier#v1.4.1',
+    'github:DevLeadHunter/devleadhunter-template-plumber-cuivre#v1.3.1',
+    'github:DevLeadHunter/devleadhunter-template-electrician-lumen#v1.3.1',
     'github:DevLeadHunter/devleadhunter-template-mechanic-pitlane#v1.3.5',
-    'github:DevLeadHunter/devleadhunter-template-dental#v1.2.0',
+    'github:DevLeadHunter/devleadhunter-template-dental#v1.2.1',
     'github:DevLeadHunter/devleadhunter-template-food#v1.1.1',
     'github:DevLeadHunter/devleadhunter-template-barber#v1.2.2',
-    'github:DevLeadHunter/devleadhunter-template-landscaper-verdure#v1.2.0',
+    'github:DevLeadHunter/devleadhunter-template-landscaper-verdure#v1.2.1',
   ],
 
   compatibilityDate: '2024-07-11',
