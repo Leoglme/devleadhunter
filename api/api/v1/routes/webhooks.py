@@ -380,6 +380,14 @@ async def storyblok_webhook(
         )
         return
 
+    # Metrics injected by the API (address, Google rating/count, map coords) are not editable Storyblok
+    # sections, so the flattened story doesn't carry them — preserve them from the previous content_json,
+    # otherwise the address, the Google badge and the map would vanish on the client's first publish.
+    previous = site.content_json if isinstance(site.content_json, dict) else {}
+    for key in ("address", "rating", "reviewsCount", "lat", "lng"):
+        if key not in flat_content and previous.get(key) is not None:
+            flat_content[key] = previous[key]
+
     site.content_json = flat_content
     db.commit()
     logger.info("[Webhook] Demo site %d content_json synced from Storyblok space %s", site.id, space_id_raw)
