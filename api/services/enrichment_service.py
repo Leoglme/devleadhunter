@@ -258,12 +258,21 @@ class EnrichmentService:
                 self._record_diagnostic(prospect, None, error=mismatch)
             else:
                 self._apply_data(record, data)
+                # A Facebook page on the Maps listing (as the "website" link or a social link) is not a
+                # real website — capture it as the prospect's facebook_url so a later complementary
+                # Facebook enrichment can recover a second contact email (e.g. contact@…).
+                facebook_url = self._facebook_url_from_data(data)
+                if facebook_url and not (prospect.facebook_url or "").strip():
+                    prospect.facebook_url = facebook_url
+                    db.add(prospect)
+                    logger.info("Enrichment found a Facebook page for prospect_id=%s: %s", prospect.id, facebook_url)
                 # Double-check for a website: one on the Maps listing means the prospect
                 # isn't the « no website » target after all — fill it in when we had none.
-                if data.website and not (prospect.website or "").strip():
-                    prospect.website = data.website
+                website = (data.website or "").strip()
+                if website and "facebook.com/" not in website.lower() and not (prospect.website or "").strip():
+                    prospect.website = website
                     db.add(prospect)
-                    logger.info("Enrichment found a website for prospect_id=%s: %s", prospect.id, data.website)
+                    logger.info("Enrichment found a website for prospect_id=%s: %s", prospect.id, website)
                 record.status = EnrichmentStatus.COMPLETED.value
                 record.enriched_at = datetime.now(UTC)
                 self._record_diagnostic(prospect, data, error=None)
@@ -280,6 +289,22 @@ class EnrichmentService:
 
         db.refresh(record)
         return record
+
+    @staticmethod
+    def _facebook_url_from_data(data: object) -> str | None:
+        """Extract a Facebook page URL from scraped enrichment, or None.
+
+        Prefers an explicit social link; falls back to the Maps "website" link when it points to
+        ``facebook.com`` (a common case for businesses whose only web presence is a Facebook page).
+        """
+        social = getattr(data, "social_links", None)
+        candidate = social.get("facebook") if isinstance(social, dict) else None
+        if not candidate:
+            website = str(getattr(data, "website", "") or "")
+            if "facebook.com/" in website.lower():
+                candidate = website
+        candidate = str(candidate or "").strip()
+        return candidate or None
 
     async def _resolve_contact(self, db: Session, prospect: ProspectDB, record: ProspectEnrichment) -> None:
         """Run the decision-maker cascade and persist its 3-way outcome.
