@@ -11,6 +11,7 @@ from scrappers.facebook_enrichment_scraper import (
     _parse_reviews,
     _parse_reviews_from_embedded_texts,
     _rating_from_pct,
+    photo_identity,
 )
 
 # Real text captured from a public Facebook page's « À propos » panel.
@@ -209,6 +210,15 @@ def test_dedupe_photos_drops_static_ui_icons() -> None:
         "https://scontent.xx.fbcdn.net/v/t39.30808-6/photo.jpg",
         "https://scontent.xx.fbcdn.net/v/t39.30808-6/taco.jpg",
     ]
+
+
+def test_dedupe_photos_collapses_same_image_across_sizes() -> None:
+    """One Facebook photo served at many sizes / CDN nodes / params dedupes to one via its numeric id."""
+    same_a = "https://scontent-cdg6-1.xx.fbcdn.net/v/t39.30808-6/556857573_122106_n.jpg?stp=s600x600&_nc_ohc=A"
+    same_b = "https://scontent-cdg2-1.xx.fbcdn.net/v/t39.30808-6/556857573_122106_n.jpg?stp=p1080x1080&_nc_ohc=B"
+    other = "https://scontent-cdg6-1.xx.fbcdn.net/v/t39.30808-6/999999999_333_n.jpg?x=1"
+    assert photo_identity(same_a) == photo_identity(same_b) == "556857573"
+    assert _dedupe_photos([same_a, same_b, other]) == [same_a, other]
 
 
 def test_clean_social_url_strips_tracking_params() -> None:

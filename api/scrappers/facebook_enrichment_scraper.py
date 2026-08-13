@@ -38,9 +38,9 @@ from scrappers.nodriver_executor import run_nodriver_task
 
 logger = logging.getLogger(__name__)
 
-# Cap aligned with the Google enrichment merge (photos 30 / reviews 12). More photos than we show:
+# Cap aligned with the Google enrichment merge (photos 40 / reviews 12). More photos than we show:
 # Google's come first, Facebook's are appended as a secondary pool, and the user picks the best.
-_MAX_PHOTOS = 30
+_MAX_PHOTOS = 40
 _MAX_REVIEWS = 12
 
 # `\s` matches the thin/no-break spaces Facebook puts before « % », so « 96 % » / « 22 avis » parse verbatim.
@@ -569,20 +569,40 @@ def _merge_review_lists(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return merged
 
 
+def photo_identity(url: str) -> str:
+    """A stable identity so the SAME photo served at different sizes / CDN nodes / query strings
+    dedupes to one entry. Facebook fbcdn URLs embed a numeric photo id at the start of the filename
+    (``…/t39.30808-6/{id}_{hash}_n.jpg``) — keep that; otherwise (Google) fall back to host+path
+    without the size/tracking query string.
+    """
+    try:
+        parsed = urlparse(url)
+        name = parsed.path.rsplit("/", 1)[-1]
+        match = re.match(r"(\d{6,})_", name)
+        if match:
+            return match.group(1)
+        return f"{parsed.netloc}{parsed.path}"
+    except Exception:
+        return url.split("?", 1)[0]
+
+
 def _dedupe_photos(urls: list[str]) -> list[str]:
-    """Keep photo URLs unique while preserving order, capped at ``_MAX_PHOTOS``."""
+    """Keep photos unique by stable IMAGE IDENTITY (not raw URL) in order, capped at ``_MAX_PHOTOS``."""
     seen: set[str] = set()
     out: list[str] = []
     for url in urls:
         cleaned = (url or "").strip()
-        if not cleaned or cleaned in seen:
+        if not cleaned:
             continue
         # Icons / static assets sometimes slip through if the page rewrites src.
         if not re.search(r"scontent", cleaned, re.IGNORECASE):
             continue
         if re.search(r"emoji\.php|rsrc\.php|static\.xx\.fbcdn", cleaned, re.IGNORECASE):
             continue
-        seen.add(cleaned)
+        key = photo_identity(cleaned)
+        if key in seen:
+            continue
+        seen.add(key)
         out.append(cleaned)
         if len(out) >= _MAX_PHOTOS:
             break

@@ -166,35 +166,29 @@ class EnrichmentService:
             seen.add(key)
         return merged
 
-    @staticmethod
-    def _merge_photos(existing: list | None, incoming: list[str]) -> list[str]:
-        """Union photo URLs, preserving existing order first."""
-        merged: list[str] = [url for url in (existing or []) if isinstance(url, str) and url.strip()]
-        seen: set[str] = set(merged)
-        for url in incoming:
-            if not isinstance(url, str):
-                continue
-            cleaned: str = url.strip()
-            if not cleaned or cleaned in seen:
-                continue
-            merged.append(cleaned)
-            seen.add(cleaned)
-        return merged[:20]
-
     def _apply_data(self, record: ProspectEnrichment, data: EnrichmentData) -> None:
-        """Copy scraped data onto the record without wiping manual edits with blanks."""
+        """Copy the scraped data onto the record. « Relancer l'enrichissement » is a REFRESH: the
+        scrape-derived blurb and gallery are replaced (a fresh empty description clears the previous
+        stale one, photos are the new identity-deduped set), not merely filled when the record is blank.
+        """
         record.source = data.source or record.source
         if data.rating is not None:
             record.rating = data.rating
         if data.reviews_count is not None:
             record.reviews_count = data.reviews_count
-        # Guard against outdated sidecar payloads still sending the Maps page meta.
+        # Description: a re-run REFRESHES the blurb. When the fresh scrape yields nothing usable (weak
+        # Facebook page → the « X J'aime · category » meta is stripped to empty), CLEAR the previous
+        # value instead of keeping the stale/wrong one forever (Léo prefers empty over wrong).
         if data.description and not validation_service.is_generic_platform_description(data.description):
             record.description = data.description
+        else:
+            record.description = None
         if data.logo_url:
             record.logo_url = data.logo_url
         if data.photos:
-            record.photos = self._merge_photos(record.photos, data.photos)
+            # A re-run REFRESHES the gallery: replace with the fresh, identity-deduped scrape (Google
+            # first, Facebook appended) — no forever-union of stale URLs, no image-size duplicates.
+            record.photos = list(data.photos)[:40]
         if data.reviews:
             # Facebook re-scrapes often start from a single stale DOM review; prefer
             # a fuller incoming list instead of forever appending the first one.
@@ -272,6 +266,12 @@ class EnrichmentService:
                 emails = getattr(data, "emails", None) or []
                 if emails or not prospect.emails:
                     sync_prospect_emails(prospect, add=emails)
+                    db.add(prospect)
+                # A re-run must not leave a stale social page (Instagram, TikTok…) parked in the website
+                # field from an earlier enrichment or import — demote it first so it gets re-evaluated.
+                if (prospect.website or "").strip() and not validation_service.is_valid_website(prospect.website):
+                    logger.info("Enrichment demoted a social page stored as website for prospect_id=%s", prospect.id)
+                    prospect.website = None
                     db.add(prospect)
                 # Double-check for a website: a REAL one on the Maps listing means the prospect isn't
                 # the « no website » target after all — fill it in when we had none. Social pages
