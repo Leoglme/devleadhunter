@@ -20,6 +20,7 @@ from services.templates.site_content import (  # noqa: F401 — re-exported for 
     SITE_CONTENT_SCHEMAS,
     apply_real_rating_trust,
     map_prospect_and_enrichment,
+    resolve_trade_services,
     to_storyblok_site_content,
 )
 
@@ -196,12 +197,7 @@ def build_site_content(
         about_default=_SITE_ABOUT_DEFAULT,
     )
     enr = enrichment or {}
-    scraped = [
-        {"title": str(name).strip(), "description": ""}
-        for name in enr.get("services", [])
-        if isinstance(name, str) and str(name).strip()
-    ]
-    site["services"] = scraped or MECHANIC_SERVICES
+    site["services"] = resolve_trade_services(enr.get("services"), MECHANIC_SERVICES)
     site["faq"] = MECHANIC_FAQ
     site.update(_EDITORIAL_DEFAULTS)
     apply_real_rating_trust(site, enrichment)

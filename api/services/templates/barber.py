@@ -20,6 +20,7 @@ from services.templates.site_content import (  # noqa: F401 — re-exported for 
     SITE_CONTENT_SCHEMAS,
     experience_years_from_text,
     map_prospect_and_enrichment,
+    resolve_trade_services,
     to_storyblok_site_content,
 )
 
@@ -137,38 +138,6 @@ _EDITORIAL_DEFAULTS: dict[str, Any] = {
 }
 
 
-def _barber_service_description(title: str) -> str:
-    """Return a coherent default description for a scraped service title, matched by NAME.
-
-    A real service name dropped onto a template card must not inherit the leftover slot description
-    (a scraped "Coloration" once rendered the "coupe + barbe" copy). We reuse the trade default whose
-    title matches; an unknown service keeps an empty description (a clean title-only card) rather
-    than a wrong one — the client fills the rest in Storyblok.
-    """
-    key = title.strip().lower()
-    if not key:
-        return ""
-    for service in BARBER_SERVICES:
-        if service["title"].strip().lower() == key:
-            return service["description"]
-    for service in BARBER_SERVICES:
-        default_key = service["title"].strip().lower()
-        if default_key and (default_key in key or key in default_key):
-            return service["description"]
-    return ""
-
-
-def _resolve_barber_services(enrichment: dict[str, Any]) -> list[dict[str, str]]:
-    """Build the services list from scraped names, each paired with a name-matched description."""
-    services: list[dict[str, str]] = []
-    for name in enrichment.get("services", []):
-        if not isinstance(name, str) or not name.strip():
-            continue
-        title = name.strip()
-        services.append({"title": title, "description": _barber_service_description(title)})
-    return services
-
-
 def _apply_real_experience(site: dict[str, Any], about: Any) -> None:
     """Swap the "10+ / Années d'expérience" placeholder for a real count when the about text says so.
 
@@ -212,7 +181,7 @@ def build_site_content(
         about_default=_SITE_ABOUT_DEFAULT,
     )
     enr = enrichment or {}
-    site["services"] = _resolve_barber_services(enr) or BARBER_SERVICES
+    site["services"] = resolve_trade_services(enr.get("services"), BARBER_SERVICES)
     site["faq"] = BARBER_FAQ
     site.update(_EDITORIAL_DEFAULTS)
     _apply_real_experience(site, site.get("about"))

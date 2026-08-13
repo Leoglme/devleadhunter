@@ -21,6 +21,7 @@ from services.templates.site_content import (  # noqa: F401 — re-exported for 
     format_rating_value,
     format_review_count,
     map_prospect_and_enrichment,
+    resolve_trade_services,
     to_storyblok_site_content,
 )
 
@@ -184,12 +185,7 @@ def build_site_content(
         about_default=_SITE_ABOUT_DEFAULT,
     )
     enr = enrichment or {}
-    scraped = [
-        {"title": str(name).strip(), "description": ""}
-        for name in enr.get("services", [])
-        if isinstance(name, str) and str(name).strip()
-    ]
-    site["services"] = scraped or FOOD_SERVICES
+    site["services"] = resolve_trade_services(enr.get("services"), FOOD_SERVICES)
     site["faq"] = FOOD_FAQ
     site.update(_EDITORIAL_DEFAULTS)
     _apply_real_food_stats(site, enrichment)

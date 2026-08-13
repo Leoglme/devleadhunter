@@ -196,6 +196,54 @@ def experience_years_from_text(text: Any) -> int | None:
     return years if 1 <= years <= 80 else None
 
 
+_PRICE_SUFFIX_RE = re.compile(r"\s*[—–\-]\s*\d+(?:[.,]\d+)?\s*€\s*$")
+
+
+def without_price(description: Any) -> str:
+    """Strip a trailing "— 32 €" price from a service description.
+
+    Template service prices are invented defaults, never the prospect's real prices — showing one next
+    to a real scraped service name is misleading. We drop the price and keep the descriptive text.
+    """
+    if not isinstance(description, str):
+        return ""
+    return _PRICE_SUFFIX_RE.sub("", description).strip()
+
+
+def _match_service_description(name: str, defaults: list[dict[str, str]]) -> str:
+    """Return the trade default description whose title matches the scraped service name, or ""."""
+    key = name.strip().lower()
+    if not key:
+        return ""
+    for service in defaults:
+        if service.get("title", "").strip().lower() == key:
+            return service.get("description", "")
+    for service in defaults:
+        default_key = service.get("title", "").strip().lower()
+        if default_key and (default_key in key or key in default_key):
+            return service.get("description", "")
+    return ""
+
+
+def resolve_trade_services(scraped_names: Any, defaults: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Build the services list for a template, never attaching an invented price to a real service.
+
+    Scraped service names (real) are kept and paired with a name-matched default description **with the
+    price stripped** (a fuller card than an empty one, without a fake price). With no scraped services,
+    the template defaults are shown as a demo fallback — also price-stripped, so no site ever shows a
+    made-up price.
+    """
+    names = [name.strip() for name in (scraped_names or []) if isinstance(name, str) and name.strip()]
+    if names:
+        return [
+            {"title": name, "description": without_price(_match_service_description(name, defaults))} for name in names
+        ]
+    return [
+        {"title": service.get("title", ""), "description": without_price(service.get("description", ""))}
+        for service in defaults
+    ]
+
+
 def map_prospect_and_enrichment(
     *,
     business_name: str,
