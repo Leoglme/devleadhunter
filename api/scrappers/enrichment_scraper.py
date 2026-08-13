@@ -249,7 +249,10 @@ _HYDRATION_READY_JS = r"""
 })()
 """
 
-# Expand the weekly hours table and open the reviews tab before extraction.
+# Expand the weekly hours table before extraction. We deliberately DO NOT open the reviews
+# tab: clicking it now triggers Google's ReviewsService, which demands a sign-in (auth wall)
+# and dead-ends the scrape (browser lands on accounts.google.com and closes). Reviews are read
+# straight from the main place panel instead — fewer of them, but no wall.
 _PREPARE_PANEL_JS = r"""
 (() => {
     const txt = (el) => (el ? (el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim() : '');
@@ -265,7 +268,6 @@ _PREPARE_PANEL_JS = r"""
     };
     return {
         hours: clickNeedle(['horaire', 'hours', 'opening']),
-        reviews: clickNeedle(['avis', 'review']),
     };
 })()
 """
@@ -321,9 +323,10 @@ class EnrichmentScraper:
         self._merge_osm(data, osm)
 
         # Complementary Facebook read: the Maps listing often links a Facebook page that carries
-        # opening hours / social links (and, once multi-email lands, a contact email) Google doesn't
-        # expose. The FB URL comes from THIS listing, so it's the same business — gaps are safe to fill.
-        facebook_url = self._facebook_url_from_data(data)
+        # opening hours / social links / a contact email Google doesn't expose. Prefer the FB URL
+        # found on THIS listing; fall back to the one stored on the prospect (same business), so a
+        # manually-added FB page still enriches even when Google links only Instagram or is walled.
+        facebook_url = self._facebook_url_from_data(data) or (facebook_url or "").strip() or None
         if facebook_url and NODRIVER_AVAILABLE:
             try:
                 from scrappers.facebook_enrichment_scraper import facebook_enrichment_scraper
@@ -437,7 +440,9 @@ class EnrichmentScraper:
         deadline = asyncio.get_running_loop().time() + timeout_s
         while asyncio.get_running_loop().time() < deadline:
             status = await self._read_hydration_status(tab)
-            if status.get("hasReviewCount") and status.get("hourRowCount", 0) >= _ENRICHMENT_MIN_HOUR_ROWS:
+            # Weekly hours are the reliable wave-2 signal; the review count is a bonus that some
+            # listings (new places, food trucks) never render, so we no longer block on it.
+            if status.get("hourRowCount", 0) >= _ENRICHMENT_MIN_HOUR_ROWS:
                 return
             await asyncio.sleep(0.5)
 
@@ -480,10 +485,12 @@ class EnrichmentScraper:
 
     @staticmethod
     def _is_extraction_ready(data: EnrichmentData) -> bool:
-        """True when wave-2 data looks complete enough to stop retrying."""
-        has_review_count: bool = data.reviews_count is not None
-        has_weekly_hours: bool = len(data.opening_hours) >= _ENRICHMENT_MIN_HOUR_ROWS
-        return has_review_count and has_weekly_hours
+        """True when wave-2 data looks complete enough to stop retrying.
+
+        Weekly hours are the reliable signal; the review count is optional (new places and food
+        trucks often have none), so we don't burn extra attempts waiting for a count that never comes.
+        """
+        return len(data.opening_hours) >= _ENRICHMENT_MIN_HOUR_ROWS
 
     @staticmethod
     def _merge_attempt_data(current: EnrichmentData, incoming: EnrichmentData) -> EnrichmentData:
