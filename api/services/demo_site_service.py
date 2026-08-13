@@ -406,6 +406,10 @@ class DemoSiteService:
         db.refresh(demo_site)
 
         enrichment_dict: dict | None = await self._resolve_enrichment_for_creation(db, user.id, prospect_id)
+        # Personalise the action colour from the prospect's logo at first generation, not only on regenerate.
+        palette: dict[str, str] = self._apply_brand_color(
+            theme or self._default_theme_for_template(template_id), template_id, enrichment_dict
+        )
 
         try:
             provision: StoryblokProvisionResult = await storyblok_service.provision_space(
@@ -419,7 +423,7 @@ class DemoSiteService:
                 collaborator_email=email.strip(),
                 preview_url=self.demo_url_for_slug(slug),
                 invite_client=invite_client_to_cms,
-                theme=theme,
+                theme=palette,
                 enrichment=enrichment_dict,
             )
 
