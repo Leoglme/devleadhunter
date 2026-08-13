@@ -273,10 +273,12 @@ class EnrichmentService:
                 if emails or not prospect.emails:
                     sync_prospect_emails(prospect, add=emails)
                     db.add(prospect)
-                # Double-check for a website: one on the Maps listing means the prospect
-                # isn't the « no website » target after all — fill it in when we had none.
+                # Double-check for a website: a REAL one on the Maps listing means the prospect isn't
+                # the « no website » target after all — fill it in when we had none. Social pages
+                # (Instagram, TikTok, Facebook…) are NOT websites: is_valid_website rejects them all,
+                # so an Instagram-only food truck never gets wrongly flagged as « has a site ».
                 website = (data.website or "").strip()
-                if website and "facebook.com/" not in website.lower() and not (prospect.website or "").strip():
+                if website and validation_service.is_valid_website(website) and not (prospect.website or "").strip():
                     prospect.website = website
                     db.add(prospect)
                     logger.info("Enrichment found a website for prospect_id=%s: %s", prospect.id, website)
