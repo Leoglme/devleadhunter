@@ -47,6 +47,39 @@ class ValidationService:
         }
     )
 
+    # Media assets a business may list as its "website" by mistake — a poster/logo pulled from a
+    # Facebook post, a cloudinary image, an fbcdn photo… — never a real website.
+    _ASSET_EXTENSIONS: ClassVar[tuple[str, ...]] = (
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".svg",
+        ".avif",
+        ".bmp",
+        ".ico",
+        ".mp4",
+        ".pdf",
+    )
+    _ASSET_HOSTS: ClassVar[tuple[str, ...]] = (
+        "cloudinary.com",
+        "fbcdn.net",
+        "cdninstagram.com",
+        "googleusercontent.com",
+        "lookaside.",
+        "imgur.com",
+    )
+
+    @classmethod
+    def is_asset_url(cls, url: str | None) -> bool:
+        """Whether a URL points at a media asset (image / video / pdf), not a website."""
+        if not url:
+            return False
+        low = url.lower()
+        path = low.split("?", 1)[0].split("#", 1)[0]
+        return path.endswith(cls._ASSET_EXTENSIONS) or any(host in low for host in cls._ASSET_HOSTS)
+
     @classmethod
     def is_social_url(cls, url: str | None) -> bool:
         """Whether a URL points to a social-media page (Facebook, Instagram…), never a real website."""
@@ -85,6 +118,10 @@ class ValidationService:
             return False
 
         if cls.is_social_url(url):
+            return False
+
+        # A media asset (image/video/pdf) scraped from a post is not a website.
+        if cls.is_asset_url(url):
             return False
 
         url_clean = url.replace("http://", "").replace("https://", "").replace("www.", "").strip()

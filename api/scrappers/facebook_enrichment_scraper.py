@@ -209,6 +209,9 @@ _FB_PAGE_JS = r"""
     };
     const isSocial = (low) => ['facebook.com', 'instagram.com', 'tiktok.com', 'youtube.com',
         'linkedin.com', 'twitter.com', 'x.com', 'l.php', 'l.facebook'].some((needle) => low.includes(needle));
+    // A media asset (a poster/logo/photo from a post — e.g. a cloudinary .png) is NOT a website.
+    const isAsset = (low) => /\.(png|jpe?g|gif|webp|svg|avif|bmp|ico|mp4|pdf)(\?|#|$)/.test(low) ||
+        ['cloudinary.com', 'fbcdn', 'cdninstagram', 'googleusercontent', 'lookaside'].some((h) => low.includes(h));
     try {
         const nets = { facebook: 'facebook.com/', instagram: 'instagram.com/',
             tiktok: 'tiktok.com/', youtube: 'youtube.com/', linkedin: 'linkedin.com/' };
@@ -218,7 +221,7 @@ _FB_PAGE_JS = r"""
             for (const [net, needle] of Object.entries(nets)) {
                 if (!out.social[net] && low.includes(needle)) out.social[net] = href;
             }
-            if (!out.website && /^https?:\/\//i.test(href) && !isSocial(low)) out.website = href;
+            if (!out.website && /^https?:\/\//i.test(href) && !isSocial(low) && !isAsset(low)) out.website = href;
         }
     } catch (e) {}
     // Profile photo (logo candidate). Facebook renders it as an <svg role="img"><image xlink:href>
@@ -759,6 +762,15 @@ class FacebookEnrichmentScraper:
             try:
                 await NodriverDom.navigate(tab, url, sleep_s=1.2)
                 await self._prepare_tab(tab)
+                # Facebook only renders the first ~10 photos until the grid is scrolled — page through
+                # it several times (dismissing the login gate each hop) so we gather the fuller set.
+                for _ in range(10):
+                    try:
+                        await NodriverDom.evaluate(tab, _SCROLL_REVIEWS_JS, by_value=True)
+                    except Exception:
+                        break
+                    await asyncio.sleep(0.5)
+                    await self._dismiss_login_gate(tab)
                 payload = await self._extract_json(tab, _FB_PHOTOS_JS)
                 for photo in payload.get("photos", []):
                     if isinstance(photo, str) and photo.strip():
