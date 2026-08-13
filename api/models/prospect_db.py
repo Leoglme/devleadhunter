@@ -43,6 +43,8 @@ class ProspectDB(Base):
     city: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # All known emails, best-first; ``email`` above stays synced to ``emails[0]`` (the primary).
+    emails: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     website: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Liveness of the found website (WebsiteStatus value, NULL = none/unchecked).
     # Dead/placeholder prospects keep their URL so the verdict can be verified by hand.

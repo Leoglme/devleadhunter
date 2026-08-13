@@ -25,6 +25,7 @@ from scrappers import scrape_signals
 from scrappers.enrichment_scraper import EnrichmentData, enrichment_scraper
 from services.decision_maker.types import NameCandidate, NameResolution
 from services.enrichment_content import EnrichmentContentMapper
+from services.prospect_emails import sync_prospect_emails
 from services.scraper_diagnostics_service import (
     STATUS_BLOCKED,
     STATUS_EMPTY,
@@ -266,6 +267,12 @@ class EnrichmentService:
                     prospect.facebook_url = facebook_url
                     db.add(prospect)
                     logger.info("Enrichment found a Facebook page for prospect_id=%s: %s", prospect.id, facebook_url)
+                # Fold any discovered email (typically from the Facebook page) into the multi-email list,
+                # and backfill the list from the existing single email on first pass.
+                emails = getattr(data, "emails", None) or []
+                if emails or not prospect.emails:
+                    sync_prospect_emails(prospect, add=emails)
+                    db.add(prospect)
                 # Double-check for a website: one on the Maps listing means the prospect
                 # isn't the « no website » target after all — fill it in when we had none.
                 website = (data.website or "").strip()

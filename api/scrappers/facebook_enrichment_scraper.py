@@ -79,6 +79,31 @@ _SOCIAL_HOST_RE = re.compile(
     re.IGNORECASE,
 )
 _PHONE_LINE_RE = re.compile(r"^\+?\d[\d\s./()-]{6,}$")
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+# Domains/extensions that are never a business contact email (CDN assets, tracking, Facebook itself).
+_EMAIL_NOISE: tuple[str, ...] = ("facebook.com", "fbcdn", "sentry", "example.com", ".png", ".jpg", ".gif", ".svg")
+
+
+def _extract_emails(*texts: str) -> list[str]:
+    """Find contact emails in the Facebook page's own text (intro / about / embedded), deduped.
+
+    A business page usually lists a contact email (e.g. ``contact@…``) that Google Maps does not expose;
+    this is the whole point of the complementary Facebook read. CDN/tracking noise is filtered out.
+    """
+    found: list[str] = []
+    seen: set[str] = set()
+    for blob in texts:
+        for match in _EMAIL_RE.findall(blob or ""):
+            email = match.strip().rstrip(".").lower()
+            if any(noise in email for noise in _EMAIL_NOISE):
+                continue
+            if email in seen:
+                continue
+            seen.add(email)
+            found.append(email)
+    return found
+
+
 _TRACKING_QUERY_KEYS = frozenset(
     {
         "igsh",
@@ -757,6 +782,7 @@ class FacebookEnrichmentScraper:
             _parse_reviews_from_embedded_texts(embedded_texts or []),
             _parse_reviews(reviews_text),
         )
+        emails = _extract_emails(intro_text, about_text, "\n".join(page_embedded))
         return EnrichmentData(
             source="facebook",
             rating=_rating_from_pct(rating_pct),
@@ -766,6 +792,7 @@ class FacebookEnrichmentScraper:
             photos=photo_urls,
             reviews=reviews,
             social_links=social,
+            emails=emails,
             place_title=place_title or None,
         )
 

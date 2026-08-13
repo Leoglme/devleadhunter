@@ -46,6 +46,9 @@ class EnrichmentData:
     opening_hours: list[dict[str, str]] = field(default_factory=list)
     services: list[str] = field(default_factory=list)
     social_links: dict[str, str] = field(default_factory=dict)
+    # Contact emails discovered while enriching (e.g. from the linked Facebook page) — folded into the
+    # prospect's multi-email list. Usually empty from Google Maps, which rarely exposes an email.
+    emails: list[str] = field(default_factory=list)
     # Identity of the Maps place the data was ACTUALLY read from — lets the
     # service reject a homonym's listing instead of silently absorbing it.
     # None on payloads from older desktop sidecars (identity check skipped).
@@ -67,6 +70,7 @@ class EnrichmentData:
             "opening_hours": self.opening_hours,
             "services": self.services,
             "social_links": self.social_links,
+            "emails": self.emails,
             "place_title": self.place_title,
             "place_city": self.place_city,
             "place_postal_code": self.place_postal_code,
@@ -352,6 +356,8 @@ class EnrichmentScraper:
             data.social_links = {**facebook.social_links, **(data.social_links or {})}
         if not data.description and facebook.description:
             data.description = facebook.description
+        if facebook.emails:
+            data.emails = [*data.emails, *facebook.emails]
         if "facebook" not in data.source:
             data.source = f"{data.source}+facebook"
 
