@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from enums.demo_site_status import DemoSiteStatus
 from models.demo_site import DemoSite
+from models.order import Order
 from models.user import User
 from services.demo_site_verification_service import (
     DemoSiteVerificationResult,
@@ -551,8 +552,12 @@ class DemoSiteService:
         return demo_site
 
     async def delete_demo_site(self, db: Session, demo_site: DemoSite) -> None:
-        """Soft-delete a demo site and remove its Storyblok space when present."""
-        now: datetime = datetime.now(UTC)
+        """Delete a demo site and its Storyblok space, freeing its slug for a clean regeneration.
+
+        A site tied to a sale (already delivered, or referenced by an order) is soft-deleted so the
+        order keeps a valid ``demo_site_id``; any other site is hard-deleted so its unique slug is
+        freed and a later regeneration reuses it without a ``-2`` suffix.
+        """
         try:
             deleted_space_id: int | None = await storyblok_service.delete_demo_space(
                 space_id=demo_site.storyblok_space_id,
@@ -565,6 +570,27 @@ class DemoSiteService:
         except Exception as exc:
             logger.warning("Failed to delete Storyblok space for slug=%s: %s", demo_site.slug, exc)
 
+        # Purge the generated prospection video files with the demo, whichever deletion path we take.
+        from services.demo_video_service import delete_files_for_slug
+
+        delete_files_for_slug(demo_site.slug)
+
+        if self._is_tied_to_sale(db, demo_site):
+            self._soft_delete(demo_site)
+        else:
+            db.delete(demo_site)
+        db.commit()
+
+    @staticmethod
+    def _is_tied_to_sale(db: Session, demo_site: DemoSite) -> bool:
+        """Whether the site was sold — delivered, or referenced by an order — so its row must be kept."""
+        if demo_site.status == DemoSiteStatus.DELIVERED.value:
+            return True
+        return db.query(Order.id).filter(Order.demo_site_id == demo_site.id).first() is not None
+
+    @staticmethod
+    def _soft_delete(demo_site: DemoSite) -> None:
+        """Blank a sold site's provisioning data and flag it deleted, keeping the row for its order link."""
         demo_site.storyblok_space_id = None
         demo_site.storyblok_public_token = None
         demo_site.storyblok_preview_token = None
@@ -581,16 +607,10 @@ class DemoSiteService:
         demo_site.verification_message = None
         demo_site.error_message = None
         demo_site.status = DemoSiteStatus.DELETED.value
-        demo_site.deleted_at = now
-
-        # Purge the generated prospection video files with the demo.
-        from services.demo_video_service import delete_files_for_slug
-
-        delete_files_for_slug(demo_site.slug)
+        demo_site.deleted_at = datetime.now(UTC)
         demo_site.video_status = None
         demo_site.video_error = None
         demo_site.video_generated_at = None
-        db.commit()
 
     async def expire_due_sites(self, db: Session) -> int:
         """
