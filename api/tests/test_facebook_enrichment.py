@@ -220,6 +220,7 @@ def test_build_from_raw_produces_facebook_enrichment() -> None:
             "tiktok": "https://www.tiktok.com/@food.truck.mexicai?_r=1&_t=ZN-93MqQbLcVJ0",
         },
         "website": None,
+        "profile_photo": "https://scontent.xx.fbcdn.net/v/t1/logo.jpg",
     }
     gallery = [
         "https://static.xx.fbcdn.net/rsrc.php/icon.webp",
@@ -236,6 +237,7 @@ def test_build_from_raw_produces_facebook_enrichment() -> None:
     assert data.social_links["tiktok"].endswith("food.truck.mexicai")
     assert "igsh=" not in data.social_links["instagram"]
     assert data.website is None
+    assert data.logo_url == "https://scontent.xx.fbcdn.net/v/t1/logo.jpg"
     assert data.photos == ["https://scontent.xx.fbcdn.net/v/t1/photo.jpg"]
     assert len(data.reviews) >= 3
     authors = {review["author"] for review in data.reviews}

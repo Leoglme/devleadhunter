@@ -155,7 +155,7 @@ _FB_PAGE_JS = r"""
 (() => {
     const out = {
         place_title: null, intro_text: '', about_text: '', og_description: null,
-        embedded_texts: [], social: {}, website: null
+        embedded_texts: [], social: {}, website: null, profile_photo: null
     };
     const txt = (el) => (el ? (el.innerText || el.textContent || '').trim() : '');
     try { out.place_title = txt(document.querySelector('h1')) || null; } catch (e) {}
@@ -218,6 +218,20 @@ _FB_PAGE_JS = r"""
                 if (!out.social[net] && low.includes(needle)) out.social[net] = href;
             }
             if (!out.website && /^https?:\/\//i.test(href) && !isSocial(low)) out.website = href;
+        }
+    } catch (e) {}
+    // Profile photo (logo candidate): only the scontent image whose alt/aria-label names the page,
+    // so we never mistake a cover photo or a post for the logo — no match means no logo (template fallback).
+    try {
+        const title = (out.place_title || '').toLowerCase().slice(0, 14);
+        if (title) {
+            for (const el of document.querySelectorAll('image, img')) {
+                const src = el.getAttribute('xlink:href') || el.getAttribute('href') || el.getAttribute('src') || '';
+                if (!/scontent/i.test(src)) continue;
+                const holder = el.closest('[aria-label]');
+                const label = ((el.getAttribute('alt') || '') + ' ' + (holder ? holder.getAttribute('aria-label') || '' : '')).toLowerCase();
+                if (label.includes(title)) { out.profile_photo = src; break; }
+            }
         }
     } catch (e) {}
     return out;
@@ -783,6 +797,7 @@ class FacebookEnrichmentScraper:
             _parse_reviews(reviews_text),
         )
         emails = _extract_emails(intro_text, about_text, "\n".join(page_embedded))
+        logo_url = str(dom["profile_photo"]).strip() if dom.get("profile_photo") else None
         return EnrichmentData(
             source="facebook",
             rating=_rating_from_pct(rating_pct),
@@ -794,6 +809,7 @@ class FacebookEnrichmentScraper:
             social_links=social,
             emails=emails,
             place_title=place_title or None,
+            logo_url=logo_url,
         )
 
 
