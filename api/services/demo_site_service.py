@@ -14,6 +14,7 @@ from enums.demo_site_status import DemoSiteStatus
 from models.demo_site import DemoSite
 from models.order import Order
 from models.user import User
+from services.brand_color_service import brand_color_service
 from services.demo_site_verification_service import (
     DemoSiteVerificationResult,
     demo_site_verification_service,
@@ -154,11 +155,13 @@ class DemoSiteService:
         self, db: Session, demo_site: DemoSite, theme: dict[str, str] | None = None
     ) -> dict:
         """Build Storyblok content JSON from the demo site record (with enrichment)."""
+        enrichment = self._enrichment_dict_for_site(db, demo_site)
         palette = (
             theme
             or self._theme_from_content(demo_site.content_json)
             or self._default_theme_for_template(demo_site.template_id)
         )
+        palette = self._apply_brand_color(palette, demo_site.template_id, enrichment)
         return storyblok_service.build_content_json(
             business_name=demo_site.business_name,
             phone=demo_site.phone,
@@ -167,8 +170,27 @@ class DemoSiteService:
             description=demo_site.description,
             template_id=demo_site.template_id,
             theme=palette,
-            enrichment=self._enrichment_dict_for_site(db, demo_site),
+            enrichment=enrichment,
         )
+
+    @staticmethod
+    def _apply_brand_color(palette: dict[str, str], template_id: str, enrichment: dict | None) -> dict[str, str]:
+        """Override the template's action colour with the prospect's brand colour (from its logo), if usable.
+
+        A logo that yields no vivid colour leaves the template palette untouched, so the DA is never degraded.
+
+        Args:
+            palette: The base palette (template default or stored theme).
+            template_id: Template whose action-colour key receives the brand colour.
+            enrichment: The prospect enrichment dict (holds ``logo_url``), or None.
+
+        Returns:
+            A new palette with the action colour overridden, or the base palette unchanged.
+        """
+        brand = brand_color_service.extract_brand_color((enrichment or {}).get("logo_url"))
+        if not brand:
+            return palette
+        return {**palette, template_registry.brand_color_key(template_id): brand}
 
     def slugify(self, value: str) -> str:
         """Convert a business name into a URL-safe slug."""

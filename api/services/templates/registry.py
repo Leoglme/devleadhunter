@@ -92,6 +92,18 @@ def default_theme(template_id: str) -> dict[str, str]:
     return {"primary": "#0284c7", "secondary": "#0f172a", "accent": "#f59e0b"}
 
 
+def brand_color_key(template_id: str) -> str:
+    """Return the palette key a template uses for its action colour, overridden by the prospect's brand colour.
+
+    Most templates drive their buttons/highlights from ``primary`` (mechanic's red, food's green); barber is
+    the exception — its ``primary`` is the dark charcoal and the action colour is the gold ``accent``. A
+    template declares it via ``TEMPLATE_META['brand_color_key']``; the default is ``primary``.
+    """
+    meta = getattr(get_module(template_id), "TEMPLATE_META", {}) or {}
+    key = meta.get("brand_color_key")
+    return key if key in ("primary", "secondary", "accent") else "primary"
+
+
 def build_content(
     *,
     template_id: str,

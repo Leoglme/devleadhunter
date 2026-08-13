@@ -42,6 +42,8 @@ TEMPLATE_META: dict[str, object] = {
         "secondary": "#f8f5ef",
         "accent": "#dec7a6",
     },
+    # Barber's action colour is the gold accent (its primary is the dark charcoal).
+    "brand_color_key": "accent",
 }
 
 # Shared base bloks only (flat SiteContent).
