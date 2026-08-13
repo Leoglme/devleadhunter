@@ -18,7 +18,7 @@ from typing import Any
 
 from services.templates.site_content import (  # noqa: F401 — re-exported for the registry
     SITE_CONTENT_SCHEMAS,
-    experience_years_from_text,
+    apply_real_trust_stats,
     map_prospect_and_enrichment,
     resolve_trade_services,
     to_storyblok_site_content,
@@ -138,20 +138,6 @@ _EDITORIAL_DEFAULTS: dict[str, Any] = {
 }
 
 
-def _apply_real_experience(site: dict[str, Any], about: Any) -> None:
-    """Swap the "10+ / Années d'expérience" placeholder for a real count when the about text says so.
-
-    Only fires on an explicit "depuis 20xx" mention; otherwise the editorial "10+" fallback stays.
-    """
-    years = experience_years_from_text(about)
-    if years is None:
-        return
-    for item in site.get("trustItems", []):
-        if isinstance(item, dict) and "expérience" in str(item.get("label", "")).lower():
-            item["value"] = f"{years}+"
-            return
-
-
 def build_site_content(
     *,
     business_name: str,
@@ -184,5 +170,5 @@ def build_site_content(
     site["services"] = resolve_trade_services(enr.get("services"), BARBER_SERVICES)
     site["faq"] = BARBER_FAQ
     site.update(_EDITORIAL_DEFAULTS)
-    _apply_real_experience(site, site.get("about"))
+    apply_real_trust_stats(site, enrichment)
     return site

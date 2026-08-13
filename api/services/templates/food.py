@@ -150,10 +150,13 @@ def _apply_real_food_stats(site: dict[str, Any], enrichment: dict[str, Any] | No
     stats = site.get("trustItems")
     if not isinstance(stats, list):
         return
+    # Copy so the shared, module-level ``_EDITORIAL_DEFAULTS`` is never mutated across generations.
+    stats = [dict(item) if isinstance(item, dict) else item for item in stats]
     if rating_value and len(stats) >= 1:
         stats[0] = {"value": rating_value, "label": "Avis Google"}
     if count_value and len(stats) >= 2:
         stats[1] = {"value": count_value, "label": "Avis clients"}
+    site["trustItems"] = stats
 
 
 def build_site_content(

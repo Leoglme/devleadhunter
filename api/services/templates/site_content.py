@@ -196,6 +196,48 @@ def experience_years_from_text(text: Any) -> int | None:
     return years if 1 <= years <= 80 else None
 
 
+def apply_real_trust_stats(site: dict[str, Any], enrichment: dict[str, Any] | None) -> None:
+    """Fill a template's trust badges from real data instead of fabricated numbers.
+
+    By label: a "satisfaction" badge derives its percentage from the real Google rating (4,9/5 → 98 %);
+    an "experience" badge shows the real years in business (from a "depuis 20xx" mention), or the real
+    review count when the founding year is unknown; a "rating/avis" badge shows the real rating + count.
+    Each badge keeps its editorial default only when no real figure exists. Mutates ``site`` in place.
+    """
+    enr = enrichment or {}
+    rating = enr.get("rating")
+    satisfaction = round(float(rating) / 5 * 100) if isinstance(rating, (int, float)) and rating > 0 else None
+    rating_value = format_rating_value(rating)
+    count_value = format_review_count(enr.get("reviews_count"))
+    years = experience_years_from_text(site.get("about"))
+    items = site.get("trustItems")
+    if not isinstance(items, list):
+        return
+    result: list[Any] = []
+    for original in items:
+        if not isinstance(original, dict):
+            result.append(original)
+            continue
+        # Copy so the shared, module-level ``_EDITORIAL_DEFAULTS`` is never mutated across generations.
+        item = dict(original)
+        label = str(item.get("label", "")).lower()
+        value = str(item.get("value", "")).strip()
+        if "satisfait" in label or "satisfaction" in label:
+            if satisfaction is not None:
+                item["value"] = f"{satisfaction}%"
+        elif "expérience" in label or "année" in label:
+            if years is not None:
+                item["value"] = f"{years}+"
+            elif count_value:
+                item["value"], item["label"] = count_value, "avis Google"
+        elif "avis" in label or _RATING_VALUE_RE.match(value):
+            if rating_value:
+                item["value"] = rating_value
+                item["label"] = f"{count_value} avis" if count_value else "Avis Google"
+        result.append(item)
+    site["trustItems"] = result
+
+
 _PRICE_SUFFIX_RE = re.compile(r"\s*[—–\-]\s*\d+(?:[.,]\d+)?\s*€\s*$")
 
 
