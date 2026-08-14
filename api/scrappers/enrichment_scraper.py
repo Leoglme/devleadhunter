@@ -155,8 +155,9 @@ _EXTRACT_JS = r"""
             if (!src || src.indexOf('googleusercontent') === -1) return;
             // keep only reasonably large images (skip tiny avatars)
             if (/=s\d{1,2}-/.test(src) || /=w\d{1,2}-/.test(src)) return;
-            // normalize size to a large variant
-            src = src.replace(/=w\d+-h\d+.*$/, '=w1200-h800').replace(/=s\d+.*$/, '=s1200');
+            // normalize the size param to ONE large variant so the same photo — served here as a small
+            // panel <img> and in the grid as a background-image thumb — collapses to an identical URL.
+            src = /=[\w-]+$/.test(src) ? src.replace(/=[\w-]+$/, '=s1600') : (src + '=s1600');
             if (!seen.has(src)) { seen.add(src); out.photos.push(src); }
         });
         out.photos = out.photos.slice(0, 20);
@@ -272,19 +273,69 @@ _PREPARE_PANEL_JS = r"""
 })()
 """
 
-# « Voir les photos » / « Voir toutes les photos » opens the photo grid, which — unlike the reviews
-# tab (ReviewsService sign-in wall) — loads fully even logged-out. Clicking it renders far more
-# googleusercontent images into the DOM for the extraction to pick up.
+# The hero header carries a dedicated « Voir les photos » button (class Dx2nRe) that opens the full
+# photo grid, which — unlike the reviews tab (ReviewsService sign-in wall) — loads fully even
+# logged-out. Prefer that button by class; fall back to any button labelled with « photos ».
 _OPEN_PHOTOS_JS = r"""
 (() => {
+    const direct = document.querySelector('button.Dx2nRe');
+    if (direct) { try { direct.click(); return true; } catch (e) {} }
     for (const el of document.querySelectorAll('button, [role="button"]')) {
         const label = (el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim().toLowerCase();
         if (label === 'voir les photos' || label === 'voir toutes les photos' ||
-            label.includes('see all photos') || label.includes('all photos')) {
+            label.includes('see all photos') || label.includes('all photos') ||
+            label.includes('toutes les photos')) {
             try { el.click(); return true; } catch (e) {}
         }
     }
     return false;
+})()
+"""
+
+# Read the OPEN photo grid. Each tile is `<a class="MIgS0d" data-photo-index>` whose picture is a
+# `background-image` on an inner div (NOT an <img>), so the panel extraction never saw it. Videos are
+# mixed in (aria-label « Vidéo » / a `.bKP3Ce` duration badge) and excluded. URLs are normalised to the
+# same `=s1600` variant as the panel photos so identical shots collapse on dedup.
+_GRID_PHOTOS_JS = r"""
+(() => {
+    const urls = [];
+    const seen = new Set();
+    const norm = (u) => /=[\w-]+$/.test(u) ? u.replace(/=[\w-]+$/, '=s1600') : (u + '=s1600');
+    const grab = (bg) => {
+        if (!bg || bg === 'none') return '';
+        const m = bg.match(/url\((['"]?)(.*?)\1\)/);
+        return m ? m[2] : '';
+    };
+    document.querySelectorAll('a.MIgS0d[data-photo-index]').forEach((a) => {
+        const label = (a.getAttribute('aria-label') || '').toLowerCase();
+        if (label.indexOf('vidéo') !== -1 || label.indexOf('video') !== -1) return;
+        if (a.querySelector('.bKP3Ce')) return;
+        const outer = a.querySelector('.aHpZye');
+        const inner = a.querySelector('.gCPOGf');
+        let src = grab(outer && outer.style.backgroundImage) || grab(inner && inner.style.backgroundImage);
+        if (!src || src.indexOf('googleusercontent') === -1) return;
+        src = norm(src);
+        if (!seen.has(src)) { seen.add(src); urls.push(src); }
+    });
+    return urls;
+})()
+"""
+
+# Nudge the grid's own scroll container down one step. The tiles are virtualised (absolutely positioned
+# in a tall relative box, unloaded once scrolled past), so we step in small increments and read after
+# each — reading only at the end would miss most photos.
+_GRID_SCROLL_JS = r"""
+(() => {
+    const anchors = document.querySelectorAll('a.MIgS0d[data-photo-index]');
+    if (!anchors.length) return 0;
+    let el = anchors[anchors.length - 1];
+    let scroller = null;
+    while (el && el !== document.body) {
+        if (el.scrollHeight > el.clientHeight + 40) { scroller = el; break; }
+        el = el.parentElement;
+    }
+    if (scroller) scroller.scrollTop = scroller.scrollTop + 1200;
+    return anchors.length;
 })()
 """
 
@@ -581,29 +632,53 @@ class EnrichmentScraper:
             pass
 
     async def _grab_more_photos(self, tab: Any, data: EnrichmentData) -> None:
-        """Open « Voir les photos » and merge the fuller photo grid into ``data.photos``.
+        """Open « Voir les photos » and merge the full photo grid into ``data.photos``.
 
-        Isolated + best-effort: runs AFTER the main extraction and only ADDS photos, so a failure (or
-        a place with no grid) never touches the data already gathered. The grid loads logged-out —
-        unlike the reviews wall — so opening it is safe.
+        The grid tiles are ``background-image`` divs inside ``a.MIgS0d`` (not <img>), lazy-loaded and
+        virtualised, so we open the grid, step-scroll its own container, and collect the URLs after each
+        step (reading only at the end would miss tiles unloaded on the way). Isolated + best-effort:
+        runs AFTER the main extraction and only ADDS photos, so a failure never touches what we have.
         """
         try:
             opened = await NodriverDom.evaluate(tab, _OPEN_PHOTOS_JS, by_value=True)
             if opened is not True:
                 return
-            await asyncio.sleep(1.2)
-            for _ in range(8):
-                await NodriverDom.scroll_element(tab, "div[role='main']", 1600)
-                await asyncio.sleep(0.4)
-            more = await self._extract_raw(tab)
-            grid_photos = [p for p in more.get("photos", []) if isinstance(p, str) and p.strip()]
+            if not await NodriverDom.wait_for_selector(tab, "a.MIgS0d[data-photo-index]", timeout_s=6.0):
+                return
+
             seen: set[str] = {url for url in data.photos if url}
-            for url in grid_photos:
-                if url not in seen:
-                    data.photos.append(url)
-                    seen.add(url)
+            merged: list[str] = list(data.photos)
+            stable_rounds = 0
+            for _ in range(28):
+                added = 0
+                for url in await self._read_grid_photos(tab):
+                    if url and url not in seen:
+                        seen.add(url)
+                        merged.append(url)
+                        added += 1
+                stable_rounds = 0 if added else stable_rounds + 1
+                if stable_rounds >= 3 or len(merged) >= 40:
+                    break
+                await NodriverDom.evaluate(tab, _GRID_SCROLL_JS, by_value=True)
+                await asyncio.sleep(0.5)
+            # Cap at the same 40 the record ultimately stores: collecting more only wastes downloads in
+            # the perceptual dedup and would crowd out the Facebook photos merged in right after.
+            data.photos = merged[:40]
         except Exception as exc:
             logger.info("Extra Google photo pass failed: %s", exc)
+
+    async def _read_grid_photos(self, tab: Any) -> list[str]:
+        """Read the currently-loaded photo tiles from the open grid (videos excluded)."""
+        raw = await NodriverDom.evaluate(tab, f"JSON.stringify({_GRID_PHOTOS_JS})", by_value=True)
+        if not isinstance(raw, str):
+            return []
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return []
+        if not isinstance(parsed, list):
+            return []
+        return [p for p in parsed if isinstance(p, str) and p.strip()]
 
     async def _extract_raw(self, tab: Any) -> dict[str, Any]:
         """Run the in-page extraction script once."""

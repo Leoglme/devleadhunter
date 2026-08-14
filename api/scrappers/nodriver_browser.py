@@ -137,15 +137,9 @@ class NodriverBrowser:
     so the main scraper profile is not locked by two Chrome processes.
     """
 
-    def __init__(
-        self, *, headless: bool | None = None, ephemeral: bool = False, profile_suffix: str | None = None
-    ) -> None:
+    def __init__(self, *, headless: bool | None = None, ephemeral: bool = False) -> None:
         self.headless = resolve_scraper_headless() if headless is None else headless
         self.ephemeral = ephemeral
-        # A dedicated persistent sub-profile (e.g. "fb-photos") accumulates its OWN cookies across runs
-        # without locking the main scraper profile — closer to a returning « normal » browser, which
-        # sites gate less aggressively. Falls back to ephemeral when no base profile dir is configured.
-        self.profile_suffix = profile_suffix
         self._browser: Any = None
 
     def _chrome_executable(self) -> str | None:
@@ -183,10 +177,6 @@ class NodriverBrowser:
             return browser
 
         primary_profile = resolve_scraper_user_data_dir(ephemeral=self.ephemeral)
-        if self.profile_suffix:
-            base = resolve_scraper_user_data_dir(ephemeral=False)
-            if base:
-                primary_profile = str(Path(base) / self.profile_suffix)
         attempts: list[str | None] = [primary_profile]
         # Always keep an ephemeral fallback so a locked/broken persistent profile never kills the run.
         if primary_profile:
