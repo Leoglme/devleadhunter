@@ -221,6 +221,16 @@ def test_dedupe_photos_collapses_same_image_across_sizes() -> None:
     assert _dedupe_photos([same_a, same_b, other]) == [same_a, other]
 
 
+def test_base_url_collapses_permalinks_to_numeric_id() -> None:
+    """« /p/{slug}-{id} » and « profile.php?id={id} » don't accept /photos_by — use the id root."""
+    base = FacebookEnrichmentScraper._base_url
+    assert base("https://www.facebook.com/p/Tasty-Korea-61580535121729/") == "https://www.facebook.com/61580535121729"
+    assert base("https://www.facebook.com/profile.php?id=100063586360699") == "https://www.facebook.com/100063586360699"
+    # Username and bare-id URLs already accept the sub-pages — leave them untouched.
+    assert base("https://www.facebook.com/TacosMexicanosMaru/") == "https://www.facebook.com/TacosMexicanosMaru"
+    assert base("https://www.facebook.com/100063586360699") == "https://www.facebook.com/100063586360699"
+
+
 def test_clean_social_url_strips_tracking_params() -> None:
     """Instagram / TikTok tracking junk is removed from stored social links."""
     cleaned = _clean_social_url("https://www.instagram.com/food_truck_mexicano_tacos_maru?igsh=abc&utm_source=qr")

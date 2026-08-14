@@ -128,6 +128,15 @@ _DISMISS_LOGIN_JS = r"""
     for (const el of document.querySelectorAll('[aria-label="Fermer"], [aria-label="Close"]')) {
         try { el.click(); closed = true; break; } catch (e) {}
     }
+    // Decline the Facebook cookie banner (privacy-preserving) — it otherwise covers the photos grid
+    // and blocks the read. Match its exact button text so we never click « Autoriser tous ».
+    for (const el of document.querySelectorAll('[role="button"], button')) {
+        const label = ((el.getAttribute('aria-label') || '') + ' ' + (el.textContent || '')).trim().toLowerCase();
+        if (label.includes('refuser les cookies optionnel') || label.includes('decline optional cookies') ||
+            label.includes('only allow essential cookies')) {
+            try { el.click(); closed = true; break; } catch (e) {}
+        }
+    }
     try {
         document.body.style.overflow = 'visible';
         document.documentElement.style.overflow = 'visible';
@@ -705,11 +714,19 @@ class FacebookEnrichmentScraper:
 
     @staticmethod
     def _base_url(facebook_url: str) -> str:
-        """Normalize a Facebook page URL to its bare page root (no query, no trailing slash)."""
-        base = facebook_url.strip()
-        if not base.startswith("http"):
-            base = f"https://{base}"
-        return base.split("?")[0].rstrip("/")
+        """Normalize a Facebook page URL to a root that the /photos_by, /photos_of, /reviews
+        sub-pages actually accept. A « /p/{slug}-{id}/ » permalink or a « profile.php?id={id} » URL
+        does NOT support those sub-pages — Facebook redirects « /p/…/photos_by » to a generic
+        « facebook.com/photos_by » (no page → 0 photos). Collapse both to the numeric-id root
+        « facebook.com/{id} », which the sub-pages DO accept.
+        """
+        raw = facebook_url.strip()
+        if not raw.startswith("http"):
+            raw = f"https://{raw}"
+        match = re.search(r"profile\.php\?id=(\d+)", raw) or re.search(r"/p/[^/?#]*?-(\d{6,})(?:[/?#]|$)", raw)
+        if match:
+            return f"https://www.facebook.com/{match.group(1)}"
+        return raw.split("?")[0].rstrip("/")
 
     @classmethod
     def _photos_by_url(cls, facebook_url: str) -> str:

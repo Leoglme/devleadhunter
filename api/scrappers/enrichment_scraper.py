@@ -272,26 +272,6 @@ _PREPARE_PANEL_JS = r"""
 })()
 """
 
-# Mid-scrape, Google Maps pops a « Envoyer des commentaires / Connectez-vous pour commencer » card
-# (jsaction=rap.signInCard). It covers the place panel, stalls for seconds and blocks photo
-# lazy-loading. Close it (its « Fermer » button) so extraction can carry on.
-_DISMISS_MAPS_MODAL_JS = r"""
-(() => {
-    let closed = false;
-    const selectors = [
-        'button[jsaction*="rap.signInCard.cancel"]',
-        'div[role="dialog"] button[aria-label="Fermer"]',
-        'div[role="dialog"] button[aria-label="Close"]',
-    ];
-    for (const sel of selectors) {
-        for (const el of document.querySelectorAll(sel)) {
-            try { el.click(); closed = true; } catch (e) {}
-        }
-    }
-    return closed;
-})()
-"""
-
 _ENRICHMENT_MAX_ATTEMPTS: int = 4
 _ENRICHMENT_POLL_INTERVAL_S: float = 1.5
 _ENRICHMENT_MIN_HOUR_ROWS: int = 5
@@ -492,13 +472,13 @@ class EnrichmentScraper:
         return parsed if isinstance(parsed, dict) else {}
 
     async def _prepare_panel_for_extraction(self, tab: Any) -> None:
-        """Dismiss the feedback/sign-in card, expand hours, and scroll to lazy-load photos.
+        """Expand hours and scroll to lazy-load photos.
 
-        The card (rap.signInCard) that Google pops mid-scrape covers the panel and stops photos
-        loading, so we close it before AND on every scroll hop.
+        NOTE: we deliberately do NOT click Google's « Envoyer des commentaires / Connectez-vous »
+        card (rap.signInCard). Clicking its « Fermer » made Google loop the panel open↔closed and
+        stalled the scrape far worse — so we leave it be and just read what the DOM already holds.
         """
         try:
-            await NodriverDom.evaluate(tab, _DISMISS_MAPS_MODAL_JS, by_value=True)
             await NodriverDom.evaluate(tab, _PREPARE_PANEL_JS, by_value=True)
             await asyncio.sleep(0.8)
         except Exception:
@@ -506,7 +486,6 @@ class EnrichmentScraper:
 
         try:
             for _ in range(6):
-                await NodriverDom.evaluate(tab, _DISMISS_MAPS_MODAL_JS, by_value=True)
                 await NodriverDom.scroll_element(tab, "div[role='main']", 1400)
                 await asyncio.sleep(0.45)
         except Exception:
