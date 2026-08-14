@@ -590,14 +590,33 @@ class EnrichmentScraper:
             await browser.close()
 
     async def _wait_for_maps_hydration(self, tab: Any, *, timeout_s: float = 18.0) -> None:
-        """Wait until Google Maps wave-2 data (review count / weekly hours) appears."""
+        """Wait until the place panel's wave-2 data (review count / weekly hours) has settled.
+
+        Returns as soon as EITHER strong signal is present — the review count has rendered, or the
+        weekly hours table is full — otherwise as soon as the hour count stops growing. A sparse-hours
+        listing (food truck, few open days) never reaches a full week and may have no review count, so
+        without the stabilisation exit it would burn the entire timeout every run (the ~30s stall).
+        Only a genuinely blank/slow panel now waits the timeout out.
+        """
         deadline = asyncio.get_running_loop().time() + timeout_s
+        previous_hours = -1
+        stable_polls = 0
         while asyncio.get_running_loop().time() < deadline:
             status = await self._read_hydration_status(tab)
-            # Weekly hours are the reliable wave-2 signal; the review count is a bonus that some
-            # listings (new places, food trucks) never render, so we no longer block on it.
-            if status.get("hourRowCount", 0) >= _ENRICHMENT_MIN_HOUR_ROWS:
+            hours = int(status.get("hourRowCount", 0) or 0)
+            # The review count is the clearest « panel hydrated » marker (stars show first, the count
+            # lands with wave-2); a full week of hours is the other. Either one → done.
+            if status.get("hasReviewCount") or hours >= _ENRICHMENT_MIN_HOUR_ROWS:
                 return
+            # No count yet and only partial hours: stop once the hours stop growing, so we don't wait
+            # for a 5th row that will never come.
+            if hours > 0 and hours == previous_hours:
+                stable_polls += 1
+                if stable_polls >= 2:
+                    return
+            else:
+                stable_polls = 0
+            previous_hours = hours
             await asyncio.sleep(0.5)
 
     async def _read_hydration_status(self, tab: Any) -> dict[str, Any]:
