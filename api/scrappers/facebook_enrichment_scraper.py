@@ -695,7 +695,11 @@ class FacebookEnrichmentScraper:
 
     async def _enrich_nodriver(self, business_name: str, facebook_url: str) -> EnrichmentData:
         """nodriver implementation: home → photos → reviews, dismiss login each hop."""
-        browser = NodriverBrowser(ephemeral=True)
+        # Dedicated persistent profile: Facebook throttles logged-out scrolling of a FRESH/ephemeral
+        # session (« Voir plus sur Facebook » wall after ~30 photos), but lets a returning browser with
+        # accumulated cookies scroll further. This builds that state up across runs, without locking
+        # the main scraper profile. Falls back to ephemeral when no base profile dir is configured.
+        browser = NodriverBrowser(ephemeral=True, profile_suffix="fb-photos")
         try:
             tab = await browser.get_tab(self._base_url(facebook_url))
             await self._prepare_tab(tab)

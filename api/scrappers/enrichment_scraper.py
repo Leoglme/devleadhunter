@@ -293,6 +293,72 @@ _ENRICHMENT_POLL_INTERVAL_S: float = 1.5
 _ENRICHMENT_MIN_HOUR_ROWS: int = 5
 
 
+def _average_hash(image_bytes: bytes) -> int | None:
+    """A 64-bit average hash (aHash) of an image — the SAME picture shares it despite re-uploads,
+    resizes or CDN params (which a URL/id dedup can't catch). None on decode failure."""
+    try:
+        from io import BytesIO
+
+        from PIL import Image  # Pillow is already a dependency (brand_color_service).
+
+        image = Image.open(BytesIO(image_bytes)).convert("L").resize((8, 8))
+        pixels = list(image.getdata())
+        average = sum(pixels) / len(pixels)
+        bits = 0
+        for index, pixel in enumerate(pixels):
+            if pixel >= average:
+                bits |= 1 << index
+        return bits
+    except Exception:
+        return None
+
+
+def _hamming_distance(left: int, right: int) -> int:
+    """Number of differing bits between two hashes (0 = identical look)."""
+    return bin(left ^ right).count("1")
+
+
+async def _perceptual_dedupe_photos(urls: list[str], *, threshold: int = 6) -> list[str]:
+    """Drop VISUALLY duplicate photos (same image re-uploaded → new file id, same look).
+
+    Downloads each image once (parallel, best-effort), average-hashes it, and keeps a photo only if
+    it isn't within ``threshold`` bits of one already kept. On any download/decode failure the URL is
+    kept (never silently dropped). No-ops on fewer than two photos.
+    """
+    if len(urls) < 2:
+        return list(urls)
+
+    import httpx
+
+    semaphore = asyncio.Semaphore(8)
+
+    async def _hash_one(client: httpx.AsyncClient, url: str) -> int | None:
+        async with semaphore:
+            try:
+                response = await client.get(url)
+            except Exception:
+                return None
+            return _average_hash(response.content) if response.status_code == 200 else None
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+            hashes = await asyncio.gather(*[_hash_one(client, url) for url in urls])
+    except Exception:
+        return list(urls)
+
+    kept: list[str] = []
+    kept_hashes: list[int] = []
+    for url, digest in zip(urls, hashes):
+        if digest is None:
+            kept.append(url)  # couldn't hash → keep rather than lose a real photo
+            continue
+        if any(_hamming_distance(digest, seen) <= threshold for seen in kept_hashes):
+            continue
+        kept.append(url)
+        kept_hashes.append(digest)
+    return kept
+
+
 class EnrichmentScraper:
     """Gathers rich Google Maps place data for a single prospect."""
 
@@ -316,9 +382,11 @@ class EnrichmentScraper:
         if not (google_maps_url or "").strip() and (facebook_url or "").strip():
             from scrappers.facebook_enrichment_scraper import facebook_enrichment_scraper
 
-            return await facebook_enrichment_scraper.enrich(
+            fb_only = await facebook_enrichment_scraper.enrich(
                 business_name=business_name, facebook_url=facebook_url or ""
             )
+            fb_only.photos = await _perceptual_dedupe_photos(fb_only.photos)
+            return fb_only
 
         data = EnrichmentData()
         if NODRIVER_AVAILABLE:
@@ -354,6 +422,9 @@ class EnrichmentScraper:
             except Exception as exc:
                 logger.info("Facebook complementary enrichment failed for %s: %s", business_name, exc)
 
+        # Drop visually-duplicate photos (same image re-uploaded across Google/Facebook) once the
+        # full set is assembled, before it reaches the prospect's gallery.
+        data.photos = await _perceptual_dedupe_photos(data.photos)
         return data
 
     @staticmethod
