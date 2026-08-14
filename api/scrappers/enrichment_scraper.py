@@ -272,6 +272,22 @@ _PREPARE_PANEL_JS = r"""
 })()
 """
 
+# « Voir les photos » / « Voir toutes les photos » opens the photo grid, which — unlike the reviews
+# tab (ReviewsService sign-in wall) — loads fully even logged-out. Clicking it renders far more
+# googleusercontent images into the DOM for the extraction to pick up.
+_OPEN_PHOTOS_JS = r"""
+(() => {
+    for (const el of document.querySelectorAll('button, [role="button"]')) {
+        const label = (el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim().toLowerCase();
+        if (label === 'voir les photos' || label === 'voir toutes les photos' ||
+            label.includes('see all photos') || label.includes('all photos')) {
+            try { el.click(); return true; } catch (e) {}
+        }
+    }
+    return false;
+})()
+"""
+
 _ENRICHMENT_MAX_ATTEMPTS: int = 4
 _ENRICHMENT_POLL_INTERVAL_S: float = 1.5
 _ENRICHMENT_MIN_HOUR_ROWS: int = 5
@@ -442,7 +458,9 @@ class EnrichmentScraper:
                 return EnrichmentData()
 
             await self._wait_for_maps_hydration(tab)
-            return await self._extract_with_retries(tab, business_name=business_name, city=city)
+            data = await self._extract_with_retries(tab, business_name=business_name, city=city)
+            await self._grab_more_photos(tab, data)
+            return data
         except Exception as exc:
             logger.warning("Enrichment scrape failed for %s: %s", business_name, exc)
             return EnrichmentData()
@@ -490,6 +508,31 @@ class EnrichmentScraper:
                 await asyncio.sleep(0.45)
         except Exception:
             pass
+
+    async def _grab_more_photos(self, tab: Any, data: EnrichmentData) -> None:
+        """Open « Voir les photos » and merge the fuller photo grid into ``data.photos``.
+
+        Isolated + best-effort: runs AFTER the main extraction and only ADDS photos, so a failure (or
+        a place with no grid) never touches the data already gathered. The grid loads logged-out —
+        unlike the reviews wall — so opening it is safe.
+        """
+        try:
+            opened = await NodriverDom.evaluate(tab, _OPEN_PHOTOS_JS, by_value=True)
+            if opened is not True:
+                return
+            await asyncio.sleep(1.2)
+            for _ in range(8):
+                await NodriverDom.scroll_element(tab, "div[role='main']", 1600)
+                await asyncio.sleep(0.4)
+            more = await self._extract_raw(tab)
+            grid_photos = [p for p in more.get("photos", []) if isinstance(p, str) and p.strip()]
+            seen: set[str] = {url for url in data.photos if url}
+            for url in grid_photos:
+                if url not in seen:
+                    data.photos.append(url)
+                    seen.add(url)
+        except Exception as exc:
+            logger.info("Extra Google photo pass failed: %s", exc)
 
     async def _extract_raw(self, tab: Any) -> dict[str, Any]:
         """Run the in-page extraction script once."""
