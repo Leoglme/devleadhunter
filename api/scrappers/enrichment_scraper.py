@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -184,12 +185,19 @@ _EXTRACT_JS = r"""
         out.opening_hours = out.opening_hours.slice(0, 7);
     } catch (e) {}
 
-    // Reviews snippets present in the panel
+    // Reviews snippets present in the panel — deduplicated by author+text (the same review can be
+    // rendered twice in the DOM, e.g. panel + expanded list), and capped generously so enough survive
+    // the downstream "positive only" filter.
     try {
+        const seenReviews = new Set();
         const blocks = document.querySelectorAll('div.jftiEf, div[data-review-id]');
         blocks.forEach((b) => {
             const author = txt(b.querySelector('.d4r55, .TSUbDb'));
             const text = txt(b.querySelector('.wiI7pd, .MyEned'));
+            if (!text) return;
+            const key = ((author || '') + '|' + text).toLowerCase().replace(/\\s+/g, ' ').trim();
+            if (seenReviews.has(key)) return;
+            seenReviews.add(key);
             const ratingEl = b.querySelector('[aria-label*="étoile"], [aria-label*="star"], .kvMYJc');
             let rating = null;
             if (ratingEl) {
@@ -209,9 +217,9 @@ _EXTRACT_JS = r"""
                     ownerResponse = full.split(marker)[1].replace(/^[\\s:.-]+/, '').trim().slice(0, 400) || null;
                 }
             } catch (e) {}
-            if (text) out.reviews.push({ author: author || 'Client', text, rating, owner_response: ownerResponse });
+            out.reviews.push({ author: author || 'Client', text, rating, owner_response: ownerResponse });
         });
-        out.reviews = out.reviews.slice(0, 12);
+        out.reviews = out.reviews.slice(0, 24);
     } catch (e) {}
 
     return out;
@@ -369,6 +377,30 @@ def _hamming_distance(left: int, right: int) -> int:
     return bin(left ^ right).count("1")
 
 
+def _dedupe_reviews(reviews: list[Any]) -> list[dict[str, Any]]:
+    """Drop duplicate reviews (same author+text). The same review is sometimes captured twice — the
+    Google panel + its expanded list, or a Facebook page rendering it more than once. Preserves order;
+    text-less entries are dropped."""
+
+    def _norm(value: Any) -> str:
+        return re.sub(r"\s+", " ", str(value or "")).strip().lower()
+
+    seen: set[str] = set()
+    unique: list[dict[str, Any]] = []
+    for review in reviews:
+        if not isinstance(review, dict):
+            continue
+        text = _norm(review.get("text"))
+        if not text:
+            continue
+        key = f"{_norm(review.get('author'))}|{text}"
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(review)
+    return unique
+
+
 async def _perceptual_dedupe_photos(urls: list[str], *, threshold: int = 6) -> list[str]:
     """Drop VISUALLY duplicate photos (same image re-uploaded → new file id, same look).
 
@@ -437,6 +469,7 @@ class EnrichmentScraper:
                 business_name=business_name, facebook_url=facebook_url or ""
             )
             fb_only.photos = await _perceptual_dedupe_photos(fb_only.photos)
+            fb_only.reviews = _dedupe_reviews(fb_only.reviews)
             return fb_only
 
         data = EnrichmentData()
@@ -476,6 +509,7 @@ class EnrichmentScraper:
         # Drop visually-duplicate photos (same image re-uploaded across Google/Facebook) once the
         # full set is assembled, before it reaches the prospect's gallery.
         data.photos = await _perceptual_dedupe_photos(data.photos)
+        data.reviews = _dedupe_reviews(data.reviews)
         return data
 
     @staticmethod
