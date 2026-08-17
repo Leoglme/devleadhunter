@@ -459,6 +459,7 @@ from .site_content import (  # noqa: E402, F401
     PLUMBER_FAQ,
     PLUMBER_SERVICES,
     SITE_CONTENT_SCHEMAS,
+    fixed_trade_services,
     map_prospect_and_enrichment,
     to_storyblok_site_content,
 )
@@ -520,13 +521,7 @@ def build_site_content(
         enrichment=enrichment,
         about_default=_SITE_ABOUT_DEFAULT,
     )
-    enr = enrichment or {}
-    scraped = [
-        {"title": str(name).strip(), "description": ""}
-        for name in enr.get("services", [])
-        if isinstance(name, str) and str(name).strip()
-    ]
-    site["services"] = scraped or PLUMBER_SERVICES
+    site["services"] = fixed_trade_services(PLUMBER_SERVICES)
     site["faq"] = PLUMBER_FAQ
     # Pre-fill editorial copy (client edits his real texts in the CMS).
     site.update(_EDITORIAL_DEFAULTS)

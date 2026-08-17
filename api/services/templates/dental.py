@@ -18,6 +18,7 @@ from typing import Any
 
 from services.templates.site_content import (  # noqa: F401 — re-exported for the registry
     SITE_CONTENT_SCHEMAS,
+    fixed_trade_services,
     map_prospect_and_enrichment,
     to_storyblok_site_content,
 )
@@ -168,13 +169,7 @@ def build_site_content(
         enrichment=enrichment,
         about_default=_SITE_ABOUT_DEFAULT,
     )
-    enr = enrichment or {}
-    scraped = [
-        {"title": str(name).strip(), "description": ""}
-        for name in enr.get("services", [])
-        if isinstance(name, str) and str(name).strip()
-    ]
-    site["services"] = scraped or DENTAL_SERVICES
+    site["services"] = fixed_trade_services(DENTAL_SERVICES)
     site["faq"] = DENTAL_FAQ
     site.update(_EDITORIAL_DEFAULTS)
     return site

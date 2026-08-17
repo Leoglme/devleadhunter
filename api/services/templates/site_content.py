@@ -351,6 +351,27 @@ def _clean_review_text(raw: Any) -> str:
     return text
 
 
+_SPECIALTY_RE = re.compile(r"sp[ée]cialit[ée]s?\s*:\s*(.+)", re.IGNORECASE)
+_GLUED_LABEL_RE = re.compile(r"\s+[A-ZÀ-Ý][\wÀ-ÿ]*\s*:")
+
+
+def extract_specialty(description: Any) -> str:
+    """Pull the cuisine specialty out of a scraped description (« … Spécialité: poulet frit coréen »).
+
+    Google glues attribute labels into the description; the specialty is a food truck's identity and
+    worth keeping even when the whole description is too fragmentary to use as an about. Returns the
+    first specialty phrase (trimmed, cut before any following glued label / sentence end, capped), or "".
+    """
+    if not isinstance(description, str):
+        return ""
+    match = _SPECIALTY_RE.search(description)
+    if not match:
+        return ""
+    specialty = re.split(r"[\n.;]", match.group(1))[0]
+    specialty = _GLUED_LABEL_RE.split(specialty)[0].strip()
+    return specialty[:60].strip()
+
+
 _HOURS_DISCLAIMER_RE = re.compile(r"les horaires? peuvent .*|hours (?:might|may) .*", re.IGNORECASE)
 _GLUED_RANGES_RE = re.compile(r"(\d{1,2}[:h]\d{2}\s*[–—-]\s*\d{1,2}[:h]\d{2})(?=\d)")
 _DAY_ANNOTATION_RE = re.compile(r"\s*\([^)]*\)\s*")

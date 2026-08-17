@@ -18,6 +18,7 @@ from typing import Any
 
 from services.templates.site_content import (  # noqa: F401 — re-exported for the registry
     SITE_CONTENT_SCHEMAS,
+    extract_specialty,
     format_rating_value,
     format_review_count,
     map_prospect_and_enrichment,
@@ -191,6 +192,11 @@ def build_site_content(
         about_default=_SITE_ABOUT_DEFAULT,
     )
     enr = enrichment or {}
+    # The scraped description is often too fragmentary to use as an about, but its "Spécialité: …" is
+    # the truck's identity — surface it in the about when we fell back to the generic default.
+    specialty: str = extract_specialty(enr.get("description"))
+    if specialty and site["about"] == _SITE_ABOUT_DEFAULT:
+        site["about"] = f"Spécialité maison : {specialty}. {_SITE_ABOUT_DEFAULT}"
     site["services"] = resolve_trade_services(enr.get("services"), FOOD_SERVICES)
     site["faq"] = FOOD_FAQ
     site.update(_EDITORIAL_DEFAULTS)
