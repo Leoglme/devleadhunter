@@ -58,7 +58,7 @@
             Annuler
           </button>
           <button
-            v-if="isTerminal"
+            v-if="canDelete"
             class="app-btn-secondary h-9 px-4 text-xs text-[var(--app-red)]"
             :disabled="isActing"
             @click="remove"
@@ -337,9 +337,14 @@ const canCancel: ComputedRef<boolean> = computed(
   (): boolean => run.value !== null && ['running', 'paused', 'awaiting_review'].includes(run.value.status),
 )
 
-/** Whether the run is terminal (deletable). */
+/** Whether the run is terminal (finished or stopped). */
 const isTerminal: ComputedRef<boolean> = computed(
   (): boolean => run.value !== null && ['completed', 'cancelled', 'failed'].includes(run.value.status),
+)
+
+/** Whether the run can be deleted: a never-started draft, or any terminal run. */
+const canDelete: ComputedRef<boolean> = computed(
+  (): boolean => run.value !== null && (run.value.status === 'draft' || isTerminal.value),
 )
 
 /** KPI tiles. */
