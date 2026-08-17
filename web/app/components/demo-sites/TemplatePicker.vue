@@ -231,6 +231,11 @@ const props: TemplatePickerProps = defineProps({
     type: Array as PropType<string[] | null>,
     default: null,
   },
+  // Candidate colours pushed live into the published-site preview (null = keep the published palette).
+  previewTheme: {
+    type: Object as PropType<DemoSiteTheme | null>,
+    default: null,
+  },
 })
 
 const emit: EmitFn<TemplatePickerEmits> = defineEmits<TemplatePickerEmits>()
@@ -391,7 +396,9 @@ function postPreviewOverrides(): void {
     {
       type: 'dlh:preview',
       templateId: props.modelValue,
-      palette: { ...props.theme },
+      // Only pending colours override the published palette — the local theme state may not
+      // perfectly reconstruct it, and repainting an untouched site would be a lie.
+      palette: props.previewTheme ? { ...props.previewTheme } : null,
       photos: props.previewPhotos ? [...props.previewPhotos] : null,
     },
     origin,
@@ -497,6 +504,8 @@ watch(
 )
 
 watch((): string[] | null => props.previewPhotos ?? null, schedulePreviewMessage, { deep: true })
+
+watch((): DemoSiteTheme | null => props.previewTheme ?? null, schedulePreviewMessage, { deep: true })
 
 watch((): string | null => props.publishedSiteUrl ?? null, applyLivePreviewUrl)
 

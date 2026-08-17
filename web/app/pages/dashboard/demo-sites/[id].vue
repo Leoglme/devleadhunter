@@ -348,6 +348,7 @@
                 :reload-nonce="previewReloadNonce"
                 :show-colors="false"
                 :preview-photos="previewPhotos"
+                :preview-theme="previewTheme"
                 templates-below-preview
                 @update:theme="selectedTheme = $event"
                 @update:use-brand-color="selectedUseBrandColor = $event"
@@ -492,6 +493,11 @@ const hasPendingChanges: ComputedRef<boolean> = computed(
 /** Candidate placement pushed live into the preview — only when it differs from the published one. */
 const previewPhotos: ComputedRef<string[] | null> = computed((): string[] | null =>
   imagesChanged.value ? imagesOrder.value : null,
+)
+
+/** Candidate colours pushed live into the preview — only when a colour or template edit is pending. */
+const previewTheme: ComputedRef<DemoSiteTheme | null> = computed((): DemoSiteTheme | null =>
+  templateChanged.value || themeChanged.value || brandSourceChanged.value ? selectedTheme.value : null,
 )
 
 const isVideoGenerating: ComputedRef<boolean> = computed(

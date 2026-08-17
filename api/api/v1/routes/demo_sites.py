@@ -64,7 +64,12 @@ def _serialize_demo_site(site, *, include_brand_color: bool = False) -> DemoSite
     """
     payload = DemoSiteResponse.model_validate(site).model_dump()
     content = site.content_json if isinstance(site.content_json, dict) else {}
+    # ``theme`` only exists once the user edited colours; a generated site stores its real
+    # colours (template defaults + brand colour) under ``palette`` — without this fallback the
+    # editor shows the app-default blue/navy instead of the site's actual published colours.
     theme_raw = content.get("theme")
+    if not isinstance(theme_raw, dict):
+        theme_raw = content.get("palette")
     if isinstance(theme_raw, dict):
         payload["theme"] = {
             "primary": str(theme_raw.get("primary", "#0284c7")),

@@ -17,6 +17,8 @@ export type TemplatePickerProps = {
   showColors?: boolean
   /** Candidate photo placement pushed live into the published-site preview. Null = published placement. */
   previewPhotos?: string[] | null
+  /** Candidate colours pushed live into the published-site preview. Null = published palette. */
+  previewTheme?: DemoSiteTheme | null
 }
 
 export type TemplateThemeColorKey = keyof DemoSiteTheme
