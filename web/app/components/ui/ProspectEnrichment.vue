@@ -238,8 +238,13 @@
               <img
                 :src="photo"
                 alt=""
-                :class="['w-full rounded-t object-cover', i === 0 ? 'h-20' : i === 1 ? 'h-[4.5rem]' : 'h-16']"
+                :class="[
+                  'w-full cursor-zoom-in rounded-t object-cover',
+                  i === 0 ? 'h-20' : i === 1 ? 'h-[4.5rem]' : 'h-16',
+                ]"
                 draggable="false"
+                title="Voir en grand"
+                @click="lightboxIndex = i"
               />
               <span
                 class="pointer-events-none absolute top-1 left-1 flex h-5 min-w-5 items-center justify-center rounded bg-[var(--app-overlay)] px-1 text-[10px] font-semibold text-white tabular-nums"
@@ -310,6 +315,8 @@
             <input v-model="newPhotoUrl" type="url" class="input-field flex-1 text-xs" placeholder="URL d'une photo" />
             <button class="btn-secondary px-3 text-xs" @click="addPhoto">Ajouter</button>
           </div>
+
+          <UiImageLightbox v-model="lightboxIndex" :photos="form.photos" />
         </div>
 
         <div>
@@ -439,6 +446,8 @@ const isSaving: Ref<boolean> = ref(false)
 const isResolving: Ref<boolean> = ref(false)
 const isDecidingProposal: Ref<boolean> = ref(false)
 const newPhotoUrl: Ref<string> = ref('')
+/** Index of the photo shown fullscreen in the lightbox, or null when closed. */
+const lightboxIndex: Ref<number | null> = ref(null)
 const newService: Ref<string> = ref('')
 /** Index of the photo currently dragged from the grip handle, or null. */
 const photoDragIndex: Ref<number | null> = ref(null)
