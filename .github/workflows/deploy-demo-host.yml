@@ -22,6 +22,11 @@ jobs:
 
       - name: Install demo-host dependencies
         working-directory: demo-host
+        env:
+          # `npm ci` runs `nuxt prepare`, which uses giget to fetch the ~10 template layers from
+          # GitHub. Unauthenticated, that hits GitHub's 60-req/hour limit → 429 and the deploy fails.
+          # Authenticating with the workflow token raises the limit to 5000/hour.
+          GIGET_AUTH: ${{ secrets.GITHUB_TOKEN }}
         run: npm ci
 
       # Build with Nitro's Vercel preset → demo-host/.vercel/output (Build Output API).
@@ -29,6 +34,7 @@ jobs:
       - name: Build demo-host
         working-directory: demo-host
         env:
+          GIGET_AUTH: ${{ secrets.GITHUB_TOKEN }}
           NUXT_PUBLIC_API_BASE: https://api.devleadhunter.dibodev.fr
           NUXT_PUBLIC_POSTHOG_PROJECT_API_KEY: ${{ secrets.NUXT_PUBLIC_POSTHOG_PROJECT_API_KEY }}
           NUXT_PUBLIC_POSTHOG_INGESTION_HOST: ${{ secrets.NUXT_PUBLIC_POSTHOG_INGESTION_HOST }}
