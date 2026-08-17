@@ -26,6 +26,7 @@ from schemas.demo_site import (
     DemoSiteUpdateRequest,
 )
 from services.auth_service import get_current_active_user
+from services.brand_color_service import brand_color_service
 from services.demo_site_service import demo_site_service
 from services.demo_video_service import (
     demo_video_service,
@@ -53,16 +54,25 @@ class BulkDemoSiteCreateRequest(BaseModel):
     invite_client_to_cms: bool = Field(default=False)
 
 
-def _serialize_demo_site(site) -> DemoSiteResponse:
-    """Build API response including theme extracted from content JSON."""
+def _serialize_demo_site(site, *, include_brand_color: bool = False) -> DemoSiteResponse:
+    """Build API response including theme extracted from content JSON.
+
+    ``include_brand_color`` extracts the prospect's logo colour (a download) for the Logo/Template
+    action-colour picker — only the single-site detail/update paths ask for it, never list views.
+    """
     payload = DemoSiteResponse.model_validate(site).model_dump()
-    theme_raw = (site.content_json or {}).get("theme") if isinstance(site.content_json, dict) else None
+    content = site.content_json if isinstance(site.content_json, dict) else {}
+    theme_raw = content.get("theme")
     if isinstance(theme_raw, dict):
         payload["theme"] = {
             "primary": str(theme_raw.get("primary", "#0284c7")),
             "secondary": str(theme_raw.get("secondary", "#0f172a")),
             "accent": str(theme_raw.get("accent", "#f59e0b")),
         }
+    if include_brand_color:
+        logo = content.get("logo")
+        if isinstance(logo, str) and logo.strip():
+            payload["brand_color"] = brand_color_service.extract_brand_color(logo)
     if has_ready_video(site):
         payload["video_page_url"] = video_page_url(site.slug)
         payload["video_thumbnail_url"] = public_thumbnail_url(site.slug)
@@ -300,7 +310,7 @@ async def get_demo_site(
     site = demo_site_service.get_for_user(db, current_user.id, demo_site_id)
     if not site:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo site not found")
-    return _serialize_demo_site(site)
+    return _serialize_demo_site(site, include_brand_color=True)
 
 
 @router.get("/{demo_site_id}/export")
@@ -371,7 +381,7 @@ async def update_demo_site(
         site = await demo_site_service.update_demo_site(db, site, **update_data)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return _serialize_demo_site(site)
+    return _serialize_demo_site(site, include_brand_color=True)
 
 
 @router.post("/{demo_site_id}/regenerate", response_model=DemoSiteResponse)
@@ -383,7 +393,7 @@ async def regenerate_demo_site(
     """Rebuild demo site content from stored fields without changing them."""
     site = _get_editable_demo_site(db, current_user.id, demo_site_id)
     site = await demo_site_service.regenerate_demo_site(db, site)
-    return _serialize_demo_site(site)
+    return _serialize_demo_site(site, include_brand_color=True)
 
 
 @router.post("/{demo_site_id}/video", response_model=DemoSiteResponse, status_code=status.HTTP_202_ACCEPTED)

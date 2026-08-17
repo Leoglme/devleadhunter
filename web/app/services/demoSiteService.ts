@@ -95,6 +95,8 @@ export type DemoSite = {
   error_message?: string | null
   theme?: DemoSiteTheme | null
   use_brand_color?: boolean
+  /** Colour extracted from the prospect logo (detail/update responses), for the Logo pill. */
+  brand_color?: string | null
   video_status?: DemoSiteVideoStatus | null
   video_error?: string | null
   video_generated_at?: string | null

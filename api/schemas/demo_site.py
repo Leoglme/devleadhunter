@@ -116,6 +116,8 @@ class DemoSiteResponse(BaseModel):
     theme: DemoSiteTheme | None = None
     # Logo ⟷ Template choice for the action colour.
     use_brand_color: bool = True
+    # The colour extracted from the prospect logo (for the "Logo" pill); None when no usable one exists.
+    brand_color: str | None = None
     # Prospection video (webcam + capture du site du prospect).
     video_status: str | None = None
     video_error: str | None = None

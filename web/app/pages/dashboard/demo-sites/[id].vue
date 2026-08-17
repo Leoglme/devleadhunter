@@ -296,9 +296,12 @@
                 v-model="selectedTemplateId"
                 :templates="templates"
                 :theme="selectedTheme"
+                :use-brand-color="selectedUseBrandColor"
+                :brand-color="site?.brand_color ?? null"
                 :published-site-url="publishedSiteUrl"
                 templates-below-preview
                 @update:theme="selectedTheme = $event"
+                @update:use-brand-color="selectedUseBrandColor = $event"
               />
               <div v-else-if="openUrl">
                 <iframe
@@ -367,6 +370,8 @@ const templates: Ref<DemoSiteTemplate[]> = ref([])
 const loadingTemplates: Ref<boolean> = ref(true)
 const selectedTemplateId: Ref<string> = ref('')
 const selectedTheme: Ref<DemoSiteTheme> = ref({ ...DEFAULT_DEMO_SITE_THEME })
+/** Action colour source: logo (true) / template (false) — #13. */
+const selectedUseBrandColor: Ref<boolean> = ref(true)
 const applyingTemplate: Ref<boolean> = ref(false)
 const verifying: Ref<boolean> = ref(false)
 const regenerating: Ref<boolean> = ref(false)
@@ -481,6 +486,7 @@ function resetTemplateChanges(): void {
   if (!site.value) return
   selectedTemplateId.value = site.value.template_id
   selectedTheme.value = { ...(site.value.theme ?? DEFAULT_DEMO_SITE_THEME) }
+  selectedUseBrandColor.value = site.value.use_brand_color ?? true
 }
 
 /**
@@ -493,6 +499,7 @@ async function applyTemplateChanges(): Promise<void> {
     site.value = await DemoSiteService.updateDemoSite(demoSiteId, {
       template_id: selectedTemplateId.value,
       theme: { ...selectedTheme.value },
+      use_brand_color: selectedUseBrandColor.value,
     })
     resetTemplateChanges()
     toast.success('Site régénéré avec le nouveau modèle')
