@@ -1,0 +1,52 @@
+"""
+Tests for review curation on the generated site: a sales site must surface only reviews we are sure
+are positive (rating >= 4). Complaints (rating < 4) and reviews whose per-review rating wasn't
+captured are dropped — the enrichment record keeps every review, but the site does not show them.
+"""
+
+from services.templates import registry
+
+
+def _site_reviews(enrichment: dict) -> list[dict]:
+    site = registry.build_site_content(
+        template_id="barber",
+        business_name="X",
+        phone="0",
+        email="x@y.fr",
+        city="Tours",
+        area="Tours",
+        subtitle="",
+        palette={"primary": "#000", "secondary": "#111", "accent": "#222"},
+        enrichment=enrichment,
+    )
+    return site["reviews"]
+
+
+def test_only_positive_reviews_reach_the_site() -> None:
+    """Ratings >= 4 are kept, in order; a 1-star complaint and a 3-star are dropped."""
+    reviews = _site_reviews(
+        {
+            "reviews": [
+                {"author": "A", "text": "Top", "rating": 5},
+                {"author": "B", "text": "Travaux sans accord", "rating": 1},
+                {"author": "C", "text": "Bien", "rating": 4},
+                {"author": "D", "text": "Moyen", "rating": 3},
+            ]
+        }
+    )
+    assert [r["author"] for r in reviews] == ["A", "C"]
+    assert all(r["rating"] >= 4 for r in reviews)
+
+
+def test_reviews_without_a_rating_or_text_are_dropped() -> None:
+    """No captured rating -> dropped (can't be trusted as positive); empty text -> dropped."""
+    reviews = _site_reviews(
+        {
+            "reviews": [
+                {"author": "A", "text": "Super", "rating": 5},
+                {"author": "NoRating", "text": "Sans note"},
+                {"author": "Empty", "text": "", "rating": 5},
+            ]
+        }
+    )
+    assert [r["author"] for r in reviews] == ["A"]

@@ -322,10 +322,18 @@ def map_prospect_and_enrichment(
         text = str(review.get("text", "")).strip()
         if not text:
             continue
-        entry: dict[str, Any] = {"author": str(review.get("author", "")).strip() or "Client", "text": text}
+        # Sales site: only surface reviews we are SURE are positive. A rating below 4 is a
+        # complaint that undermines the pitch; a review whose per-review rating wasn't captured
+        # can't be trusted as positive — both are dropped. (The enrichment record keeps every
+        # review; this curation happens only for the generated site.)
         rating_value = review.get("rating")
-        if isinstance(rating_value, (int, float)):
-            entry["rating"] = int(rating_value)
+        if not isinstance(rating_value, (int, float)) or rating_value < 4:
+            continue
+        entry: dict[str, Any] = {
+            "author": str(review.get("author", "")).strip() or "Client",
+            "text": text,
+            "rating": int(rating_value),
+        }
         reviews.append(entry)
 
     opening_hours: list[dict[str, str]] = []
