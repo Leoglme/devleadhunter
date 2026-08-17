@@ -286,6 +286,48 @@ def resolve_trade_services(scraped_names: Any, defaults: list[dict[str, str]]) -
     ]
 
 
+_WEEKDAYS: frozenset[str] = frozenset(
+    {
+        "lundi",
+        "mardi",
+        "mercredi",
+        "jeudi",
+        "vendredi",
+        "samedi",
+        "dimanche",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+    }
+)
+_HOURS_DISCLAIMER_RE = re.compile(r"les horaires? peuvent .*|hours (?:might|may) .*", re.IGNORECASE)
+_GLUED_RANGES_RE = re.compile(r"(\d{1,2}[:h]\d{2}\s*[–—-]\s*\d{1,2}[:h]\d{2})(?=\d)")
+_DAY_ANNOTATION_RE = re.compile(r"\s*\([^)]*\)\s*")
+
+
+def _clean_opening_hours(raw_hours: list[dict]) -> list[dict[str, str]]:
+    """Clean scraped opening-hours rows for display.
+
+    Around a public holiday, Google annotates the affected day ("samedi (Assomption)") and adds an
+    "hours may differ" disclaimer, which the scraper captures verbatim — sometimes even as its own
+    row. This strips the parenthetical day annotation, drops the disclaimer, separates two glued time
+    ranges ("07:45–12:0014:00–18:00" → "07:45–12:00, 14:00–18:00"), and keeps only real weekday rows.
+    """
+    cleaned: list[dict[str, str]] = []
+    for row in raw_hours:
+        day = _DAY_ANNOTATION_RE.sub(" ", str(row.get("day", ""))).strip()
+        if day.lower() not in _WEEKDAYS:
+            continue
+        hours = _HOURS_DISCLAIMER_RE.sub("", str(row.get("hours", ""))).strip()
+        hours = _GLUED_RANGES_RE.sub(r"\1, ", hours).strip().strip(",").strip()
+        cleaned.append({"day": day, "hours": hours})
+    return cleaned
+
+
 def map_prospect_and_enrichment(
     *,
     business_name: str,
@@ -343,13 +385,7 @@ def map_prospect_and_enrichment(
         }
         reviews.append(entry)
 
-    opening_hours: list[dict[str, str]] = []
-    for row in raw_hours:
-        day = str(row.get("day", "")).strip()
-        hours = str(row.get("hours", "")).strip()
-        if not day and not hours:
-            continue
-        opening_hours.append({"day": day, "hours": hours})
+    opening_hours: list[dict[str, str]] = _clean_opening_hours(raw_hours)
 
     raw_social = enrichment.get("social_links") or {}
     social: list[dict[str, str]] = [
