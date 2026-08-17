@@ -104,6 +104,19 @@ def brand_color_key(template_id: str) -> str:
     return key if key in ("primary", "secondary", "accent") else "primary"
 
 
+def color_roles(template_id: str) -> dict[str, str]:
+    """Return the template's canonical colour roles → palette key (``{"action": "primary", …}``).
+
+    Only the roles a layer visibly consumes are listed (from the CSS audit), so the editor hides dead
+    fields. ``action`` always equals ``brand_color_key``. Empty when a template declares none.
+    """
+    meta = getattr(get_module(template_id), "TEMPLATE_META", {}) or {}
+    roles = meta.get("color_roles")
+    if not isinstance(roles, dict):
+        return {}
+    return {str(role): str(key) for role, key in roles.items() if key in ("primary", "secondary", "accent")}
+
+
 def build_content(
     *,
     template_id: str,

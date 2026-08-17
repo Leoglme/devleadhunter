@@ -45,6 +45,9 @@ TEMPLATE_META: dict[str, object] = {
         "secondary": "#6B6355",
         "accent": "#E8A33C",
     },
+    # Canonical colour roles → palette key (audit 2026-08-17). Only these roles are editable;
+    # keys not listed here don't visibly theme this layer, so the editor hides them.
+    "color_roles": {"action": "accent"},
     # Édito's action colour is the amber accent (its primary is the dark editorial ink).
     "brand_color_key": "accent",
 }

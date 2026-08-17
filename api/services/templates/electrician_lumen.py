@@ -42,6 +42,9 @@ TEMPLATE_META: dict[str, object] = {
         "secondary": "#070B14",
         "accent": "#FF9F1C",
     },
+    # Canonical colour roles → palette key (audit 2026-08-17). Only these roles are editable;
+    # keys not listed here don't visibly theme this layer, so the editor hides them.
+    "color_roles": {"action": "primary", "fond": "secondary", "secondaire": "accent"},
 }
 
 # Top-level bloks this template adds to the Storyblok page body whitelist.

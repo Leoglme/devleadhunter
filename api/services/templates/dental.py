@@ -41,6 +41,9 @@ TEMPLATE_META: dict[str, object] = {
         "secondary": "#2e333e",
         "accent": "#80060d",
     },
+    # Canonical colour roles → palette key (audit 2026-08-17). Only these roles are editable;
+    # keys not listed here don't visibly theme this layer, so the editor hides them.
+    "color_roles": {"action": "primary", "secondaire": "secondary"},
 }
 
 BODY_COMPONENTS: list[str] = []

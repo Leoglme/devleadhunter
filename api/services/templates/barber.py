@@ -44,6 +44,9 @@ TEMPLATE_META: dict[str, object] = {
         "secondary": "#f8f5ef",
         "accent": "#dec7a6",
     },
+    # Canonical colour roles → palette key (audit 2026-08-17). Only these roles are editable;
+    # keys not listed here don't visibly theme this layer, so the editor hides them.
+    "color_roles": {"action": "accent"},
     # Barber's action colour is the gold accent (its primary is the dark charcoal).
     "brand_color_key": "accent",
 }

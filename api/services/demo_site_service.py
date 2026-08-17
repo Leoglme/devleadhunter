@@ -165,7 +165,9 @@ class DemoSiteService:
             or self._theme_from_content(demo_site.content_json)
             or self._default_theme_for_template(demo_site.template_id)
         )
-        palette = self._apply_brand_color(palette, demo_site.template_id, enrichment)
+        palette = self._apply_brand_color(
+            palette, demo_site.template_id, enrichment, use_brand_color=demo_site.use_brand_color
+        )
         return storyblok_service.build_content_json(
             business_name=demo_site.business_name,
             phone=demo_site.phone,
@@ -178,19 +180,30 @@ class DemoSiteService:
         )
 
     @staticmethod
-    def _apply_brand_color(palette: dict[str, str], template_id: str, enrichment: dict | None) -> dict[str, str]:
+    def _apply_brand_color(
+        palette: dict[str, str],
+        template_id: str,
+        enrichment: dict | None,
+        *,
+        use_brand_color: bool = True,
+    ) -> dict[str, str]:
         """Override the template's action colour with the prospect's brand colour (from its logo), if usable.
 
         A logo that yields no vivid colour leaves the template palette untouched, so the DA is never degraded.
+        When ``use_brand_color`` is False the site keeps the template's default action colour (the client
+        preferred it to the logo colour) — the palette is returned unchanged.
 
         Args:
             palette: The base palette (template default or stored theme).
             template_id: Template whose action-colour key receives the brand colour.
             enrichment: The prospect enrichment dict (holds ``logo_url``), or None.
+            use_brand_color: Whether to pull the action colour from the logo (True) or keep the template's.
 
         Returns:
             A new palette with the action colour overridden, or the base palette unchanged.
         """
+        if not use_brand_color:
+            return palette
         brand = brand_color_service.extract_brand_color((enrichment or {}).get("logo_url"))
         if not brand:
             return palette
@@ -304,9 +317,12 @@ class DemoSiteService:
         city: str | None = None,
         description: str | None = None,
         theme: dict[str, str] | None = None,
+        use_brand_color: bool | None = None,
     ) -> DemoSite:
         """Update demo site fields and regenerate its published content."""
         pending_theme = theme
+        if use_brand_color is not None:
+            demo_site.use_brand_color = use_brand_color
         if business_name is not None:
             demo_site.business_name = business_name
         if template_id is not None:

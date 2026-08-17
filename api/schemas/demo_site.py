@@ -62,6 +62,8 @@ class DemoSiteUpdateRequest(BaseModel):
     city: str | None = Field(default=None, max_length=128)
     description: str | None = Field(default=None, max_length=2000)
     theme: DemoSiteTheme | None = None
+    # Logo ⟷ Template choice for the action colour (applied on regeneration).
+    use_brand_color: bool | None = None
 
 
 class DemoSiteTemplateTheme(BaseModel):
@@ -82,6 +84,10 @@ class DemoSiteTemplateResponse(BaseModel):
     default_theme: DemoSiteTemplateTheme
     category: str = "artisan"
     trades: list[str] = []
+    # Canonical colour role → palette key, for the role-based editor (only listed roles are editable).
+    color_roles: dict[str, str] = {}
+    # Palette key driving the action colour (== color_roles["action"]).
+    brand_color_key: str = "primary"
 
 
 class DemoSiteResponse(BaseModel):
@@ -108,6 +114,8 @@ class DemoSiteResponse(BaseModel):
     created_at: datetime
     error_message: str | None = None
     theme: DemoSiteTheme | None = None
+    # Logo ⟷ Template choice for the action colour.
+    use_brand_color: bool = True
     # Prospection video (webcam + capture du site du prospect).
     video_status: str | None = None
     video_error: str | None = None

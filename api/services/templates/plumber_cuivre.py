@@ -44,6 +44,9 @@ TEMPLATE_META: dict[str, object] = {
         "secondary": "#10293D",
         "accent": "#22A8C4",
     },
+    # Canonical colour roles → palette key (audit 2026-08-17). Only these roles are editable;
+    # keys not listed here don't visibly theme this layer, so the editor hides them.
+    "color_roles": {"action": "primary", "fond": "secondary", "secondaire": "accent"},
 }
 
 # Shared base bloks only (flat SiteContent) — like every other template.
