@@ -286,6 +286,20 @@ def resolve_trade_services(scraped_names: Any, defaults: list[dict[str, str]]) -
     ]
 
 
+def fixed_trade_services(defaults: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Use a template's curated service grid as-is (fake prices stripped), ignoring scraped services.
+
+    A trade's services are standardised, so a fixed, always-complete grid — every card has a
+    description, a stable count, and matches its icon — beats a scraped-driven one (variable count,
+    empty cards, icon mismatches). Food is the exception: its menu is its identity, so it keeps
+    ``resolve_trade_services``.
+    """
+    return [
+        {"title": service.get("title", ""), "description": without_price(service.get("description", ""))}
+        for service in defaults
+    ]
+
+
 _WEEKDAYS: frozenset[str] = frozenset(
     {
         "lundi",

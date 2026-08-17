@@ -19,6 +19,7 @@ from typing import Any
 from services.templates.site_content import (  # noqa: F401 — re-exported for the registry
     SITE_CONTENT_SCHEMAS,
     apply_real_trust_stats,
+    fixed_trade_services,
     map_prospect_and_enrichment,
     resolve_trade_services,
     to_storyblok_site_content,
@@ -197,7 +198,7 @@ def build_site_content(
         about_default=_SITE_ABOUT_DEFAULT,
     )
     enr = enrichment or {}
-    site["services"] = resolve_trade_services(enr.get("services"), MECHANIC_SERVICES)
+    site["services"] = fixed_trade_services(MECHANIC_SERVICES)
     site["faq"] = MECHANIC_FAQ
     site.update(_EDITORIAL_DEFAULTS)
     apply_real_trust_stats(site, enrichment)
