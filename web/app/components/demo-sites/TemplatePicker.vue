@@ -66,9 +66,7 @@
               :src="livePreviewUrl"
               :class="[
                 'absolute top-0 origin-top-left border-0 bg-white',
-                previewDevice === 'mobile'
-                  ? 'h-[844px] w-[390px] rounded-xl shadow-[var(--app-shadow-soft)]'
-                  : 'left-0 h-[800px] w-[1280px]',
+                previewDevice === 'mobile' ? 'rounded-md shadow-[var(--app-shadow-soft)]' : 'left-0',
               ]"
               :style="liveFrameStyle"
               title="Aperçu interactif du template"
@@ -385,11 +383,19 @@ function selectBrandSource(fromLogo: boolean): void {
   emit('update:useBrandColor', fromLogo)
 }
 
-/** Native viewport of the live iframe per device (scaled down to fit the pane). */
+/** Native layout viewport the live iframe renders at, per device, before it is fitted to the pane. */
 const LIVE_VIEWPORTS: Record<TemplatePreviewDevice, { width: number; height: number }> = {
   desktop: { width: 1280, height: 800 },
   mobile: { width: 390, height: 844 },
 }
+
+/**
+ * Backing-resolution multiplier for the live preview. The iframe is sized at `viewport / SUPERSAMPLE`
+ * and `zoom`ed back up by the same factor: the sub-frame keeps its native layout viewport (1280 / 390)
+ * but rasterizes at SUPERSAMPLE× the pixels, so the fit-to-pane `transform: scale` down-samples a
+ * high-res image instead of stretching a 1:1 one — the fix for the soft preview on HiDPI screens.
+ */
+const PREVIEW_SUPERSAMPLE: number = 2
 
 const previewContainer: Ref<HTMLElement | null> = ref(null)
 const paneWidth: Ref<number> = ref(640)
@@ -400,7 +406,7 @@ const livePreviewUrl: Ref<string> = ref('')
 const isPreviewLoading: Ref<boolean> = ref(true)
 const failedThumbnails: Ref<Set<string>> = ref(new Set())
 
-/** ResizeObserver keeping the scaled iframe in sync with the preview pane width. */
+/** ResizeObserver keeping the zoomed iframe in sync with the preview pane width. */
 let previewResizeObserver: ResizeObserver | null = null
 /** Timer debouncing live preview reloads while colors are edited. */
 let livePreviewReloadTimer: ReturnType<typeof setTimeout> | null = null
@@ -418,17 +424,26 @@ const sortedTemplates: ComputedRef<DemoSiteTemplate[]> = computed((): DemoSiteTe
   sortTemplatesByRecommendation(props.templates, props.recommendedTrade ?? null),
 )
 
-/** Scaled position of the live iframe: full-width desktop, or a centered phone. */
+/**
+ * Sizing of the live iframe: a supersampled backing (`zoom`) fitted to the pane with `transform: scale`
+ * — full width for desktop, height-fit and centered for mobile.
+ */
 const liveFrameStyle: ComputedRef<Record<string, string>> = computed((): Record<string, string> => {
   const viewport: { width: number; height: number } = LIVE_VIEWPORTS[previewDevice.value]
+  const base: Record<string, string> = {
+    width: `${viewport.width / PREVIEW_SUPERSAMPLE}px`,
+    height: `${viewport.height / PREVIEW_SUPERSAMPLE}px`,
+    zoom: String(PREVIEW_SUPERSAMPLE),
+  }
   if (previewDevice.value === 'mobile') {
     const scale: number = paneHeight.value / viewport.height
     return {
+      ...base,
       transform: `scale(${scale})`,
       left: `calc(50% - ${(viewport.width * scale) / 2}px)`,
     }
   }
-  return { transform: `scale(${paneWidth.value / viewport.width})` }
+  return { ...base, transform: `scale(${paneWidth.value / viewport.width})` }
 })
 
 /** Whether the current theme differs from the selected template's defaults. */
