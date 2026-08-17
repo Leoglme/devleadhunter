@@ -164,34 +164,82 @@
                 Revenir aux couleurs du template
               </button>
             </div>
-            <div class="grid grid-cols-3 gap-3">
-              <div v-for="colorKey in colorKeys" :key="colorKey">
-                <span class="mb-1 block text-[10px] tracking-wide text-[var(--app-ink-soft)] uppercase">
-                  {{ colorLabels[colorKey] }}
+            <div class="flex flex-wrap gap-3">
+              <div v-for="color in editableColors" :key="color.key" class="min-w-[7rem] flex-1">
+                <span
+                  class="mb-1 flex items-center gap-1 text-[10px] tracking-wide text-[var(--app-ink-soft)] uppercase"
+                >
+                  {{ color.label }}
+                  <span
+                    v-if="color.isAction"
+                    class="rounded-sm bg-[var(--app-ink)] px-1 py-px text-[8px] font-semibold tracking-normal text-[var(--app-bg)] normal-case"
+                    title="Couleur des boutons et de la marque"
+                  >
+                    boutons
+                  </span>
                 </span>
                 <div class="flex items-center gap-1.5">
                   <div class="group relative h-8 w-8 shrink-0">
                     <div
                       class="pointer-events-none h-8 w-8 rounded-lg border border-[var(--app-line)] transition-transform group-hover:scale-105"
-                      :style="{ backgroundColor: theme[colorKey] }"
+                      :style="{ backgroundColor: theme[color.key] }"
                     />
                     <input
-                      :value="theme[colorKey]"
+                      :value="theme[color.key]"
                       type="color"
-                      :title="`Choisir la couleur ${colorLabels[colorKey].toLowerCase()}`"
-                      :aria-label="`Choisir la couleur ${colorLabels[colorKey].toLowerCase()}`"
+                      :title="`Choisir la couleur ${color.label.toLowerCase()}`"
+                      :aria-label="`Choisir la couleur ${color.label.toLowerCase()}`"
                       class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                      @input="updateThemeColor(colorKey, ($event.target as HTMLInputElement).value)"
+                      @input="updateThemeColor(color.key, ($event.target as HTMLInputElement).value)"
                     />
                   </div>
                   <input
-                    :value="theme[colorKey]"
+                    :value="theme[color.key]"
                     type="text"
                     class="input-field h-8 min-w-0 text-xs"
                     placeholder="#1d4ed8"
                     maxlength="7"
-                    @input="updateThemeColor(colorKey, ($event.target as HTMLInputElement).value)"
+                    @input="updateThemeColor(color.key, ($event.target as HTMLInputElement).value)"
                   />
+                </div>
+                <div
+                  v-if="color.isAction && showBrandSourcePicker"
+                  class="mt-1.5 flex gap-1"
+                  role="group"
+                  aria-label="Source de la couleur d'action"
+                >
+                  <button
+                    type="button"
+                    class="flex flex-1 items-center justify-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-medium transition-colors"
+                    :class="
+                      useBrandColor
+                        ? 'border-[var(--app-ink)] bg-[var(--app-surface-2)] text-[var(--app-ink)]'
+                        : 'border-[var(--app-line)] text-[var(--app-ink-soft)] hover:bg-[var(--app-surface-2)]'
+                    "
+                    @click="selectBrandSource(true)"
+                  >
+                    <span
+                      class="h-2.5 w-2.5 rounded-full border border-[var(--app-line)]"
+                      :style="{ backgroundColor: brandColor ?? undefined }"
+                    />
+                    Logo
+                  </button>
+                  <button
+                    type="button"
+                    class="flex flex-1 items-center justify-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-medium transition-colors"
+                    :class="
+                      !useBrandColor
+                        ? 'border-[var(--app-ink)] bg-[var(--app-surface-2)] text-[var(--app-ink)]'
+                        : 'border-[var(--app-line)] text-[var(--app-ink-soft)] hover:bg-[var(--app-surface-2)]'
+                    "
+                    @click="selectBrandSource(false)"
+                  >
+                    <span
+                      class="h-2.5 w-2.5 rounded-full border border-[var(--app-line)]"
+                      :style="{ backgroundColor: templateActionColor ?? undefined }"
+                    />
+                    Template
+                  </button>
                 </div>
               </div>
             </div>
@@ -214,7 +262,7 @@ import type {
   TemplateThemeColorKey,
 } from '~/types/TemplatePicker'
 import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
-import type { DemoSiteTemplate, DemoSiteTheme } from '~/services/demoSiteService'
+import type { ColorRole, DemoSiteTemplate, DemoSiteTheme } from '~/services/demoSiteService'
 import { isTemplateRecommendedFor, sortTemplatesByRecommendation } from '~/utils/templateRecommendation'
 
 /** Template picker: compact list, real screenshot, live iframe preview with theme colors applied. */
@@ -245,6 +293,16 @@ const props: TemplatePickerProps = defineProps({
     type: Boolean,
     default: false,
   },
+  // Action colour source: logo (true) / template (false). Null → hide the Logo/Template picker (wizard).
+  useBrandColor: {
+    type: Boolean as PropType<boolean | null>,
+    default: null,
+  },
+  // Colour extracted from the prospect logo, for the "Logo" pill (null = no usable logo colour).
+  brandColor: {
+    type: String as PropType<string | null>,
+    default: null,
+  },
 })
 
 const emit: EmitFn<TemplatePickerEmits> = defineEmits<TemplatePickerEmits>()
@@ -256,6 +314,70 @@ const colorLabels: Record<TemplateThemeColorKey, string> = {
   primary: 'Principale',
   secondary: 'Fond',
   accent: 'Accent',
+}
+
+/** One editable colour swatch, resolved from the template's canonical roles. */
+type EditableColor = {
+  key: TemplateThemeColorKey
+  label: string
+  isAction: boolean
+}
+
+const ROLE_ORDER: ColorRole[] = ['action', 'fond', 'secondaire']
+const ROLE_LABELS: Record<ColorRole, string> = {
+  action: "Couleur d'action",
+  fond: 'Fond',
+  secondaire: 'Secondaire',
+}
+
+/**
+ * The colours the editor exposes: the selected template's canonical roles (only those a layer visibly
+ * uses — dead fields are hidden). Falls back to the three raw keys for a template without role metadata.
+ */
+const editableColors: ComputedRef<EditableColor[]> = computed((): EditableColor[] => {
+  const roles: Partial<Record<ColorRole, TemplateThemeColorKey>> | undefined = selectedTemplate.value?.color_roles
+  if (!roles || Object.keys(roles).length === 0) {
+    return colorKeys.map(
+      (key: TemplateThemeColorKey): EditableColor => ({
+        key,
+        label: colorLabels[key],
+        isAction: false,
+      }),
+    )
+  }
+  return ROLE_ORDER.filter((role: ColorRole): boolean => Boolean(roles[role])).map(
+    (role: ColorRole): EditableColor => ({
+      key: roles[role] as TemplateThemeColorKey,
+      label: ROLE_LABELS[role],
+      isAction: role === 'action',
+    }),
+  )
+})
+
+/** The template's own default for the action colour (the "Template" pill). */
+const templateActionColor: ComputedRef<string | null> = computed((): string | null => {
+  const tpl: DemoSiteTemplate | null = selectedTemplate.value
+  const actionKey: TemplateThemeColorKey | undefined = tpl?.color_roles?.action ?? tpl?.brand_color_key
+  return tpl && actionKey ? tpl.default_theme[actionKey] : null
+})
+
+/** Show the Logo ⟷ Template picker only on a saved site that has a usable logo colour. */
+const showBrandSourcePicker: ComputedRef<boolean> = computed(
+  (): boolean => props.useBrandColor !== null && Boolean(props.brandColor),
+)
+
+/**
+ * Pick the action-colour source: apply the colour to the theme AND flag it, so the choice sticks
+ * through regeneration.
+ * @param fromLogo True → the extracted logo colour; false → the template default.
+ */
+function selectBrandSource(fromLogo: boolean): void {
+  const action: EditableColor | undefined = editableColors.value.find((c: EditableColor): boolean => c.isAction)
+  const color: string | null = (fromLogo ? props.brandColor : templateActionColor.value) ?? null
+  if (action && color) {
+    updateThemeColor(action.key, color)
+  }
+  emit('update:useBrandColor', fromLogo)
 }
 
 /** Native viewport of the live iframe per device (scaled down to fit the pane). */

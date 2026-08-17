@@ -15,6 +15,9 @@ export const DEFAULT_DEMO_SITE_THEME: DemoSiteTheme = {
   accent: '#f59e0b',
 }
 
+/** Canonical, template-agnostic colour roles the editor exposes. */
+export type ColorRole = 'action' | 'fond' | 'secondaire'
+
 export type DemoSiteTemplate = {
   id: string
   name: string
@@ -23,6 +26,10 @@ export type DemoSiteTemplate = {
   default_theme: DemoSiteTheme
   category?: string
   trades?: string[]
+  /** Role → palette key. Only listed roles are editable (a layer's dead colours are omitted). */
+  color_roles?: Partial<Record<ColorRole, keyof DemoSiteTheme>>
+  /** Palette key driving the action colour (== color_roles.action). */
+  brand_color_key?: keyof DemoSiteTheme
 }
 
 export type DemoSiteCreatePayload = {
@@ -60,6 +67,8 @@ export type DemoSiteUpdatePayload = {
   city?: string
   description?: string
   theme?: DemoSiteTheme
+  /** Action colour from the prospect logo (true) or the template default (false). */
+  use_brand_color?: boolean
 }
 
 export type DemoSite = {
@@ -85,6 +94,7 @@ export type DemoSite = {
   created_at: string
   error_message?: string | null
   theme?: DemoSiteTheme | null
+  use_brand_color?: boolean
   video_status?: DemoSiteVideoStatus | null
   video_error?: string | null
   video_generated_at?: string | null
