@@ -447,6 +447,7 @@ def map_prospect_and_enrichment(
     description = enrichment.get("description")
 
     reviews: list[dict[str, Any]] = []
+    seen_reviews: set[tuple[str, str]] = set()
     for review in raw_reviews:
         text = _clean_review_text(review.get("text", ""))
         if not text:
@@ -458,8 +459,16 @@ def map_prospect_and_enrichment(
         rating_value = review.get("rating")
         if not isinstance(rating_value, (int, float)) or rating_value < 4:
             continue
+        author = str(review.get("author", "")).strip() or "Client"
+        # Drop duplicate reviews at generation time. Scrapers can capture the same review twice, and
+        # older enrichment records predate the scrape-time dedup — showing the same testimonial twice
+        # cheapens a site sold at 500 €. Keyed on (author, text) so genuine distinct reviews survive.
+        review_key: tuple[str, str] = (author.lower(), text.lower())
+        if review_key in seen_reviews:
+            continue
+        seen_reviews.add(review_key)
         entry: dict[str, Any] = {
-            "author": str(review.get("author", "")).strip() or "Client",
+            "author": author,
             "text": text,
             "rating": int(rating_value),
         }

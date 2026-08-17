@@ -212,5 +212,8 @@ def build_site_content(
     site["audience"] = "men" if masculine else "all"
     if not masculine:
         site["aboutHeading"] = "Votre salon de quartier"
+        # heroBadge survives the Storyblok round-trip (``audience`` doesn't), so the layer reads it to
+        # pick the mixed-salon copy instead of the barbershop wording. "COIFFEUR" for a mixed salon.
+        site["heroBadge"] = "COIFFEUR"
     apply_real_trust_stats(site, enrichment)
     return site

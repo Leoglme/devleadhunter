@@ -51,6 +51,8 @@ def test_masculine_build_uses_men_copy() -> None:
     assert site["audience"] == "men"
     assert site["about"] == _ABOUT_MEN
     assert site["aboutHeading"] == "Votre barbier de quartier"
+    # heroBadge carries the audience to the layer (``audience`` is stripped by the Storyblok round-trip).
+    assert site["heroBadge"] == "BARBIER"
 
 
 def test_mixed_build_uses_neutral_copy() -> None:
@@ -59,3 +61,4 @@ def test_mixed_build_uses_neutral_copy() -> None:
     assert site["about"] == _ABOUT_MIXED
     assert site["aboutHeading"] == "Votre salon de quartier"
     assert "pour hommes" not in site["about"]
+    assert site["heroBadge"] == "COIFFEUR"

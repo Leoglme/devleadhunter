@@ -50,3 +50,17 @@ def test_reviews_without_a_rating_or_text_are_dropped() -> None:
         }
     )
     assert [r["author"] for r in reviews] == ["A"]
+
+
+def test_duplicate_reviews_are_shown_once() -> None:
+    """Same (author, text) captured twice -> shown once. Older enrichment predates scrape-time dedup."""
+    reviews = _site_reviews(
+        {
+            "reviews": [
+                {"author": "Marie L.", "text": "Super salon", "rating": 5},
+                {"author": "marie l.", "text": "super salon", "rating": 5},  # same review, different case
+                {"author": "Marie L.", "text": "Autre visite tout aussi top", "rating": 5},
+            ]
+        }
+    )
+    assert [r["text"] for r in reviews] == ["Super salon", "Autre visite tout aussi top"]
