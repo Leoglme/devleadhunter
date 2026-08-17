@@ -73,22 +73,25 @@ _SITE_ABOUT_DEFAULT: str = (
 
 # Trade defaults when enrichment provides no services / FAQ.
 # Mirror of layer defaults in devleadhunter-template-food (food.ts).
+# Cuisine-NEUTRAL fallback (used only when no real menu was scraped): a food truck's menu is its
+# identity, so we never invent typed dishes (a burger/hot-dog default clashed with, e.g., a Korean
+# or Mexican truck). Real scraped items win; these neutral cards just avoid a wrong-cuisine menu.
 FOOD_SERVICES: list[dict[str, str]] = [
     {
-        "title": "Burger dinde, œuf & fromage",
-        "description": ("Pain brioché, dinde grillée, œuf coulant, cheddar et sauce maison. — 12 €"),
+        "title": "Plat signature",
+        "description": "Notre recette phare, préparée minute avec des produits frais.",
     },
     {
-        "title": "Hot wings & frites",
-        "description": ("Ailes marinées, sauce piquante et frites croustillantes. — 11 €"),
+        "title": "Formule du midi",
+        "description": "Un plat, un accompagnement et une boisson — rapide et généreux.",
     },
     {
-        "title": "Duo hot-dog & soda",
-        "description": "Deux hot-dogs garnis, frites et boisson au choix. — 13 €",
+        "title": "Sur place ou à emporter",
+        "description": "Servi chaud, prêt à déguster sur le pouce ou à emporter.",
     },
     {
-        "title": "Soda float glacé",
-        "description": ("Boisson gazeuse et boule de glace vanille — le classique. — 6 €"),
+        "title": "Boisson & douceur",
+        "description": "Boissons fraîches et petites douceurs pour compléter le repas.",
     },
 ]
 
