@@ -146,6 +146,24 @@ def _is_unrehostable_photo(url: str) -> bool:
     return any(host in lowered for host in _UNREHOSTABLE_PHOTO_HOSTS)
 
 
+def usable_site_photos(enrichment: dict[str, Any] | None) -> list[str]:
+    """The prospect photos eligible for the site, in order: deduped, logo excluded, broken hosts dropped.
+
+    This is the exact pool the generated site draws from — ``[0]`` hero, ``[1]`` about, ``[2:]`` gallery.
+    Exposed so the demo-site image editor shows precisely what will render, and so a user-curated order
+    can be validated against the same set.
+    """
+    enrichment = enrichment or {}
+    logo_photo: str = str(enrichment.get("logo_url") or "").strip()
+    return [
+        url
+        for url in _dedupe_preserve_order(
+            [p.strip() for p in enrichment.get("photos", []) if isinstance(p, str) and p.strip()]
+        )
+        if url != logo_photo and not _is_unrehostable_photo(url)
+    ]
+
+
 def format_rating_value(rating: Any) -> str | None:
     """Format a Google rating the French way (``"4,5/5"``), or None when missing/unparseable."""
     if not isinstance(rating, (int, float)):
@@ -420,16 +438,10 @@ def map_prospect_and_enrichment(
     """
     enrichment = enrichment or {}
 
-    # The prospect's logo has its own slot — keep it out of the photo pool so it never lands as a
-    # hero / about / gallery tile (it was scraped into both places on some prospects).
-    logo_photo: str = str(enrichment.get("logo_url") or "").strip()
-    photos: list[str] = [
-        url
-        for url in _dedupe_preserve_order(
-            [p.strip() for p in enrichment.get("photos", []) if isinstance(p, str) and p.strip()]
-        )
-        if url != logo_photo and not _is_unrehostable_photo(url)
-    ]
+    # The photo pool the site draws from ([0]→hero, [1]→about, [2:]→gallery): deduped, logo excluded
+    # (it has its own slot), broken hosts dropped. A user-curated order arrives already folded into
+    # ``enrichment["photos"]`` upstream, so this stays the single mapping rule.
+    photos: list[str] = usable_site_photos(enrichment)
     raw_reviews: list[dict] = [r for r in enrichment.get("reviews", []) if isinstance(r, dict)]
     raw_hours: list[dict] = [h for h in enrichment.get("opening_hours", []) if isinstance(h, dict)]
     description = enrichment.get("description")

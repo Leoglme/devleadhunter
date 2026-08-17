@@ -66,6 +66,19 @@ class DemoSiteUpdateRequest(BaseModel):
     use_brand_color: bool | None = None
 
 
+class DemoSiteImagesResponse(BaseModel):
+    """The site's photo pool and its current placement (hero/about/gallery by order)."""
+
+    pool: list[str]
+    order: list[str]
+
+
+class DemoSiteImagesUpdateRequest(BaseModel):
+    """New photo placement order: ``[0]`` hero, ``[1]`` about, ``[2:]`` gallery; omitted photos are unused."""
+
+    order: list[str] = Field(default_factory=list, max_length=60)
+
+
 class DemoSiteTemplateTheme(BaseModel):
     """Default theme colors for a template."""
 

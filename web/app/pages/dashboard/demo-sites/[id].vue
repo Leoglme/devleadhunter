@@ -299,6 +299,7 @@
                 :use-brand-color="selectedUseBrandColor"
                 :brand-color="site?.brand_color ?? null"
                 :published-site-url="publishedSiteUrl"
+                :reload-nonce="previewReloadNonce"
                 templates-below-preview
                 @update:theme="selectedTheme = $event"
                 @update:use-brand-color="selectedUseBrandColor = $event"
@@ -340,6 +341,15 @@
               </div>
             </div>
           </div>
+
+          <div v-if="siteImages && siteImages.pool.length" class="card p-5">
+            <DemoSitesImageSlots
+              :pool="siteImages.pool"
+              :order="siteImages.order"
+              :busy="savingImages"
+              @apply="handleApplyImages"
+            />
+          </div>
         </section>
       </div>
     </template>
@@ -351,7 +361,7 @@ import { formatNumericDate } from '~/utils/date'
 import type { UseCopyToClipboardReturn, UseOpenExternalUrlReturn, UseToastReturn } from '~/types/Composables'
 import type { DemoSiteStat } from '~/types/DemoSiteDetailPage'
 import type { ComputedRef, Ref } from 'vue'
-import type { DemoSite, DemoSiteTemplate, DemoSiteTheme } from '~/services/demoSiteService'
+import type { DemoSite, DemoSiteImages, DemoSiteTemplate, DemoSiteTheme } from '~/services/demoSiteService'
 import { DEFAULT_DEMO_SITE_THEME, DemoSiteService } from '~/services/demoSiteService'
 import { useToast } from '~/composables/useToast'
 
@@ -373,6 +383,10 @@ const selectedTheme: Ref<DemoSiteTheme> = ref({ ...DEFAULT_DEMO_SITE_THEME })
 /** Action colour source: logo (true) / template (false) — #13. */
 const selectedUseBrandColor: Ref<boolean> = ref(true)
 const applyingTemplate: Ref<boolean> = ref(false)
+const siteImages: Ref<DemoSiteImages | null> = ref(null)
+const savingImages: Ref<boolean> = ref(false)
+/** Bumped after any regeneration to force the live preview iframe to reload. */
+const previewReloadNonce: Ref<number> = ref(0)
 const verifying: Ref<boolean> = ref(false)
 const regenerating: Ref<boolean> = ref(false)
 const deleting: Ref<boolean> = ref(false)
@@ -511,6 +525,37 @@ async function applyTemplateChanges(): Promise<void> {
 }
 
 /**
+ * Load the photo pool and current placement for the image editor.
+ * Silent on failure: the editor block simply stays hidden.
+ */
+async function loadImages(): Promise<void> {
+  try {
+    siteImages.value = await DemoSiteService.getDemoSiteImages(demoSiteId)
+  } catch {
+    siteImages.value = null
+  }
+}
+
+/**
+ * Persist a curated photo placement, which regenerates the site, then refresh the preview.
+ * @param order - Photo URLs in placement order (hero, about, gallery…).
+ */
+async function handleApplyImages(order: string[]): Promise<void> {
+  savingImages.value = true
+  try {
+    site.value = await DemoSiteService.updateDemoSiteImages(demoSiteId, order)
+    resetTemplateChanges()
+    await loadImages()
+    previewReloadNonce.value += 1
+    toast.success('Images mises à jour et site régénéré')
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : 'Échec de la mise à jour des images')
+  } finally {
+    savingImages.value = false
+  }
+}
+
+/**
  * Open the live demo URL in a new browser tab.
  */
 async function openDemoUrl(url: string): Promise<void> {
@@ -544,6 +589,8 @@ async function handleRegenerate(): Promise<void> {
   try {
     site.value = await DemoSiteService.regenerateDemoSite(demoSiteId)
     resetTemplateChanges()
+    await loadImages()
+    previewReloadNonce.value += 1
   } finally {
     regenerating.value = false
   }
@@ -680,6 +727,7 @@ onMounted(async () => {
   } finally {
     loadingTemplates.value = false
   }
+  await loadImages()
 })
 
 onBeforeUnmount((): void => {

@@ -30,6 +30,7 @@ from services.storyblok_service import (
     storyblok_service,
 )
 from services.templates import registry as template_registry
+from services.templates.site_content import usable_site_photos
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +161,10 @@ class DemoSiteService:
     ) -> dict:
         """Build Storyblok content JSON from the demo site record (with enrichment)."""
         enrichment = self._enrichment_dict_for_site(db, demo_site)
+        # A user-curated photo placement overrides the scraped order: fold it into the photo pool so
+        # the shared mapping ([0]→hero, [1]→about, [2:]→gallery) produces the arrangement they chose.
+        if isinstance(enrichment, dict) and isinstance(demo_site.image_order, list) and demo_site.image_order:
+            enrichment = {**enrichment, "photos": demo_site.image_order}
         palette = (
             theme
             or self._theme_from_content(demo_site.content_json)
@@ -345,6 +350,43 @@ class DemoSiteService:
             demo_site.content_json = existing_content
 
         return await self.regenerate_demo_site(db, demo_site)
+
+    def get_site_images(self, db: Session, demo_site: DemoSite) -> dict[str, list[str]]:
+        """Return the site's photo pool and its current placement order.
+
+        ``pool`` is every usable prospect photo (what could go on the site); ``order`` is the current
+        arrangement ([0]→hero, [1]→about, [2:]→gallery), i.e. the saved override cleaned to the pool,
+        or the default scraped order when none is saved. Photos in ``pool`` but not in ``order`` are
+        unused. Empty pool means the site has no editable photos (no prospect, or none usable).
+        """
+        pool: list[str] = usable_site_photos(self._enrichment_dict_for_site(db, demo_site))
+        saved: list[str] = self._clean_image_order(demo_site.image_order, pool)
+        return {"pool": pool, "order": saved or list(pool)}
+
+    async def set_site_images(self, db: Session, demo_site: DemoSite, order: list[str]) -> DemoSite:
+        """Persist a user-curated photo order and regenerate the site so the new placement goes live.
+
+        The order is cleaned against the current pool (unknown or duplicate URLs dropped); an order
+        that matches the default is stored as NULL so the site keeps following the scraped order.
+        """
+        pool: list[str] = usable_site_photos(self._enrichment_dict_for_site(db, demo_site))
+        cleaned: list[str] = self._clean_image_order(order, pool)
+        demo_site.image_order = cleaned if cleaned and cleaned != pool else None
+        return await self.regenerate_demo_site(db, demo_site)
+
+    @staticmethod
+    def _clean_image_order(order: object, pool: list[str]) -> list[str]:
+        """Keep only pool URLs, first occurrence, in the given order (drops unknown/duplicate URLs)."""
+        if not isinstance(order, list):
+            return []
+        allowed: set[str] = set(pool)
+        seen: set[str] = set()
+        cleaned: list[str] = []
+        for url in order:
+            if isinstance(url, str) and url in allowed and url not in seen:
+                seen.add(url)
+                cleaned.append(url)
+        return cleaned
 
     async def invite_client_to_cms(self, db: Session, demo_site: DemoSite) -> DemoSite:
         """Send a Storyblok CMS invitation to the demo site client email."""

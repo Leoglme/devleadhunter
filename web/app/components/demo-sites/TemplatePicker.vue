@@ -288,6 +288,11 @@ const props: TemplatePickerProps = defineProps({
     type: String as PropType<string | null>,
     default: null,
   },
+  // Bump to force the published-site iframe to reload after a regeneration (URL itself is unchanged).
+  reloadNonce: {
+    type: Number,
+    default: 0,
+  },
   // When true, stack a full-width preview with the template strip below it (demo site page).
   templatesBelowPreview: {
     type: Boolean,
@@ -480,7 +485,10 @@ function buildLivePreviewUrl(template: DemoSiteTemplate): string {
  */
 function applyLivePreviewUrl(): void {
   if (props.publishedSiteUrl) {
-    livePreviewUrl.value = props.publishedSiteUrl
+    const separator: string = props.publishedSiteUrl.includes('?') ? '&' : '?'
+    livePreviewUrl.value = props.reloadNonce
+      ? `${props.publishedSiteUrl}${separator}_r=${props.reloadNonce}`
+      : props.publishedSiteUrl
     return
   }
   if (selectedTemplate.value) livePreviewUrl.value = buildLivePreviewUrl(selectedTemplate.value)
@@ -575,6 +583,8 @@ watch(
 watch((): DemoSiteTheme => props.theme, scheduleLivePreviewReload, { deep: true })
 
 watch((): string | null => props.publishedSiteUrl ?? null, applyLivePreviewUrl)
+
+watch((): number => props.reloadNonce ?? 0, applyLivePreviewUrl)
 
 watch([livePreviewUrl, isLivePreview], (): void => {
   if (isLivePreview.value) beginPreviewLoad()

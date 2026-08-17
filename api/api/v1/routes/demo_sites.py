@@ -16,6 +16,8 @@ from models.prospect_db import ProspectDB
 from models.user import User
 from schemas.demo_site import (
     DemoSiteCreateRequest,
+    DemoSiteImagesResponse,
+    DemoSiteImagesUpdateRequest,
     DemoSiteListResponse,
     DemoSitePreviewRequest,
     DemoSitePreviewResponse,
@@ -393,6 +395,33 @@ async def regenerate_demo_site(
     """Rebuild demo site content from stored fields without changing them."""
     site = _get_editable_demo_site(db, current_user.id, demo_site_id)
     site = await demo_site_service.regenerate_demo_site(db, site)
+    return _serialize_demo_site(site, include_brand_color=True)
+
+
+@router.get("/{demo_site_id}/images", response_model=DemoSiteImagesResponse)
+async def get_demo_site_images(
+    demo_site_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> DemoSiteImagesResponse:
+    """Return the site's photo pool and current placement (hero/about/gallery by order)."""
+    site = demo_site_service.get_for_user(db, current_user.id, demo_site_id)
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo site not found")
+    images = demo_site_service.get_site_images(db, site)
+    return DemoSiteImagesResponse(**images)
+
+
+@router.put("/{demo_site_id}/images", response_model=DemoSiteResponse)
+async def update_demo_site_images(
+    demo_site_id: int,
+    payload: DemoSiteImagesUpdateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> DemoSiteResponse:
+    """Save a user-curated photo placement and regenerate the site so it goes live."""
+    site = _get_editable_demo_site(db, current_user.id, demo_site_id)
+    site = await demo_site_service.set_site_images(db, site, payload.order)
     return _serialize_demo_site(site, include_brand_color=True)
 
 

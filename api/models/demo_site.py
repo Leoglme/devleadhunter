@@ -47,6 +47,9 @@ class DemoSite(Base):
     storyblok_login_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     storyblok_invite_sent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     content_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # User-curated photo order for the site (list of URLs). NULL = default scraped order.
+    # When set, it overrides the prospect photos at generation: [0]→hero, [1]→about, [2:]→gallery.
+    image_order: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Whether the action colour is pulled from the prospect's logo (True) or kept as the template
     # default (False). Default True — the logo colour is used when a usable one exists.
     use_brand_color: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

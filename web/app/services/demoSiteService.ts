@@ -71,6 +71,12 @@ export type DemoSiteUpdatePayload = {
   use_brand_color?: boolean
 }
 
+/** The site's photo pool and its current placement: order[0]→hero, order[1]→about, order[2:]→gallery. */
+export type DemoSiteImages = {
+  pool: string[]
+  order: string[]
+}
+
 export type DemoSite = {
   id: number
   slug: string
@@ -201,6 +207,24 @@ export class DemoSiteService {
    */
   static async regenerateDemoSite(demoSiteId: number): Promise<DemoSite> {
     return ApiClient.post<DemoSite>(`${BASE_URL}/${demoSiteId}/regenerate`, {})
+  }
+
+  /**
+   * Fetch the site's photo pool and current placement (hero/about/gallery by order).
+   * @param demoSiteId - Id of the demo site.
+   */
+  static async getDemoSiteImages(demoSiteId: number): Promise<DemoSiteImages> {
+    return ApiClient.get<DemoSiteImages>(`${BASE_URL}/${demoSiteId}/images`)
+  }
+
+  /**
+   * Save a curated photo placement and regenerate the site so it goes live.
+   * @param demoSiteId - Id of the demo site.
+   * @param order - Photo URLs in placement order: [0] hero, [1] about, [2:] gallery; omitted = unused.
+   * @returns The regenerated demo site.
+   */
+  static async updateDemoSiteImages(demoSiteId: number, order: string[]): Promise<DemoSite> {
+    return ApiClient.put<DemoSite>(`${BASE_URL}/${demoSiteId}/images`, { order })
   }
 
   /**
