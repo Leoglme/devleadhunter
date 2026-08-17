@@ -27,7 +27,16 @@ jobs:
           # GitHub. Unauthenticated, that hits GitHub's 60-req/hour limit → 429 and the deploy fails.
           # Authenticating with the workflow token raises the limit to 5000/hour.
           GIGET_AUTH: ${{ secrets.GITHUB_TOKEN }}
-        run: npm ci
+        # GitHub's tarball API is intermittently flaky (503 / truncated downloads); the layer fetch is
+        # all-or-nothing per prepare, so retry a few times before giving up.
+        run: |
+          for attempt in 1 2 3 4 5; do
+            npm ci && exit 0
+            echo "::warning::npm ci failed (attempt $attempt/5) — retrying layer download in 30s"
+            rm -rf node_modules
+            sleep 30
+          done
+          echo "::error::npm ci failed after 5 attempts" && exit 1
 
       # Build with Nitro's Vercel preset → demo-host/.vercel/output (Build Output API).
       # Public runtime config is baked here, so the NUXT_PUBLIC_* vars live on this step.
