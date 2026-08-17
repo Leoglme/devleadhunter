@@ -5,11 +5,30 @@
         <UIcon name="i-lucide-arrow-left" class="h-4 w-4" />
         Retour aux sites
       </NuxtLink>
-      <div class="flex flex-wrap gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <template v-if="hasPendingChanges">
+          <button
+            type="button"
+            class="btn-secondary inline-flex items-center gap-2"
+            :disabled="saving"
+            @click="resetPendingChanges"
+          >
+            Annuler
+          </button>
+          <button
+            type="button"
+            class="btn-primary inline-flex items-center gap-2"
+            :disabled="saving"
+            @click="savePendingChanges"
+          >
+            <UIcon name="i-lucide-save" class="h-4 w-4" />
+            {{ saving ? 'Sauvegarde…' : 'Sauvegarder' }}
+          </button>
+        </template>
         <NuxtLink
           v-if="site"
           :to="`/dashboard/demo-sites/${site.id}/edit`"
-          class="btn-primary inline-flex items-center gap-2"
+          class="btn-secondary inline-flex items-center gap-2"
         >
           <UIcon name="i-lucide-square-pen" class="h-4 w-4" />
           Modifier
@@ -42,212 +61,238 @@
         <p class="text-sm text-[var(--app-ink-soft)]">{{ site.slug }} · {{ templateLabel }}</p>
       </header>
 
-      <div class="grid items-start gap-6 @4xl:grid-cols-[320px_1fr]">
-        <aside class="card sticky top-6 space-y-6 p-5">
-          <div>
-            <h2 class="text-sm font-semibold tracking-wide text-[var(--app-ink)] uppercase">Résumé</h2>
-            <dl class="mt-4 space-y-3 text-xs">
-              <div class="flex justify-between gap-3">
-                <dt class="text-[var(--app-ink-soft)]">Statut</dt>
-                <dd>
-                  <span :class="['rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase', statusClass]">
-                    {{ statusLabel }}
-                  </span>
-                </dd>
-              </div>
-              <div class="flex justify-between gap-3">
-                <dt class="text-[var(--app-ink-soft)]">Template</dt>
-                <dd class="text-right text-[var(--app-ink)]">{{ templateLabel }}</dd>
-              </div>
-              <div v-if="site.city" class="flex justify-between gap-3">
-                <dt class="text-[var(--app-ink-soft)]">Ville</dt>
-                <dd class="text-right text-[var(--app-ink)]">{{ site.city }}</dd>
-              </div>
-              <div v-if="site.email" class="flex justify-between gap-3">
-                <dt class="text-[var(--app-ink-soft)]">Email client</dt>
-                <dd class="text-right break-all text-[var(--app-ink)]">{{ site.email }}</dd>
-              </div>
-              <div v-if="site.phone" class="flex justify-between gap-3">
-                <dt class="text-[var(--app-ink-soft)]">Téléphone</dt>
-                <dd class="text-right text-[var(--app-ink)]">{{ site.phone }}</dd>
-              </div>
-              <div class="flex justify-between gap-3">
-                <dt class="text-[var(--app-ink-soft)]">Expire dans</dt>
-                <dd class="text-right text-[var(--app-ink)]">{{ daysLeft }} jours</dd>
-              </div>
-              <div class="flex justify-between gap-3">
-                <dt class="text-[var(--app-ink-soft)]">Créé le</dt>
-                <dd class="text-right text-[var(--app-ink)]">{{ formatNumericDate(site.created_at) }}</dd>
-              </div>
-            </dl>
-          </div>
+      <div class="grid items-start gap-6 @4xl:grid-cols-[360px_1fr]">
+        <aside class="card sticky top-6 max-h-[calc(100vh-3rem)] space-y-5 overflow-y-auto p-5">
+          <UiTabs v-model="activeTab" :tabs="asideTabs" />
 
-          <div v-if="site.description" class="border-t border-[var(--app-line)] pt-4">
-            <h3 class="text-sm font-semibold text-[var(--app-ink)]">Description</h3>
-            <p class="mt-2 text-xs leading-relaxed whitespace-pre-wrap text-[var(--app-ink-soft)]">
-              {{ site.description }}
-            </p>
-          </div>
-
-          <div class="space-y-2 border-t border-[var(--app-line)] pt-4">
-            <h3 class="text-sm font-semibold text-[var(--app-ink)]">Actions</h3>
-            <button v-if="openUrl" type="button" class="btn-secondary w-full text-xs" @click="copyDemoUrl(openUrl)">
-              {{ copied ? 'Lien copié !' : 'Copier le lien' }}
-            </button>
-            <button
-              type="button"
-              class="btn-secondary w-full text-xs"
-              :disabled="regenerating"
-              @click="handleRegenerate"
-            >
-              {{ regenerating ? 'Régénération…' : 'Régénérer le contenu' }}
-            </button>
-            <button type="button" class="btn-secondary w-full text-xs" :disabled="verifying" @click="handleVerify">
-              {{ verifying ? 'Vérification…' : "Revérifier l'URL" }}
-            </button>
-            <button
-              type="button"
-              class="btn-secondary inline-flex w-full items-center justify-center gap-2 text-xs"
-              :disabled="exporting"
-              @click="handleExport"
-            >
-              <UIcon name="i-lucide-download" class="h-3.5 w-3.5" />
-              {{ exporting ? 'Préparation du zip…' : 'Exporter le code' }}
-            </button>
-            <button
-              type="button"
-              class="btn-secondary w-full text-xs text-[var(--app-red)]"
-              :disabled="deleting"
-              @click="deleteSiteModalRef?.open()"
-            >
-              {{ deleting ? 'Suppression…' : 'Supprimer' }}
-            </button>
-
-            <UiConfirmModal
-              ref="deleteSiteModalRef"
-              title="Supprimer le site"
-              :message="`Supprimer le site « ${site?.business_name} » ? La démo et son espace CMS seront retirés. Cette action est irréversible.`"
-              confirm-text="Supprimer"
-              cancel-text="Annuler"
-              @confirm="handleDelete"
-            />
-          </div>
-
-          <div class="rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-4">
-            <div class="flex items-center justify-between gap-3">
-              <h3 class="text-sm font-semibold text-[var(--app-ink)]">Vidéo de prospection</h3>
-              <span
-                v-if="videoStatusLabel"
-                :class="['rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase', videoStatusClass]"
-              >
-                {{ videoStatusLabel }}
-              </span>
-            </div>
-            <p class="mt-1.5 text-xs leading-relaxed text-[var(--app-ink-soft)]">
-              Votre webcam + le site du prospect qui défile, avec « Bonjour {Prénom} » à l'écran. La vignette est
-              utilisable dans les emails via {vignette_video}.
-            </p>
-
-            <div v-if="isVideoGenerating" class="mt-3 flex items-center gap-2 text-xs text-[var(--app-ink-soft)]">
-              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-              Génération en cours (capture + montage)…
+          <template v-if="activeTab === 'resume'">
+            <div>
+              <h2 class="text-sm font-semibold tracking-wide text-[var(--app-ink)] uppercase">Résumé</h2>
+              <dl class="mt-4 space-y-3 text-xs">
+                <div class="flex justify-between gap-3">
+                  <dt class="text-[var(--app-ink-soft)]">Statut</dt>
+                  <dd>
+                    <span :class="['rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase', statusClass]">
+                      {{ statusLabel }}
+                    </span>
+                  </dd>
+                </div>
+                <div class="flex justify-between gap-3">
+                  <dt class="text-[var(--app-ink-soft)]">Template</dt>
+                  <dd class="text-right text-[var(--app-ink)]">{{ templateLabel }}</dd>
+                </div>
+                <div v-if="site.city" class="flex justify-between gap-3">
+                  <dt class="text-[var(--app-ink-soft)]">Ville</dt>
+                  <dd class="text-right text-[var(--app-ink)]">{{ site.city }}</dd>
+                </div>
+                <div v-if="site.email" class="flex justify-between gap-3">
+                  <dt class="text-[var(--app-ink-soft)]">Email client</dt>
+                  <dd class="text-right break-all text-[var(--app-ink)]">{{ site.email }}</dd>
+                </div>
+                <div v-if="site.phone" class="flex justify-between gap-3">
+                  <dt class="text-[var(--app-ink-soft)]">Téléphone</dt>
+                  <dd class="text-right text-[var(--app-ink)]">{{ site.phone }}</dd>
+                </div>
+                <div class="flex justify-between gap-3">
+                  <dt class="text-[var(--app-ink-soft)]">Expire dans</dt>
+                  <dd class="text-right text-[var(--app-ink)]">{{ daysLeft }} jours</dd>
+                </div>
+                <div class="flex justify-between gap-3">
+                  <dt class="text-[var(--app-ink-soft)]">Créé le</dt>
+                  <dd class="text-right text-[var(--app-ink)]">{{ formatNumericDate(site.created_at) }}</dd>
+                </div>
+              </dl>
             </div>
 
-            <p v-else-if="site.video_status === 'failed'" class="mt-3 text-xs text-[var(--app-red)]">
-              {{ site.video_error || 'La génération a échoué.' }}
-            </p>
+            <div v-if="openUrl" class="border-t border-[var(--app-line)] pt-4">
+              <h3 class="text-sm font-semibold text-[var(--app-ink)]">Lien de la démo</h3>
+              <div class="mt-2 flex items-center gap-2">
+                <input :value="openUrl" readonly class="input-field h-9 flex-1 truncate text-xs" />
+                <button
+                  type="button"
+                  class="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded border border-[var(--app-line)] text-[var(--app-ink-soft)] hover:text-[var(--app-ink)]"
+                  :title="copied ? 'Lien copié !' : 'Copier le lien'"
+                  @click="copyDemoUrl(openUrl)"
+                >
+                  <UIcon :name="copied ? 'i-lucide-check' : 'i-lucide-copy'" class="h-4 w-4" />
+                </button>
+              </div>
+            </div>
 
-            <template v-if="site.video_status === 'ready' && site.video_page_url">
+            <div v-if="site.description" class="border-t border-[var(--app-line)] pt-4">
+              <h3 class="text-sm font-semibold text-[var(--app-ink)]">Description</h3>
+              <p class="mt-2 text-xs leading-relaxed whitespace-pre-wrap text-[var(--app-ink-soft)]">
+                {{ site.description }}
+              </p>
+            </div>
+
+            <div class="space-y-2 border-t border-[var(--app-line)] pt-4">
+              <h3 class="text-sm font-semibold text-[var(--app-ink)]">Actions</h3>
               <button
                 type="button"
-                class="mt-3 block w-full cursor-pointer overflow-hidden rounded-lg border border-[var(--app-line)] transition-opacity hover:opacity-90"
-                title="Ouvrir la page vidéo"
-                @click="openVideoPage(site.video_page_url)"
+                class="btn-secondary inline-flex w-full items-center justify-center gap-2 text-xs"
+                :disabled="exporting"
+                @click="handleExport"
               >
-                <img
-                  v-if="site.video_thumbnail_url"
-                  :src="site.video_thumbnail_url"
-                  alt="Vignette de la vidéo de prospection"
-                  class="w-full"
-                />
+                <UIcon name="i-lucide-download" class="h-3.5 w-3.5" />
+                {{ exporting ? 'Préparation du zip…' : 'Exporter le code' }}
               </button>
-              <div class="mt-2 space-y-2">
-                <button type="button" class="btn-secondary w-full text-xs" @click="copyDemoUrl(site.video_page_url)">
-                  {{ copied ? 'Lien copié !' : 'Copier le lien vidéo' }}
-                </button>
-                <button
-                  type="button"
-                  class="btn-secondary w-full text-xs"
-                  :disabled="generatingVideo"
-                  @click="handleGenerateVideo"
+              <button
+                type="button"
+                class="btn-secondary w-full text-xs text-[var(--app-red)]"
+                :disabled="deleting"
+                @click="deleteSiteModalRef?.open()"
+              >
+                {{ deleting ? 'Suppression…' : 'Supprimer' }}
+              </button>
+
+              <UiConfirmModal
+                ref="deleteSiteModalRef"
+                title="Supprimer le site"
+                :message="`Supprimer le site « ${site?.business_name} » ? La démo et son espace CMS seront retirés. Cette action est irréversible.`"
+                confirm-text="Supprimer"
+                cancel-text="Annuler"
+                @confirm="handleDelete"
+              />
+            </div>
+
+            <div class="rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-4">
+              <div class="flex items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold text-[var(--app-ink)]">Vidéo de prospection</h3>
+                <span
+                  v-if="videoStatusLabel"
+                  :class="['rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase', videoStatusClass]"
                 >
-                  {{ generatingVideo ? 'Lancement…' : 'Régénérer la vidéo' }}
-                </button>
-                <button
-                  type="button"
-                  class="btn-secondary w-full text-xs text-[var(--app-red)]"
-                  :disabled="deletingVideo"
-                  @click="askDeleteVideo"
-                >
-                  {{ deletingVideo ? 'Suppression…' : 'Supprimer la vidéo' }}
-                </button>
+                  {{ videoStatusLabel }}
+                </span>
               </div>
-            </template>
+              <p class="mt-1.5 text-xs leading-relaxed text-[var(--app-ink-soft)]">
+                Votre webcam + le site du prospect qui défile, avec « Bonjour {Prénom} » à l'écran. La vignette est
+                utilisable dans les emails via {vignette_video}.
+              </p>
 
-            <button
-              v-if="!isVideoGenerating && site.video_status !== 'ready'"
-              type="button"
-              class="btn-primary mt-3 w-full text-xs disabled:cursor-not-allowed disabled:opacity-50"
-              :disabled="generatingVideo"
-              @click="handleGenerateVideo"
+              <div v-if="isVideoGenerating" class="mt-3 flex items-center gap-2 text-xs text-[var(--app-ink-soft)]">
+                <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
+                Génération en cours (capture + montage)…
+              </div>
+
+              <p v-else-if="site.video_status === 'failed'" class="mt-3 text-xs text-[var(--app-red)]">
+                {{ site.video_error || 'La génération a échoué.' }}
+              </p>
+
+              <template v-if="site.video_status === 'ready' && site.video_page_url">
+                <button
+                  type="button"
+                  class="mt-3 block w-full cursor-pointer overflow-hidden rounded-lg border border-[var(--app-line)] transition-opacity hover:opacity-90"
+                  title="Ouvrir la page vidéo"
+                  @click="openVideoPage(site.video_page_url)"
+                >
+                  <img
+                    v-if="site.video_thumbnail_url"
+                    :src="site.video_thumbnail_url"
+                    alt="Vignette de la vidéo de prospection"
+                    class="w-full"
+                  />
+                </button>
+                <div class="mt-2 space-y-2">
+                  <button type="button" class="btn-secondary w-full text-xs" @click="copyDemoUrl(site.video_page_url)">
+                    {{ copied ? 'Lien copié !' : 'Copier le lien vidéo' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-secondary w-full text-xs"
+                    :disabled="generatingVideo"
+                    @click="handleGenerateVideo"
+                  >
+                    {{ generatingVideo ? 'Lancement…' : 'Régénérer la vidéo' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-secondary w-full text-xs text-[var(--app-red)]"
+                    :disabled="deletingVideo"
+                    @click="askDeleteVideo"
+                  >
+                    {{ deletingVideo ? 'Suppression…' : 'Supprimer la vidéo' }}
+                  </button>
+                </div>
+              </template>
+
+              <button
+                v-if="!isVideoGenerating && site.video_status !== 'ready'"
+                type="button"
+                class="btn-primary mt-3 w-full text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="generatingVideo"
+                @click="handleGenerateVideo"
+              >
+                <UIcon name="i-lucide-clapperboard" class="mr-1.5 h-3.5 w-3.5" />
+                {{ generatingVideo ? 'Lancement…' : site.video_status === 'failed' ? 'Réessayer' : 'Générer la vidéo' }}
+              </button>
+
+              <NuxtLink
+                to="/dashboard/settings/video"
+                class="mt-2 block w-full text-center text-[11px] text-[var(--app-ink-soft)] underline underline-offset-2 transition-colors hover:text-[var(--app-ink)]"
+              >
+                Configurer mon clip webcam (Paramètres
+                <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> Vidéo de prospection)
+              </NuxtLink>
+            </div>
+
+            <UiConfirmModal
+              ref="deleteVideoModalRef"
+              title="Supprimer la vidéo"
+              message="Supprimer la vidéo de prospection de ce site ? Le lien envoyé dans les emails ne fonctionnera plus."
+              confirm-text="Supprimer"
+              cancel-text="Annuler"
+              @confirm="handleDeleteVideoConfirmed"
+            />
+
+            <div
+              v-if="site.storyblok_editor_url"
+              class="rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-4"
             >
-              <UIcon name="i-lucide-clapperboard" class="mr-1.5 h-3.5 w-3.5" />
-              {{ generatingVideo ? 'Lancement…' : site.video_status === 'failed' ? 'Réessayer' : 'Générer la vidéo' }}
-            </button>
+              <h3 class="text-sm font-semibold text-[var(--app-ink)]">Storyblok CMS</h3>
+              <button
+                type="button"
+                class="mt-2 text-xs text-blue-400 underline"
+                @click="openDemoUrl(site.storyblok_editor_url!)"
+              >
+                Ouvrir l'éditeur
+              </button>
+              <p v-if="site.storyblok_invite_sent" class="mt-2 text-xs text-[var(--app-green)]">
+                Invitation envoyée à {{ site.storyblok_login_email || site.email }}
+              </p>
+              <button
+                v-else
+                type="button"
+                class="btn-secondary mt-3 w-full text-xs"
+                :disabled="inviting"
+                @click="handleInvite"
+              >
+                {{ inviting ? 'Envoi…' : 'Inviter le client au CMS' }}
+              </button>
+            </div>
+          </template>
 
-            <NuxtLink
-              to="/dashboard/settings/video"
-              class="mt-2 block w-full text-center text-[11px] text-[var(--app-ink-soft)] underline underline-offset-2 transition-colors hover:text-[var(--app-ink)]"
-            >
-              Configurer mon clip webcam (Paramètres
-              <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> Vidéo de prospection)
-            </NuxtLink>
-          </div>
+          <template v-else>
+            <DemoSitesColorEditor
+              :template="selectedTemplate"
+              :theme="selectedTheme"
+              :use-brand-color="selectedUseBrandColor"
+              :brand-color="site.brand_color ?? null"
+              @update:theme="selectedTheme = $event"
+              @update:use-brand-color="selectedUseBrandColor = $event"
+            />
 
-          <UiConfirmModal
-            ref="deleteVideoModalRef"
-            title="Supprimer la vidéo"
-            message="Supprimer la vidéo de prospection de ce site ? Le lien envoyé dans les emails ne fonctionnera plus."
-            confirm-text="Supprimer"
-            cancel-text="Annuler"
-            @confirm="handleDeleteVideoConfirmed"
-          />
-
-          <div
-            v-if="site.storyblok_editor_url"
-            class="rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-4"
-          >
-            <h3 class="text-sm font-semibold text-[var(--app-ink)]">Storyblok CMS</h3>
-            <button
-              type="button"
-              class="mt-2 text-xs text-blue-400 underline"
-              @click="openDemoUrl(site.storyblok_editor_url!)"
-            >
-              Ouvrir l'éditeur
-            </button>
-            <p v-if="site.storyblok_invite_sent" class="mt-2 text-xs text-[var(--app-green)]">
-              Invitation envoyée à {{ site.storyblok_login_email || site.email }}
-            </p>
-            <button
+            <div v-if="siteImages && siteImages.pool.length" class="border-t border-[var(--app-line)] pt-4">
+              <DemoSitesImageSlots :pool="siteImages.pool" :order="imagesOrder" @update:order="imagesOrder = $event" />
+            </div>
+            <p
               v-else
-              type="button"
-              class="btn-secondary mt-3 w-full text-xs"
-              :disabled="inviting"
-              @click="handleInvite"
+              class="rounded-xl border border-dashed border-[var(--app-line)] p-4 text-xs text-[var(--app-ink-soft)]"
             >
-              {{ inviting ? 'Envoi…' : 'Inviter le client au CMS' }}
-            </button>
-          </div>
+              Aucune photo exploitable pour ce prospect : le site garde les images par défaut du template.
+            </p>
+          </template>
         </aside>
 
         <section class="space-y-6">
@@ -284,7 +329,8 @@
             <div class="border-b border-[var(--app-line)] px-5 py-4">
               <h2 class="font-semibold text-[var(--app-ink)]">Aperçu &amp; template</h2>
               <p class="text-xs text-[var(--app-ink-soft)]">
-                Rendu actuel du site démo publié — changez de modèle ou de couleurs pour voir l'effet, puis régénérez.
+                Votre vrai site, mis à jour en direct : couleurs, images et template s'y reflètent instantanément —
+                sauvegardez pour publier.
               </p>
             </div>
             <div class="space-y-4 p-5">
@@ -298,8 +344,10 @@
                 :theme="selectedTheme"
                 :use-brand-color="selectedUseBrandColor"
                 :brand-color="site?.brand_color ?? null"
-                :published-site-url="publishedSiteUrl"
+                :published-site-url="openUrl"
                 :reload-nonce="previewReloadNonce"
+                :show-colors="false"
+                :preview-photos="previewPhotos"
                 templates-below-preview
                 @update:theme="selectedTheme = $event"
                 @update:use-brand-color="selectedUseBrandColor = $event"
@@ -311,44 +359,7 @@
                   title="Aperçu live"
                 />
               </div>
-
-              <div
-                v-if="hasPendingTemplateChanges"
-                class="flex flex-col gap-3 rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] px-4 py-3.5 @2xl:flex-row @2xl:items-center @2xl:justify-between"
-              >
-                <p class="flex items-start gap-2 text-xs leading-relaxed text-[var(--app-ink-soft)]">
-                  <UIcon name="i-lucide-info" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  Ces changements ne sont pas encore en ligne : régénérez pour publier le nouveau rendu.
-                </p>
-                <div class="flex shrink-0 gap-2">
-                  <button
-                    type="button"
-                    class="btn-secondary text-xs"
-                    :disabled="applyingTemplate"
-                    @click="resetTemplateChanges"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    type="button"
-                    class="btn-primary text-xs"
-                    :disabled="applyingTemplate"
-                    @click="applyTemplateChanges"
-                  >
-                    {{ applyingTemplate ? 'Régénération…' : 'Appliquer & régénérer' }}
-                  </button>
-                </div>
-              </div>
             </div>
-          </div>
-
-          <div v-if="siteImages && siteImages.pool.length" class="card p-5">
-            <DemoSitesImageSlots
-              :pool="siteImages.pool"
-              :order="siteImages.order"
-              :busy="savingImages"
-              @apply="handleApplyImages"
-            />
           </div>
         </section>
       </div>
@@ -360,8 +371,16 @@
 import { formatNumericDate } from '~/utils/date'
 import type { UseCopyToClipboardReturn, UseOpenExternalUrlReturn, UseToastReturn } from '~/types/Composables'
 import type { DemoSiteStat } from '~/types/DemoSiteDetailPage'
+import type { UiTab } from '~/types/UiTabs'
+import type { TemplateThemeColorKey } from '~/types/TemplatePicker'
 import type { ComputedRef, Ref } from 'vue'
-import type { DemoSite, DemoSiteImages, DemoSiteTemplate, DemoSiteTheme } from '~/services/demoSiteService'
+import type {
+  DemoSite,
+  DemoSiteImages,
+  DemoSiteTemplate,
+  DemoSiteTheme,
+  DemoSiteUpdatePayload,
+} from '~/services/demoSiteService'
 import { DEFAULT_DEMO_SITE_THEME, DemoSiteService } from '~/services/demoSiteService'
 import { useToast } from '~/composables/useToast'
 
@@ -373,22 +392,28 @@ const { copy, copied }: UseCopyToClipboardReturn = useCopyToClipboard()
 const { openExternalUrl }: UseOpenExternalUrlReturn = useOpenExternalUrl()
 const toast: UseToastReturn = useToast()
 
+/** Tabs of the sticky side panel: the site's summary/actions, and its visual configuration. */
+const asideTabs: UiTab[] = [
+  { key: 'resume', label: 'Résumé', icon: 'i-lucide-clipboard-list' },
+  { key: 'config', label: 'Configuration', icon: 'i-lucide-sliders-horizontal' },
+]
+
 const site: Ref<DemoSite | null> = ref(null)
 const pending: Ref<boolean> = ref(true)
 const loadError: Ref<string | null> = ref(null)
 const templates: Ref<DemoSiteTemplate[]> = ref([])
 const loadingTemplates: Ref<boolean> = ref(true)
+const activeTab: Ref<string> = ref('resume')
 const selectedTemplateId: Ref<string> = ref('')
 const selectedTheme: Ref<DemoSiteTheme> = ref({ ...DEFAULT_DEMO_SITE_THEME })
 /** Action colour source: logo (true) / template (false) — #13. */
 const selectedUseBrandColor: Ref<boolean> = ref(true)
-const applyingTemplate: Ref<boolean> = ref(false)
+/** Candidate photo placement (hero/about/gallery), edited live and saved with the other changes. */
+const imagesOrder: Ref<string[]> = ref([])
 const siteImages: Ref<DemoSiteImages | null> = ref(null)
-const savingImages: Ref<boolean> = ref(false)
-/** Bumped after any regeneration to force the live preview iframe to reload. */
+const saving: Ref<boolean> = ref(false)
+/** Bumped after a save to force the live preview iframe to reload the published content. */
 const previewReloadNonce: Ref<number> = ref(0)
-const verifying: Ref<boolean> = ref(false)
-const regenerating: Ref<boolean> = ref(false)
 const deleting: Ref<boolean> = ref(false)
 const inviting: Ref<boolean> = ref(false)
 const exporting: Ref<boolean> = ref(false)
@@ -428,18 +453,45 @@ const daysLeft: ComputedRef<number> = computed(() =>
   site.value ? DemoSiteService.daysUntilExpiry(site.value.expires_at) : 0,
 )
 
-const hasPendingTemplateChanges: ComputedRef<boolean> = computed((): boolean => {
-  if (!site.value || !selectedTemplateId.value) return false
-  if (selectedTemplateId.value !== site.value.template_id) return true
+/** The template currently selected in the picker (drives the colour editor's roles). */
+const selectedTemplate: ComputedRef<DemoSiteTemplate | null> = computed(
+  (): DemoSiteTemplate | null =>
+    templates.value.find((template: DemoSiteTemplate): boolean => template.id === selectedTemplateId.value) ?? null,
+)
+
+/** Whether the picked template differs from the published one. */
+const templateChanged: ComputedRef<boolean> = computed(
+  (): boolean => Boolean(site.value) && selectedTemplateId.value !== site.value?.template_id,
+)
+
+/** Whether the edited colours differ from the published theme. */
+const themeChanged: ComputedRef<boolean> = computed((): boolean => {
+  if (!site.value) return false
   const publishedTheme: DemoSiteTheme = site.value.theme ?? DEFAULT_DEMO_SITE_THEME
   return (['primary', 'secondary', 'accent'] as const).some(
     (key: keyof DemoSiteTheme): boolean => publishedTheme[key] !== selectedTheme.value[key],
   )
 })
 
-/** Real published site shown in the preview — dropped while changes are pending. */
-const publishedSiteUrl: ComputedRef<string | null> = computed((): string | null =>
-  hasPendingTemplateChanges.value ? null : openUrl.value,
+/** Whether the Logo ⟷ Template action-colour source differs from the published choice. */
+const brandSourceChanged: ComputedRef<boolean> = computed(
+  (): boolean => Boolean(site.value) && selectedUseBrandColor.value !== (site.value?.use_brand_color ?? true),
+)
+
+/** Whether the edited photo placement differs from the published one. */
+const imagesChanged: ComputedRef<boolean> = computed((): boolean => {
+  if (!siteImages.value) return false
+  return imagesOrder.value.join('\n') !== siteImages.value.order.join('\n')
+})
+
+/** Any pending edit → the Annuler / Sauvegarder pair shows up top right. */
+const hasPendingChanges: ComputedRef<boolean> = computed(
+  (): boolean => templateChanged.value || themeChanged.value || brandSourceChanged.value || imagesChanged.value,
+)
+
+/** Candidate placement pushed live into the preview — only when it differs from the published one. */
+const previewPhotos: ComputedRef<string[] | null> = computed((): string[] | null =>
+  imagesChanged.value ? imagesOrder.value : null,
 )
 
 const isVideoGenerating: ComputedRef<boolean> = computed(
@@ -494,33 +546,43 @@ const stats: ComputedRef<DemoSiteStat[]> = computed(() => {
 })
 
 /**
- * Point the picker back at the template and colors currently published.
+ * Drop every pending edit: back to the published template, colours and photo placement.
  */
-function resetTemplateChanges(): void {
+function resetPendingChanges(): void {
   if (!site.value) return
   selectedTemplateId.value = site.value.template_id
   selectedTheme.value = { ...(site.value.theme ?? DEFAULT_DEMO_SITE_THEME) }
   selectedUseBrandColor.value = site.value.use_brand_color ?? true
+  imagesOrder.value = [...(siteImages.value?.order ?? [])]
 }
 
 /**
- * Persist the picked template and colors, which regenerates the published site.
+ * Save every pending edit (template, colours, photo placement) in ONE call — the API regenerates
+ * the published site once — then reload the preview on the fresh content.
  * @returns A promise resolved once the site has been regenerated.
  */
-async function applyTemplateChanges(): Promise<void> {
-  applyingTemplate.value = true
+async function savePendingChanges(): Promise<void> {
+  if (!site.value || !hasPendingChanges.value) return
+  saving.value = true
   try {
-    site.value = await DemoSiteService.updateDemoSite(demoSiteId, {
-      template_id: selectedTemplateId.value,
-      theme: { ...selectedTheme.value },
-      use_brand_color: selectedUseBrandColor.value,
-    })
-    resetTemplateChanges()
-    toast.success('Site régénéré avec le nouveau modèle')
+    const payload: DemoSiteUpdatePayload = {}
+    if (templateChanged.value || themeChanged.value || brandSourceChanged.value) {
+      payload.template_id = selectedTemplateId.value
+      payload.theme = { ...selectedTheme.value }
+      payload.use_brand_color = selectedUseBrandColor.value
+    }
+    if (imagesChanged.value) {
+      payload.image_order = [...imagesOrder.value]
+    }
+    site.value = await DemoSiteService.updateDemoSite(demoSiteId, payload)
+    await loadImages()
+    resetPendingChanges()
+    previewReloadNonce.value += 1
+    toast.success('Changements sauvegardés, site mis à jour')
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : 'Échec de la mise à jour du modèle')
+    toast.error(error instanceof Error ? error.message : 'Échec de la sauvegarde')
   } finally {
-    applyingTemplate.value = false
+    saving.value = false
   }
 }
 
@@ -537,25 +599,6 @@ async function loadImages(): Promise<void> {
 }
 
 /**
- * Persist a curated photo placement, which regenerates the site, then refresh the preview.
- * @param order - Photo URLs in placement order (hero, about, gallery…).
- */
-async function handleApplyImages(order: string[]): Promise<void> {
-  savingImages.value = true
-  try {
-    site.value = await DemoSiteService.updateDemoSiteImages(demoSiteId, order)
-    resetTemplateChanges()
-    await loadImages()
-    previewReloadNonce.value += 1
-    toast.success('Images mises à jour et site régénéré')
-  } catch (error) {
-    toast.error(error instanceof Error ? error.message : 'Échec de la mise à jour des images')
-  } finally {
-    savingImages.value = false
-  }
-}
-
-/**
  * Open the live demo URL in a new browser tab.
  */
 async function openDemoUrl(url: string): Promise<void> {
@@ -567,33 +610,6 @@ async function openDemoUrl(url: string): Promise<void> {
  */
 async function copyDemoUrl(url: string): Promise<void> {
   await copy(url)
-}
-
-/**
- * Verify that the deployed demo site is reachable.
- */
-async function handleVerify(): Promise<void> {
-  verifying.value = true
-  try {
-    site.value = await DemoSiteService.verifyDemoSite(demoSiteId)
-  } finally {
-    verifying.value = false
-  }
-}
-
-/**
- * Regenerate the demo site content and refresh the preview.
- */
-async function handleRegenerate(): Promise<void> {
-  regenerating.value = true
-  try {
-    site.value = await DemoSiteService.regenerateDemoSite(demoSiteId)
-    resetTemplateChanges()
-    await loadImages()
-    previewReloadNonce.value += 1
-  } finally {
-    regenerating.value = false
-  }
 }
 
 /**
@@ -710,10 +726,28 @@ async function openVideoPage(url: string): Promise<void> {
   await openExternalUrl(`${url}${url.includes('?') ? '&' : '?'}from=app`)
 }
 
+watch(selectedTemplateId, (templateId: string, previous: string): void => {
+  if (!site.value || !previous) return
+  // Back to the published template → restore the published colours; another template → its
+  // defaults, with the logo colour re-applied on its action key (what the server does on save).
+  if (templateId === site.value.template_id) {
+    selectedTheme.value = { ...(site.value.theme ?? DEFAULT_DEMO_SITE_THEME) }
+    return
+  }
+  const picked: DemoSiteTemplate | null = selectedTemplate.value
+  if (!picked) return
+  const theme: DemoSiteTheme = { ...picked.default_theme }
+  const actionKey: TemplateThemeColorKey | undefined = picked.color_roles?.action ?? picked.brand_color_key
+  if (selectedUseBrandColor.value && site.value.brand_color && actionKey) {
+    theme[actionKey] = site.value.brand_color
+  }
+  selectedTheme.value = theme
+})
+
 onMounted(async () => {
   try {
     site.value = await DemoSiteService.getDemoSite(demoSiteId)
-    resetTemplateChanges()
+    resetPendingChanges()
     if (isVideoGenerating.value) startVideoPolling()
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : 'Impossible de charger le site'
@@ -728,6 +762,8 @@ onMounted(async () => {
     loadingTemplates.value = false
   }
   await loadImages()
+  // Second sync now that the photo pool is known (imagesOrder starts on the published placement).
+  resetPendingChanges()
 })
 
 onBeforeUnmount((): void => {

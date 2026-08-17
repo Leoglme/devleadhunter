@@ -323,11 +323,21 @@ class DemoSiteService:
         description: str | None = None,
         theme: dict[str, str] | None = None,
         use_brand_color: bool | None = None,
+        image_order: list[str] | None = None,
     ) -> DemoSite:
-        """Update demo site fields and regenerate its published content."""
+        """Update demo site fields and regenerate its published content.
+
+        ``image_order`` uses the same semantics as :meth:`set_site_images` (cleaned against the
+        pool, default order stored as NULL) so one PATCH can save every pending edit — template,
+        colours and photo placement — with a single regeneration.
+        """
         pending_theme = theme
         if use_brand_color is not None:
             demo_site.use_brand_color = use_brand_color
+        if image_order is not None:
+            pool: list[str] = usable_site_photos(self._enrichment_dict_for_site(db, demo_site))
+            cleaned: list[str] = self._clean_image_order(image_order, pool)
+            demo_site.image_order = cleaned if cleaned and cleaned != pool else None
         if business_name is not None:
             demo_site.business_name = business_name
         if template_id is not None:

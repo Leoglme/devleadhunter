@@ -13,6 +13,10 @@ export type TemplatePickerProps = {
   useBrandColor?: boolean | null
   /** The colour extracted from the prospect logo, for the "Logo" pill. Null = no usable logo colour. */
   brandColor?: string | null
+  /** Hide the colour editor (the demo-site page hosts it in its configuration tab instead). */
+  showColors?: boolean
+  /** Candidate photo placement pushed live into the published-site preview. Null = published placement. */
+  previewPhotos?: string[] | null
 }
 
 export type TemplateThemeColorKey = keyof DemoSiteTheme

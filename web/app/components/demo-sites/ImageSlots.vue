@@ -1,19 +1,19 @@
 <template>
   <div class="space-y-4">
     <div>
-      <h3 class="text-sm font-semibold text-[var(--app-ink)]">Images du site</h3>
+      <p class="app-label">Images du site</p>
       <p class="mt-1 text-xs leading-relaxed text-[var(--app-ink-soft)]">
-        La 1ʳᵉ photo devient l'en-tête, la 2ᵉ la section « à propos », le reste la galerie. Glissez la poignée ou
-        utilisez les flèches pour changer, puis régénérez pour publier.
+        La 1ʳᵉ photo devient l'en-tête, la 2ᵉ la section « à propos », le reste la galerie. Chaque changement s'affiche
+        en direct dans l'aperçu ; sauvegardez pour publier.
       </p>
     </div>
 
-    <ul v-if="used.length" class="space-y-2" aria-label="Photos placées sur le site">
+    <ul v-if="order.length" class="space-y-2" aria-label="Photos placées sur le site">
       <li
-        v-for="(url, i) in used"
+        v-for="(url, i) in order"
         :key="url"
         :class="[
-          'flex items-center gap-3 rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-2 transition-opacity',
+          'flex items-center gap-2 rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-2 transition-opacity',
           dragIndex === i ? 'opacity-50' : 'opacity-100',
         ]"
         @dragover.prevent
@@ -30,16 +30,16 @@
           <UIcon name="i-lucide-grip-vertical" class="h-4 w-4" />
         </button>
 
-        <img :src="url" :alt="`Photo ${i + 1}`" class="h-14 w-20 shrink-0 rounded-lg object-cover" draggable="false" />
+        <img :src="url" :alt="`Photo ${i + 1}`" class="h-12 w-16 shrink-0 rounded-lg object-cover" draggable="false" />
 
-        <span :class="['rounded-full px-2 py-0.5 text-[10px] font-bold uppercase', slotBadgeClass(i)]">
+        <span :class="['rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase', slotBadgeClass(i)]">
           {{ slotLabel(i) }}
         </span>
 
-        <div class="ml-auto flex items-center gap-1">
+        <div class="ml-auto flex items-center">
           <button
             type="button"
-            class="rounded-md p-1.5 text-[var(--app-ink-soft)] hover:text-[var(--app-ink)] disabled:opacity-30"
+            class="rounded-md p-1 text-[var(--app-ink-soft)] hover:text-[var(--app-ink)] disabled:opacity-30"
             aria-label="Mettre en photo principale"
             :disabled="i === 0"
             @click="moveToFront(i)"
@@ -48,7 +48,7 @@
           </button>
           <button
             type="button"
-            class="rounded-md p-1.5 text-[var(--app-ink-soft)] hover:text-[var(--app-ink)] disabled:opacity-30"
+            class="rounded-md p-1 text-[var(--app-ink-soft)] hover:text-[var(--app-ink)] disabled:opacity-30"
             aria-label="Monter"
             :disabled="i === 0"
             @click="move(i, i - 1)"
@@ -57,16 +57,16 @@
           </button>
           <button
             type="button"
-            class="rounded-md p-1.5 text-[var(--app-ink-soft)] hover:text-[var(--app-ink)] disabled:opacity-30"
+            class="rounded-md p-1 text-[var(--app-ink-soft)] hover:text-[var(--app-ink)] disabled:opacity-30"
             aria-label="Descendre"
-            :disabled="i === used.length - 1"
+            :disabled="i === order.length - 1"
             @click="move(i, i + 1)"
           >
             <UIcon name="i-lucide-arrow-down" class="h-4 w-4" />
           </button>
           <button
             type="button"
-            class="rounded-md p-1.5 text-[var(--app-ink-soft)] hover:text-[var(--app-red)]"
+            class="rounded-md p-1 text-[var(--app-ink-soft)] hover:text-[var(--app-red)]"
             aria-label="Retirer du site"
             @click="removeAt(i)"
           >
@@ -94,7 +94,7 @@
           <img
             :src="url"
             alt="Photo non utilisée"
-            class="h-16 w-24 object-cover opacity-70 transition-opacity group-hover:opacity-100"
+            class="h-14 w-20 object-cover opacity-70 transition-opacity group-hover:opacity-100"
             draggable="false"
           />
           <span
@@ -105,40 +105,18 @@
         </button>
       </div>
     </div>
-
-    <div
-      v-if="hasPendingChanges"
-      class="flex flex-col gap-3 rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] px-4 py-3.5 @2xl:flex-row @2xl:items-center @2xl:justify-between"
-    >
-      <p class="flex items-start gap-2 text-xs leading-relaxed text-[var(--app-ink-soft)]">
-        <UIcon name="i-lucide-info" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        Ce nouvel ordre n'est pas encore en ligne : régénérez pour publier le rendu.
-      </p>
-      <div class="flex shrink-0 gap-2">
-        <button type="button" class="btn-secondary text-xs" :disabled="busy" @click="reset">Annuler</button>
-        <button type="button" class="btn-primary text-xs" :disabled="busy" @click="apply">
-          {{ busy ? 'Régénération…' : 'Appliquer & régénérer' }}
-        </button>
-      </div>
-    </div>
   </div>
 </template>
 
 <script lang="ts" setup>
+import type { ImageSlotsEmits, ImageSlotsProps } from '~/types/ImageSlots'
 import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
 
-/** ``order`` = current placement (hero/about/gallery); ``pool`` = every usable photo. */
-type ImageSlotsProps = {
-  pool: string[]
-  order: string[]
-  busy: boolean
-}
-
-type ImageSlotsEmits = {
-  apply: [order: string[]]
-}
-
-/** Editor placing the prospect's photos into the site's hero / about / gallery slots. */
+/**
+ * Controlled editor placing the prospect's photos into the site's hero / about / gallery slots.
+ * Every gesture emits the new order immediately — the parent shows it live in the preview and
+ * owns the save (no local apply step).
+ */
 const props: ImageSlotsProps = defineProps({
   pool: {
     type: Array as PropType<string[]>,
@@ -148,28 +126,19 @@ const props: ImageSlotsProps = defineProps({
     type: Array as PropType<string[]>,
     required: true,
   },
-  busy: {
-    type: Boolean,
-    default: false,
-  },
 })
 
 const emit: EmitFn<ImageSlotsEmits> = defineEmits<ImageSlotsEmits>()
 
-const used: Ref<string[]> = ref([...props.order])
 const dragIndex: Ref<number | null> = ref(null)
 
 const unused: ComputedRef<string[]> = computed((): string[] =>
-  props.pool.filter((url: string): boolean => !used.value.includes(url)),
-)
-
-const hasPendingChanges: ComputedRef<boolean> = computed(
-  (): boolean => used.value.join('\n') !== props.order.join('\n'),
+  props.pool.filter((url: string): boolean => !props.order.includes(url)),
 )
 
 /**
  * Destination label for a photo at a given placement index.
- * @param index - Position in the used list.
+ * @param index - Position in the placement list.
  */
 function slotLabel(index: number): string {
   if (index === 0) return 'Principale'
@@ -179,7 +148,7 @@ function slotLabel(index: number): string {
 
 /**
  * Badge colour for a placement slot — the hero slot is highlighted, the rest are muted.
- * @param index - Position in the used list.
+ * @param index - Position in the placement list.
  */
 function slotBadgeClass(index: number): string {
   if (index === 0) return 'bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]'
@@ -187,21 +156,21 @@ function slotBadgeClass(index: number): string {
 }
 
 /**
- * Move a used photo from one index to another, keeping the rest in order.
+ * Move a placed photo from one index to another, keeping the rest in order.
  * @param from - Current index.
  * @param to - Target index.
  */
 function move(from: number, to: number): void {
-  if (to < 0 || to >= used.value.length) return
-  const next: string[] = [...used.value]
+  if (to < 0 || to >= props.order.length) return
+  const next: string[] = [...props.order]
   const moved: string | undefined = next.splice(from, 1)[0]
   if (moved === undefined) return
   next.splice(to, 0, moved)
-  used.value = next
+  emit('update:order', next)
 }
 
 /**
- * Promote a used photo to the hero slot (index 0).
+ * Promote a placed photo to the hero slot (index 0).
  * @param index - Current index of the photo.
  */
 function moveToFront(index: number): void {
@@ -213,7 +182,10 @@ function moveToFront(index: number): void {
  * @param index - Index of the photo to drop.
  */
 function removeAt(index: number): void {
-  used.value = used.value.filter((_: string, i: number): boolean => i !== index)
+  emit(
+    'update:order',
+    props.order.filter((_: string, i: number): boolean => i !== index),
+  )
 }
 
 /**
@@ -221,12 +193,12 @@ function removeAt(index: number): void {
  * @param url - Photo URL to add.
  */
 function add(url: string): void {
-  if (used.value.includes(url)) return
-  used.value = [...used.value, url]
+  if (props.order.includes(url)) return
+  emit('update:order', [...props.order, url])
 }
 
 /**
- * Start dragging a used photo.
+ * Start dragging a placed photo.
  * @param index - Index being dragged.
  */
 function onDragStart(index: number): void {
@@ -248,21 +220,4 @@ function onDrop(index: number): void {
 function onDragEnd(): void {
   dragIndex.value = null
 }
-
-/** Revert the local placement to the published order. */
-function reset(): void {
-  used.value = [...props.order]
-}
-
-/** Emit the curated placement for the parent to persist and regenerate. */
-function apply(): void {
-  emit('apply', [...used.value])
-}
-
-watch(
-  (): string[] => props.order,
-  (order: string[]): void => {
-    used.value = [...order]
-  },
-)
 </script>

@@ -69,6 +69,8 @@ export type DemoSiteUpdatePayload = {
   theme?: DemoSiteTheme
   /** Action colour from the prospect logo (true) or the template default (false). */
   use_brand_color?: boolean
+  /** Curated photo placement ([0]→hero, [1]→about, [2:]→gallery), saved with the other edits in one regeneration. */
+  image_order?: string[]
 }
 
 /** The site's photo pool and its current placement: order[0]→hero, order[1]→about, order[2:]→gallery. */

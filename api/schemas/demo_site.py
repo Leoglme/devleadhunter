@@ -64,6 +64,9 @@ class DemoSiteUpdateRequest(BaseModel):
     theme: DemoSiteTheme | None = None
     # Logo ⟷ Template choice for the action colour (applied on regeneration).
     use_brand_color: bool | None = None
+    # Curated photo placement ([0]→hero, [1]→about, [2:]→gallery), saved with the other
+    # pending edits so one PATCH regenerates the site once.
+    image_order: list[str] | None = None
 
 
 class DemoSiteImagesResponse(BaseModel):

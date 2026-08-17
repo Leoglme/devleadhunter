@@ -6,17 +6,23 @@
     Demo site not found or expired.
   </div>
   <main v-else class="min-h-screen bg-white text-slate-900">
-    <DemoSiteView :site="site" />
+    <DemoSiteView :site="previewedSite ?? site" />
   </main>
 </template>
 
 <script lang="ts" setup>
-import type { ComputedRef } from 'vue'
+import type { ComputedRef, Ref } from 'vue'
+import type { DemoPreviewOverrides } from '~/composables/useDemoPreviewOverrides'
 import type { DemoSitePublic } from '~/types/demoSite'
 
 const route: ReturnType<typeof useRoute> = useRoute()
 const config: ReturnType<typeof useRuntimeConfig> = useRuntimeConfig()
 const slug: ComputedRef<string> = computed((): string => String(route.params.slug ?? ''))
+
+/** Live-edit mode: the dashboard preview iframe adds `?_edit=1` and drives us via postMessage. */
+const isLiveEditPreview: ComputedRef<boolean> = computed((): boolean => route.query._edit === '1')
+
+const { overrides }: { overrides: Ref<DemoPreviewOverrides> } = useDemoPreviewOverrides(isLiveEditPreview)
 
 const {
   data: site,
@@ -32,6 +38,33 @@ const {
 
 useSeoMeta({
   title: () => site.value?.business_name ?? 'Demo site',
+})
+
+/**
+ * The published site with the dashboard's live-edit overrides merged in (template, palette,
+ * photo order) — what an instant editor preview renders. Null outside live-edit mode or before
+ * any override arrives, so the regular published rendering is untouched.
+ */
+const previewedSite: ComputedRef<DemoSitePublic | null> = computed((): DemoSitePublic | null => {
+  const published: DemoSitePublic | null | undefined = site.value
+  if (!published || !isLiveEditPreview.value) return null
+  const { templateId, palette, photos }: DemoPreviewOverrides = overrides.value
+  if (!templateId && !palette && !photos) return null
+  const content: Record<string, unknown> = { ...((published.content_json ?? {}) as Record<string, unknown>) }
+  if (palette) {
+    content.palette = { ...((content.palette as Record<string, unknown>) ?? {}), ...palette }
+  }
+  if (photos && photos.length > 0) {
+    // Same slot mapping as generation: [0] → hero, [1] → about, [2:] → gallery.
+    content.heroImage = photos[0] ?? ''
+    content.aboutImage = photos[1] ?? ''
+    content.gallery = photos.slice(2).map((url: string): { url: string; alt: string } => ({ url, alt: '' }))
+  }
+  return {
+    ...published,
+    template_id: templateId ?? published.template_id,
+    content_json: content,
+  }
 })
 
 /**

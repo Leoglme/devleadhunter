@@ -63,6 +63,7 @@
         >
           <template v-if="isLivePreview">
             <iframe
+              ref="previewFrame"
               :src="livePreviewUrl"
               :class="[
                 'absolute top-0 origin-top-left border-0 bg-white',
@@ -150,101 +151,15 @@
             <p class="mt-1.5 text-xs leading-relaxed text-[var(--app-ink-soft)]">{{ selectedTemplate.description }}</p>
           </div>
 
-          <div class="border-t border-[var(--app-line-soft)] pt-4">
-            <div class="mb-2.5 flex items-center justify-between">
-              <p class="app-label">Couleurs du site</p>
-              <button
-                v-if="isThemeCustomised"
-                type="button"
-                class="cursor-pointer text-[11px] font-medium text-[var(--app-ink-soft)] underline underline-offset-2 hover:text-[var(--app-ink)]"
-                @click="resetTheme"
-              >
-                Revenir aux couleurs du template
-              </button>
-            </div>
-            <div class="flex flex-wrap gap-3">
-              <div v-for="color in editableColors" :key="color.key" class="min-w-[7rem] flex-1">
-                <span
-                  class="mb-1 flex items-center gap-1 text-[10px] tracking-wide text-[var(--app-ink-soft)] uppercase"
-                >
-                  {{ color.label }}
-                  <span
-                    v-if="color.isAction"
-                    class="rounded-sm bg-[var(--app-ink)] px-1 py-px text-[8px] font-semibold tracking-normal text-[var(--app-bg)] normal-case"
-                    title="Couleur des boutons et de la marque"
-                  >
-                    boutons
-                  </span>
-                </span>
-                <div class="flex items-center gap-1.5">
-                  <div class="group relative h-8 w-8 shrink-0">
-                    <div
-                      class="pointer-events-none h-8 w-8 rounded-lg border border-[var(--app-line)] transition-transform group-hover:scale-105"
-                      :style="{ backgroundColor: theme[color.key] }"
-                    />
-                    <input
-                      :value="theme[color.key]"
-                      type="color"
-                      :title="`Choisir la couleur ${color.label.toLowerCase()}`"
-                      :aria-label="`Choisir la couleur ${color.label.toLowerCase()}`"
-                      class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                      @input="updateThemeColor(color.key, ($event.target as HTMLInputElement).value)"
-                    />
-                  </div>
-                  <input
-                    :value="theme[color.key]"
-                    type="text"
-                    class="input-field h-8 min-w-0 text-xs"
-                    placeholder="#1d4ed8"
-                    maxlength="7"
-                    @input="updateThemeColor(color.key, ($event.target as HTMLInputElement).value)"
-                  />
-                </div>
-                <div
-                  v-if="color.isAction && showBrandSourcePicker"
-                  class="mt-1.5 flex gap-1"
-                  role="group"
-                  aria-label="Source de la couleur d'action"
-                >
-                  <button
-                    type="button"
-                    class="flex flex-1 items-center justify-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-medium transition-colors"
-                    :class="
-                      useBrandColor
-                        ? 'border-[var(--app-ink)] bg-[var(--app-surface-2)] text-[var(--app-ink)]'
-                        : 'border-[var(--app-line)] text-[var(--app-ink-soft)] hover:bg-[var(--app-surface-2)]'
-                    "
-                    @click="selectBrandSource(true)"
-                  >
-                    <span
-                      class="h-2.5 w-2.5 rounded-full border border-[var(--app-line)]"
-                      :style="{ backgroundColor: brandColor ?? undefined }"
-                    />
-                    Logo
-                  </button>
-                  <button
-                    type="button"
-                    class="flex flex-1 items-center justify-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-medium transition-colors"
-                    :class="
-                      !useBrandColor
-                        ? 'border-[var(--app-ink)] bg-[var(--app-surface-2)] text-[var(--app-ink)]'
-                        : 'border-[var(--app-line)] text-[var(--app-ink-soft)] hover:bg-[var(--app-surface-2)]'
-                    "
-                    @click="selectBrandSource(false)"
-                  >
-                    <span
-                      class="h-2.5 w-2.5 rounded-full border border-[var(--app-line)]"
-                      :style="{ backgroundColor: templateActionColor ?? undefined }"
-                    />
-                    Template
-                  </button>
-                </div>
-              </div>
-            </div>
-            <p class="mt-2.5 flex items-center gap-1.5 text-[11px] text-[var(--app-ink-soft)]">
-              <UIcon name="i-lucide-info" class="h-3 w-3 shrink-0" />
-              L'aperçu est interactif : vos couleurs s'y appliquent en direct.
-            </p>
+          <div v-if="showColors" class="border-t border-[var(--app-line-soft)] pt-4">
+            <DemoSitesColorEditor
+              :template="selectedTemplate"
+              :theme="theme"
+              :use-brand-color="useBrandColor"
+              :brand-color="brandColor"
+              @update:theme="onColorEditorTheme"
+              @update:use-brand-color="emit('update:useBrandColor', $event)"
+            />
           </div>
         </div>
       </div>
@@ -260,7 +175,7 @@ import type {
   TemplateThemeColorKey,
 } from '~/types/TemplatePicker'
 import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
-import type { ColorRole, DemoSiteTemplate, DemoSiteTheme } from '~/services/demoSiteService'
+import type { DemoSiteTemplate, DemoSiteTheme } from '~/services/demoSiteService'
 import { isTemplateRecommendedFor, sortTemplatesByRecommendation } from '~/utils/templateRecommendation'
 
 /** Template picker: compact list, real screenshot, live iframe preview with theme colors applied. */
@@ -306,6 +221,16 @@ const props: TemplatePickerProps = defineProps({
     type: String as PropType<string | null>,
     default: null,
   },
+  // Hide the colour editor (the demo-site page hosts it in its configuration tab instead).
+  showColors: {
+    type: Boolean,
+    default: true,
+  },
+  // Candidate photo placement pushed live into the published-site preview (null = published placement).
+  previewPhotos: {
+    type: Array as PropType<string[] | null>,
+    default: null,
+  },
 })
 
 const emit: EmitFn<TemplatePickerEmits> = defineEmits<TemplatePickerEmits>()
@@ -313,75 +238,6 @@ const emit: EmitFn<TemplatePickerEmits> = defineEmits<TemplatePickerEmits>()
 const config: ReturnType<typeof useRuntimeConfig> = useRuntimeConfig()
 
 const colorKeys: TemplateThemeColorKey[] = ['primary', 'secondary', 'accent']
-const colorLabels: Record<TemplateThemeColorKey, string> = {
-  primary: 'Principale',
-  secondary: 'Fond',
-  accent: 'Accent',
-}
-
-/** One editable colour swatch, resolved from the template's canonical roles. */
-type EditableColor = {
-  key: TemplateThemeColorKey
-  label: string
-  isAction: boolean
-}
-
-const ROLE_ORDER: ColorRole[] = ['action', 'fond', 'secondaire']
-const ROLE_LABELS: Record<ColorRole, string> = {
-  action: "Couleur d'action",
-  fond: 'Fond',
-  secondaire: 'Secondaire',
-}
-
-/**
- * The colours the editor exposes: the selected template's canonical roles (only those a layer visibly
- * uses — dead fields are hidden). Falls back to the three raw keys for a template without role metadata.
- */
-const editableColors: ComputedRef<EditableColor[]> = computed((): EditableColor[] => {
-  const roles: Partial<Record<ColorRole, TemplateThemeColorKey>> | undefined = selectedTemplate.value?.color_roles
-  if (!roles || Object.keys(roles).length === 0) {
-    return colorKeys.map(
-      (key: TemplateThemeColorKey): EditableColor => ({
-        key,
-        label: colorLabels[key],
-        isAction: false,
-      }),
-    )
-  }
-  return ROLE_ORDER.filter((role: ColorRole): boolean => Boolean(roles[role])).map(
-    (role: ColorRole): EditableColor => ({
-      key: roles[role] as TemplateThemeColorKey,
-      label: ROLE_LABELS[role],
-      isAction: role === 'action',
-    }),
-  )
-})
-
-/** The template's own default for the action colour (the "Template" pill). */
-const templateActionColor: ComputedRef<string | null> = computed((): string | null => {
-  const tpl: DemoSiteTemplate | null = selectedTemplate.value
-  const actionKey: TemplateThemeColorKey | undefined = tpl?.color_roles?.action ?? tpl?.brand_color_key
-  return tpl && actionKey ? tpl.default_theme[actionKey] : null
-})
-
-/** Show the Logo ⟷ Template picker only on a saved site that has a usable logo colour. */
-const showBrandSourcePicker: ComputedRef<boolean> = computed(
-  (): boolean => props.useBrandColor !== null && Boolean(props.brandColor),
-)
-
-/**
- * Pick the action-colour source: apply the colour to the theme AND flag it, so the choice sticks
- * through regeneration.
- * @param fromLogo True → the extracted logo colour; false → the template default.
- */
-function selectBrandSource(fromLogo: boolean): void {
-  const action: EditableColor | undefined = editableColors.value.find((c: EditableColor): boolean => c.isAction)
-  const color: string | null = (fromLogo ? props.brandColor : templateActionColor.value) ?? null
-  if (action && color) {
-    updateThemeColor(action.key, color)
-  }
-  emit('update:useBrandColor', fromLogo)
-}
 
 /** Native layout viewport the live iframe renders at, per device, before it is fitted to the pane. */
 const LIVE_VIEWPORTS: Record<TemplatePreviewDevice, { width: number; height: number }> = {
@@ -398,6 +254,8 @@ const LIVE_VIEWPORTS: Record<TemplatePreviewDevice, { width: number; height: num
 const PREVIEW_SUPERSAMPLE: number = 2
 
 const previewContainer: Ref<HTMLElement | null> = ref(null)
+/** Live preview iframe, targeted by the postMessage overrides in published-site mode. */
+const previewFrame: Ref<HTMLIFrameElement | null> = ref(null)
 const paneWidth: Ref<number> = ref(640)
 const paneHeight: Ref<number> = ref(400)
 const isLivePreview: Ref<boolean> = ref(true)
@@ -412,6 +270,8 @@ let previewResizeObserver: ResizeObserver | null = null
 let livePreviewReloadTimer: ReturnType<typeof setTimeout> | null = null
 /** Timer lifting the loading veil when the iframe never reports a load. */
 let previewLoadTimeoutTimer: ReturnType<typeof setTimeout> | null = null
+/** Timer debouncing the postMessage overrides pushed into the published-site preview. */
+let previewMessageTimer: ReturnType<typeof setTimeout> | null = null
 
 /** The template currently selected in the list. */
 const selectedTemplate: ComputedRef<DemoSiteTemplate | null> = computed(
@@ -444,13 +304,6 @@ const liveFrameStyle: ComputedRef<Record<string, string>> = computed((): Record<
     }
   }
   return { ...base, transform: `scale(${paneWidth.value / viewport.width})` }
-})
-
-/** Whether the current theme differs from the selected template's defaults. */
-const isThemeCustomised: ComputedRef<boolean> = computed((): boolean => {
-  const defaults: DemoSiteTheme | undefined = selectedTemplate.value?.default_theme
-  if (!defaults) return false
-  return colorKeys.some((key: TemplateThemeColorKey): boolean => defaults[key] !== props.theme[key])
 })
 
 /**
@@ -497,13 +350,16 @@ function buildLivePreviewUrl(template: DemoSiteTemplate): string {
 
 /**
  * Point the live iframe at the selected template with the current colors.
+ *
+ * With a published site, `_edit=1` switches the demo-host page into live-edit mode: it then accepts
+ * the postMessage overrides below, so the REAL generated site previews colour / photo / template
+ * changes instantly — never the empty catalog render.
  */
 function applyLivePreviewUrl(): void {
   if (props.publishedSiteUrl) {
     const separator: string = props.publishedSiteUrl.includes('?') ? '&' : '?'
-    livePreviewUrl.value = props.reloadNonce
-      ? `${props.publishedSiteUrl}${separator}_r=${props.reloadNonce}`
-      : props.publishedSiteUrl
+    const nonce: string = props.reloadNonce ? `&_r=${props.reloadNonce}` : ''
+    livePreviewUrl.value = `${props.publishedSiteUrl}${separator}_edit=1${nonce}`
     return
   }
   if (selectedTemplate.value) livePreviewUrl.value = buildLivePreviewUrl(selectedTemplate.value)
@@ -515,6 +371,39 @@ function applyLivePreviewUrl(): void {
 function scheduleLivePreviewReload(): void {
   if (livePreviewReloadTimer) clearTimeout(livePreviewReloadTimer)
   livePreviewReloadTimer = setTimeout(applyLivePreviewUrl, 600)
+}
+
+/**
+ * Push the pending edits (template, colours, photo order) into the published-site iframe, which
+ * applies them instantly — no reload, no regeneration.
+ */
+function postPreviewOverrides(): void {
+  if (!props.publishedSiteUrl) return
+  const frame: HTMLIFrameElement | null = previewFrame.value
+  if (!frame?.contentWindow) return
+  let origin: string
+  try {
+    origin = new URL(props.publishedSiteUrl).origin
+  } catch {
+    return
+  }
+  frame.contentWindow.postMessage(
+    {
+      type: 'dlh:preview',
+      templateId: props.modelValue,
+      palette: { ...props.theme },
+      photos: props.previewPhotos ? [...props.previewPhotos] : null,
+    },
+    origin,
+  )
+}
+
+/**
+ * Debounced {@link postPreviewOverrides}, so hex typing or drag reorders don't flood the iframe.
+ */
+function schedulePreviewMessage(): void {
+  if (previewMessageTimer) clearTimeout(previewMessageTimer)
+  previewMessageTimer = setTimeout(postPreviewOverrides, 200)
 }
 
 /**
@@ -530,11 +419,13 @@ function beginPreviewLoad(): void {
 }
 
 /**
- * Lift the loading veil once the iframe finished loading.
+ * Lift the loading veil once the iframe finished loading, and re-send any pending edits — a reload
+ * (regeneration nonce, navigation) starts from the published state and would lose them otherwise.
  */
 function endPreviewLoad(): void {
   if (previewLoadTimeoutTimer) clearTimeout(previewLoadTimeoutTimer)
   isPreviewLoading.value = false
+  postPreviewOverrides()
 }
 
 /**
@@ -558,44 +449,54 @@ function deviceButtonClass(device: TemplatePreviewDevice): string {
 }
 
 /**
- * Select a template and sync its default theme.
+ * Select a template and sync its default theme. With a published site the parent page owns the
+ * theme transition (restore the published colours when re-picking the live template), so the
+ * defaults are only pushed for the catalog flows (wizard, edit form).
  * @param template - Template picked in the list.
  */
 function selectTemplate(template: DemoSiteTemplate): void {
   emit('update:modelValue', template.id)
-  emit('update:theme', { ...template.default_theme })
+  if (!props.publishedSiteUrl) emit('update:theme', { ...template.default_theme })
 }
 
 /**
- * Reset the theme to the selected template's default colors.
+ * Relay a colour change from the editor pane and make sure the live preview shows it.
+ * @param theme - The updated theme.
  */
-function resetTheme(): void {
-  const defaults: DemoSiteTheme | undefined = selectedTemplate.value?.default_theme
-  if (defaults) emit('update:theme', { ...defaults })
-}
-
-/**
- * Update a single theme color when the hex value is valid, and show it live.
- * @param key - Theme key being edited.
- * @param value - Candidate hex color.
- */
-function updateThemeColor(key: TemplateThemeColorKey, value: string): void {
-  if (!/^#[0-9A-Fa-f]{6}$/.test(value)) return
-  emit('update:theme', { ...props.theme, [key]: value })
+function onColorEditorTheme(theme: DemoSiteTheme): void {
+  emit('update:theme', theme)
   isLivePreview.value = true
 }
 
 watch(
   (): string => props.modelValue,
-  (): void => {
+  (_value: string, previous: string | undefined): void => {
     isLivePreview.value = true
+    // Published site + template switch: the iframe URL doesn't change (same site), the new
+    // template is pushed via postMessage — reloading would only flash the veil for nothing.
+    if (props.publishedSiteUrl && previous !== undefined) {
+      schedulePreviewMessage()
+      return
+    }
     beginPreviewLoad()
     applyLivePreviewUrl()
   },
   { immediate: true },
 )
 
-watch((): DemoSiteTheme => props.theme, scheduleLivePreviewReload, { deep: true })
+watch(
+  (): DemoSiteTheme => props.theme,
+  (): void => {
+    if (props.publishedSiteUrl) {
+      schedulePreviewMessage()
+      return
+    }
+    scheduleLivePreviewReload()
+  },
+  { deep: true },
+)
+
+watch((): string[] | null => props.previewPhotos ?? null, schedulePreviewMessage, { deep: true })
 
 watch((): string | null => props.publishedSiteUrl ?? null, applyLivePreviewUrl)
 
@@ -626,6 +527,7 @@ onBeforeUnmount((): void => {
   previewResizeObserver?.disconnect()
   if (livePreviewReloadTimer) clearTimeout(livePreviewReloadTimer)
   if (previewLoadTimeoutTimer) clearTimeout(previewLoadTimeoutTimer)
+  if (previewMessageTimer) clearTimeout(previewMessageTimer)
 })
 </script>
 
