@@ -785,10 +785,14 @@ class FacebookEnrichmentScraper:
         prospects render imageless, so the bytes must be grabbed at scrape time. fbcdn *does* allow a
         cross-origin read (it serves ``Access-Control-Allow-Origin: *``), and a plain server-side download
         is refused (fbcdn blocks non-browser clients), so the capture stays in the browser that just
-        displayed the images. The result is collected via a fire-and-forget script + polling rather than
-        ``evaluate(await_promise=True)``, which didn't reliably return the async result. Best-effort +
-        additive: any photo we can't capture is left as-is, so generation's drop-then-fallback still yields
-        a complete site.
+        displayed the images.
+
+        The whole capture runs inside ONE ``evaluate(await_promise=True)`` call: CDP drives the async IIFE
+        to completion and returns its value. A fire-and-forget script + polling didn't work — the page's JS
+        doesn't run freely between separate CDP commands, so the detached task never progressed. The result
+        comes back as a JSON *string* (not a plain object) because nodriver's deep-serialization mangles an
+        object of long data URIs. Best-effort + additive: any photo we can't capture is left as-is, so
+        generation's drop-then-fallback still yields a complete site.
         """
 
         def _is_fb_cdn(url: str) -> bool:
@@ -799,11 +803,8 @@ class FacebookEnrichmentScraper:
         if not targets:
             return photos
 
-        # Kick off the capture without awaiting it in-page: the async IIFE stashes its result on
-        # ``window.__fbRehost`` and we poll for it, sidestepping the unreliable await_promise path.
-        start_js: str = (
-            "(() => { window.__fbRehost = null; (async () => {"
-            " const urls = " + json.dumps(targets) + "; const out = {};"
+        js: str = (
+            "(async () => { const urls = " + json.dumps(targets) + "; const out = {};"
             " for (const u of urls) { try {"
             " const r = await fetch(u); if (!r.ok) continue;"
             " const b = await r.blob(); if (!b || !b.size || b.size > 3500000) continue;"
@@ -811,35 +812,26 @@ class FacebookEnrichmentScraper:
             " fr.onloadend = () => res(typeof fr.result === 'string' ? fr.result : null);"
             " fr.onerror = () => res(null); fr.readAsDataURL(b); });"
             " if (d && d.startsWith('data:image')) out[u] = d;"
-            " } catch (e) {} } window.__fbRehost = out; })(); return true; })()"
+            " } catch (e) {} } return JSON.stringify(out); })()"
         )
         try:
-            await NodriverDom.evaluate(tab, start_js, by_value=True)
+            raw: Any = await NodriverDom.evaluate(tab, js, by_value=True, await_promise=True)
         except Exception as exc:  # a rehost failure must never break the scrape
             logger.info("Facebook photo rehost skipped: %s", exc)
             return photos
 
         captured: dict[str, str] = {}
-        for _ in range(40):  # poll up to ~20s for the in-page capture to finish
-            await asyncio.sleep(0.5)
+        if isinstance(raw, str) and raw:
             try:
-                raw: Any = await NodriverDom.evaluate(
-                    tab, "window.__fbRehost ? JSON.stringify(window.__fbRehost) : null", by_value=True
-                )
-            except Exception:
-                raw = None
-            if isinstance(raw, str) and raw:
-                try:
-                    parsed: Any = json.loads(raw)
-                except json.JSONDecodeError:
-                    parsed = None
-                if isinstance(parsed, dict):
-                    captured = {
-                        key: value
-                        for key, value in parsed.items()
-                        if isinstance(value, str) and value.startswith("data:image")
-                    }
-                    break
+                parsed: Any = json.loads(raw)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict):
+                captured = {
+                    key: value
+                    for key, value in parsed.items()
+                    if isinstance(value, str) and value.startswith("data:image")
+                }
 
         if captured:
             logger.info("Facebook enrichment: rehosted %d/%d fbcdn photo(s) in-browser", len(captured), len(targets))

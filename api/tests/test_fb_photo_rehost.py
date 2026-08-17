@@ -41,25 +41,16 @@ def test_raw_fbcdn_is_dropped_but_captured_data_uri_passes() -> None:
 
 @pytest.mark.asyncio
 async def test_rehost_maps_captured_data_uris_and_leaves_the_rest(monkeypatch) -> None:
-    """The in-browser capture maps fbcdn URLs to data URIs; an uncaptured fbcdn stays raw; non-fbcdn is untouched."""
+    """The single awaited evaluate returns a JSON string: fbcdn→data URI, uncaptured fbcdn stays raw, non-fbcdn untouched."""
     ok_url = "https://scontent.xx.fbcdn.net/a.jpg?oh=1"
     missed_url = "https://scontent.xx.fbcdn.net/b.jpg?oh=2"
     google_url = "https://lh3.googleusercontent.com/x=s1600"
     data_uri = "data:image/jpeg;base64," + base64.b64encode(b"fake").decode("ascii")
 
-    calls = {"n": 0}
-
-    async def fake_evaluate(_tab: object, _js: str, **_kwargs: object) -> object:
-        calls["n"] += 1
-        if calls["n"] == 1:
-            return True  # the fire-and-forget start script
-        return json.dumps({ok_url: data_uri})  # a poll returns the captured map
-
-    async def instant_sleep(_seconds: float) -> None:
-        return None
+    async def fake_evaluate(_tab: object, _js: str, **_kwargs: object) -> str:
+        return json.dumps({ok_url: data_uri})
 
     monkeypatch.setattr("scrappers.facebook_enrichment_scraper.NodriverDom.evaluate", fake_evaluate)
-    monkeypatch.setattr("scrappers.facebook_enrichment_scraper.asyncio.sleep", instant_sleep)
 
     scraper = FacebookEnrichmentScraper()
     result = await scraper._rehost_fb_photos(object(), [ok_url, missed_url, google_url])
