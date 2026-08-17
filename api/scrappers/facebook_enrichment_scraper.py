@@ -708,6 +708,7 @@ class FacebookEnrichmentScraper:
                 return EnrichmentData(source="facebook")
             page = await self._extract_json(tab, _FB_PAGE_JS)
             photos = await self._extract_photos(tab, facebook_url)
+            photos = await self._rehost_fb_photos(tab, photos)
             reviews_text, embedded_texts = await self._extract_reviews(tab, facebook_url)
             return self._build_from_raw(page, reviews_text, photos, embedded_texts)
         except Exception as exc:
@@ -775,6 +776,50 @@ class FacebookEnrichmentScraper:
         except json.JSONDecodeError:
             return {}
         return parsed if isinstance(parsed, dict) else {}
+
+    async def _rehost_fb_photos(self, tab: Any, photos: list[str]) -> list[str]:
+        """Capture Facebook-CDN photo bytes in-browser (fresh signed URLs) as base64 ``data:`` URIs.
+
+        fbcdn URLs are signed and short-lived: valid at scrape time but 403 by the time the VPS fetches
+        them at generation, so FB-only prospects render imageless. We fetch the top few in the browser
+        (where they just loaded) and inline them as ``data:`` URIs that the generation step uploads to
+        Storyblok. Best-effort + additive: any photo we can't capture is left as-is, so the generation's
+        drop-then-fallback still yields a complete site.
+        """
+
+        def _is_fb_cdn(url: str) -> bool:
+            low: str = url.lower()
+            return "fbcdn" in low or "scontent" in low
+
+        targets: list[str] = [p for p in photos if _is_fb_cdn(p)][:8]
+        if not targets:
+            return photos
+        js: str = (
+            "(async () => { const urls = " + json.dumps(targets) + "; const out = [];"
+            " for (const u of urls) { try {"
+            " const resp = await fetch(u); if (!resp.ok) { out.push(u); continue; }"
+            " const blob = await resp.blob();"
+            " if (!blob || blob.size === 0 || blob.size > 3500000) { out.push(u); continue; }"
+            " const dataUri = await new Promise((res) => { const fr = new FileReader();"
+            " fr.onloadend = () => res(typeof fr.result === 'string' ? fr.result : null);"
+            " fr.onerror = () => res(null); fr.readAsDataURL(blob); });"
+            " out.push(dataUri || u); } catch (e) { out.push(u); } } return out; })()"
+        )
+        try:
+            result: Any = await NodriverDom.evaluate(tab, js, by_value=True, await_promise=True)
+        except Exception as exc:  # a rehost failure must never break the scrape
+            logger.info("Facebook photo rehost skipped: %s", exc)
+            return photos
+        if not isinstance(result, list):
+            return photos
+        captured: dict[str, str] = {
+            orig: new
+            for orig, new in zip(targets, result, strict=False)
+            if isinstance(new, str) and new.startswith("data:image")
+        }
+        if captured:
+            logger.info("Facebook enrichment: rehosted %d/%d fbcdn photo(s) in-browser", len(captured), len(targets))
+        return [captured.get(p, p) for p in photos]
 
     async def _extract_photos(self, tab: Any, facebook_url: str) -> list[str]:
         """Read photos from « prises par » then « identifiées », filtered for real media."""

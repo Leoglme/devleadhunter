@@ -8,6 +8,8 @@ content locally in the database (demo-host renders from content_json).
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import logging
 import random
 import re
@@ -58,6 +60,21 @@ class StoryblokProvisionError(Exception):
         self.space_id = space_id
         self.editor_url = editor_url
         self.content_json = content_json
+
+
+_DATA_URI_RE = re.compile(r"^data:(?P<mime>[\w/\-.+]+)?;base64,(?P<data>.+)$", re.DOTALL)
+
+
+def _decode_data_uri(uri: str) -> tuple[bytes | None, str]:
+    """Decode a base64 ``data:`` image URI into ``(bytes, content-type)``, or ``(None, "")`` if malformed."""
+    match = _DATA_URI_RE.match(uri)
+    if not match:
+        return None, ""
+    try:
+        content = base64.b64decode(match.group("data"), validate=False)
+    except (ValueError, binascii.Error):
+        return None, ""
+    return content, (match.group("mime") or "image/jpeg")
 
 
 class StoryblokService:
@@ -299,10 +316,18 @@ class StoryblokService:
         can fall back to the external URL.
         """
         try:
-            image = await client.get(source_url, follow_redirects=True, timeout=30.0)
-            if image.status_code != 200 or not image.content:
-                return None
-            content_type: str = image.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+            if source_url.startswith("data:"):
+                # A base64 data URI: the desktop scraper captured the bytes in-browser (e.g. Facebook
+                # photos the VPS can't fetch). Decode instead of downloading.
+                content, content_type = _decode_data_uri(source_url)
+                if not content:
+                    return None
+            else:
+                image = await client.get(source_url, follow_redirects=True, timeout=30.0)
+                if image.status_code != 200 or not image.content:
+                    return None
+                content = image.content
+                content_type = image.headers.get("content-type", "image/jpeg").split(";")[0].strip()
             extension: str = {"image/png": "png", "image/webp": "webp", "image/gif": "gif"}.get(content_type, "jpg")
             filename: str = f"{secrets.token_hex(8)}.{extension}"
             sign = await self._storyblok_request(
@@ -315,7 +340,7 @@ class StoryblokService:
             upload = await client.post(
                 signed["post_url"],
                 data=signed.get("fields", {}),
-                files={"file": (filename, image.content, content_type)},
+                files={"file": (filename, content, content_type)},
                 timeout=60.0,
             )
             if upload.status_code not in (200, 201, 204):

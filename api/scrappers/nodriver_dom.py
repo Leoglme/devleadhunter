@@ -18,9 +18,12 @@ class NodriverDom:
     """Static helpers for querying and interacting with a nodriver Tab."""
 
     @staticmethod
-    async def evaluate(tab: Any, js: str, *, by_value: bool = True) -> Any:
-        """Evaluate JavaScript in the page context."""
-        return await tab.evaluate(js, return_by_value=by_value)
+    async def evaluate(tab: Any, js: str, *, by_value: bool = True, await_promise: bool = False) -> Any:
+        """Evaluate JavaScript in the page context.
+
+        ``await_promise=True`` resolves an async expression (e.g. an in-page ``fetch``) before returning.
+        """
+        return await tab.evaluate(js, return_by_value=by_value, await_promise=await_promise)
 
     @staticmethod
     def tab_url(tab: Any) -> str:
