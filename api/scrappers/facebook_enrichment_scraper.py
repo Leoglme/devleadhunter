@@ -25,11 +25,14 @@ they can be unit-tested without a browser.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import re
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+import httpx
 
 from scrappers.enrichment_scraper import EnrichmentData
 from scrappers.nodriver_browser import NODRIVER_AVAILABLE, NodriverBrowser
@@ -42,6 +45,11 @@ logger = logging.getLogger(__name__)
 # Google's come first, Facebook's are appended as a secondary pool, and the user picks the best.
 _MAX_PHOTOS = 40
 _MAX_REVIEWS = 12
+
+# UA used when downloading fbcdn photos if the live browser UA can't be read (recent desktop Chrome).
+_FALLBACK_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+)
 
 # `\s` matches the thin/no-break spaces Facebook puts before « % », so « 96 % » / « 22 avis » parse verbatim.
 _RECOMMEND_RE = re.compile(r"recommand[ée]?s?\s+par\s*(\d+)\s*%", re.IGNORECASE)
@@ -778,13 +786,15 @@ class FacebookEnrichmentScraper:
         return parsed if isinstance(parsed, dict) else {}
 
     async def _rehost_fb_photos(self, tab: Any, photos: list[str]) -> list[str]:
-        """Capture Facebook-CDN photo bytes in-browser (fresh signed URLs) as base64 ``data:`` URIs.
+        """Download the top Facebook-CDN photos server-side (now, while their signed URLs are valid) and
+        inline them as base64 ``data:`` URIs.
 
         fbcdn URLs are signed and short-lived: valid at scrape time but 403 by the time the VPS fetches
-        them at generation, so FB-only prospects render imageless. We fetch the top few in the browser
-        (where they just loaded) and inline them as ``data:`` URIs that the generation step uploads to
-        Storyblok. Best-effort + additive: any photo we can't capture is left as-is, so the generation's
-        drop-then-fallback still yields a complete site.
+        them hours later at generation, so FB-only prospects render imageless. The bytes must be captured
+        *now*. An in-browser ``fetch`` can't read them — fbcdn is a cross-origin CDN with no CORS headers,
+        so the request is blocked. Downloading here in Python (same desktop, same moment) has neither the
+        CORS restriction nor the expiry problem. The generation step then uploads the data URIs to
+        Storyblok. Best-effort + additive: any photo we can't capture is left as-is.
         """
 
         def _is_fb_cdn(url: str) -> bool:
@@ -794,31 +804,50 @@ class FacebookEnrichmentScraper:
         targets: list[str] = [p for p in photos if _is_fb_cdn(p)][:8]
         if not targets:
             return photos
-        js: str = (
-            "(async () => { const urls = " + json.dumps(targets) + "; const out = [];"
-            " for (const u of urls) { try {"
-            " const resp = await fetch(u); if (!resp.ok) { out.push(u); continue; }"
-            " const blob = await resp.blob();"
-            " if (!blob || blob.size === 0 || blob.size > 3500000) { out.push(u); continue; }"
-            " const dataUri = await new Promise((res) => { const fr = new FileReader();"
-            " fr.onloadend = () => res(typeof fr.result === 'string' ? fr.result : null);"
-            " fr.onerror = () => res(null); fr.readAsDataURL(blob); });"
-            " out.push(dataUri || u); } catch (e) { out.push(u); } } return out; })()"
-        )
+
+        # Mirror the browser that just loaded these images so the signed CDN URL serves us the same bytes.
         try:
-            result: Any = await NodriverDom.evaluate(tab, js, by_value=True, await_promise=True)
+            user_agent: Any = await NodriverDom.evaluate(tab, "navigator.userAgent", by_value=True)
+        except Exception:
+            user_agent = None
+        headers: dict[str, str] = {
+            "User-Agent": user_agent if isinstance(user_agent, str) and user_agent else _FALLBACK_UA,
+            "Referer": "https://www.facebook.com/",
+            "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        }
+
+        captured: dict[str, str] = {}
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
+                for url in targets:
+                    try:
+                        resp: httpx.Response = await client.get(url, headers=headers)
+                    except Exception as exc:  # a single photo failure must never break the scrape
+                        logger.info("Facebook photo download error: %s", exc)
+                        continue
+                    content_type: str = resp.headers.get("content-type", "").split(";")[0].strip().lower()
+                    if (
+                        resp.status_code == 200
+                        and content_type.startswith("image/")
+                        and 0 < len(resp.content) <= 3_500_000
+                    ):
+                        encoded: str = base64.b64encode(resp.content).decode("ascii")
+                        captured[url] = f"data:{content_type};base64,{encoded}"
+                    else:
+                        logger.info(
+                            "Facebook photo not rehosted (status=%s type=%s bytes=%d)",
+                            resp.status_code,
+                            content_type or "?",
+                            len(resp.content),
+                        )
         except Exception as exc:  # a rehost failure must never break the scrape
             logger.info("Facebook photo rehost skipped: %s", exc)
             return photos
-        if not isinstance(result, list):
-            return photos
-        captured: dict[str, str] = {
-            orig: new
-            for orig, new in zip(targets, result, strict=False)
-            if isinstance(new, str) and new.startswith("data:image")
-        }
+
         if captured:
-            logger.info("Facebook enrichment: rehosted %d/%d fbcdn photo(s) in-browser", len(captured), len(targets))
+            logger.info("Facebook enrichment: rehosted %d/%d fbcdn photo(s) server-side", len(captured), len(targets))
+        else:
+            logger.warning("Facebook enrichment: 0/%d fbcdn photos rehosted (all downloads failed)", len(targets))
         return [captured.get(p, p) for p in photos]
 
     async def _extract_photos(self, tab: Any, facebook_url: str) -> list[str]:
