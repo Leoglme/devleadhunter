@@ -130,6 +130,22 @@ def _dedupe_preserve_order(urls: list[str]) -> list[str]:
     return unique
 
 
+# Hosts whose image URLs can't be rehosted server-side. Facebook CDN URLs (fbcdn.net / fbsbx.com)
+# are signed and session-bound: the VPS gets 403 fetching them, so they never rehost to Storyblok and
+# render broken on the site. Dropping them lets the template's fallback images fill the slot.
+_UNREHOSTABLE_PHOTO_HOSTS: tuple[str, ...] = ("fbcdn.net", "fbsbx.com")
+
+
+def _is_unrehostable_photo(url: str) -> bool:
+    """Whether a photo URL would render broken because it can't be fetched/rehosted server-side.
+
+    A complete site with fallback imagery beats one with broken Facebook-CDN tiles. The real fix —
+    capturing the bytes at desktop scrape time, where the FB session is available — supersedes this.
+    """
+    lowered: str = url.lower()
+    return any(host in lowered for host in _UNREHOSTABLE_PHOTO_HOSTS)
+
+
 def format_rating_value(rating: Any) -> str | None:
     """Format a Google rating the French way (``"4,5/5"``), or None when missing/unparseable."""
     if not isinstance(rating, (int, float)):
@@ -318,6 +334,23 @@ _WEEKDAYS: frozenset[str] = frozenset(
         "sunday",
     }
 )
+# Google truncates a long review to a preview and appends an expand-link label ("… Plus" in FR,
+# "More"/"Mehr"/"Más"… otherwise); the scraper captures that label verbatim at the end of the text.
+_REVIEW_READMORE_RE = re.compile(r"\s*(?:…|\.\.\.)?\s*(?:Plus|More|Mehr|Más|Mas|Meer|Altro)\s*$")
+
+
+def _clean_review_text(raw: Any) -> str:
+    """Tidy a scraped review for display: collapse inner whitespace and drop the "… Plus" read-more label.
+
+    Google's review previews keep hard newlines and end with an expand-link label ("… Plus") that the
+    scraper captures; both read badly on the site. This collapses whitespace runs to single spaces and
+    strips the trailing read-more marker (the ellipsis and the label together), leaving a clean end.
+    """
+    text = re.sub(r"\s+", " ", str(raw)).strip()
+    text = _REVIEW_READMORE_RE.sub("", text).strip()
+    return text
+
+
 _HOURS_DISCLAIMER_RE = re.compile(r"les horaires? peuvent .*|hours (?:might|may) .*", re.IGNORECASE)
 _GLUED_RANGES_RE = re.compile(r"(\d{1,2}[:h]\d{2}\s*[–—-]\s*\d{1,2}[:h]\d{2})(?=\d)")
 _DAY_ANNOTATION_RE = re.compile(r"\s*\([^)]*\)\s*")
@@ -374,7 +407,7 @@ def map_prospect_and_enrichment(
         for url in _dedupe_preserve_order(
             [p.strip() for p in enrichment.get("photos", []) if isinstance(p, str) and p.strip()]
         )
-        if url != logo_photo
+        if url != logo_photo and not _is_unrehostable_photo(url)
     ]
     raw_reviews: list[dict] = [r for r in enrichment.get("reviews", []) if isinstance(r, dict)]
     raw_hours: list[dict] = [h for h in enrichment.get("opening_hours", []) if isinstance(h, dict)]
@@ -382,7 +415,7 @@ def map_prospect_and_enrichment(
 
     reviews: list[dict[str, Any]] = []
     for review in raw_reviews:
-        text = str(review.get("text", "")).strip()
+        text = _clean_review_text(review.get("text", ""))
         if not text:
             continue
         # Sales site: only surface reviews we are SURE are positive. A rating below 4 is a
@@ -422,6 +455,8 @@ def map_prospect_and_enrichment(
 
     logo_raw = enrichment.get("logo_url")
     logo = logo_raw.strip() if isinstance(logo_raw, str) and logo_raw.strip() else ""
+    if logo and _is_unrehostable_photo(logo):
+        logo = ""
 
     address_raw = enrichment.get("address")
     address = address_raw.strip() if isinstance(address_raw, str) and address_raw.strip() else ""
