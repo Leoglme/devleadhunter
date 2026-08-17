@@ -54,6 +54,7 @@ def _site(status: str = DemoSiteStatus.ACTIVE.value) -> SimpleNamespace:
         business_name="Barbier d'Antan",
         storyblok_space_id=None,
         storyblok_editor_url=None,
+        prospect_id=None,
     )
 
 

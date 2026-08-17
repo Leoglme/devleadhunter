@@ -344,7 +344,7 @@ def build_content(
         f"Depuis plus de quinze ans, {business_name} intervient chez les particuliers et les professionnels de {area}. "
         "Chaque chantier est mené de bout en bout par le même artisan — celui qui répond au téléphone est celui qui vient chez vous.",
         "La plomberie est un métier de confiance : on entre chez vous, souvent dans l'urgence. On y répond par un travail "
-        "soigné, des explications claires et des tarifs annoncés à l'avance.",
+        "soigné, des explications claires et un devis clair avant d'intervenir.",
         "Pas de sous-traitance, pas de mauvaise surprise sur la facture : juste le geste juste, garanti.",
     ]
 

@@ -564,7 +564,7 @@ def build_content(
                         "question": "Le devis est-il vraiment gratuit ?",
                         "answer": (
                             "Oui. Le déplacement pour établir le devis et le chiffrage sont "
-                            "gratuits et sans engagement. Le prix annoncé est le prix payé."
+                            "gratuits et sans engagement. Le devis validé, c'est le prix final."
                         ),
                     },
                     {

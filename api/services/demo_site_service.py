@@ -7,10 +7,14 @@ import re
 import unicodedata
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.config import settings
+from enums.acquisition import AcquisitionItemStep, AcquisitionRunStatus
 from enums.demo_site_status import DemoSiteStatus
+from models.acquisition_run import AcquisitionRun
+from models.acquisition_run_item import AcquisitionRunItem
 from models.demo_site import DemoSite
 from models.order import Order
 from models.user import User
@@ -601,11 +605,44 @@ class DemoSiteService:
 
         delete_files_for_slug(demo_site.slug)
 
+        # Deleting the generated demo frees the prospect from its automation, so it can be re-run and
+        # the orchestrator never campaigns a site that no longer exists.
+        self._free_prospect_from_automation(db, demo_site.prospect_id)
+
         if self._is_tied_to_sale(db, demo_site):
             self._soft_delete(demo_site)
         else:
             db.delete(demo_site)
         db.commit()
+
+    @staticmethod
+    def _free_prospect_from_automation(db: Session, prospect_id: int | None) -> None:
+        """Release the prospect's automation claim when its generated demo is deleted.
+
+        An automation item stays "claimed" (see ``acquisition_service.used_prospect_ids``) until it is
+        skipped or fails; deleting the demo it produced must free the prospect so it can be re-run — and
+        must stop the orchestrator from later campaigning a site that no longer exists. Marks every
+        non-terminal item for this prospect (in a live run) as SKIPPED.
+        """
+        if not prospect_id:
+            return
+        items = (
+            db.execute(
+                select(AcquisitionRunItem)
+                .join(AcquisitionRun, AcquisitionRunItem.run_id == AcquisitionRun.id)
+                .where(
+                    AcquisitionRunItem.prospect_id == prospect_id,
+                    AcquisitionRun.status != AcquisitionRunStatus.CANCELLED.value,
+                    AcquisitionRunItem.step.notin_(
+                        [AcquisitionItemStep.SKIPPED.value, AcquisitionItemStep.FAILED.value]
+                    ),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for item in items:
+            item.step = AcquisitionItemStep.SKIPPED.value
 
     @staticmethod
     def _is_tied_to_sale(db: Session, demo_site: DemoSite) -> bool:

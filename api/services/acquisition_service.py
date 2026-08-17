@@ -111,6 +111,14 @@ class AcquisitionService:
 
         has_query: bool = bool(payload.search_metiers and payload.search_villes and payload.target_days)
 
+        # Selection: preserve order, drop invisible or already-used prospects.
+        ordered: list[int] = [pid for pid in payload.prospect_ids if pid in visible_ids and pid not in used_ids]
+
+        # Nothing to do (no eligible selection AND no full-auto query): refuse WITHOUT persisting a run,
+        # so a rejected creation never leaves an orphan empty draft behind (the row was committed first).
+        if not ordered and not has_query:
+            raise ValueError("Aucun prospect valide (déjà utilisés ou hors de ta visibilité).")
+
         run = AcquisitionRun(
             user_id=user_id,
             organization_id=organization_id,
@@ -136,8 +144,6 @@ class AcquisitionService:
         db.add(run)
         db.flush()  # assign run.id
 
-        # Selection: preserve order, drop invisible or already-used prospects.
-        ordered: list[int] = [pid for pid in payload.prospect_ids if pid in visible_ids and pid not in used_ids]
         for prospect_id in ordered:
             db.add(
                 AcquisitionRunItem(

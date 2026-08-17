@@ -164,35 +164,34 @@ async def create_automation(
         )
 
     org_id: int | None = organization_service.user_org_id(db, current_user.id)
-    run = acquisition_service.create_from_prospects(
-        db,
-        current_user.id,
-        org_id,
-        CreateSequenceInput(
-            name=payload.name,
-            prospect_ids=payload.prospect_ids,
-            mode=payload.mode.value,
-            auto_enrich=payload.auto_enrich,
-            auto_generate=payload.auto_generate,
-            template_id=payload.template_id,
-            auto_campaign=payload.auto_campaign,
-            email_template_id_a=payload.email_template_id_a,
-            email_template_id_b=payload.email_template_id_b,
-            send_delay_minutes=payload.send_delay_minutes,
-            follow_ups=[
-                SequenceFollowUp(template_id=fu.template_id, delay_days=fu.delay_days) for fu in payload.follow_ups
-            ],
-            search_metiers=payload.search_metiers,
-            search_villes=payload.search_villes,
-            target_days=payload.target_days,
-            only_without_website=payload.only_without_website,
-        ),
-    )
-    if not run.items and not has_query:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Aucun prospect valide (déjà utilisés ou hors de ta visibilité).",
+    try:
+        run = acquisition_service.create_from_prospects(
+            db,
+            current_user.id,
+            org_id,
+            CreateSequenceInput(
+                name=payload.name,
+                prospect_ids=payload.prospect_ids,
+                mode=payload.mode.value,
+                auto_enrich=payload.auto_enrich,
+                auto_generate=payload.auto_generate,
+                template_id=payload.template_id,
+                auto_campaign=payload.auto_campaign,
+                email_template_id_a=payload.email_template_id_a,
+                email_template_id_b=payload.email_template_id_b,
+                send_delay_minutes=payload.send_delay_minutes,
+                follow_ups=[
+                    SequenceFollowUp(template_id=fu.template_id, delay_days=fu.delay_days) for fu in payload.follow_ups
+                ],
+                search_metiers=payload.search_metiers,
+                search_villes=payload.search_villes,
+                target_days=payload.target_days,
+                only_without_website=payload.only_without_website,
+            ),
         )
+    except ValueError as exc:
+        # The service refuses (and never persists) a run with no eligible selection and no query.
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return _detail_response(db, run)
 
 
