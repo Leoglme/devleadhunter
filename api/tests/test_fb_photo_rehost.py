@@ -5,38 +5,13 @@ Storyblok upload decodes them instead of downloading.
 """
 
 import base64
+import json
 
 import pytest
 
 from scrappers.facebook_enrichment_scraper import FacebookEnrichmentScraper
 from services.storyblok_service import _decode_data_uri
 from services.templates.site_content import _is_unrehostable_photo
-
-
-class _FakeResponse:
-    def __init__(self, status_code: int, content: bytes, content_type: str) -> None:
-        self.status_code = status_code
-        self.content = content
-        self.headers = {"content-type": content_type}
-
-
-class _FakeAsyncClient:
-    def __init__(self, responses: dict[str, _FakeResponse]) -> None:
-        self._responses = responses
-
-    async def __aenter__(self) -> "_FakeAsyncClient":
-        return self
-
-    async def __aexit__(self, *_exc: object) -> bool:
-        return False
-
-    async def get(self, url: str, headers: dict | None = None) -> _FakeResponse:
-        return self._responses[url]
-
-
-class _FakeTab:
-    async def evaluate(self, _js: str, **_kwargs: object) -> str:
-        return "TestUA/1.0"
 
 
 def test_decode_valid_data_uri() -> None:
@@ -65,24 +40,30 @@ def test_raw_fbcdn_is_dropped_but_captured_data_uri_passes() -> None:
 
 
 @pytest.mark.asyncio
-async def test_rehost_downloads_valid_fbcdn_and_leaves_the_rest(monkeypatch) -> None:
-    """A 200 image download becomes a data URI; a 403 stays a raw URL; non-fbcdn photos are untouched."""
-    png = b"\x89PNG\r\n fake image bytes"
+async def test_rehost_maps_captured_data_uris_and_leaves_the_rest(monkeypatch) -> None:
+    """The in-browser capture maps fbcdn URLs to data URIs; an uncaptured fbcdn stays raw; non-fbcdn is untouched."""
     ok_url = "https://scontent.xx.fbcdn.net/a.jpg?oh=1"
-    forbidden_url = "https://scontent.xx.fbcdn.net/b.jpg?oh=2"
+    missed_url = "https://scontent.xx.fbcdn.net/b.jpg?oh=2"
     google_url = "https://lh3.googleusercontent.com/x=s1600"
-    responses = {
-        ok_url: _FakeResponse(200, png, "image/jpeg"),
-        forbidden_url: _FakeResponse(403, b"", "text/html"),
-    }
-    monkeypatch.setattr(
-        "scrappers.facebook_enrichment_scraper.httpx.AsyncClient",
-        lambda **_kwargs: _FakeAsyncClient(responses),
-    )
+    data_uri = "data:image/jpeg;base64," + base64.b64encode(b"fake").decode("ascii")
+
+    calls = {"n": 0}
+
+    async def fake_evaluate(_tab: object, _js: str, **_kwargs: object) -> object:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return True  # the fire-and-forget start script
+        return json.dumps({ok_url: data_uri})  # a poll returns the captured map
+
+    async def instant_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr("scrappers.facebook_enrichment_scraper.NodriverDom.evaluate", fake_evaluate)
+    monkeypatch.setattr("scrappers.facebook_enrichment_scraper.asyncio.sleep", instant_sleep)
 
     scraper = FacebookEnrichmentScraper()
-    result = await scraper._rehost_fb_photos(_FakeTab(), [ok_url, forbidden_url, google_url])
+    result = await scraper._rehost_fb_photos(object(), [ok_url, missed_url, google_url])
 
-    assert result[0] == "data:image/jpeg;base64," + base64.b64encode(png).decode("ascii")
-    assert result[1] == forbidden_url  # 403 → kept as-is, generation will drop + fallback
+    assert result[0] == data_uri
+    assert result[1] == missed_url  # fbcdn not captured → left raw (generation drops + fallback)
     assert result[2] == google_url  # non-fbcdn → never touched
