@@ -231,6 +231,16 @@
                 >
                   <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5" />
                 </a>
+                <button
+                  v-if="prospect.website"
+                  type="button"
+                  :disabled="isSaving"
+                  class="flex h-7 w-7 items-center justify-center rounded text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-red)] disabled:opacity-50"
+                  title="Ce n'est pas son site (ex. site de la franchise) — le retirer"
+                  @click="removeWebsite"
+                >
+                  <UIcon name="i-lucide-unlink" class="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
 
@@ -784,6 +794,24 @@ async function handleSave(): Promise<void> {
     toast.success('Prospect mis à jour')
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : 'Erreur lors de la mise à jour')
+  } finally {
+    isSaving.value = false
+  }
+}
+
+/**
+ * Retire le site du prospect quand ce n'est pas le sien (ex. le site de la franchise) : le prospect
+ * redevient « sans site » donc ciblable. Réversible via le formulaire d'édition.
+ */
+async function removeWebsite(): Promise<void> {
+  if (!props.prospect?.website) return
+  isSaving.value = true
+  try {
+    const updated: Prospect = await ProspectsService.updateProspect(props.prospect.id, { website: null })
+    emit('updated', updated)
+    toast.success('Site retiré — le prospect redevient « sans site »')
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Erreur lors du retrait du site')
   } finally {
     isSaving.value = false
   }
