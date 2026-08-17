@@ -310,9 +310,16 @@ def map_prospect_and_enrichment(
     """
     enrichment = enrichment or {}
 
-    photos: list[str] = _dedupe_preserve_order(
-        [p.strip() for p in enrichment.get("photos", []) if isinstance(p, str) and p.strip()]
-    )
+    # The prospect's logo has its own slot — keep it out of the photo pool so it never lands as a
+    # hero / about / gallery tile (it was scraped into both places on some prospects).
+    logo_photo: str = str(enrichment.get("logo_url") or "").strip()
+    photos: list[str] = [
+        url
+        for url in _dedupe_preserve_order(
+            [p.strip() for p in enrichment.get("photos", []) if isinstance(p, str) and p.strip()]
+        )
+        if url != logo_photo
+    ]
     raw_reviews: list[dict] = [r for r in enrichment.get("reviews", []) if isinstance(r, dict)]
     raw_hours: list[dict] = [h for h in enrichment.get("opening_hours", []) if isinstance(h, dict)]
     description = enrichment.get("description")
