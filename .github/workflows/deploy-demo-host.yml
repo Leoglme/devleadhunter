@@ -23,27 +23,30 @@ jobs:
       - name: Install demo-host dependencies
         working-directory: demo-host
         env:
-          # `npm ci` runs `nuxt prepare`, which uses giget to fetch the ~10 template layers from
-          # GitHub. Unauthenticated, that hits GitHub's 60-req/hour limit → 429 and the deploy fails.
-          # Authenticating with the workflow token raises the limit to 5000/hour.
-          GIGET_AUTH: ${{ secrets.GITHUB_TOKEN }}
-        # GitHub's tarball API is intermittently flaky (503 / truncated downloads); the layer fetch is
-        # all-or-nothing per prepare, so retry a few times before giving up.
+          # `npm ci` runs `nuxt prepare`, which uses giget to fetch the ~10 template-layer tarballs
+          # from GitHub. Unauthenticated that hits GitHub's 60-req/hour-per-IP limit → 429. The default
+          # GITHUB_TOKEN is scoped to THIS repo and doesn't lift the limit for OTHER repos' tarballs, so
+          # a dedicated read-only PAT (secret GIGET_GITHUB_TOKEN) is used when present — it gives 5000/h.
+          GIGET_AUTH: ${{ secrets.GIGET_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+        # GitHub's tarball API is also intermittently flaky (503); a prepare is all-or-nothing, so retry.
         run: |
-          for attempt in 1 2 3 4 5; do
+          echo "Effective GitHub rate limit for the giget token (60 = unauthenticated, 5000 = PAT):"
+          curl -sI -H "Authorization: Bearer $GIGET_AUTH" \
+            https://api.github.com/repos/DevLeadHunter/devleadhunter-template-barber/tarball/v1.2.5 \
+            | grep -i "^x-ratelimit-limit" || true
+          for attempt in 1 2 3; do
             npm ci && exit 0
-            echo "::warning::npm ci failed (attempt $attempt/5) — retrying layer download in 30s"
-            rm -rf node_modules
-            sleep 30
+            echo "::warning::npm ci failed (attempt $attempt/3) — retrying layer download in 60s"
+            sleep 60
           done
-          echo "::error::npm ci failed after 5 attempts" && exit 1
+          echo "::error::npm ci failed after 3 attempts" && exit 1
 
       # Build with Nitro's Vercel preset → demo-host/.vercel/output (Build Output API).
       # Public runtime config is baked here, so the NUXT_PUBLIC_* vars live on this step.
       - name: Build demo-host
         working-directory: demo-host
         env:
-          GIGET_AUTH: ${{ secrets.GITHUB_TOKEN }}
+          GIGET_AUTH: ${{ secrets.GIGET_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           NUXT_PUBLIC_API_BASE: https://api.devleadhunter.dibodev.fr
           NUXT_PUBLIC_POSTHOG_PROJECT_API_KEY: ${{ secrets.NUXT_PUBLIC_POSTHOG_PROJECT_API_KEY }}
           NUXT_PUBLIC_POSTHOG_INGESTION_HOST: ${{ secrets.NUXT_PUBLIC_POSTHOG_INGESTION_HOST }}
