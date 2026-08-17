@@ -170,6 +170,31 @@ class ValidationService:
         return any(marker in lowered for marker in cls.GENERIC_PLATFORM_DESCRIPTION_MARKERS)
 
     @classmethod
+    def is_fragmentary_description(cls, description: str | None) -> bool:
+        """
+        Whether a description is scraped attribute fragments glued together, not real prose.
+
+        Real-world case: "Food Truck à Poitiers Spécialité: poulet frit coréen" — a name, a city and
+        a "Spécialité:" label stitched into one line, which reads badly on a client site. Detected by
+        an inline attribute label ("Spécialité:", "Catégorie:"…) inside a SHORT text; long prose that
+        merely contains such a word is left alone.
+
+        Args:
+            description: Scraped description text.
+
+        Returns:
+            True when the text looks fragmentary and should be dropped for a clean fallback.
+        """
+        if not description:
+            return False
+        text = description.strip()
+        # A CAPITALISED attribute label + colon ("Spécialité:", "Catégorie:") is how scraped
+        # attributes glue in; prose keeps such words lowercase ("notre spécialité, ..."). Restricting
+        # to short texts avoids flagging long prose that happens to use a heading.
+        label = r"\b(Sp[ée]cialit[ée]s?|Cat[ée]gorie|Type|Cuisine|Adresse|Horaires?|T[ée]l[ée]phone)\s*:"
+        return len(text) < 100 and bool(re.search(label, text))
+
+    @classmethod
     def description_mentions_business(
         cls,
         description: str,

@@ -359,9 +359,12 @@ def map_prospect_and_enrichment(
     ]
 
     about = description.strip() if isinstance(description, str) and description.strip() else ""
-    # Already-stored enrichments may hold a platform's own meta description
-    # ("Find local businesses…") — never show that on a client-facing site.
-    if validation_service.is_generic_platform_description(about):
+    # Reject an unusable about before it reaches the site: a platform's own meta description
+    # ("Find local businesses…") or scraped attribute fragments glued together
+    # ("Food Truck à Poitiers Spécialité: …") — both read badly, so fall back to the clean default.
+    if validation_service.is_generic_platform_description(about) or validation_service.is_fragmentary_description(
+        about
+    ):
         about = ""
     about = about or about_default
     site_city = city or area
