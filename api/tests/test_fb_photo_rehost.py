@@ -9,9 +9,30 @@ import json
 
 import pytest
 
-from scrappers.facebook_enrichment_scraper import FacebookEnrichmentScraper
+from scrappers.facebook_enrichment_scraper import FacebookEnrichmentScraper, _dedupe_photos
 from services.storyblok_service import _decode_data_uri
 from services.templates.site_content import _is_unrehostable_photo
+
+
+def test_dedupe_keeps_data_uris_alongside_fbcdn() -> None:
+    """The build-time dedup must not drop rehosted ``data:`` photos: they carry no ``scontent`` host,
+    so the old asset filter silently stripped every captured photo (FB-only prospect rendered empty).
+    """
+    data_uri = "data:image/jpeg;base64," + base64.b64encode(b"fake-bytes").decode("ascii")
+    fbcdn = "https://scontent-cdg4-2.xx.fbcdn.net/v/t39.30808-6/123456_abc_n.jpg?oh=1"
+    icon = "https://static.xx.fbcdn.net/rsrc.php/y.png"
+
+    result = _dedupe_photos([data_uri, fbcdn, icon])
+
+    assert data_uri in result  # rehosted photo survives
+    assert any("fbcdn.net/v/t39" in p for p in result)  # real fbcdn survives
+    assert icon not in result  # static asset still filtered
+
+
+def test_dedupe_drops_duplicate_data_uris() -> None:
+    """Identical captured photos (same bytes) collapse to a single entry."""
+    data_uri = "data:image/jpeg;base64," + base64.b64encode(b"same").decode("ascii")
+    assert _dedupe_photos([data_uri, data_uri]) == [data_uri]
 
 
 def test_decode_valid_data_uri() -> None:

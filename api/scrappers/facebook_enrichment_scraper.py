@@ -599,19 +599,26 @@ def photo_identity(url: str) -> str:
 
 
 def _dedupe_photos(urls: list[str]) -> list[str]:
-    """Keep photos unique by stable IMAGE IDENTITY (not raw URL) in order, capped at ``_MAX_PHOTOS``."""
+    """Keep photos unique by stable IMAGE IDENTITY (not raw URL) in order, capped at ``_MAX_PHOTOS``.
+
+    In-browser rehosted photos arrive as ``data:image`` URIs (see ``_rehost_fb_photos``): they carry no
+    fbcdn host, so they must skip the scontent/asset filters — otherwise this second dedup pass, run at
+    build time, silently drops every captured photo and the prospect renders imageless again.
+    """
     seen: set[str] = set()
     out: list[str] = []
     for url in urls:
         cleaned = (url or "").strip()
         if not cleaned:
             continue
-        # Icons / static assets sometimes slip through if the page rewrites src.
-        if not re.search(r"scontent", cleaned, re.IGNORECASE):
-            continue
-        if re.search(r"emoji\.php|rsrc\.php|static\.xx\.fbcdn", cleaned, re.IGNORECASE):
-            continue
-        key = photo_identity(cleaned)
+        is_data_uri: bool = cleaned.startswith("data:image")
+        if not is_data_uri:
+            # Icons / static assets sometimes slip through if the page rewrites src.
+            if not re.search(r"scontent", cleaned, re.IGNORECASE):
+                continue
+            if re.search(r"emoji\.php|rsrc\.php|static\.xx\.fbcdn", cleaned, re.IGNORECASE):
+                continue
+        key = cleaned if is_data_uri else photo_identity(cleaned)
         if key in seen:
             continue
         seen.add(key)
