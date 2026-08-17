@@ -290,7 +290,7 @@
             />
             Enrichir
           </button>
-          <button type="button" class="app-btn-primary h-9 px-4 text-xs" @click="bulkGenerateOpen = true">
+          <button type="button" class="app-btn-primary h-9 px-4 text-xs" @click="goToSiteGeneration">
             <UIcon name="i-lucide-globe" class="h-3.5 w-3.5" />Générer les sites
           </button>
           <button
@@ -323,13 +323,6 @@
       @close="bulkCampaignOpen = false"
       @added="handleBulkAdded"
     />
-
-    <UiBulkGenerateModal
-      :open="bulkGenerateOpen"
-      :prospect-ids="selectedIds"
-      @close="bulkGenerateOpen = false"
-      @generated="handleBulkGenerated"
-    />
   </div>
 </template>
 
@@ -346,7 +339,6 @@ import { downloadProspectsJson, downloadProspectTemplateJson, parseProspectsJson
 import { ProspectWebsite } from '~/utils/prospectWebsite'
 import { EnrichmentService } from '~/services/enrichmentService'
 import { useDrawerStackStore } from '~/stores/drawerStack'
-import type { BulkGenerateResult } from '~/services/demoSiteService'
 import { useToast } from '~/composables/useToast'
 import { useMyProspectsFilters } from '~/composables/useMyProspectsFilters'
 
@@ -360,7 +352,6 @@ const isLoading: Ref<boolean> = ref(false)
 const error: Ref<string | null> = ref(null)
 const selectedProspects: Ref<string[]> = ref([])
 const bulkCampaignOpen: Ref<boolean> = ref(false)
-const bulkGenerateOpen: Ref<boolean> = ref(false)
 const bulkBusy: Ref<boolean> = ref(false)
 const {
   searchQuery,
@@ -567,17 +558,13 @@ function handleBulkAdded(payload: { campaignName: string; count: number }): void
   clearSelection()
 }
 
-/**
- * Bulk generation finished — surface skipped/failed items and clear selection.
- * @param result - The aggregated bulk generation result.
- */
-function handleBulkGenerated(result: BulkGenerateResult): void {
-  if (result.failed > 0 || result.skipped_no_email.length > 0) {
-    toast.info(
-      `${result.created} site(s) créé(s) · ${result.skipped_no_email.length} sans email · ${result.failed} échec(s)`,
-    )
-  }
-  clearSelection()
+/** Send the selected prospects to the demo-site generation tunnel (single flow, no bulk modal). */
+function goToSiteGeneration(): void {
+  if (selectedIds.value.length === 0) return
+  void navigateTo({
+    path: '/dashboard/demo-sites/create',
+    query: { prospect: selectedIds.value.map((id: number): string => String(id)) },
+  })
 }
 
 /**

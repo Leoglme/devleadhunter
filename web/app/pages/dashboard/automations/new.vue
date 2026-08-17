@@ -392,7 +392,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import type { Prospect } from '~/types'
 import type { TemplateSelectOption } from '~/types/TemplateSelect'
 import type { UiWizardStep } from '~/types/UiWizardStepper'
-import type { DemoSiteTemplate } from '~/services/demoSiteService'
+import type { BulkGenerateItemResult, BulkGenerateResult, DemoSiteTemplate } from '~/services/demoSiteService'
 import { AutomationsService } from '~/services/automationsService'
 import { ProspectsService } from '~/services/prospectsService'
 import { EmailTemplatesService } from '~/services/emailTemplatesService'
@@ -880,12 +880,40 @@ function resolvedName(): string {
 }
 
 /**
- * Create the automatisation then open its detail page.
+ * Site mode: generate the demo sites directly (no automation), then land on the site (a single one)
+ * or the demo-sites list (several). Uses the prospects' stored enrichment — enrich them beforehand.
+ */
+async function launchSites(): Promise<void> {
+  const result: BulkGenerateResult = await DemoSiteService.createDemoSitesBulk({
+    prospect_ids: selectedProspectIds.value.map((id: string): number => Number(id)),
+    template_id: form.value.templateId || 'artisan-edito',
+    theme: form.value.theme,
+  })
+  clearDraft()
+  const createdIds: number[] = result.results
+    .map((item: BulkGenerateItemResult): number | undefined => item.demo_site_id)
+    .filter((id: number | undefined): id is number => typeof id === 'number')
+  if (result.skipped_no_email.length > 0 || result.failed > 0) {
+    toast.info(
+      `${result.created} site(s) créé(s) · ${result.skipped_no_email.length} sans email · ${result.failed} échec(s)`,
+    )
+  } else {
+    toast.success(result.created > 1 ? `${result.created} sites démo générés` : 'Site démo généré')
+  }
+  await navigateTo(createdIds.length === 1 ? `/dashboard/demo-sites/${createdIds[0]}` : '/dashboard/demo-sites')
+}
+
+/**
+ * Create the automatisation — or, in site mode, generate the sites — then navigate to the result.
  * @returns A promise resolved once created.
  */
 async function launch(): Promise<void> {
   isCreating.value = true
   try {
+    if (isSiteMode.value) {
+      await launchSites()
+      return
+    }
     const detail: AutomationDetail = await AutomationsService.createAutomation({
       name: resolvedName(),
       mode: form.value.mode,
@@ -999,13 +1027,16 @@ onMounted(async (): Promise<void> => {
   }
   await reloadProspects()
 
-  // Pre-select a prospect passed via ?prospect= (single-site shortcut).
-  const rawQuery: LocationQueryValue | undefined = Array.isArray(route.query.prospect)
-    ? route.query.prospect[0]
-    : route.query.prospect
-  const raw: string | undefined = typeof rawQuery === 'string' ? rawQuery : undefined
-  if (raw && !Number.isNaN(Number(raw))) {
-    selectedProspectIds.value = [raw]
+  // Pre-select the prospect(s) passed via ?prospect= (one or several, for the site-generation tunnel).
+  const rawProspects: Array<LocationQueryValue | undefined> = Array.isArray(route.query.prospect)
+    ? route.query.prospect
+    : [route.query.prospect]
+  const preselected: string[] = rawProspects.filter(
+    (value: LocationQueryValue | undefined): value is string =>
+      typeof value === 'string' && value.length > 0 && !Number.isNaN(Number(value)),
+  )
+  if (preselected.length) {
+    selectedProspectIds.value = preselected
   }
 })
 </script>
