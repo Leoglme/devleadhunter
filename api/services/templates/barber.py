@@ -14,6 +14,7 @@ Exposes the stable names consumed by the shared services (see ``registry``):
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from services.templates.site_content import (  # noqa: F401 — re-exported for the registry
@@ -56,7 +57,10 @@ USED_SECTIONS: list[str] = ["hero", "trust", "about", "services", "gallery", "re
 
 
 def default_subtitle(area: str) -> str:
-    """Barber-aware default hero subtitle when the prospect has no description.
+    """Gender-neutral default hero subtitle when the prospect has no description.
+
+    Kept neutral (no "pour hommes") because this helper has no business name to tell a men-only
+    barbershop from a mixed salon; the gendered wording lives in the about + hero title instead.
 
     Args:
         area: Service area / city label.
@@ -64,14 +68,40 @@ def default_subtitle(area: str) -> str:
     Returns:
         A barber subtitle.
     """
-    return f"Coupe, barbe et soins pour hommes à {area} — un salon de quartier, sur rendez-vous."
+    return f"Coupe, barbe et soins à {area} — un salon de quartier, sur rendez-vous."
 
 
-_SITE_ABOUT_DEFAULT: str = (
+# Same template, two audiences: a men's barbershop keeps the "pour hommes" framing; a mixed salon
+# (or an ambiguous name) gets the neutral one. Which about is used is decided by ``_is_masculine_barber``.
+_ABOUT_MEN: str = (
     "Salon de coiffure pour hommes : coupes classiques et contemporaines, "
     "entretien de barbe et rasage soigné. Accueil sans chichi, diagnostic "
     "clair et un résultat net à chaque passage."
 )
+_ABOUT_MIXED: str = (
+    "Salon de coiffure : coupes classiques et contemporaines, entretien de "
+    "barbe et rasage soigné. Accueil sans chichi, diagnostic clair et un "
+    "résultat net à chaque passage."
+)
+# Kept for the shared helper's signature; a men-only default is the safe base since the DA is a barbershop.
+_SITE_ABOUT_DEFAULT: str = _ABOUT_MEN
+
+_MASCULINE_TRADE_RE = re.compile(r"barbi(?:er|ère)|\bbarber\b|barbershop|\bhomme|\bmen\b|messieurs", re.IGNORECASE)
+_MIXED_TRADE_RE = re.compile(r"coiffure|coiffeu(?:r|se)|\bsalon\b|mixte|\bdames?\b|\bfemme", re.IGNORECASE)
+
+
+def _is_masculine_barber(business_name: str, enrichment: dict[str, Any]) -> bool:
+    """Whether this prospect reads as a men's barbershop (vs a mixed salon), from its name + category.
+
+    Heuristic (Léo's call): masculine only when a barber signal is present AND no mixed/salon signal is —
+    so a clear "Barbier …" is men's, "… Coiffure/Salon" is mixed, and anything ambiguous falls back to the
+    neutral (mixed) wording, which is the safe default.
+    """
+    haystack: str = f"{business_name} {enrichment.get('category', '')}"
+    masculine: bool = bool(_MASCULINE_TRADE_RE.search(haystack))
+    mixed: bool = bool(_MIXED_TRADE_RE.search(haystack))
+    return masculine and not mixed
+
 
 # Trade defaults when enrichment provides no services / FAQ.
 # Mirror of layer defaults in devleadhunter-template-barber (barber.ts).
@@ -158,6 +188,8 @@ def build_site_content(
     scraped enrichment when present, else the barber editorial defaults; the template
     layer supplies section headings and remaining boilerplate. See ``site_content.py``.
     """
+    enr = enrichment or {}
+    masculine: bool = _is_masculine_barber(business_name, enr)
     site = map_prospect_and_enrichment(
         business_name=business_name,
         phone=phone,
@@ -167,11 +199,15 @@ def build_site_content(
         subtitle=subtitle,
         palette=palette,
         enrichment=enrichment,
-        about_default=_SITE_ABOUT_DEFAULT,
+        about_default=_ABOUT_MEN if masculine else _ABOUT_MIXED,
     )
-    enr = enrichment or {}
     site["services"] = fixed_trade_services(BARBER_SERVICES)
     site["faq"] = BARBER_FAQ
     site.update(_EDITORIAL_DEFAULTS)
+    # Same template, gendered content: a men's barbershop keeps "barbier"/"pour hommes"; a mixed salon
+    # (or an ambiguous name) gets neutral wording. ``audience`` lets the layer gender the hero title too.
+    site["audience"] = "men" if masculine else "all"
+    if not masculine:
+        site["aboutHeading"] = "Votre salon de quartier"
     apply_real_trust_stats(site, enrichment)
     return site
