@@ -67,7 +67,9 @@
               :src="livePreviewUrl"
               :class="[
                 'absolute top-0 origin-top-left border-0 bg-white',
-                previewDevice === 'mobile' ? 'rounded-md shadow-[var(--app-shadow-soft)]' : 'left-0',
+                previewDevice === 'mobile'
+                  ? 'h-[844px] w-[390px] rounded-xl shadow-[var(--app-shadow-soft)]'
+                  : 'left-0 h-[800px] w-[1280px]',
               ]"
               :style="liveFrameStyle"
               title="Aperçu interactif du template"
@@ -250,14 +252,6 @@ const LIVE_VIEWPORTS: Record<TemplatePreviewDevice, { width: number; height: num
   mobile: { width: 390, height: 844 },
 }
 
-/**
- * Backing-resolution multiplier for the live preview. The iframe is sized at `viewport / SUPERSAMPLE`
- * and `zoom`ed back up by the same factor: the sub-frame keeps its native layout viewport (1280 / 390)
- * but rasterizes at SUPERSAMPLE× the pixels, so the fit-to-pane `transform: scale` down-samples a
- * high-res image instead of stretching a 1:1 one — the fix for the soft preview on HiDPI screens.
- */
-const PREVIEW_SUPERSAMPLE: number = 2
-
 const previewContainer: Ref<HTMLElement | null> = ref(null)
 /** Live preview iframe, targeted by the postMessage overrides in published-site mode. */
 const previewFrame: Ref<HTMLIFrameElement | null> = ref(null)
@@ -290,25 +284,22 @@ const sortedTemplates: ComputedRef<DemoSiteTemplate[]> = computed((): DemoSiteTe
 )
 
 /**
- * Sizing of the live iframe: a supersampled backing (`zoom`) fitted to the pane with `transform: scale`
- * — full width for desktop, height-fit and centered for mobile.
+ * Fit of the live iframe into the pane: full width for desktop, height-fit and centered for mobile.
+ *
+ * Plain `transform: scale` only — a `zoom`-based supersampling pass (sharper on HiDPI) was tried and
+ * reverted: `zoom` on an iframe resizes the INNER viewport on some Chromium versions, which flipped
+ * the preview to a phone layout, over-zoomed and cropped. Faithful layout beats sharpness here.
  */
 const liveFrameStyle: ComputedRef<Record<string, string>> = computed((): Record<string, string> => {
   const viewport: { width: number; height: number } = LIVE_VIEWPORTS[previewDevice.value]
-  const base: Record<string, string> = {
-    width: `${viewport.width / PREVIEW_SUPERSAMPLE}px`,
-    height: `${viewport.height / PREVIEW_SUPERSAMPLE}px`,
-    zoom: String(PREVIEW_SUPERSAMPLE),
-  }
   if (previewDevice.value === 'mobile') {
     const scale: number = paneHeight.value / viewport.height
     return {
-      ...base,
       transform: `scale(${scale})`,
       left: `calc(50% - ${(viewport.width * scale) / 2}px)`,
     }
   }
-  return { ...base, transform: `scale(${paneWidth.value / viewport.width})` }
+  return { transform: `scale(${paneWidth.value / viewport.width})` }
 })
 
 /**
