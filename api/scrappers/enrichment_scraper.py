@@ -817,12 +817,13 @@ class EnrichmentScraper:
             if self._is_extraction_ready(best):
                 logger.info("Enrichment ready for %s after %s attempt(s)", business_name, attempt + 1)
                 return best
-            # Plateau exit: once the panel is loaded (a rating is parsed) and the parsed hour count
-            # stops growing, further attempts only burn ~5s each without adding data — a food truck
-            # open a few days, or a panel variant whose full weekly hours the parser doesn't read.
-            # Without this the loop always exhausts its 4 attempts (~20s stall) on such listings.
+            # Plateau exit: the merged hour count stopped growing between attempts (best only ever
+            # grows), so further attempts add nothing — a food truck open a few days, OR a panel the
+            # sign-in modal collapsed so nothing parses (rating None, hours 0). No rating requirement:
+            # the collapsed-panel case is exactly the one that has none, and it caused the ~20s stall.
+            # A genuinely still-loading panel keeps growing, so it is never cut here.
             hours: int = len(best.opening_hours)
-            if best.rating is not None and hours == previous_hours:
+            if attempt > 0 and hours == previous_hours:
                 logger.info("Enrichment plateaued for %s after %s attempt(s)", business_name, attempt + 1)
                 return best
             previous_hours = hours

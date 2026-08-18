@@ -41,6 +41,36 @@ async def test_extract_retries_plateau_stops_before_exhausting_attempts(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_extract_retries_plateau_exits_when_panel_collapsed_no_rating(monkeypatch) -> None:
+    """The sign-in modal can collapse the panel so nothing parses (no rating, no hours). The plateau
+    exit must still fire — the earlier rating-gated version burned all 4 attempts on this exact case.
+    """
+    scraper = EnrichmentScraper()
+    prepare_calls = {"n": 0}
+
+    async def fake_prepare(_tab: object) -> None:
+        prepare_calls["n"] += 1
+
+    async def fake_extract_raw(_tab: object) -> dict:
+        return {}
+
+    def fake_build(_raw: dict, *, business_name: str, city: str | None) -> EnrichmentData:
+        return EnrichmentData()  # collapsed panel: nothing parses (rating None, hours empty)
+
+    async def fake_sleep(_s: float) -> None:
+        return None
+
+    monkeypatch.setattr(scraper, "_prepare_panel_for_extraction", fake_prepare)
+    monkeypatch.setattr(scraper, "_extract_raw", fake_extract_raw)
+    monkeypatch.setattr(scraper, "_build_from_raw", fake_build)
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
+    await scraper._extract_with_retries(object(), business_name="X", city=None)
+
+    assert prepare_calls["n"] == 2
+
+
+@pytest.mark.asyncio
 async def test_extract_retries_returns_immediately_when_hours_complete(monkeypatch) -> None:
     """A full weekly-hours parse is ``ready`` on the first attempt — no plateau needed."""
     scraper = EnrichmentScraper()
