@@ -26,6 +26,27 @@ def _site_with_photos(photos: list[str]) -> dict:
     )
 
 
+def _site_with_logo(logo_url: str) -> dict:
+    return registry.build_site_content(
+        template_id="barber",
+        business_name="X",
+        phone="0",
+        email="x@y.fr",
+        city="Tours",
+        area="Tours",
+        subtitle="",
+        palette={"primary": "#000", "secondary": "#111", "accent": "#222"},
+        enrichment={"logo_url": logo_url},
+    )
+
+
+def test_fbcdn_logo_dropped_but_rehosted_data_uri_logo_kept() -> None:
+    """An fbcdn logo (expires) is dropped at generation; a rehosted data-uri logo survives → favicon works."""
+    assert _site_with_logo("https://scontent.xx.fbcdn.net/v/logo.jpg?oh=1")["logo"] == ""
+    data_uri = "data:image/png;base64,AAAABBBB"
+    assert _site_with_logo(data_uri)["logo"] == data_uri
+
+
 def test_usable_pool_dedupes_and_drops_logo_and_broken_hosts() -> None:
     pool = usable_site_photos(
         {

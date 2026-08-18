@@ -716,6 +716,11 @@ class FacebookEnrichmentScraper:
             page = await self._extract_json(tab, _FB_PAGE_JS)
             photos = await self._extract_photos(tab, facebook_url)
             photos = await self._rehost_fb_photos(tab, photos)
+            # The logo is the FB profile photo (fbcdn): rehost it too, else generation drops it as
+            # unrehostable and the site loses its logo/favicon (#18, applied to the logo this time).
+            logo_src = page.get("profile_photo")
+            if isinstance(logo_src, str) and logo_src.strip():
+                page["profile_photo"] = (await self._rehost_fb_photos(tab, [logo_src]))[0]
             reviews_text, embedded_texts = await self._extract_reviews(tab, facebook_url)
             return self._build_from_raw(page, reviews_text, photos, embedded_texts)
         except Exception as exc:
