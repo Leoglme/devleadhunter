@@ -192,14 +192,30 @@
                 @error="hasLogoPreviewError = true"
               />
             </div>
+            <div v-if="isCapturedLogo" class="flex min-w-0 flex-1 items-center gap-2">
+              <span class="min-w-0 flex-1 truncate text-[11px] text-[var(--app-ink-soft)]">
+                Logo capturé automatiquement — hébergé à la génération
+              </span>
+              <button
+                type="button"
+                class="shrink-0 cursor-pointer text-[11px] font-medium text-[var(--app-ink-soft)] underline underline-offset-2 hover:text-[var(--app-ink)]"
+                @click="form.logo_url = ''"
+              >
+                Remplacer
+              </button>
+            </div>
             <input
+              v-else
               v-model="form.logo_url"
               type="url"
               class="input-field min-w-0 flex-1"
               placeholder="https://… — sa couleur de marque personnalise l'action du site généré"
             />
           </div>
-          <p v-if="trimmedLogoUrl && hasLogoPreviewError" class="mt-1 text-[10px] text-[var(--app-danger)]">
+          <p
+            v-if="trimmedLogoUrl && !isCapturedLogo && hasLogoPreviewError"
+            class="mt-1 text-[10px] text-[var(--app-danger)]"
+          >
             Image introuvable à cette URL.
           </p>
         </div>
@@ -496,6 +512,9 @@ const isIdentityConflict: ComputedRef<boolean> = computed(
 
 /** URL du logo nettoyée : conditionne l'affichage de l'aperçu (vide → pas d'aperçu). */
 const trimmedLogoUrl: ComputedRef<string> = computed((): string => form.value.logo_url.trim())
+
+/** Logo capté au scrape en data:base64 (photo de profil Facebook) : on masque le pavé base64 du champ. */
+const isCapturedLogo: ComputedRef<boolean> = computed((): boolean => trimmedLogoUrl.value.startsWith('data:'))
 
 /** True when a name proposal awaits the user's confirm/reject decision. */
 const hasPendingProposal: ComputedRef<boolean> = computed(

@@ -27,7 +27,9 @@ class ProspectEnrichment(Base):
     source: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # Scalar enrichment fields
-    logo_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    # TEXT, not VARCHAR: a Facebook logo is rehosted as a base64 data URI at scrape time (see
+    # facebook_enrichment_scraper), which far exceeds any VARCHAR length and would be truncated.
+    logo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     rating: Mapped[float | None] = mapped_column(Float, nullable=True)
     reviews_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
