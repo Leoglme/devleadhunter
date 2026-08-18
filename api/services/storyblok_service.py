@@ -25,6 +25,7 @@ import httpx
 from core.config import settings
 from services.enrichment_content import EnrichmentContentMapper
 from services.templates import registry as template_registry
+from services.templates.default_images import apply_default_images
 from services.templates.site_content import SECTION_COMPONENT_NAMES, SITE_CONTENT_SCHEMAS
 
 logger = logging.getLogger(__name__)
@@ -150,7 +151,7 @@ class StoryblokService:
         # Phase 4b — templates that opt in produce a FLAT SiteContent that already
         # consumes enrichment; the rich enrichment merge must not run for them.
         if template_registry.uses_site_content(template_id):
-            return template_registry.build_site_content(
+            site_content = template_registry.build_site_content(
                 template_id=template_id,
                 business_name=business_name,
                 phone=phone,
@@ -161,6 +162,10 @@ class StoryblokService:
                 palette=palette,
                 enrichment=enrichment,
             )
+            # Seed empty image slots with the template's own default images so they reach Storyblok
+            # (uploaded as real, editable assets) — not just the render-time layer fallback.
+            apply_default_images(site_content, template_id)
+            return site_content
 
         content = template_registry.build_content(
             template_id=template_id,
