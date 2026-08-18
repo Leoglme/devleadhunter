@@ -56,6 +56,29 @@ COMPONENT_SCHEMAS: list[dict[str, Any]] = []
 # Sections this template renders — drives the client's Storyblok editor so it shows no dead sections.
 USED_SECTIONS: list[str] = ["hero", "trust", "about", "services", "gallery", "reviews", "faq", "contact"]
 
+# One-off photos this template renders that aren't hero/about-center — exposed as dedicated, labelled
+# Storyblok fields (grouped in the section they appear in), editable by the client via ``SiteContent.images``.
+# The menu's per-dish photos aren't here: each rides on its service blok's own ``image`` field (seeded below).
+EXTRA_SECTION_IMAGES: dict[str, list[dict[str, str]]] = {
+    "about": [
+        {"field": "aboutCollageLeft", "label": "Photo collage à propos — gauche"},
+        {"field": "aboutCollageRight", "label": "Photo collage à propos — droite"},
+    ],
+    "reviews": [{"field": "testimonial", "label": "Photo de l'avis mis en avant"}],
+}
+
+# Default dish photos — EXACT mirror of ``FALLBACK_DISH_IMAGES`` in the layer (food.ts). Seeded onto each
+# menu item + the about-collage side vignettes + the testimonial photo so those CMS fields ship with a real
+# food image (never an empty slot) that the client can replace. All already absolute Unsplash URLs.
+_DEFAULT_DISH_IMAGES: list[str] = [
+    "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=800&q=70",
+    "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?auto=format&fit=crop&w=800&q=70",
+    "https://images.unsplash.com/photo-1553979459-d2229ba7433b?auto=format&fit=crop&w=800&q=70",
+    "https://images.unsplash.com/photo-1572490122747-3968b75cc699?auto=format&fit=crop&w=800&q=70",
+    "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=70",
+    "https://images.unsplash.com/photo-1572802419224-296b0aeee0d9?auto=format&fit=crop&w=800&q=70",
+]
+
 
 def default_subtitle(area: str) -> str:
     """Food-truck-aware default hero subtitle when the prospect has no description.
@@ -204,4 +227,16 @@ def build_site_content(
     site["faq"] = FOOD_FAQ
     site.update(_EDITORIAL_DEFAULTS)
     _apply_real_food_stats(site, enrichment)
+    # Seed the editable photo slots so each ships with a real default the client can replace in the CMS:
+    # one dish photo per menu item (its service blok's ``image``), and the about-collage side vignettes +
+    # the featured-review photo (via ``images``). The collage CENTRE stays ``aboutImage`` and the hero stays
+    # ``heroImage`` — both already editable, untouched here.
+    for index, service in enumerate(site["services"]):
+        if isinstance(service, dict):
+            service["image"] = _DEFAULT_DISH_IMAGES[index % len(_DEFAULT_DISH_IMAGES)]
+    site["images"] = {
+        "aboutCollageLeft": _DEFAULT_DISH_IMAGES[0],
+        "aboutCollageRight": _DEFAULT_DISH_IMAGES[2],
+        "testimonial": _DEFAULT_DISH_IMAGES[3],
+    }
     return site

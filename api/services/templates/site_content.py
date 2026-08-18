@@ -654,7 +654,27 @@ FIELD_SCHEMAS: dict[str, dict[str, Any]] = {
         "restrict_components": True,
         "component_whitelist": ["site_content_social"],
     },
+    "teamHeading": {"type": "text", "display_name": "Titre de la section"},
+    "teamMembers": {
+        "type": "bloks",
+        "display_name": "Membres de l'équipe",
+        "description": "Photo + nom + rôle de chaque membre présenté",
+        "restrict_components": True,
+        "component_whitelist": ["site_content_team_member"],
+    },
+    "portfolioHeading": {"type": "text", "display_name": "Titre de la section"},
+    "portfolio": {
+        "type": "bloks",
+        "display_name": "Réalisations",
+        "description": "Photo + titre + catégorie de chaque réalisation présentée",
+        "restrict_components": True,
+        "component_whitelist": ["site_content_portfolio_item"],
+    },
 }
+
+# Standard SiteContent field keys. Any OTHER key found on a section blok that carries an asset is a
+# per-template one-off image, surfaced under the generic ``images`` map (see from_storyblok_site_content).
+_KNOWN_FIELD_KEYS: frozenset[str] = frozenset(FIELD_SCHEMAS.keys()) | {"palette"}
 
 # Ordered page sections: (component suffix, editor label, the flat ``SiteContent`` keys it owns).
 # This is the SINGLE source of truth — schema, ``to_storyblok`` split and the merge share it.
@@ -667,6 +687,8 @@ SECTION_DEFINITIONS: list[tuple[str, str, list[str]]] = [
     ("reviews", "Avis clients", ["reviewsHeading", "reviews"]),
     ("faq", "Questions fréquentes", ["faqHeading", "faq"]),
     ("beforeAfter", "Avant / après", ["beforeAfter"]),
+    ("team", "Équipe", ["teamHeading", "teamMembers"]),
+    ("portfolio", "Réalisations", ["portfolioHeading", "portfolio"]),
     (
         "contact",
         "Contact & informations",
@@ -678,18 +700,28 @@ SECTION_DEFINITIONS: list[tuple[str, str, list[str]]] = [
 SECTION_COMPONENT_NAMES: list[str] = [f"section_{suffix}" for suffix, _, _ in SECTION_DEFINITIONS]
 
 
-def _section_component(suffix: str, display_name: str, field_keys: list[str]) -> dict[str, Any]:
-    """Build a ``section_*`` component schema from its field keys, assigning each a ``pos``."""
-    return {
-        "name": f"section_{suffix}",
-        "display_name": display_name,
-        "schema": {key: {**FIELD_SCHEMAS[key], "pos": index} for index, key in enumerate(field_keys)},
-    }
+def _section_component(
+    suffix: str, display_name: str, field_keys: list[str], extra_images: list[dict[str, str]] | None = None
+) -> dict[str, Any]:
+    """Build a ``section_*`` component schema from its field keys, assigning each a ``pos``.
+
+    ``extra_images`` appends this template's one-off image fields (asset), each
+    ``{"field": <SiteContent.images key>, "label": <FR label>}`` — grouped in the section the photo
+    actually appears in, and flattened back into ``SiteContent.images`` by the bridge.
+    """
+    schema: dict[str, Any] = {key: {**FIELD_SCHEMAS[key], "pos": index} for index, key in enumerate(field_keys)}
+    for offset, extra in enumerate(extra_images or []):
+        schema[extra["field"]] = {
+            "type": "asset",
+            "filetypes": ["images"],
+            "allow_external_url": True,
+            "pos": len(field_keys) + offset,
+            "display_name": extra["label"],
+        }
+    return {"name": f"section_{suffix}", "display_name": display_name, "schema": schema}
 
 
-SITE_CONTENT_SCHEMAS: list[dict[str, Any]] = [
-    _section_component(suffix, display_name, field_keys) for suffix, display_name, field_keys in SECTION_DEFINITIONS
-] + [
+_ITEM_BLOK_SCHEMAS: list[dict[str, Any]] = [
     {
         "name": "site_content_social",
         "display_name": "Réseau social",
@@ -709,6 +741,44 @@ SITE_CONTENT_SCHEMAS: list[dict[str, Any]] = [
         "schema": {
             "title": {"type": "text", "pos": 0, "display_name": "Titre"},
             "description": {"type": "textarea", "pos": 1, "display_name": "Description"},
+            "image": {
+                "type": "asset",
+                "filetypes": ["images"],
+                "allow_external_url": True,
+                "pos": 2,
+                "display_name": "Photo",
+            },
+        },
+    },
+    {
+        "name": "site_content_team_member",
+        "display_name": "Membre de l'équipe",
+        "schema": {
+            "photo": {
+                "type": "asset",
+                "filetypes": ["images"],
+                "allow_external_url": True,
+                "pos": 0,
+                "display_name": "Photo",
+            },
+            "name": {"type": "text", "pos": 1, "display_name": "Nom"},
+            "role": {"type": "text", "pos": 2, "display_name": "Rôle / spécialité"},
+            "bio": {"type": "textarea", "pos": 3, "display_name": "Présentation"},
+        },
+    },
+    {
+        "name": "site_content_portfolio_item",
+        "display_name": "Réalisation",
+        "schema": {
+            "image": {
+                "type": "asset",
+                "filetypes": ["images"],
+                "allow_external_url": True,
+                "pos": 0,
+                "display_name": "Photo",
+            },
+            "title": {"type": "text", "pos": 1, "display_name": "Titre"},
+            "category": {"type": "text", "pos": 2, "display_name": "Catégorie"},
         },
     },
     {
@@ -771,6 +841,25 @@ SITE_CONTENT_SCHEMAS: list[dict[str, Any]] = [
         },
     },
 ]
+
+
+def build_content_schemas(
+    extra_section_images: dict[str, list[dict[str, str]]] | None = None,
+) -> list[dict[str, Any]]:
+    """Build the Storyblok component schemas for a template.
+
+    ``extra_section_images`` maps a section suffix to the one-off image fields the template adds to
+    that section (each ``{"field", "label"}``); ``None`` yields the shared schema unchanged.
+    """
+    extra = extra_section_images or {}
+    sections: list[dict[str, Any]] = [
+        _section_component(suffix, display_name, field_keys, extra.get(suffix))
+        for suffix, display_name, field_keys in SECTION_DEFINITIONS
+    ]
+    return sections + _ITEM_BLOK_SCHEMAS
+
+
+SITE_CONTENT_SCHEMAS: list[dict[str, Any]] = build_content_schemas()
 
 
 def _items_to_bloks(items: Any, component: str, keys: tuple[str, ...]) -> list[dict[str, Any]]:
@@ -843,7 +932,42 @@ def _content_field_values(site_content: dict[str, Any]) -> dict[str, Any]:
             for item in site_content.get("gallery") or []
             if isinstance(item, dict) and str(item.get("url", "")).strip()
         ],
-        "services": _items_to_bloks(site_content.get("services"), "site_content_service", ("title", "description")),
+        "services": [
+            {
+                "_uid": _uid(),
+                "component": "site_content_service",
+                "title": item.get("title", ""),
+                "description": item.get("description", ""),
+                "image": _asset(item.get("image", "")),
+            }
+            for item in site_content.get("services") or []
+            if isinstance(item, dict)
+        ],
+        "teamHeading": site_content.get("teamHeading", ""),
+        "teamMembers": [
+            {
+                "_uid": _uid(),
+                "component": "site_content_team_member",
+                "photo": _asset(item.get("photo", "")),
+                "name": item.get("name", ""),
+                "role": item.get("role", ""),
+                "bio": item.get("bio", ""),
+            }
+            for item in site_content.get("teamMembers") or []
+            if isinstance(item, dict)
+        ],
+        "portfolioHeading": site_content.get("portfolioHeading", ""),
+        "portfolio": [
+            {
+                "_uid": _uid(),
+                "component": "site_content_portfolio_item",
+                "image": _asset(item.get("image", "")),
+                "title": item.get("title", ""),
+                "category": item.get("category", ""),
+            }
+            for item in site_content.get("portfolio") or []
+            if isinstance(item, dict)
+        ],
         # Storyblok ``number`` fields store their value as a STRING — an int fails the editor's
         # save/publish validation ("must be a string with numbers"), so stringify the rating.
         "reviews": [
@@ -874,7 +998,11 @@ def _content_field_values(site_content: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def to_storyblok_site_content(site_content: dict[str, Any], sections: list[str] | None = None) -> list[dict[str, Any]]:
+def to_storyblok_site_content(
+    site_content: dict[str, Any],
+    sections: list[str] | None = None,
+    extra_section_images: dict[str, list[dict[str, str]]] | None = None,
+) -> list[dict[str, Any]]:
     """Project a flat ``SiteContent`` into the Storyblok page ``body`` — a list of SECTION bloks.
 
     The page is split into small, focused sections (``section_hero``, ``section_about``…) instead of
@@ -891,6 +1019,9 @@ def to_storyblok_site_content(site_content: dict[str, Any], sections: list[str] 
         The page ``body``: an ordered list of ``section_*`` bloks.
     """
     allowed: set[str] | None = set(sections) if sections is not None else None
+    extra: dict[str, list[dict[str, str]]] = extra_section_images or {}
+    raw_images = site_content.get("images")
+    images: dict[str, Any] = raw_images if isinstance(raw_images, dict) else {}
     values = _content_field_values(site_content)
     body: list[dict[str, Any]] = []
     for suffix, _, field_keys in SECTION_DEFINITIONS:
@@ -899,6 +1030,10 @@ def to_storyblok_site_content(site_content: dict[str, Any], sections: list[str] 
         section: dict[str, Any] = {"_uid": _uid(), "component": f"section_{suffix}"}
         for key in field_keys:
             section[key] = values[key]
+        # This template's one-off image slots for this section (empty for most): pushed as asset
+        # fields so the client edits them; the bridge flattens them back into ``SiteContent.images``.
+        for extra_image in extra.get(suffix, []):
+            section[extra_image["field"]] = _asset(images.get(extra_image["field"], ""))
         body.append(section)
     return body
 
@@ -995,7 +1130,7 @@ def from_storyblok_site_content(raw: dict[str, Any]) -> dict[str, Any] | None:
             entry["rating"] = int(rating_raw.strip())
         reviews.append(entry)
 
-    return {
+    result: dict[str, Any] = {
         "businessName": _clean_str(blok.get("businessName")),
         "phone": _clean_str(blok.get("phone")),
         "email": _clean_str(blok.get("email")),
@@ -1034,8 +1169,33 @@ def from_storyblok_site_content(raw: dict[str, Any]) -> dict[str, Any] | None:
             if _asset_url(item)
         ],
         "services": [
-            {"title": _clean_str(item.get("title")), "description": _clean_str(item.get("description"))}
+            {
+                "title": _clean_str(item.get("title")),
+                "description": _clean_str(item.get("description")),
+                "image": _asset_url(item.get("image")),
+            }
             for item in _blok_list(blok.get("services"))
+        ],
+        "teamHeading": _clean_str(blok.get("teamHeading")),
+        "teamMembers": [
+            {
+                "photo": _asset_url(item.get("photo")),
+                "name": _clean_str(item.get("name")),
+                "role": _clean_str(item.get("role")),
+                "bio": _clean_str(item.get("bio")),
+            }
+            for item in _blok_list(blok.get("teamMembers"))
+            if _asset_url(item.get("photo")) or _clean_str(item.get("name"))
+        ],
+        "portfolioHeading": _clean_str(blok.get("portfolioHeading")),
+        "portfolio": [
+            {
+                "image": _asset_url(item.get("image")),
+                "title": _clean_str(item.get("title")),
+                "category": _clean_str(item.get("category")),
+            }
+            for item in _blok_list(blok.get("portfolio"))
+            if _asset_url(item.get("image")) or _clean_str(item.get("title"))
         ],
         "reviews": reviews,
         "faq": [
@@ -1062,3 +1222,15 @@ def from_storyblok_site_content(raw: dict[str, Any]) -> dict[str, Any] | None:
             if _clean_str(item.get("url"))
         ],
     }
+    # Per-template one-off image slots (barber's banner, food's collage…): a section field that is
+    # not a standard SiteContent key and holds an asset object is surfaced under the generic map.
+    images: dict[str, str] = {}
+    for key, value in blok.items():
+        if key in _KNOWN_FIELD_KEYS or not isinstance(value, dict):
+            continue
+        url = _asset_url(value)
+        if url:
+            images[key] = url
+    if images:
+        result["images"] = images
+    return result

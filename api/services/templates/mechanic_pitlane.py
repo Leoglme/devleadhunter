@@ -56,6 +56,27 @@ COMPONENT_SCHEMAS: list[dict[str, Any]] = []
 # Sections this template renders — drives the client's Storyblok editor so it shows no dead sections.
 USED_SECTIONS: list[str] = ["hero", "trust", "about", "services", "gallery", "reviews", "faq", "contact"]
 
+# One-off photos this template renders that aren't hero/about/gallery — exposed as dedicated, labelled
+# Storyblok fields (grouped in the section they appear in), editable by the client via ``SiteContent.images``.
+EXTRA_SECTION_IMAGES: dict[str, list[dict[str, str]]] = {
+    "about": [{"field": "aboutSecondary", "label": "Deuxième photo à propos"}],
+    "faq": [{"field": "faq", "label": "Photo de la section FAQ"}],
+}
+
+# Default photo pool for the per-service card images + the two one-off slots — EXACT mirror of the layer
+# defaults (devleadhunter-template-mechanic-pitlane app/types/pitlane.ts ``defaults.images.gallery``).
+_DEFAULT_SERVICE_IMAGES: list[str] = [
+    "https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1637640125496-31852f042a60?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1723099971299-3789db53604c?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1711386689622-1cda23e10217?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1735361039382-d78a0a0cc185?auto=format&fit=crop&w=1200&q=80",
+]
+# The two one-off slots fall back, in the layer, to gallery photos: aboutSecondary → gallery[1], faq → gallery[0].
+_DEFAULT_ABOUT_SECONDARY: str = _DEFAULT_SERVICE_IMAGES[1]
+_DEFAULT_FAQ_IMAGE: str = _DEFAULT_SERVICE_IMAGES[0]
+
 
 def default_subtitle(area: str) -> str:
     """Garage-aware default hero subtitle when the prospect has no description.
@@ -205,4 +226,10 @@ def build_site_content(
     site["faq"] = MECHANIC_FAQ
     site.update(_EDITORIAL_DEFAULTS)
     apply_real_trust_stats(site, enrichment)
+    # Each service card, the second "about" photo and the FAQ photo are dedicated, editable CMS fields now,
+    # seeded with the template's own default photos so the client sees them (and can replace them) in Storyblok.
+    # Per-service image: a distinct default per card (no "% length" repeat within the 6-card grid).
+    for index, service in enumerate(site["services"]):
+        service["image"] = _DEFAULT_SERVICE_IMAGES[index % len(_DEFAULT_SERVICE_IMAGES)]
+    site["images"] = {"aboutSecondary": _DEFAULT_ABOUT_SECONDARY, "faq": _DEFAULT_FAQ_IMAGE}
     return site

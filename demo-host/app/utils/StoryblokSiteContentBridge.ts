@@ -34,6 +34,37 @@ export class StoryblokSiteContentBridge {
     return this.readString(value)
   }
 
+  /** Single-asset fields that map to their own named `SiteContent` key (never the generic `images` map). */
+  private static readonly NAMED_ASSET_KEYS: ReadonlySet<string> = new Set(['heroImage', 'aboutImage', 'logo'])
+
+  /**
+   * Collect a template's one-off image slots: every top-level section field holding an asset object
+   * that is not a shared named image field is surfaced under the generic `images` map.
+   *
+   * @param blok - The merged section fields.
+   * @returns A `{ slotName: url }` map (empty when there are none).
+   */
+  private static collectImages(blok: Blok): Record<string, string> {
+    const images: Record<string, string> = {}
+    Object.keys(blok).forEach((key: string): void => {
+      const value: unknown = blok[key]
+      if (
+        this.NAMED_ASSET_KEYS.has(key) ||
+        !value ||
+        typeof value !== 'object' ||
+        Array.isArray(value) ||
+        !('filename' in (value as Blok))
+      ) {
+        return
+      }
+      const url: string | undefined = this.readAsset(value)
+      if (url) {
+        images[key] = url
+      }
+    })
+    return images
+  }
+
   /**
    * Read a Storyblok `number` field, which comes back as a numeric string.
    *
@@ -191,6 +222,8 @@ export class StoryblokSiteContentBridge {
       faqHeading: this.readString(blok.faqHeading),
       aboutHeading: this.readString(blok.aboutHeading),
       contactHeading: this.readString(blok.contactHeading),
+      teamHeading: this.readString(blok.teamHeading),
+      portfolioHeading: this.readString(blok.portfolioHeading),
       logo: this.readAsset(blok.logo),
       heroImage: this.readAsset(blok.heroImage),
       aboutImage: this.readAsset(blok.aboutImage),
@@ -205,10 +238,13 @@ export class StoryblokSiteContentBridge {
           alt: this.readString(item.alt),
         }))
         .filter((image: Blok): boolean => Boolean(image.url)),
-      services: this.readBlokList(blok.services).map((item: Blok): { title?: string; description?: string } => ({
-        title: this.readString(item.title),
-        description: this.readString(item.description),
-      })),
+      services: this.readBlokList(blok.services).map(
+        (item: Blok): { title?: string; description?: string; image?: string } => ({
+          title: this.readString(item.title),
+          description: this.readString(item.description),
+          image: this.readAsset(item.image),
+        }),
+      ),
       reviews: this.readBlokList(blok.reviews).map(
         (item: Blok): { author?: string; rating?: number; text?: string } => ({
           author: this.readString(item.author),
@@ -239,6 +275,22 @@ export class StoryblokSiteContentBridge {
           url: this.readString(item.url),
         }))
         .filter((link: Blok): boolean => Boolean(link.url)),
+      teamMembers: this.readBlokList(blok.teamMembers)
+        .map((item: Blok): { photo?: string; name?: string; role?: string; bio?: string } => ({
+          photo: this.readAsset(item.photo),
+          name: this.readString(item.name),
+          role: this.readString(item.role),
+          bio: this.readString(item.bio),
+        }))
+        .filter((member: Blok): boolean => Boolean(member.photo) || Boolean(member.name)),
+      portfolio: this.readBlokList(blok.portfolio)
+        .map((item: Blok): { image?: string; title?: string; category?: string } => ({
+          image: this.readAsset(item.image),
+          title: this.readString(item.title),
+          category: this.readString(item.category),
+        }))
+        .filter((project: Blok): boolean => Boolean(project.image) || Boolean(project.title)),
+      images: this.collectImages(blok),
       // Per-section click-to-edit markers — empty on the public site, so binding them is a no-op there.
       _editable: this.collectEditableMap(raw as Blok),
     }

@@ -674,7 +674,7 @@ class StoryblokService:
                 # (webhook registration is best-effort and never raises).
                 await asyncio.gather(
                     self._configure_preview_url(client, space_id, preview_url),
-                    self._ensure_template_components(client, space_id),
+                    self._ensure_template_components(client, space_id, template_id),
                     self._register_publish_webhook(client, space_id),
                 )
                 # Publish last: the home story references the ``site_content`` component.
@@ -729,7 +729,7 @@ class StoryblokService:
             return
 
         async with httpx.AsyncClient(timeout=60.0) as client:
-            await self._ensure_template_components(client, space_id)
+            await self._ensure_template_components(client, space_id, template_id)
 
             story_id = await self._find_home_story_id(client, space_id)
             await self._publish_home_story(client, space_id, content_json, story_id=story_id, template_id=template_id)
@@ -835,7 +835,9 @@ class StoryblokService:
             if component.get("name") and component.get("id") is not None
         }
 
-    async def _ensure_template_components(self, client: httpx.AsyncClient, space_id: int) -> None:
+    async def _ensure_template_components(
+        self, client: httpx.AsyncClient, space_id: int, template_id: str | None = None
+    ) -> None:
         """Upsert (create OR update) the blok components the client actually edits.
 
         All active templates use the flat ``SiteContent`` path, so a space only
@@ -880,7 +882,9 @@ class StoryblokService:
                     },
                 },
             },
-            *SITE_CONTENT_SCHEMAS,
+            # Per-template schemas add that template's one-off image fields to the right sections;
+            # ``None`` (e.g. a space-only resync) falls back to the shared default schema.
+            *(template_registry.content_schemas(template_id) if template_id else SITE_CONTENT_SCHEMAS),
         ]
 
         existing: dict[str, int] = await self._list_component_ids(client, space_id)

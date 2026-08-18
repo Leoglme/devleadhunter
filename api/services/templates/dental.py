@@ -50,7 +50,50 @@ BODY_COMPONENTS: list[str] = []
 COMPONENT_SCHEMAS: list[dict[str, Any]] = []
 
 # Sections this template renders — drives the client's Storyblok editor so it shows no dead sections.
-USED_SECTIONS: list[str] = ["hero", "trust", "about", "services", "gallery", "reviews", "contact"]
+# "team" replaces "reviews": the team grid is now fed by dedicated ``teamMembers`` bloks (photo + name +
+# role + bio) instead of being repurposed from the reviews blok, and dental renders no testimonials — so a
+# "reviews" section would only be a dead editor section.
+USED_SECTIONS: list[str] = ["hero", "trust", "about", "services", "gallery", "team", "contact"]
+
+# One-off photos this template renders that aren't hero/about-row-1/gallery — exposed as dedicated, labelled
+# Storyblok fields (grouped in the section they appear in), editable by the client via ``SiteContent.images``.
+EXTRA_SECTION_IMAGES: dict[str, list[dict[str, str]]] = {
+    "about": [{"field": "aboutSecondary", "label": "Photo « nouveaux patients »"}],
+}
+
+# Default photos, mirror of the Nuxt layer's STOCK (devleadhunter-template-dental app/types/dental.ts) —
+# seeded into the CMS so the client sees them and can replace each one. All absolute (Unsplash) URLs.
+# ``aboutSecondary`` is the about row 2 ("nouveaux patients") fallback; the service list gets one image per
+# card; the team grid gets a full default roster (photo + name + role + bio).
+_DEFAULT_ABOUT_SECONDARY: str = (
+    "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=1200&q=80"
+)
+_DEFAULT_SERVICE_IMAGES: list[str] = [
+    "https://images.unsplash.com/photo-1606811841689-23dfddce3e95?auto=format&fit=crop&w=900&q=80",
+    "https://images.unsplash.com/photo-1609840114035-3c981b782dfe?auto=format&fit=crop&w=900&q=80",
+    "https://images.unsplash.com/photo-1598256989800-fe5f95da9787?auto=format&fit=crop&w=900&q=80",
+]
+_TEAM_HEADING: str = "Votre équipe soignante"
+_DEFAULT_TEAM_MEMBERS: list[dict[str, str]] = [
+    {
+        "photo": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=600&q=80",
+        "name": "Dr Sophie Martin",
+        "role": "CHIRURGIEN-DENTISTE",
+        "bio": "Soins familiaux, prévention et accompagnement au long cours.",
+    },
+    {
+        "photo": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=600&q=80",
+        "name": "Dr Marc Lefèvre",
+        "role": "CHIRURGIEN-DENTISTE",
+        "bio": "Esthétique du sourire, couronnes et réhabilitation implantaire.",
+    },
+    {
+        "photo": "https://images.unsplash.com/photo-1594824476967-48c8b964273f?auto=format&fit=crop&w=600&q=80",
+        "name": "Dr Amina Benali",
+        "role": "CHIRURGIEN-DENTISTE",
+        "bio": "Soins pédiatriques et premier contact en douceur pour les enfants.",
+    },
+]
 
 
 def default_subtitle(area: str) -> str:
@@ -138,7 +181,6 @@ _EDITORIAL_DEFAULTS: dict[str, Any] = {
     ],
     "servicesHeading": "Des soins dentaires de qualité",
     "galleryHeading": "Des sourires pour tous les âges",
-    "reviewsHeading": "Votre équipe soignante",
     "faqHeading": "Questions fréquentes",
     "aboutHeading": "Votre sourire, notre fierté",
     "contactHeading": "Prendre rendez-vous",
@@ -175,4 +217,12 @@ def build_site_content(
     site["services"] = fixed_trade_services(DENTAL_SERVICES)
     site["faq"] = DENTAL_FAQ
     site.update(_EDITORIAL_DEFAULTS)
+    # Every remaining photo is a dedicated, editable CMS field now, seeded with the template's own default
+    # photos (mirror of dental.ts STOCK) so the client sees them — and can swap each one: the "nouveaux
+    # patients" about row, one image per service card, and each practitioner portrait (photo/name/role/bio).
+    site["images"] = {"aboutSecondary": _DEFAULT_ABOUT_SECONDARY}
+    for index, service in enumerate(site["services"]):
+        service["image"] = _DEFAULT_SERVICE_IMAGES[index % len(_DEFAULT_SERVICE_IMAGES)]
+    site["teamHeading"] = _TEAM_HEADING
+    site["teamMembers"] = [dict(member) for member in _DEFAULT_TEAM_MEMBERS]
     return site

@@ -185,7 +185,22 @@ def to_storyblok_site_content(template_id: str, site_content: dict[str, Any]) ->
     """
     module = get_module(template_id)
     used_sections: list[str] | None = getattr(module, "USED_SECTIONS", None)
-    return module.to_storyblok_site_content(site_content, used_sections)
+    extra_section_images: dict[str, list[dict[str, str]]] | None = getattr(module, "EXTRA_SECTION_IMAGES", None)
+    return module.to_storyblok_site_content(site_content, used_sections, extra_section_images)
+
+
+def content_schemas(template_id: str) -> list[dict[str, Any]]:
+    """Return the Storyblok component schemas for a template — its per-template image fields included.
+
+    A template declares its one-off image slots in ``EXTRA_SECTION_IMAGES`` ({section: [{field, label}]});
+    they become editable asset fields grouped in that section.
+    """
+    from services.templates.site_content import build_content_schemas
+
+    extra_section_images: dict[str, list[dict[str, str]]] | None = getattr(
+        get_module(template_id), "EXTRA_SECTION_IMAGES", None
+    )
+    return build_content_schemas(extra_section_images)
 
 
 def body_components() -> list[str]:

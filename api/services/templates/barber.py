@@ -56,7 +56,17 @@ BODY_COMPONENTS: list[str] = []
 COMPONENT_SCHEMAS: list[dict[str, Any]] = []
 
 # Sections this template renders — drives the client's Storyblok editor so it shows no dead sections.
-USED_SECTIONS: list[str] = ["hero", "trust", "about", "services", "gallery", "reviews", "faq", "contact"]
+# No "gallery": barber shows no photo grid; its extra photos are dedicated fields below.
+USED_SECTIONS: list[str] = ["hero", "trust", "about", "services", "reviews", "faq", "contact"]
+
+# One-off photos this template renders that aren't hero/about/gallery — exposed as dedicated, labelled
+# Storyblok fields (grouped in the section they appear in), editable by the client via ``SiteContent.images``.
+EXTRA_SECTION_IMAGES: dict[str, list[dict[str, str]]] = {
+    "about": [{"field": "midCta", "label": "Photo du bandeau « le luxe d'un vrai salon »"}],
+    "contact": [{"field": "contactBackground", "label": "Photo de fond de la section contact"}],
+}
+_DEFAULT_MID_CTA: str = "https://images.unsplash.com/photo-1621605815971-fbc98d665033?auto=format&fit=crop&w=1400&q=80"
+_DEFAULT_CONTACT: str = "https://images.unsplash.com/photo-1521590832167-7bcbfaaae1b0?auto=format&fit=crop&w=1400&q=80"
 
 
 def default_subtitle(area: str) -> str:
@@ -216,4 +226,7 @@ def build_site_content(
         # pick the mixed-salon copy instead of the barbershop wording. "COIFFEUR" for a mixed salon.
         site["heroBadge"] = "COIFFEUR"
     apply_real_trust_stats(site, enrichment)
+    # The mid-CTA banner + contact background are dedicated, editable CMS fields now, seeded with the
+    # template's own default photos so the client sees them (and can replace them) in Storyblok.
+    site["images"] = {"midCta": _DEFAULT_MID_CTA, "contactBackground": _DEFAULT_CONTACT}
     return site

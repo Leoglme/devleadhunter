@@ -53,7 +53,15 @@ BODY_COMPONENTS: list[str] = []
 COMPONENT_SCHEMAS: list[dict[str, Any]] = []
 
 # Sections this template renders — drives the client's Storyblok editor so it shows no dead sections.
-USED_SECTIONS: list[str] = ["hero", "about", "services", "gallery", "faq", "contact"]
+# "portfolio" (not "gallery"): the photo grid is the editable ``portfolio`` blok (image + title +
+# category), so the client curates the two « réalisations » cards instead of a raw scraped gallery.
+USED_SECTIONS: list[str] = ["hero", "about", "services", "portfolio", "faq", "contact"]
+
+# One-off photo this template renders that isn't hero/about — exposed as a dedicated, labelled
+# Storyblok asset field (grouped in the section it appears in), editable via ``SiteContent.images``.
+EXTRA_SECTION_IMAGES: dict[str, list[dict[str, str]]] = {
+    "contact": [{"field": "ctaBackground", "label": "Image de fond de la bannière contact"}],
+}
 
 
 def default_subtitle(area: str) -> str:
@@ -142,9 +150,36 @@ _EDITORIAL_DEFAULTS: dict[str, Any] = {
     "ctaCallLabel": "Être rappelé",
     "ctaQuoteLabel": "Demander un devis gratuit",
     "servicesHeading": "Un seul artisan pour tout votre extérieur",
-    "galleryHeading": "Nos derniers chantiers",
+    "portfolioHeading": "Nos derniers chantiers",
     "faqHeading": "Vos questions, nos réponses",
 }
+
+# Bundled layer photos (served from demo-host), promoted to absolute URLs so Storyblok can preview
+# them, and seeded into the CMS so every photo becomes a dedicated, client-editable field. EXACT
+# mirror of the layer defaults (verdure.ts ``SERVICE_IMAGES`` / ``PORTFOLIO_IMAGES`` / the CTA bg).
+_VERDURE_IMAGE_BASE: str = "https://demo.dibodev.fr/images/verdure"
+# One photo per prestation card, index-aligned with the four ``VERDURE_SERVICES``.
+_DEFAULT_SERVICE_IMAGES: list[str] = [
+    f"{_VERDURE_IMAGE_BASE}/image-import-4.jpg",
+    f"{_VERDURE_IMAGE_BASE}/image-import-38.jpg",
+    f"{_VERDURE_IMAGE_BASE}/image-import.jpg",
+    f"{_VERDURE_IMAGE_BASE}/image-import-6.jpg",
+]
+# The two « réalisations » cards (photo + title + category), seeded into the editable portfolio blok.
+_DEFAULT_PORTFOLIO: list[dict[str, str]] = [
+    {
+        "image": f"{_VERDURE_IMAGE_BASE}/image-import-12.jpg",
+        "title": "Transformation complète d'un jardin : terrasse, massifs et éclairage",
+        "category": "Création",
+    },
+    {
+        "image": f"{_VERDURE_IMAGE_BASE}/image-import.jpg",
+        "title": "Remise en état d'un extérieur : pelouse, haies et allées rafraîchies",
+        "category": "Entretien",
+    },
+]
+# Contact-banner background (was hardcoded CSS ``url('/images/verdure/image-import-3.jpg')``).
+_DEFAULT_CTA_BACKGROUND: str = f"{_VERDURE_IMAGE_BASE}/image-import-3.jpg"
 
 
 def build_site_content(
@@ -178,4 +213,11 @@ def build_site_content(
     site["services"] = fixed_trade_services(VERDURE_SERVICES)
     site["faq"] = VERDURE_FAQ
     site.update(_EDITORIAL_DEFAULTS)
+    # Seed every remaining photo as a dedicated, client-editable CMS field with the layer's own
+    # defaults: one photo per prestation card, the two portfolio « réalisations », and the contact
+    # banner background. Absolute demo-host URLs so the Storyblok Visual Editor previews each one.
+    for index, service in enumerate(site["services"]):
+        service["image"] = _DEFAULT_SERVICE_IMAGES[index % len(_DEFAULT_SERVICE_IMAGES)]
+    site["portfolio"] = [dict(item) for item in _DEFAULT_PORTFOLIO]
+    site["images"] = {"ctaBackground": _DEFAULT_CTA_BACKGROUND}
     return site
