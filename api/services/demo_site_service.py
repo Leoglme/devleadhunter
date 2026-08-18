@@ -465,6 +465,10 @@ class DemoSiteService:
         # A transient read failure must not erase a state we already trust.
         if status == StoryblokCollaboratorStatus.UNKNOWN.value:
             return demo_site
+        # The invite was sent (guard above), so never downgrade to "not_invited": a pending
+        # invitation the collaborators list doesn't surface (or an unmatched email shape) stays pending.
+        if status == StoryblokCollaboratorStatus.NOT_INVITED.value:
+            status = StoryblokCollaboratorStatus.PENDING.value
 
         demo_site.storyblok_collaborator_status = status
         if status == StoryblokCollaboratorStatus.JOINED.value and demo_site.storyblok_joined_at is None:

@@ -686,8 +686,9 @@ async function handleInvite(): Promise<void> {
   inviting.value = true
   try {
     site.value = await DemoSiteService.inviteDemoSiteClientToCms(demoSiteId)
+    toast.success('Invitation au CMS envoyée au client')
   } catch (error) {
-    alert(error instanceof Error ? error.message : "Échec de l'invitation")
+    toast.error(error instanceof Error ? error.message : "Échec de l'invitation")
   } finally {
     inviting.value = false
   }
@@ -727,7 +728,7 @@ async function handleExport(): Promise<void> {
   try {
     await DemoSiteService.exportDemoSiteCode(demoSiteId, site.value.slug)
   } catch (error) {
-    alert(error instanceof Error ? error.message : "Échec de l'export du code")
+    toast.error(error instanceof Error ? error.message : "Échec de l'export du code")
   } finally {
     exporting.value = false
   }

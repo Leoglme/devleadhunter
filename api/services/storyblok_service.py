@@ -502,15 +502,18 @@ class StoryblokService:
             collaborator_email = redirect.strip()
 
         async with httpx.AsyncClient(timeout=60.0) as client:
+            # Storyblok expects the fields at the top level of the body — NOT wrapped in a
+            # ``collaborator`` object (which it ignores, then rejects with 422 "Email is required").
+            # An email with no Storyblok account yet triggers an invitation (account created on accept).
             invite_resp = await client.post(
                 f"{self._base_url}/spaces/{space_id}/collaborators/",
                 headers=self._headers(),
                 json={
-                    "collaborator": {
-                        "email": collaborator_email.strip(),
-                        "role": "admin",
-                        "permissions": [],
-                    }
+                    "email": collaborator_email.strip(),
+                    "role": "admin",
+                    "space_role_id": None,
+                    "space_role_ids": [],
+                    "permissions": [],
                 },
             )
             try:
