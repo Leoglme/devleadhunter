@@ -46,6 +46,11 @@ class DemoSite(Base):
     storyblok_login_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     storyblok_login_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     storyblok_invite_sent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Where the client stands on the CMS handover (see StoryblokCollaboratorStatus): NULL until
+    # first observed, then not_invited / pending / joined. Refreshed on demand from Storyblok.
+    storyblok_collaborator_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # First time the client was observed as having joined the space (accepted the invite).
+    storyblok_joined_at: Mapped[datetime | None] = mapped_column(nullable=True)
     content_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # User-curated photo order for the site (list of URLs). NULL = default scraped order.
     # When set, it overrides the prospect photos at generation: [0]→hero, [1]→about, [2:]→gallery.

@@ -518,6 +518,80 @@ class StoryblokService:
             except httpx.HTTPStatusError as exc:
                 raise ValueError(self._storyblok_error_message(exc)) from exc
 
+    @staticmethod
+    def _collaborator_emails(collaborator: dict[str, Any]) -> set[str]:
+        """Collect the lower-cased emails a collaborator entry may carry (linked user + pending invite).
+
+        Storyblok exposes the address in different places for an accepted member vs a still-pending
+        invitation, and the object is loosely documented — so every plausible field is probed.
+        """
+        emails: set[str] = set()
+
+        def _add(value: Any) -> None:
+            if isinstance(value, str) and "@" in value:
+                emails.add(value.strip().lower())
+
+        user = collaborator.get("user")
+        if isinstance(user, dict):
+            for key in ("real_email", "alt_email", "userid", "email", "friendly_name"):
+                _add(user.get(key))
+        for key in ("email", "invitation_email"):
+            _add(collaborator.get(key))
+        invitation = collaborator.get("invitation")
+        if isinstance(invitation, dict):
+            _add(invitation.get("email"))
+        else:
+            _add(invitation)
+        return emails
+
+    async def get_collaborator_status(self, space_id: int, email: str) -> str:
+        """Return the client's state on a space: ``not_invited`` / ``pending`` / ``joined`` / ``unknown``.
+
+        Reads ``GET /spaces/{id}/collaborators/`` and matches the invited email. A pending invitation
+        (email not yet accepted, no Storyblok account) is told apart from a joined member by the
+        presence of a linked user vs an ``invitation`` marker. Best-effort: any failure returns
+        ``unknown`` so callers never break and never clobber a previously known state.
+        """
+        if not self.is_configured or not space_id or not email or not email.strip():
+            return "unknown"
+        target: str = email.strip().lower()
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self._base_url}/spaces/{space_id}/collaborators/",
+                    headers=self._headers(),
+                )
+            if response.status_code != 200:
+                logger.warning(
+                    "Storyblok collaborators fetch failed for space %s (%s): %s",
+                    space_id,
+                    response.status_code,
+                    response.text[:300],
+                )
+                return "unknown"
+            collaborators: list[dict[str, Any]] = response.json().get("collaborators", [])
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("Storyblok collaborators fetch error for space %s: %s", space_id, exc)
+            return "unknown"
+
+        for collaborator in collaborators:
+            if not isinstance(collaborator, dict) or target not in self._collaborator_emails(collaborator):
+                continue
+            user = collaborator.get("user")
+            has_user: bool = bool(collaborator.get("user_id") or (user.get("id") if isinstance(user, dict) else None))
+            if has_user and not collaborator.get("invitation"):
+                return "joined"
+            return "pending"
+
+        # No entry matched the invited email — log the shape (keys only, no PII) to catch field drift.
+        logger.info(
+            "Storyblok: invited email not matched among %d collaborators for space %s; entry keys=%s",
+            len(collaborators),
+            space_id,
+            [sorted(c.keys()) for c in collaborators if isinstance(c, dict)][:5],
+        )
+        return "not_invited"
+
     async def provision_space(
         self,
         *,

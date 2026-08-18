@@ -126,6 +126,9 @@ class DemoSiteResponse(BaseModel):
     storyblok_login_email: str | None = None
     storyblok_login_password: str | None = None
     storyblok_invite_sent: bool = False
+    # CMS handover state: not_invited / pending / joined (NULL until first observed).
+    storyblok_collaborator_status: str | None = None
+    storyblok_joined_at: datetime | None = None
     expires_at: datetime
     created_at: datetime
     error_message: str | None = None

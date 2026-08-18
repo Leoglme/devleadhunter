@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from enums.acquisition import AcquisitionItemStep, AcquisitionRunStatus
 from enums.demo_site_status import DemoSiteStatus
+from enums.storyblok_collaborator_status import StoryblokCollaboratorStatus
 from models.acquisition_run import AcquisitionRun
 from models.acquisition_run_item import AcquisitionRunItem
 from models.demo_site import DemoSite
@@ -424,6 +425,50 @@ class DemoSiteService:
         await storyblok_service.invite_collaborator(space_id, email.strip())
         demo_site.storyblok_login_email = email.strip()
         demo_site.storyblok_invite_sent = True
+        demo_site.storyblok_collaborator_status = StoryblokCollaboratorStatus.PENDING.value
+        db.commit()
+        db.refresh(demo_site)
+        return demo_site
+
+    async def refresh_cms_collaborator_status(self, db: Session, demo_site: DemoSite) -> DemoSite:
+        """Re-read whether the client has joined the Storyblok space and persist the result.
+
+        Cheap short-circuit: an uninvited site is ``not_invited`` without any API call. Otherwise the
+        live status is fetched best-effort — a transient ``unknown`` never overwrites a known state,
+        and the first observed ``joined`` stamps ``storyblok_joined_at``.
+        """
+        if not demo_site.storyblok_invite_sent:
+            if demo_site.storyblok_collaborator_status != StoryblokCollaboratorStatus.NOT_INVITED.value:
+                demo_site.storyblok_collaborator_status = StoryblokCollaboratorStatus.NOT_INVITED.value
+                db.commit()
+                db.refresh(demo_site)
+            return demo_site
+
+        space_id: int | None = demo_site.storyblok_space_id
+        if not space_id:
+            space_id = await storyblok_service.resolve_space_id(
+                space_id=None,
+                editor_url=demo_site.storyblok_editor_url,
+                business_name=demo_site.business_name,
+                slug=demo_site.slug,
+            )
+            if space_id:
+                demo_site.storyblok_space_id = space_id
+        if not space_id:
+            return demo_site
+
+        email: str | None = demo_site.email or demo_site.storyblok_login_email
+        if not email or not email.strip():
+            return demo_site
+
+        status: str = await storyblok_service.get_collaborator_status(space_id, email.strip())
+        # A transient read failure must not erase a state we already trust.
+        if status == StoryblokCollaboratorStatus.UNKNOWN.value:
+            return demo_site
+
+        demo_site.storyblok_collaborator_status = status
+        if status == StoryblokCollaboratorStatus.JOINED.value and demo_site.storyblok_joined_at is None:
+            demo_site.storyblok_joined_at = datetime.now(UTC)
         db.commit()
         db.refresh(demo_site)
         return demo_site

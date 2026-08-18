@@ -98,6 +98,9 @@ export type DemoSite = {
   storyblok_login_email?: string | null
   storyblok_login_password?: string | null
   storyblok_invite_sent?: boolean
+  /** CMS handover state: not_invited / pending / joined (null until first observed). */
+  storyblok_collaborator_status?: StoryblokCollaboratorStatus | null
+  storyblok_joined_at?: string | null
   expires_at: string
   created_at: string
   error_message?: string | null
@@ -114,6 +117,9 @@ export type DemoSite = {
 
 /** Lifecycle of a demo site's prospection video (null = never generated). */
 export type DemoSiteVideoStatus = 'pending' | 'generating' | 'ready' | 'failed'
+
+/** Where the client stands on the Storyblok CMS handover (null until first observed). */
+export type StoryblokCollaboratorStatus = 'not_invited' | 'pending' | 'joined' | 'unknown'
 
 export type DemoSiteListResponse = {
   items: DemoSite[]
@@ -234,6 +240,14 @@ export class DemoSiteService {
    */
   static async inviteDemoSiteClientToCms(demoSiteId: number): Promise<DemoSite> {
     return ApiClient.post<DemoSite>(`${BASE_URL}/${demoSiteId}/invite-cms`, {})
+  }
+
+  /**
+   * Re-read whether the client has joined the Storyblok CMS space (invited → pending → joined).
+   * @param demoSiteId - Id of the demo site.
+   */
+  static async refreshDemoSiteCmsStatus(demoSiteId: number): Promise<DemoSite> {
+    return ApiClient.post<DemoSite>(`${BASE_URL}/${demoSiteId}/refresh-cms-status`, {})
   }
 
   /**

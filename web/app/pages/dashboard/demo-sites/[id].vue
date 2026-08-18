@@ -250,7 +250,15 @@
               v-if="site.storyblok_editor_url"
               class="rounded-xl border border-[var(--app-line)] bg-[var(--app-bg)] p-4"
             >
-              <h3 class="text-sm font-semibold text-[var(--app-ink)]">Storyblok CMS</h3>
+              <div class="flex items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold text-[var(--app-ink)]">Storyblok CMS</h3>
+                <span
+                  v-if="cmsStatusLabel"
+                  :class="['rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase', cmsStatusClass]"
+                >
+                  {{ cmsStatusLabel }}
+                </span>
+              </div>
               <button
                 type="button"
                 class="mt-2 text-xs text-blue-400 underline"
@@ -258,9 +266,28 @@
               >
                 Ouvrir l'éditeur
               </button>
-              <p v-if="site.storyblok_invite_sent" class="mt-2 text-xs text-[var(--app-green)]">
-                Invitation envoyée à {{ site.storyblok_login_email || site.email }}
+
+              <p v-if="cmsStatus === 'joined'" class="mt-2 text-xs text-[var(--app-green)]">
+                Le client a rejoint le CMS{{ cmsJoinedAtLabel ? ` le ${cmsJoinedAtLabel}` : '' }} ({{
+                  site.storyblok_login_email || site.email
+                }}).
               </p>
+
+              <template v-else-if="cmsStatus === 'pending'">
+                <p class="mt-2 text-xs text-[var(--app-ink-soft)]">
+                  Invitation envoyée à {{ site.storyblok_login_email || site.email }} — en attente qu'il rejoigne
+                  l'espace.
+                </p>
+                <button
+                  type="button"
+                  class="btn-secondary mt-3 w-full text-xs disabled:opacity-50"
+                  :disabled="refreshingCms"
+                  @click="handleRefreshCmsStatus"
+                >
+                  {{ refreshingCms ? 'Vérification…' : 'Vérifier s’il a rejoint' }}
+                </button>
+              </template>
+
               <button
                 v-else
                 type="button"
@@ -381,6 +408,7 @@ import type {
   DemoSiteTemplate,
   DemoSiteTheme,
   DemoSiteUpdatePayload,
+  StoryblokCollaboratorStatus,
 } from '~/services/demoSiteService'
 import { DEFAULT_DEMO_SITE_THEME, DemoSiteService } from '~/services/demoSiteService'
 import { useToast } from '~/composables/useToast'
@@ -417,6 +445,7 @@ const saving: Ref<boolean> = ref(false)
 const previewReloadNonce: Ref<number> = ref(0)
 const deleting: Ref<boolean> = ref(false)
 const inviting: Ref<boolean> = ref(false)
+const refreshingCms: Ref<boolean> = ref(false)
 const exporting: Ref<boolean> = ref(false)
 const generatingVideo: Ref<boolean> = ref(false)
 const deletingVideo: Ref<boolean> = ref(false)
@@ -524,6 +553,38 @@ const videoStatusClass: ComputedRef<string> = computed(() => {
   return 'bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]'
 })
 
+/** CMS handover state, derived from the persisted status with a sensible fallback. */
+const cmsStatus: ComputedRef<StoryblokCollaboratorStatus> = computed((): StoryblokCollaboratorStatus => {
+  const current: DemoSite | null = site.value
+  if (!current) return 'not_invited'
+  if (current.storyblok_collaborator_status) return current.storyblok_collaborator_status
+  return current.storyblok_invite_sent ? 'pending' : 'not_invited'
+})
+
+/** Badge label for the CMS handover (null hides the badge — nothing sent yet). */
+const cmsStatusLabel: ComputedRef<string | null> = computed((): string | null => {
+  switch (cmsStatus.value) {
+    case 'joined':
+      return 'Rejoint'
+    case 'pending':
+      return 'En attente'
+    default:
+      return null
+  }
+})
+
+/** Colour of the CMS handover badge (green once joined, accent while pending). */
+const cmsStatusClass: ComputedRef<string> = computed((): string =>
+  cmsStatus.value === 'joined'
+    ? 'bg-[var(--app-green)]/20 text-[var(--app-green)]'
+    : 'bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]',
+)
+
+/** Human date the client joined the CMS, when known. */
+const cmsJoinedAtLabel: ComputedRef<string | null> = computed((): string | null =>
+  site.value?.storyblok_joined_at ? formatNumericDate(site.value.storyblok_joined_at) : null,
+)
+
 const stats: ComputedRef<DemoSiteStat[]> = computed(() => {
   if (!site.value) return []
   const urlLive: boolean = DemoSiteService.isDemoSiteReachable(site.value)
@@ -540,8 +601,8 @@ const stats: ComputedRef<DemoSiteStat[]> = computed(() => {
     },
     {
       label: 'CMS',
-      value: site.value.storyblok_invite_sent ? 'Invité' : 'Non invité',
-      tone: site.value.storyblok_invite_sent ? 'success' : undefined,
+      value: cmsStatus.value === 'joined' ? 'Rejoint' : cmsStatus.value === 'pending' ? 'Invité' : 'Non invité',
+      tone: cmsStatus.value === 'joined' ? 'success' : undefined,
     },
     {
       label: 'Slug',
@@ -629,6 +690,31 @@ async function handleInvite(): Promise<void> {
     alert(error instanceof Error ? error.message : "Échec de l'invitation")
   } finally {
     inviting.value = false
+  }
+}
+
+/**
+ * Re-read whether the client has joined the CMS (manual « Vérifier » click).
+ */
+async function handleRefreshCmsStatus(): Promise<void> {
+  refreshingCms.value = true
+  try {
+    site.value = await DemoSiteService.refreshDemoSiteCmsStatus(demoSiteId)
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : 'Échec de la vérification du statut CMS')
+  } finally {
+    refreshingCms.value = false
+  }
+}
+
+/**
+ * Silently re-read the CMS handover status on load, so a client who joined shows up without a click.
+ */
+async function refreshCmsStatusSilently(): Promise<void> {
+  try {
+    site.value = await DemoSiteService.refreshDemoSiteCmsStatus(demoSiteId)
+  } catch {
+    // Best-effort : en cas d'échec on garde le statut déjà affiché.
   }
 }
 
@@ -755,6 +841,9 @@ onMounted(async () => {
     site.value = await DemoSiteService.getDemoSite(demoSiteId)
     resetPendingChanges()
     if (isVideoGenerating.value) startVideoPolling()
+    if (site.value.storyblok_invite_sent && site.value.storyblok_collaborator_status !== 'joined') {
+      refreshCmsStatusSilently()
+    }
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : 'Impossible de charger le site'
   } finally {

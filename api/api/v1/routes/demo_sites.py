@@ -481,6 +481,20 @@ async def invite_demo_site_client_to_cms(
     return _serialize_demo_site(site)
 
 
+@router.post("/{demo_site_id}/refresh-cms-status", response_model=DemoSiteResponse)
+async def refresh_demo_site_cms_status(
+    demo_site_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> DemoSiteResponse:
+    """Re-read whether the client has joined the Storyblok space (invited → pending → joined)."""
+    site = demo_site_service.get_for_user(db, current_user.id, demo_site_id)
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo site not found")
+    site = await demo_site_service.refresh_cms_collaborator_status(db, site)
+    return _serialize_demo_site(site)
+
+
 @router.delete("/{demo_site_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_demo_site(
     demo_site_id: int,
