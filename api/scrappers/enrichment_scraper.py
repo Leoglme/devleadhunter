@@ -808,6 +808,7 @@ class EnrichmentScraper:
     ) -> EnrichmentData:
         """Poll extraction until wave-2 hydration is complete or attempts are exhausted."""
         best: EnrichmentData = EnrichmentData()
+        previous_hours: int = -1
         for attempt in range(_ENRICHMENT_MAX_ATTEMPTS):
             await self._prepare_panel_for_extraction(tab)
             raw = await self._extract_raw(tab)
@@ -816,6 +817,15 @@ class EnrichmentScraper:
             if self._is_extraction_ready(best):
                 logger.info("Enrichment ready for %s after %s attempt(s)", business_name, attempt + 1)
                 return best
+            # Plateau exit: once the panel is loaded (a rating is parsed) and the parsed hour count
+            # stops growing, further attempts only burn ~5s each without adding data — a food truck
+            # open a few days, or a panel variant whose full weekly hours the parser doesn't read.
+            # Without this the loop always exhausts its 4 attempts (~20s stall) on such listings.
+            hours: int = len(best.opening_hours)
+            if best.rating is not None and hours == previous_hours:
+                logger.info("Enrichment plateaued for %s after %s attempt(s)", business_name, attempt + 1)
+                return best
+            previous_hours = hours
             if attempt + 1 < _ENRICHMENT_MAX_ATTEMPTS:
                 logger.info(
                     "Enrichment incomplete for %s (attempt %s/%s) — retrying",
