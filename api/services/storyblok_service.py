@@ -581,18 +581,14 @@ class StoryblokService:
             if not isinstance(collaborator, dict) or target not in self._collaborator_emails(collaborator):
                 continue
             user = collaborator.get("user")
-            logger.warning(
-                "SBDBG space=%s keys=%s invitation=%r user_id=%r inner_id=%r disabled=%r ukeys=%s",
-                space_id,
-                sorted(collaborator.keys()),
-                collaborator.get("invitation"),
-                collaborator.get("user_id"),
-                (user.get("id") if isinstance(user, dict) else None),
-                (user.get("disabled") if isinstance(user, dict) else None),
-                sorted(user.keys()) if isinstance(user, dict) else None,
+            is_disabled: bool = bool(user.get("disabled")) if isinstance(user, dict) else False
+            has_real_user: bool = bool(
+                collaborator.get("user_id") or (user.get("id") if isinstance(user, dict) else None)
             )
-            has_user: bool = bool(collaborator.get("user_id") or (user.get("id") if isinstance(user, dict) else None))
-            if has_user and not collaborator.get("invitation"):
+            # Joined = a real, enabled user is linked and no pending-invitation marker remains. A
+            # populated ``invitation``, a disabled (not-yet-activated) user, or no linked user at all
+            # each mean the client was invited but hasn't joined yet → still pending.
+            if has_real_user and not collaborator.get("invitation") and not is_disabled:
                 return "joined"
             return "pending"
 

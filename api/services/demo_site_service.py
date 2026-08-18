@@ -471,8 +471,12 @@ class DemoSiteService:
             status = StoryblokCollaboratorStatus.PENDING.value
 
         demo_site.storyblok_collaborator_status = status
-        if status == StoryblokCollaboratorStatus.JOINED.value and demo_site.storyblok_joined_at is None:
-            demo_site.storyblok_joined_at = datetime.now(UTC)
+        if status == StoryblokCollaboratorStatus.JOINED.value:
+            if demo_site.storyblok_joined_at is None:
+                demo_site.storyblok_joined_at = datetime.now(UTC)
+        else:
+            # Keep the stamp consistent if a client is ever read back as not-yet-joined.
+            demo_site.storyblok_joined_at = None
         db.commit()
         db.refresh(demo_site)
         return demo_site
