@@ -347,6 +347,31 @@ _GRID_SCROLL_JS = r"""
 })()
 """
 
+# Click the first result when a « nom + ville » search lands on the results feed instead of a place.
+_OPEN_FIRST_PLACE_JS = r"""
+(() => {
+    const link = document.querySelector("div[role='feed'] a[href*='/maps/place/']");
+    if (link) { link.removeAttribute('target'); link.click(); return true; }
+    return false;
+})()
+"""
+
+# A « complete » place panel carries the « Voir les photos » button, a rating+review count, or an
+# « Avis » tab. Google intermittently serves logged-out scrapers a STRIPPED panel (no count, no
+# gallery, only Présentation / À propos) — that render has none of these, so we reload for the full one.
+_PANEL_COMPLETE_JS = r"""
+(() => {
+    if (document.querySelector('button.Dx2nRe')) return true;
+    const f = document.querySelector('div.F7nice');
+    if (f && /\([\d\s.,]+\)/.test(f.innerText || f.textContent || '')) return true;
+    for (const el of document.querySelectorAll('[role="tab"], button')) {
+        const t = (el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim().toLowerCase();
+        if (t === 'avis' || t.startsWith('avis ') || t.includes('reviews')) return true;
+    }
+    return false;
+})()
+"""
+
 # The place's business-name <h1>, read BEFORE the hours are expanded — expanding them swaps this
 # heading for « Horaires », which would then masquerade as the place title.
 _PLACE_TITLE_JS = r"((document.querySelector('h1') || {}).innerText || '').trim()"
@@ -354,6 +379,9 @@ _PLACE_TITLE_JS = r"((document.querySelector('h1') || {}).innerText || '').trim(
 _ENRICHMENT_MAX_ATTEMPTS: int = 4
 _ENRICHMENT_POLL_INTERVAL_S: float = 1.5
 _ENRICHMENT_MIN_HOUR_ROWS: int = 5
+
+# How many times to reload a STRIPPED Maps panel (no count / gallery) before enriching with what we have.
+_MAX_PANEL_RELOADS: int = 2
 
 # Section headers Google Maps promotes to <h1> when a sub-panel (weekly hours, reviews, photos…) is
 # open. Read as the place title they never match the business name, so the homonym guard would reject
@@ -616,27 +644,7 @@ class EnrichmentScraper:
                 url = f"https://www.google.com/maps/search/{query}"
 
             tab = await browser.get_tab(url)
-            await GoogleScraper.accept_cookies(tab)
-            await GoogleScraper.accept_web_modal(tab)
-
-            # If we landed on a results feed, open the first place.
-            current = NodriverDom.tab_url(tab)
-            if "/maps/place/" not in current:
-                opened = await NodriverDom.evaluate(
-                    tab,
-                    """
-                    (() => {
-                        const link = document.querySelector("div[role='feed'] a[href*='/maps/place/']");
-                        if (link) { link.removeAttribute('target'); link.click(); return true; }
-                        return false;
-                    })()
-                    """,
-                    by_value=True,
-                )
-                if opened is True:
-                    await asyncio.sleep(1.0)
-
-            if not await NodriverDom.wait_for_selector(tab, "h1", timeout_s=12.0):
+            if not await self._open_place_panel(tab):
                 logger.info("Enrichment: place panel not found for %s", business_name)
                 try:
                     page_html = await NodriverDom.evaluate(tab, "document.documentElement.outerHTML", by_value=True)
@@ -648,6 +656,27 @@ class EnrichmentScraper:
                     html=page_html if isinstance(page_html, str) else None,
                 )
                 return EnrichmentData()
+
+            # Google intermittently serves logged-out scrapers a STRIPPED panel (no review count, no
+            # photo gallery, only Présentation / À propos). Reload to land on the full render, so the
+            # review count and photos are not silently lost — re-running by hand shows a reload works.
+            place_url = NodriverDom.tab_url(tab)
+            complete = await self._wait_for_complete_panel(tab)
+            for reload_index in range(_MAX_PANEL_RELOADS):
+                if complete:
+                    break
+                logger.info(
+                    "Enrichment: stripped Maps panel for %s — reloading (%s/%s)",
+                    business_name,
+                    reload_index + 1,
+                    _MAX_PANEL_RELOADS,
+                )
+                await asyncio.sleep(1.5)
+                await NodriverDom.navigate(tab, place_url if "/maps/place/" in place_url else url)
+                if not await self._open_place_panel(tab):
+                    break
+                place_url = NodriverDom.tab_url(tab)
+                complete = await self._wait_for_complete_panel(tab)
 
             await self._wait_for_maps_hydration(tab)
             # Capture the business-name h1 BEFORE extraction expands the hours: expanding them makes
@@ -713,6 +742,29 @@ class EnrichmentScraper:
         """
         raw = await NodriverDom.evaluate(tab, _PLACE_TITLE_JS, by_value=True)
         return _clean_place_title(raw if isinstance(raw, str) else None)
+
+    async def _panel_is_complete(self, tab: Any) -> bool:
+        """True when the place panel looks fully rendered (photos button / review count / avis tab)."""
+        return await NodriverDom.evaluate(tab, _PANEL_COMPLETE_JS, by_value=True) is True
+
+    async def _wait_for_complete_panel(self, tab: Any, *, timeout_s: float = 10.0) -> bool:
+        """Poll until the panel is complete, or the timeout signals Google served a stripped render."""
+        deadline = asyncio.get_running_loop().time() + timeout_s
+        while asyncio.get_running_loop().time() < deadline:
+            if await self._panel_is_complete(tab):
+                return True
+            await asyncio.sleep(0.5)
+        return False
+
+    async def _open_place_panel(self, tab: Any) -> bool:
+        """Dismiss consent, open the first result when on a feed, and wait for the place h1."""
+        await GoogleScraper.accept_cookies(tab)
+        await GoogleScraper.accept_web_modal(tab)
+        if "/maps/place/" not in NodriverDom.tab_url(tab):
+            opened = await NodriverDom.evaluate(tab, _OPEN_FIRST_PLACE_JS, by_value=True)
+            if opened is True:
+                await asyncio.sleep(1.0)
+        return await NodriverDom.wait_for_selector(tab, "h1", timeout_s=12.0)
 
     async def _prepare_panel_for_extraction(self, tab: Any) -> None:
         """Expand hours and scroll to lazy-load photos.

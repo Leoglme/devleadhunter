@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from scrappers.facebook_enrichment_scraper import FacebookEnrichmentScraper, _dedupe_photos
+from scrappers.facebook_enrichment_scraper import FacebookEnrichmentScraper, _dedupe_photos, _upgrade_fb_photo_url
 from services.storyblok_service import _decode_data_uri
 from services.templates.site_content import _is_unrehostable_photo
 
@@ -27,6 +27,28 @@ def test_dedupe_keeps_data_uris_alongside_fbcdn() -> None:
     assert data_uri in result  # rehosted photo survives
     assert any("fbcdn.net/v/t39" in p for p in result)  # real fbcdn survives
     assert icon not in result  # static asset still filtered
+
+
+def test_upgrade_fb_photo_url_drops_ctp_for_full_size() -> None:
+    """An fbcdn grid thumbnail (ctp=s206x206) upgrades to full size by dropping the ctp param, keeping
+    the stp/cstp transforms and the oh signature intact (verified live: 206² → 1440²)."""
+    thumb = (
+        "https://scontent-cdg4-1.xx.fbcdn.net/v/t51.82787-15/723187010_x_n.webp"
+        "?stp=dst-jpg_tt6&cstp=mx1440x1440&ctp=s206x206&_nc_cat=108"
+        "&oh=00_AQHtJIgS0M7Jc3XNQqongV3yCnY23h7jYrejthTY8aWFnQ&oe=6A8BD291"
+    )
+    upgraded = _upgrade_fb_photo_url(thumb)
+
+    assert "ctp=" not in upgraded  # display-size param dropped → full size
+    assert "cstp=mx1440x1440" in upgraded  # max-size hint kept
+    assert "stp=dst-jpg_tt6" in upgraded  # transform kept
+    assert "oh=00_AQHtJIgS0M7Jc3XNQqongV3yCnY23h7jYrejthTY8aWFnQ" in upgraded  # signature untouched
+
+
+def test_upgrade_fb_photo_url_leaves_non_fbcdn_untouched() -> None:
+    """A Google (or any non-fbcdn) URL is returned unchanged."""
+    google = "https://lh3.googleusercontent.com/gps-cs-s/ABC=s1600"
+    assert _upgrade_fb_photo_url(google) == google
 
 
 def test_dedupe_drops_duplicate_data_uris() -> None:

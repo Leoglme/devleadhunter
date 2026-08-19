@@ -42,6 +42,9 @@ logger = logging.getLogger(__name__)
 # Google's come first, Facebook's are appended as a secondary pool, and the user picks the best.
 _MAX_PHOTOS = 40
 _MAX_REVIEWS = 12
+# How many fbcdn photos to capture in-browser as data URIs (they outlive the short-lived signed URLs).
+# Full-size now, so each is heavier than the old thumbnail — kept modest so the record stays reasonable.
+_FB_REHOST_CAP = 12
 
 # `\s` matches the thin/no-break spaces Facebook puts before « % », so « 96 % » / « 22 avis » parse verbatim.
 _RECOMMEND_RE = re.compile(r"recommand[ée]?s?\s+par\s*(\d+)\s*%", re.IGNORECASE)
@@ -581,6 +584,19 @@ def _merge_review_lists(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return merged
 
 
+def _upgrade_fb_photo_url(url: str) -> str:
+    """Upgrade an fbcdn grid thumbnail URL to full size, keeping the signature valid.
+
+    Grid photos are squares whose display size lives in the ``ctp`` param (``s206x206``…). Dropping it
+    serves the full size (bounded by ``cstp``, e.g. 1440²) and the ``oh`` signature still validates —
+    verified against a live listing (``ctp=s206x206`` → 206², dropped → 1440²). Non-fbcdn URLs and URLs
+    without ``ctp`` are returned unchanged.
+    """
+    if "fbcdn" not in url and "scontent" not in url:
+        return url
+    return re.sub(r"&ctp=[^&]*", "", url)
+
+
 def photo_identity(url: str) -> str:
     """A stable identity so the SAME photo served at different sizes / CDN nodes / query strings
     dedupes to one entry. Facebook fbcdn URLs embed a numeric photo id at the start of the filename
@@ -811,33 +827,21 @@ class FacebookEnrichmentScraper:
             low: str = url.lower()
             return "fbcdn" in low or "scontent" in low
 
-        targets: list[str] = [p for p in photos if _is_fb_cdn(p)][:8]
+        targets: list[str] = [p for p in photos if _is_fb_cdn(p)][:_FB_REHOST_CAP]
         if not targets:
             return photos
 
-        # fbcdn grid photos are square thumbnails. On the newer ``t51`` format the display size lives in
-        # the ``ctp`` param (``s206x206``…): dropping it serves the full size (bounded by ``cstp``, e.g.
-        # 1440²) and the ``oh`` signature still validates. On the older ``t39`` format the size sits in
-        # ``stp`` (``dst-jpg_s320x320``…), so we raise that instead. Verified against a live listing:
-        # ``ctp=s206x206`` → 206², dropping ``ctp`` → 1440². We try the upgraded URLs first and fall back
-        # to the thumbnail, and always key the capture by the ORIGINAL url.
+        # The URLs are already upgraded to full size (see ``_upgrade_fb_photo_url``); capture the bytes
+        # now, while the short-lived signed URLs are still valid.
         js: str = (
             "(async () => { const urls = " + json.dumps(targets) + "; const out = {};"
-            " const upgrades = (u) => { const list = []; try { const url = new URL(u);"
-            " if (url.searchParams.has('ctp')) { const b = new URL(url.toString());"
-            " b.searchParams.delete('ctp'); list.push(b.toString()); }"
-            " const stp = url.searchParams.get('stp');"
-            " if (stp && /_s\\d{2,4}x\\d{2,4}/.test(stp)) { const b = new URL(url.toString());"
-            " b.searchParams.set('stp', stp.replace(/_s\\d{2,4}x\\d{2,4}/, '_s2048x2048'));"
-            " list.push(b.toString()); } } catch (e) {} return list; };"
-            " const grab = async (c) => { const r = await fetch(c); if (!r.ok) return null;"
-            " const b = await r.blob(); if (!b || !b.size || b.size > 3500000) return null;"
-            " return await new Promise((res) => { const fr = new FileReader();"
-            " fr.onloadend = () => res(typeof fr.result === 'string' ? fr.result : null);"
-            " fr.onerror = () => res(null); fr.readAsDataURL(b); }); };"
             " for (const u of urls) { try {"
-            " for (const c of [...upgrades(u), u]) {"
-            " const d = await grab(c); if (d && d.startsWith('data:image')) { out[u] = d; break; } }"
+            " const r = await fetch(u); if (!r.ok) continue;"
+            " const b = await r.blob(); if (!b || !b.size || b.size > 3500000) continue;"
+            " const d = await new Promise((res) => { const fr = new FileReader();"
+            " fr.onloadend = () => res(typeof fr.result === 'string' ? fr.result : null);"
+            " fr.onerror = () => res(null); fr.readAsDataURL(b); });"
+            " if (d && d.startsWith('data:image')) out[u] = d;"
             " } catch (e) {} } return JSON.stringify(out); })()"
         )
         try:
@@ -884,7 +888,7 @@ class FacebookEnrichmentScraper:
                 payload = await self._extract_json(tab, _FB_PHOTOS_JS)
                 for photo in payload.get("photos", []):
                     if isinstance(photo, str) and photo.strip():
-                        collected.append(photo.strip())
+                        collected.append(_upgrade_fb_photo_url(photo.strip()))
             except Exception as exc:
                 logger.info("Facebook photos tab not readable (%s): %s", url, exc)
         return _dedupe_photos(collected)
