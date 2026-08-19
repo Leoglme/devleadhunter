@@ -281,69 +281,24 @@ _PREPARE_PANEL_JS = r"""
 })()
 """
 
-# The hero header carries a dedicated « Voir les photos » button (class Dx2nRe) that opens the full
-# photo grid, which — unlike the reviews tab (ReviewsService sign-in wall) — loads fully even
-# logged-out. Prefer that button by class; fall back to any button labelled with « photos ».
-_OPEN_PHOTOS_JS = r"""
+# Photos load into the panel as plain <img> once « Voir les photos » (button.Dx2nRe) is clicked. Google
+# reworked the gallery — the old background-image grid tiles (a.MIgS0d) are gone, AND a synthetic click
+# no longer opens it, so the scraper drives a TRUSTED nodriver click (NodriverDom.click) and reads the
+# <img> here. Reviewer avatars (inside a review block) and tiny UI icons (1-2 digit sizes) are excluded;
+# each URL is normalised to the large =s1600 variant so the same shot collapses on dedup.
+_PANEL_PHOTOS_JS = r"""
 (() => {
-    const direct = document.querySelector('button.Dx2nRe');
-    if (direct) { try { direct.click(); return true; } catch (e) {} }
-    for (const el of document.querySelectorAll('button, [role="button"]')) {
-        const label = (el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim().toLowerCase();
-        if (label === 'voir les photos' || label === 'voir toutes les photos' ||
-            label.includes('see all photos') || label.includes('all photos') ||
-            label.includes('toutes les photos')) {
-            try { el.click(); return true; } catch (e) {}
-        }
-    }
-    return false;
-})()
-"""
-
-# Read the OPEN photo grid. Each tile is `<a class="MIgS0d" data-photo-index>` whose picture is a
-# `background-image` on an inner div (NOT an <img>), so the panel extraction never saw it. Videos are
-# mixed in (aria-label « Vidéo » / a `.bKP3Ce` duration badge) and excluded. URLs are normalised to the
-# same `=s1600` variant as the panel photos so identical shots collapse on dedup.
-_GRID_PHOTOS_JS = r"""
-(() => {
-    const urls = [];
+    const out = [];
     const seen = new Set();
-    const norm = (u) => /=[\w-]+$/.test(u) ? u.replace(/=[\w-]+$/, '=s1600') : (u + '=s1600');
-    const grab = (bg) => {
-        if (!bg || bg === 'none') return '';
-        const m = bg.match(/url\((['"]?)(.*?)\1\)/);
-        return m ? m[2] : '';
-    };
-    document.querySelectorAll('a.MIgS0d[data-photo-index]').forEach((a) => {
-        const label = (a.getAttribute('aria-label') || '').toLowerCase();
-        if (label.indexOf('vidéo') !== -1 || label.indexOf('video') !== -1) return;
-        if (a.querySelector('.bKP3Ce')) return;
-        const outer = a.querySelector('.aHpZye');
-        const inner = a.querySelector('.gCPOGf');
-        let src = grab(outer && outer.style.backgroundImage) || grab(inner && inner.style.backgroundImage);
+    document.querySelectorAll('img').forEach((img) => {
+        let src = img.getAttribute('src') || '';
         if (!src || src.indexOf('googleusercontent') === -1) return;
-        src = norm(src);
-        if (!seen.has(src)) { seen.add(src); urls.push(src); }
+        if (img.closest('.jftiEf, [data-review-id]')) return;
+        if (/=[ws]\d{1,2}-/.test(src)) return;
+        src = /=[\w-]+$/.test(src) ? src.replace(/=[\w-]+$/, '=s1600') : (src + '=s1600');
+        if (!seen.has(src)) { seen.add(src); out.push(src); }
     });
-    return urls;
-})()
-"""
-
-# Nudge the grid's own scroll container down one step. The tiles are virtualised (absolutely positioned
-# in a tall relative box, unloaded once scrolled past), so we step in small increments and read after
-# each — reading only at the end would miss most photos.
-_GRID_SCROLL_JS = r"""
-(() => {
-    const anchors = document.querySelectorAll('a.MIgS0d[data-photo-index]');
-    if (!anchors.length) return 0;
-    let el = anchors[anchors.length - 1];
-    let scroller = null;
-    while (el && el !== document.body) {
-        if (el.scrollHeight > el.clientHeight + 40) { scroller = el; break; }
-        el = el.parentElement;
-    }
-    if (scroller) scroller.scrollTop = scroller.scrollTop + 1200;
-    return anchors.length;
+    return out;
 })()
 """
 
@@ -659,16 +614,21 @@ class EnrichmentScraper:
 
             # Google intermittently serves logged-out scrapers a STRIPPED panel (no review count, no
             # photo gallery); reload until it renders the full one so the count and photos survive.
-            place_url = await self._ensure_complete_panel(tab, url)
+            await self._ensure_complete_panel(tab, url)
             await self._wait_for_maps_hydration(tab)
             # Capture the business-name h1 BEFORE extraction expands the hours: expanding them makes
             # Google swap the first h1 for « Horaires », which would then poison the identity guard.
             place_title = await self._read_place_title(tab)
+            # Grab the Google photos on the CLEAN panel FIRST — a trusted click loads them inline and
+            # keeps the panel intact — before extraction expands the hours and can hide the button.
+            photos = EnrichmentData()
+            await self._grab_more_photos(tab, photos)
             data = await self._extract_with_retries(tab, business_name=business_name, city=city)
+            if photos.photos:
+                known = {url for url in data.photos if url}
+                data.photos = (data.photos + [url for url in photos.photos if url not in known])[:40]
             if place_title:
                 data.place_title = place_title
-            # The hours expansion can hide the « Voir les photos » button; re-anchor before the grid.
-            await self._grab_grid_photos(tab, data, place_url)
             return data
         except Exception as exc:
             logger.warning("Enrichment scrape failed for %s: %s", business_name, exc)
@@ -769,20 +729,6 @@ class EnrichmentScraper:
             complete = await self._wait_for_complete_panel(tab)
         return place_url
 
-    async def _grab_grid_photos(self, tab: Any, data: EnrichmentData, place_url: str) -> None:
-        """Open the Google photo grid and merge it into ``data.photos``.
-
-        Extraction expands the weekly hours, which on some listings (food trucks) leaves the tab on a
-        full « Horaires » view that hides the « Voir les photos » button. When the button is gone, this
-        re-anchors to a complete panel first, so the grid still opens instead of yielding only the hero.
-        """
-        has_button = await NodriverDom.evaluate(tab, "!!document.querySelector('button.Dx2nRe')", by_value=True)
-        if has_button is not True and "/maps/place/" in place_url:
-            await NodriverDom.navigate(tab, place_url)
-            if await self._open_place_panel(tab):
-                await self._ensure_complete_panel(tab, place_url)
-        await self._grab_more_photos(tab, data)
-
     async def _prepare_panel_for_extraction(self, tab: Any) -> None:
         """Expand hours and scroll to lazy-load photos.
 
@@ -804,28 +750,23 @@ class EnrichmentScraper:
             pass
 
     async def _grab_more_photos(self, tab: Any, data: EnrichmentData) -> None:
-        """Open « Voir les photos » and merge the full photo grid into ``data.photos``.
+        """Open the photo section and merge its images into ``data.photos``.
 
-        The grid tiles are ``background-image`` divs inside ``a.MIgS0d`` (not <img>), lazy-loaded and
-        virtualised, so we open the grid, step-scroll its own container, and collect the URLs after each
-        step (reading only at the end would miss tiles unloaded on the way). Isolated + best-effort:
-        runs AFTER the main extraction and only ADDS photos, so a failure never touches what we have.
-        The hero photos are already captured by the clean-panel extraction pass, so a listing whose
-        hours view hid this button still keeps its photos.
+        Google reworked the gallery: opening it needs a TRUSTED click (a synthetic ``.click()`` is
+        ignored), and the photos then load as panel ``<img>`` — the old ``a.MIgS0d`` background-image
+        grid is gone. So we drive a real nodriver click on « Voir les photos » and read the images,
+        step-scrolling to lazy-load the rest. Best-effort: any failure leaves the photos already found.
         """
         try:
-            opened = await NodriverDom.evaluate(tab, _OPEN_PHOTOS_JS, by_value=True)
-            if opened is not True:
+            if not await NodriverDom.click(tab, "button.Dx2nRe"):
                 return
-            if not await NodriverDom.wait_for_selector(tab, "a.MIgS0d[data-photo-index]", timeout_s=6.0):
-                return
-
+            await asyncio.sleep(1.0)
             seen: set[str] = {url for url in data.photos if url}
             merged: list[str] = list(data.photos)
             stable_rounds = 0
-            for _ in range(28):
+            for _ in range(14):
                 added = 0
-                for url in await self._read_grid_photos(tab):
+                for url in await self._read_panel_photos(tab):
                     if url and url not in seen:
                         seen.add(url)
                         merged.append(url)
@@ -833,17 +774,15 @@ class EnrichmentScraper:
                 stable_rounds = 0 if added else stable_rounds + 1
                 if stable_rounds >= 3 or len(merged) >= 40:
                     break
-                await NodriverDom.evaluate(tab, _GRID_SCROLL_JS, by_value=True)
+                await NodriverDom.scroll_element(tab, "div[role='main']", 1200)
                 await asyncio.sleep(0.5)
-            # Cap at the same 40 the record ultimately stores: collecting more only wastes downloads in
-            # the perceptual dedup and would crowd out the Facebook photos merged in right after.
             data.photos = merged[:40]
         except Exception as exc:
-            logger.info("Extra Google photo pass failed: %s", exc)
+            logger.info("Google photo section pass failed: %s", exc)
 
-    async def _read_grid_photos(self, tab: Any) -> list[str]:
-        """Read the currently-loaded photo tiles from the open grid (videos excluded)."""
-        raw = await NodriverDom.evaluate(tab, f"JSON.stringify({_GRID_PHOTOS_JS})", by_value=True)
+    async def _read_panel_photos(self, tab: Any) -> list[str]:
+        """Read the googleusercontent photos currently loaded in the panel (avatars/icons excluded)."""
+        raw = await NodriverDom.evaluate(tab, f"JSON.stringify({_PANEL_PHOTOS_JS})", by_value=True)
         if not isinstance(raw, str):
             return []
         try:
