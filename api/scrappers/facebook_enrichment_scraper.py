@@ -815,22 +815,28 @@ class FacebookEnrichmentScraper:
         if not targets:
             return photos
 
-        # fbcdn grid photos are served as thumbnails; the ``stp`` query param is the display transform
-        # (``dst-jpg_s320x320``…). Dropping it fetches the full-size original, so we try the upgraded URL
-        # first and fall back to the thumbnail — the capture is always keyed by the ORIGINAL url.
+        # fbcdn grid photos are square thumbnails. On the newer ``t51`` format the display size lives in
+        # the ``ctp`` param (``s206x206``…): dropping it serves the full size (bounded by ``cstp``, e.g.
+        # 1440²) and the ``oh`` signature still validates. On the older ``t39`` format the size sits in
+        # ``stp`` (``dst-jpg_s320x320``…), so we raise that instead. Verified against a live listing:
+        # ``ctp=s206x206`` → 206², dropping ``ctp`` → 1440². We try the upgraded URLs first and fall back
+        # to the thumbnail, and always key the capture by the ORIGINAL url.
         js: str = (
             "(async () => { const urls = " + json.dumps(targets) + "; const out = {};"
-            " const bigger = (u) => { try { const url = new URL(u);"
-            " if (!url.searchParams.has('stp')) return null;"
-            " url.searchParams.delete('stp'); return url.toString();"
-            " } catch (e) { return null; } };"
+            " const upgrades = (u) => { const list = []; try { const url = new URL(u);"
+            " if (url.searchParams.has('ctp')) { const b = new URL(url.toString());"
+            " b.searchParams.delete('ctp'); list.push(b.toString()); }"
+            " const stp = url.searchParams.get('stp');"
+            " if (stp && /_s\\d{2,4}x\\d{2,4}/.test(stp)) { const b = new URL(url.toString());"
+            " b.searchParams.set('stp', stp.replace(/_s\\d{2,4}x\\d{2,4}/, '_s2048x2048'));"
+            " list.push(b.toString()); } } catch (e) {} return list; };"
             " const grab = async (c) => { const r = await fetch(c); if (!r.ok) return null;"
             " const b = await r.blob(); if (!b || !b.size || b.size > 3500000) return null;"
             " return await new Promise((res) => { const fr = new FileReader();"
             " fr.onloadend = () => res(typeof fr.result === 'string' ? fr.result : null);"
             " fr.onerror = () => res(null); fr.readAsDataURL(b); }); };"
             " for (const u of urls) { try {"
-            " for (const c of [bigger(u), u].filter(Boolean)) {"
+            " for (const c of [...upgrades(u), u]) {"
             " const d = await grab(c); if (d && d.startsWith('data:image')) { out[u] = d; break; } }"
             " } catch (e) {} } return JSON.stringify(out); })()"
         )
