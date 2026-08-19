@@ -38,6 +38,11 @@ export type UseDesktopRuntimeReturn = {
   syncDevDatabaseFromProd: () => Promise<string>
 }
 
+export type UseLazyPreviewReturn = {
+  shouldRenderPreview: Ref<boolean>
+  markPreviewLoaded: () => void
+}
+
 export type UseOpenExternalUrlReturn = {
   openExternalUrl: (url: string) => Promise<void>
 }

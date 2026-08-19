@@ -10,16 +10,20 @@
     />
 
     <div
+      ref="previewContainer"
       class="relative h-36 overflow-hidden border-b border-[var(--app-line)] bg-[var(--app-surface-2)] transition-transform duration-500 group-hover:scale-[1.02]"
     >
       <div
         v-if="!isPreviewLoaded"
-        :class="['absolute inset-0 flex items-center justify-center', previewUrl ? 'animate-pulse' : '']"
+        :class="[
+          'absolute inset-0 flex items-center justify-center',
+          previewUrl && shouldRenderPreview ? 'animate-pulse' : '',
+        ]"
       >
         <UIcon name="i-lucide-globe" class="h-6 w-6 text-[var(--app-faint)]" />
       </div>
       <iframe
-        v-if="previewUrl"
+        v-if="previewUrl && shouldRenderPreview"
         :src="previewUrl"
         :class="[
           'pointer-events-none absolute top-0 left-0 h-[400%] w-[400%] origin-top-left scale-[0.25] border-0 bg-white transition-opacity duration-500',
@@ -30,7 +34,7 @@
         aria-hidden="true"
         title="Aperçu du site démo"
         sandbox="allow-scripts allow-same-origin"
-        @load="isPreviewLoaded = true"
+        @load="onPreviewLoad"
       ></iframe>
       <span
         class="absolute top-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-0.5 text-[10px] font-bold tracking-wide text-white uppercase backdrop-blur-sm"
@@ -82,7 +86,9 @@ import { formatNumericDate } from '~/utils/date'
 import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
 import type { DemoSite } from '~/services/demoSiteService'
 import type { DemoSiteCardEmits, DemoSiteCardProps } from '~/types/DemoSiteCard'
+import type { UseLazyPreviewReturn } from '~/types/Composables'
 import { DemoSiteService } from '~/services/demoSiteService'
+import { useLazyPreview } from '~/composables/useLazyPreview'
 
 /** Demo site summary card: live scaled preview, stretched-link navigation, copy and open shortcuts. */
 const props: DemoSiteCardProps = defineProps({
@@ -100,12 +106,21 @@ const emit: EmitFn<DemoSiteCardEmits> = defineEmits<DemoSiteCardEmits>()
 
 const copied: Ref<boolean> = ref(false)
 const isPreviewLoaded: Ref<boolean> = ref(false)
+/** Preview container observed to mount the iframe only once the card is on screen. */
+const previewContainer: Ref<HTMLElement | null> = ref(null)
 
 const openUrl: ComputedRef<string | null> = computed(() => DemoSiteService.getDemoSiteOpenUrl(props.site))
 
 /** URL rendered in the scaled preview — only when the site actually responds. */
 const previewUrl: ComputedRef<string | null> = computed(() =>
   DemoSiteService.isDemoSiteReachable(props.site) ? openUrl.value : null,
+)
+
+// Aperçu monté à l'entrée dans le viewport, sous un plafond global de chargements
+// simultanés : une grille de dizaines de sites ne lance pas autant d'iframes d'un coup.
+const { shouldRenderPreview, markPreviewLoaded }: UseLazyPreviewReturn = useLazyPreview(
+  previewContainer,
+  (): boolean => previewUrl.value !== null,
 )
 
 const statusLabel: ComputedRef<string> = computed(() => {
@@ -123,6 +138,14 @@ const statusDotClass: ComputedRef<string> = computed(() => {
 })
 
 const templateLabel: ComputedRef<string> = computed(() => props.templateName ?? props.site.template_id)
+
+/**
+ * L'iframe a fini de charger : on l'affiche et on libère un créneau de chargement.
+ */
+function onPreviewLoad(): void {
+  isPreviewLoaded.value = true
+  markPreviewLoaded()
+}
 
 /**
  * Copy the demo URL and show a short confirmation state.
