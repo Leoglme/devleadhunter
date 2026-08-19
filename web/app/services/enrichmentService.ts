@@ -1,5 +1,6 @@
 import { ApiClient } from './api'
-import { postToScraperSidecar } from '~/services/scraperSidecarService'
+import type { ScraperSidecarInfo } from '~/services/scraperSidecarService'
+import { getScraperSidecarInfo, postToScraperSidecar } from '~/services/scraperSidecarService'
 
 /** A single scraped review. */
 export type EnrichmentReview = {
@@ -113,6 +114,15 @@ export type BulkEnrichResult = {
   total: number
 }
 
+/** A prospect fed to the local bulk enrichment — the sidecar scrapes each one. */
+export type BulkEnrichTarget = {
+  id: number
+  name: string
+  city: string | null
+  googleMapsUrl: string | null
+  facebookUrl: string | null
+}
+
 export class EnrichmentService {
   /**
    * Fetch a prospect's enrichment data.
@@ -189,12 +199,91 @@ export class EnrichmentService {
   }
 
   /**
-   * Enrich several prospects in one call (runs sequentially server-side).
-   * @param prospectIds - Target prospect ids.
+   * Enrich several prospects locally, through the desktop sidecar.
+   *
+   * Scraping leaves the user's own machine (residential IP), like the drawer:
+   * datacenter VPS IPs are blocked by Google, so a server-side bulk enrichment
+   * would return nothing. Each prospect is scraped one after another — a single
+   * browser, never two Google searches at once — but persisting one prospect
+   * overlaps the scraping of the next: faster than a strictly sequential run,
+   * without degrading the collected data.
+   *
+   * @param targets - The prospects to enrich (already loaded by the list view).
+   * @param onProgress - Called after each prospect is processed, for UI progress.
    * @returns Per-prospect results plus succeeded/failed counts.
+   * @throws When no local sidecar is available (web build outside the desktop app).
    */
-  static async runBulkEnrichment(prospectIds: number[]): Promise<BulkEnrichResult> {
-    return ApiClient.post<BulkEnrichResult>('/api/v1/prospects/enrichment/bulk-run', { prospect_ids: prospectIds })
+  static async runBulkEnrichment(
+    targets: BulkEnrichTarget[],
+    onProgress?: (completed: number, total: number) => void,
+  ): Promise<BulkEnrichResult> {
+    const sidecar: ScraperSidecarInfo | null = await getScraperSidecarInfo()
+    if (!sidecar) {
+      throw new Error(
+        "L'enrichissement groupé s'exécute en local : lancez-le depuis l'application desktop " +
+          '(le scraping doit partir de votre connexion, pas du serveur).',
+      )
+    }
+
+    const total: number = targets.length
+    const results: BulkEnrichItemResult[] = []
+    let completed: number = 0
+
+    /** Persist the scraped result; runs while the NEXT prospect is scraping. */
+    const persist: (target: BulkEnrichTarget, scraped: unknown) => Promise<void> = async (
+      target: BulkEnrichTarget,
+      scraped: unknown,
+    ): Promise<void> => {
+      try {
+        const record: ProspectEnrichment = await ApiClient.post<ProspectEnrichment>(
+          `/api/v1/prospects/${target.id}/enrichment/run`,
+          scraped,
+        )
+        results.push({ prospect_id: target.id, status: record.status, error: record.error_message })
+      } catch (err: unknown) {
+        results.push({ prospect_id: target.id, status: 'failed', error: err instanceof Error ? err.message : null })
+      } finally {
+        completed += 1
+        onProgress?.(completed, total)
+      }
+    }
+
+    // Pipeline à deux étages : au plus un scrape ET une persistance en vol à la fois.
+    let pendingPersist: Promise<void> = Promise.resolve()
+    for (const target of targets) {
+      let scraped: unknown
+      try {
+        scraped = await postToScraperSidecar<unknown>('/scraper/enrichment', {
+          business_name: target.name,
+          city: target.city,
+          google_maps_url: target.googleMapsUrl,
+          facebook_url: target.facebookUrl,
+        })
+      } catch (err: unknown) {
+        await pendingPersist
+        results.push({ prospect_id: target.id, status: 'failed', error: err instanceof Error ? err.message : null })
+        completed += 1
+        onProgress?.(completed, total)
+        continue
+      }
+      // La persistance précédente doit finir (≤ 1 en vol) avant d'en lancer une autre…
+      await pendingPersist
+      // …puis on lance celle-ci sans l'attendre : elle recouvre le scrape suivant.
+      pendingPersist = persist(target, scraped)
+    }
+    await pendingPersist
+
+    const order: Map<number, number> = new Map(
+      targets.map((target: BulkEnrichTarget, index: number): [number, number] => [target.id, index]),
+    )
+    results.sort(
+      (a: BulkEnrichItemResult, b: BulkEnrichItemResult): number =>
+        (order.get(a.prospect_id) ?? 0) - (order.get(b.prospect_id) ?? 0),
+    )
+    const succeeded: number = results.filter(
+      (result: BulkEnrichItemResult): boolean => result.status === 'completed',
+    ).length
+    return { results, succeeded, failed: total - succeeded, total }
   }
 
   /**

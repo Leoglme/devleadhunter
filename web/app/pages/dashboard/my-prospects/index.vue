@@ -288,7 +288,7 @@
               :name="bulkBusy ? 'i-lucide-loader-circle' : 'i-lucide-sparkles'"
               :class="['h-3.5 w-3.5', bulkBusy && 'animate-spin']"
             />
-            Enrichir
+            {{ bulkEnrichLabel }}
           </button>
           <button type="button" class="app-btn-primary h-9 px-4 text-xs" @click="goToSiteGeneration">
             <UIcon name="i-lucide-globe" class="h-3.5 w-3.5" />Générer les sites
@@ -328,7 +328,7 @@
 
 <script lang="ts" setup>
 import type { ProspectMutationNotice } from '~/types/DrawerStack'
-import type { BulkEnrichResult } from '~/services/enrichmentService'
+import type { BulkEnrichResult, BulkEnrichTarget } from '~/services/enrichmentService'
 import type { LocationQueryValue } from 'vue-router'
 import type { UseToastReturn } from '~/types/Composables'
 import { ref, computed, watch, onMounted } from 'vue'
@@ -353,6 +353,8 @@ const error: Ref<string | null> = ref(null)
 const selectedProspects: Ref<string[]> = ref([])
 const bulkCampaignOpen: Ref<boolean> = ref(false)
 const bulkBusy: Ref<boolean> = ref(false)
+/** Progress of the running bulk enrichment (null when idle). */
+const bulkProgress: Ref<{ completed: number; total: number } | null> = ref(null)
 const {
   searchQuery,
   filterCategory,
@@ -399,6 +401,11 @@ const bulkDeleteConfirmMessage: ComputedRef<string> = computed(() => {
 
 const selectedIds: ComputedRef<number[]> = computed<number[]>(() =>
   selectedProspects.value.map((id: string) => Number(id)).filter((n: number) => !Number.isNaN(n)),
+)
+
+/** Label of the « Enrichir » button, showing progress during a bulk run. */
+const bulkEnrichLabel: ComputedRef<string> = computed((): string =>
+  bulkProgress.value ? `Enrichir ${bulkProgress.value.completed}/${bulkProgress.value.total}` : 'Enrichir',
 )
 
 const totalProspects: ComputedRef<number> = computed(() => prospects.value.length)
@@ -568,19 +575,42 @@ function goToSiteGeneration(): void {
 }
 
 /**
- * Run enrichment for every selected prospect (sequential server-side).
+ * Enrich every selected prospect through the local sidecar (residential IP),
+ * with live progress. Without the desktop app the service refuses rather than
+ * scraping from the server (blocked by Google).
  */
 async function bulkEnrich(): Promise<void> {
   if (bulkBusy.value || selectedIds.value.length === 0) return
+  const selectedIdSet: Set<number> = new Set(selectedIds.value)
+  const targets: BulkEnrichTarget[] = prospects.value
+    .filter((prospect: Prospect): boolean => selectedIdSet.has(prospect.id))
+    .map(
+      (prospect: Prospect): BulkEnrichTarget => ({
+        id: prospect.id,
+        name: prospect.name,
+        city: prospect.city ?? null,
+        googleMapsUrl: prospect.google_maps_url ?? null,
+        facebookUrl: prospect.facebook_url ?? null,
+      }),
+    )
+  if (targets.length === 0) return
+
   bulkBusy.value = true
+  bulkProgress.value = { completed: 0, total: targets.length }
   try {
-    const res: BulkEnrichResult = await EnrichmentService.runBulkEnrichment(selectedIds.value)
+    const res: BulkEnrichResult = await EnrichmentService.runBulkEnrichment(
+      targets,
+      (completed: number, total: number): void => {
+        bulkProgress.value = { completed, total }
+      },
+    )
     toast.success(`Enrichissement : ${res.succeeded} réussi(s), ${res.failed} échec(s)`)
     clearSelection()
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : "Erreur lors de l'enrichissement")
   } finally {
     bulkBusy.value = false
+    bulkProgress.value = null
   }
 }
 
