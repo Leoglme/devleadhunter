@@ -270,3 +270,43 @@ def test_build_from_raw_without_identity_stays_none() -> None:
     assert data.place_title is None
     assert data.place_city is None
     assert data.place_postal_code is None
+
+
+def test_build_from_raw_drops_section_header_title() -> None:
+    """An h1 read while the « Horaires » sub-panel is open must not become the place title:
+    it falls back to the JSON-LD business name instead of poisoning the homonym guard."""
+    ld_block = json.dumps(
+        {
+            "@type": "Restaurant",
+            "name": "Hell's Cantina",
+            "address": {"@type": "PostalAddress", "postalCode": "31840", "addressLocality": "Seilh"},
+        }
+    )
+    data = EnrichmentScraper._build_from_raw(
+        {"place_title": "Horaires", "ld": [ld_block]},
+        business_name="Hell's Cantina",
+        city="Seilh",
+    )
+    assert data.place_title == "Hell's Cantina"
+
+
+def test_build_from_raw_section_header_without_ld_stays_none() -> None:
+    """A section-header h1 with no JSON-LD name → title dropped, so the guard skips (never rejects)."""
+    data = EnrichmentScraper._build_from_raw(
+        {"place_title": "Horaires"},
+        business_name="Hell's Cantina",
+        city="Seilh",
+    )
+    assert data.place_title is None
+
+
+def test_clean_place_title_drops_maps_section_headers() -> None:
+    """The cleaner strips Google Maps section headers (any case) but keeps a real business name."""
+    from scrappers.enrichment_scraper import _clean_place_title
+
+    assert _clean_place_title("Horaires") is None
+    assert _clean_place_title("  AVIS ") is None
+    assert _clean_place_title("Photos") is None
+    assert _clean_place_title("Hell's Cantina") == "Hell's Cantina"
+    assert _clean_place_title(None) is None
+    assert _clean_place_title("") is None

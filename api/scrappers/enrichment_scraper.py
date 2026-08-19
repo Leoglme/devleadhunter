@@ -347,9 +347,45 @@ _GRID_SCROLL_JS = r"""
 })()
 """
 
+# The place's business-name <h1>, read BEFORE the hours are expanded — expanding them swaps this
+# heading for « Horaires », which would then masquerade as the place title.
+_PLACE_TITLE_JS = r"((document.querySelector('h1') || {}).innerText || '').trim()"
+
 _ENRICHMENT_MAX_ATTEMPTS: int = 4
 _ENRICHMENT_POLL_INTERVAL_S: float = 1.5
 _ENRICHMENT_MIN_HOUR_ROWS: int = 5
+
+# Section headers Google Maps promotes to <h1> when a sub-panel (weekly hours, reviews, photos…) is
+# open. Read as the place title they never match the business name, so the homonym guard would reject
+# the whole enrichment — we drop them and fall back to the real name instead.
+_MAPS_SECTION_TITLES: frozenset[str] = frozenset(
+    {
+        "horaires",
+        "avis",
+        "photos",
+        "à propos",
+        "a propos",
+        "présentation",
+        "presentation",
+        "hours",
+        "reviews",
+        "about",
+        "overview",
+    }
+)
+
+
+def _clean_place_title(raw: str | None) -> str | None:
+    """Return the place title, or None when it is a Google Maps section header.
+
+    Expanding the weekly hours (needed to read them) makes Google insert a « Horaires » <h1>; read as
+    the place title it poisons the homonym guard, so a section header is dropped and the caller falls
+    back to the real business name.
+    """
+    title = (raw or "").strip()
+    if not title:
+        return None
+    return None if title.lower() in _MAPS_SECTION_TITLES else title
 
 
 def _average_hash(image_bytes: bytes) -> int | None:
@@ -614,7 +650,12 @@ class EnrichmentScraper:
                 return EnrichmentData()
 
             await self._wait_for_maps_hydration(tab)
+            # Capture the business-name h1 BEFORE extraction expands the hours: expanding them makes
+            # Google swap the first h1 for « Horaires », which would then poison the identity guard.
+            place_title = await self._read_place_title(tab)
             data = await self._extract_with_retries(tab, business_name=business_name, city=city)
+            if place_title:
+                data.place_title = place_title
             await self._grab_more_photos(tab, data)
             return data
         except Exception as exc:
@@ -663,6 +704,15 @@ class EnrichmentScraper:
         except json.JSONDecodeError:
             return {}
         return parsed if isinstance(parsed, dict) else {}
+
+    async def _read_place_title(self, tab: Any) -> str | None:
+        """Read the place panel's business-name h1, dropping any section header.
+
+        Read BEFORE the hours are expanded, so the first h1 is still the business name and not the
+        « Horaires » sub-panel header that would otherwise poison the identity guard.
+        """
+        raw = await NodriverDom.evaluate(tab, _PLACE_TITLE_JS, by_value=True)
+        return _clean_place_title(raw if isinstance(raw, str) else None)
 
     async def _prepare_panel_for_extraction(self, tab: Any) -> None:
         """Expand hours and scroll to lazy-load photos.
@@ -905,7 +955,7 @@ class EnrichmentScraper:
             if ld_description and not validation_service.is_generic_platform_description(ld_description):
                 description = ld_description
 
-        place_title = (str(data["place_title"]).strip() if data.get("place_title") else None) or None
+        place_title = _clean_place_title(str(data["place_title"]) if data.get("place_title") else None)
         if place_title is None and business and business.get("name"):
             place_title = str(business["name"]).strip() or None
 
