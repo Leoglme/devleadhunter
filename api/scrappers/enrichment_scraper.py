@@ -650,15 +650,13 @@ class EnrichmentScraper:
                 return EnrichmentData()
 
             await self._wait_for_maps_hydration(tab)
-            # Capture the clean panel BEFORE extraction expands the hours: expanding them swaps the
-            # first h1 for « Horaires » (which would poison the identity guard) and, on some listings
-            # (food trucks), replaces the whole panel with a full « Horaires » view that hides photos.
-            place_url = NodriverDom.tab_url(tab)
+            # Capture the business-name h1 BEFORE extraction expands the hours: expanding them makes
+            # Google swap the first h1 for « Horaires », which would then poison the identity guard.
             place_title = await self._read_place_title(tab)
             data = await self._extract_with_retries(tab, business_name=business_name, city=city)
             if place_title:
                 data.place_title = place_title
-            await self._grab_more_photos(tab, data, place_url=place_url if "/maps/place/" in place_url else None)
+            await self._grab_more_photos(tab, data)
             return data
         except Exception as exc:
             logger.warning("Enrichment scrape failed for %s: %s", business_name, exc)
@@ -736,26 +734,18 @@ class EnrichmentScraper:
         except Exception:
             pass
 
-    async def _grab_more_photos(self, tab: Any, data: EnrichmentData, *, place_url: str | None = None) -> None:
+    async def _grab_more_photos(self, tab: Any, data: EnrichmentData) -> None:
         """Open « Voir les photos » and merge the full photo grid into ``data.photos``.
 
         The grid tiles are ``background-image`` divs inside ``a.MIgS0d`` (not <img>), lazy-loaded and
         virtualised, so we open the grid, step-scroll its own container, and collect the URLs after each
         step (reading only at the end would miss tiles unloaded on the way). Isolated + best-effort:
         runs AFTER the main extraction and only ADDS photos, so a failure never touches what we have.
-
-        Expanding the weekly hours can leave some listings (food trucks) on a full « Horaires » view
-        that removes the « Voir les photos » button; when that happens and ``place_url`` is known, the
-        place panel is re-anchored once so the grid is still collected instead of yielding no photos.
+        The hero photos are already captured by the clean-panel extraction pass, so a listing whose
+        hours view hid this button still keeps its photos.
         """
         try:
             opened = await NodriverDom.evaluate(tab, _OPEN_PHOTOS_JS, by_value=True)
-            if opened is not True and place_url:
-                await NodriverDom.navigate(tab, place_url)
-                await GoogleScraper.accept_cookies(tab)
-                await GoogleScraper.accept_web_modal(tab)
-                await NodriverDom.wait_for_selector(tab, "h1", timeout_s=10.0)
-                opened = await NodriverDom.evaluate(tab, _OPEN_PHOTOS_JS, by_value=True)
             if opened is not True:
                 return
             if not await NodriverDom.wait_for_selector(tab, "a.MIgS0d[data-photo-index]", timeout_s=6.0):
@@ -869,7 +859,12 @@ class EnrichmentScraper:
         city: str | None,
     ) -> EnrichmentData:
         """Poll extraction until wave-2 hydration is complete or attempts are exhausted."""
-        best: EnrichmentData = EnrichmentData()
+        # First pass on the CLEAN panel, BEFORE any hours expansion: captures the hero photos, rating
+        # and reviews a destructive hours expansion drops (some food-truck listings open a full
+        # « Horaires » view that replaces the panel). Later passes expand the hours and merge them in.
+        best: EnrichmentData = self._build_from_raw(
+            await self._extract_raw(tab), business_name=business_name, city=city
+        )
         previous_hours: int = -1
         for attempt in range(_ENRICHMENT_MAX_ATTEMPTS):
             await self._prepare_panel_for_extraction(tab)

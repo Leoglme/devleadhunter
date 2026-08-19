@@ -815,15 +815,23 @@ class FacebookEnrichmentScraper:
         if not targets:
             return photos
 
+        # fbcdn grid photos are served as thumbnails; the ``stp`` query param is the display transform
+        # (``dst-jpg_s320x320``…). Dropping it fetches the full-size original, so we try the upgraded URL
+        # first and fall back to the thumbnail — the capture is always keyed by the ORIGINAL url.
         js: str = (
             "(async () => { const urls = " + json.dumps(targets) + "; const out = {};"
-            " for (const u of urls) { try {"
-            " const r = await fetch(u); if (!r.ok) continue;"
-            " const b = await r.blob(); if (!b || !b.size || b.size > 3500000) continue;"
-            " const d = await new Promise((res) => { const fr = new FileReader();"
+            " const bigger = (u) => { try { const url = new URL(u);"
+            " if (!url.searchParams.has('stp')) return null;"
+            " url.searchParams.delete('stp'); return url.toString();"
+            " } catch (e) { return null; } };"
+            " const grab = async (c) => { const r = await fetch(c); if (!r.ok) return null;"
+            " const b = await r.blob(); if (!b || !b.size || b.size > 3500000) return null;"
+            " return await new Promise((res) => { const fr = new FileReader();"
             " fr.onloadend = () => res(typeof fr.result === 'string' ? fr.result : null);"
-            " fr.onerror = () => res(null); fr.readAsDataURL(b); });"
-            " if (d && d.startsWith('data:image')) out[u] = d;"
+            " fr.onerror = () => res(null); fr.readAsDataURL(b); }); };"
+            " for (const u of urls) { try {"
+            " for (const c of [bigger(u), u].filter(Boolean)) {"
+            " const d = await grab(c); if (d && d.startsWith('data:image')) { out[u] = d; break; } }"
             " } catch (e) {} } return JSON.stringify(out); })()"
         )
         try:
