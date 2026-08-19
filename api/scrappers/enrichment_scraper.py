@@ -658,26 +658,8 @@ class EnrichmentScraper:
                 return EnrichmentData()
 
             # Google intermittently serves logged-out scrapers a STRIPPED panel (no review count, no
-            # photo gallery, only Présentation / À propos). Reload to land on the full render, so the
-            # review count and photos are not silently lost — re-running by hand shows a reload works.
-            place_url = NodriverDom.tab_url(tab)
-            complete = await self._wait_for_complete_panel(tab)
-            for reload_index in range(_MAX_PANEL_RELOADS):
-                if complete:
-                    break
-                logger.info(
-                    "Enrichment: stripped Maps panel for %s — reloading (%s/%s)",
-                    business_name,
-                    reload_index + 1,
-                    _MAX_PANEL_RELOADS,
-                )
-                await asyncio.sleep(1.5)
-                await NodriverDom.navigate(tab, place_url if "/maps/place/" in place_url else url)
-                if not await self._open_place_panel(tab):
-                    break
-                place_url = NodriverDom.tab_url(tab)
-                complete = await self._wait_for_complete_panel(tab)
-
+            # photo gallery); reload until it renders the full one so the count and photos survive.
+            place_url = await self._ensure_complete_panel(tab, url)
             await self._wait_for_maps_hydration(tab)
             # Capture the business-name h1 BEFORE extraction expands the hours: expanding them makes
             # Google swap the first h1 for « Horaires », which would then poison the identity guard.
@@ -685,7 +667,8 @@ class EnrichmentScraper:
             data = await self._extract_with_retries(tab, business_name=business_name, city=city)
             if place_title:
                 data.place_title = place_title
-            await self._grab_more_photos(tab, data)
+            # The hours expansion can hide the « Voir les photos » button; re-anchor before the grid.
+            await self._grab_grid_photos(tab, data, place_url)
             return data
         except Exception as exc:
             logger.warning("Enrichment scrape failed for %s: %s", business_name, exc)
@@ -765,6 +748,40 @@ class EnrichmentScraper:
             if opened is True:
                 await asyncio.sleep(1.0)
         return await NodriverDom.wait_for_selector(tab, "h1", timeout_s=12.0)
+
+    async def _ensure_complete_panel(self, tab: Any, url: str) -> str:
+        """Reload the place until Google serves the FULL panel, and return the place URL for re-anchors.
+
+        Google intermittently strips a logged-out panel of its review count / photo gallery; re-running
+        by hand shows a reload lands on the complete render. The returned URL anchors later re-opens.
+        """
+        place_url = NodriverDom.tab_url(tab)
+        complete = await self._wait_for_complete_panel(tab)
+        for reload_index in range(_MAX_PANEL_RELOADS):
+            if complete:
+                break
+            logger.info("Enrichment: stripped Maps panel — reloading (%s/%s)", reload_index + 1, _MAX_PANEL_RELOADS)
+            await asyncio.sleep(1.5)
+            await NodriverDom.navigate(tab, place_url if "/maps/place/" in place_url else url)
+            if not await self._open_place_panel(tab):
+                break
+            place_url = NodriverDom.tab_url(tab)
+            complete = await self._wait_for_complete_panel(tab)
+        return place_url
+
+    async def _grab_grid_photos(self, tab: Any, data: EnrichmentData, place_url: str) -> None:
+        """Open the Google photo grid and merge it into ``data.photos``.
+
+        Extraction expands the weekly hours, which on some listings (food trucks) leaves the tab on a
+        full « Horaires » view that hides the « Voir les photos » button. When the button is gone, this
+        re-anchors to a complete panel first, so the grid still opens instead of yielding only the hero.
+        """
+        has_button = await NodriverDom.evaluate(tab, "!!document.querySelector('button.Dx2nRe')", by_value=True)
+        if has_button is not True and "/maps/place/" in place_url:
+            await NodriverDom.navigate(tab, place_url)
+            if await self._open_place_panel(tab):
+                await self._ensure_complete_panel(tab, place_url)
+        await self._grab_more_photos(tab, data)
 
     async def _prepare_panel_for_extraction(self, tab: Any) -> None:
         """Expand hours and scroll to lazy-load photos.
