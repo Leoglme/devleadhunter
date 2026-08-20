@@ -281,24 +281,26 @@ _PREPARE_PANEL_JS = r"""
 })()
 """
 
-# Photos load into the panel as plain <img> once « Voir les photos » (button.Dx2nRe) is clicked. Google
-# reworked the gallery — the old background-image grid tiles (a.MIgS0d) are gone, AND a synthetic click
-# no longer opens it, so the scraper drives a TRUSTED nodriver click (NodriverDom.click) and reads the
-# <img> here. Reviewer avatars (inside a review block) and tiny UI icons (1-2 digit sizes) are excluded;
-# each URL is normalised to the large =s1600 variant so the same shot collapses on dedup.
-_PANEL_PHOTOS_JS = r"""
+# Google embeds ~20 place-photo URLs in the page HTML at load — the whole set, no gallery to open (which
+# now needs a trusted click and behaves as a one-photo lightbox logged-out). We read them straight from
+# the HTML (JSON-escaped, hence the \/ and = un-escaping), keep only rectangular place photos
+# (``=w{W}-h{H}``), drop circle-cropped reviewer avatars (``=s{N}-c``, ``-rp``, ``-mo``) and 360
+# panoramas (``-ya{N}``), and upgrade each to the large ``=s1600`` variant (verified: 32² → 1600²).
+_HTML_PHOTOS_JS = r"""
 (() => {
+    const norm = document.documentElement.innerHTML
+        .replace(/\\\//g, '/').replace(/\\u003d/gi, '=').replace(/\\u0026/gi, '&');
+    const re = /https:\/\/lh\d+\.googleusercontent\.com\/[A-Za-z0-9_\-]+\/[A-Za-z0-9_\-]+=[A-Za-z0-9\-]+/g;
     const out = [];
     const seen = new Set();
-    document.querySelectorAll('img').forEach((img) => {
-        let src = img.getAttribute('src') || '';
-        if (!src || src.indexOf('googleusercontent') === -1) return;
-        if (img.closest('.jftiEf, [data-review-id]')) return;
-        if (/=[ws]\d{1,2}-/.test(src)) return;
-        src = /=[\w-]+$/.test(src) ? src.replace(/=[\w-]+$/, '=s1600') : (src + '=s1600');
-        if (!seen.has(src)) { seen.add(src); out.push(src); }
-    });
-    return out;
+    for (const u of (norm.match(re) || [])) {
+        const size = (u.match(/=([A-Za-z0-9\-]+)$/) || [])[1] || '';
+        if (!/^w\d+-h\d+/.test(size)) continue;
+        if (/-rp-|-mo\b|-ya\d/.test(size)) continue;
+        const big = u.replace(/=[\w-]+$/, '=s1600');
+        if (!seen.has(big)) { seen.add(big); out.push(big); }
+    }
+    return out.slice(0, 40);
 })()
 """
 
@@ -619,16 +621,11 @@ class EnrichmentScraper:
             # Capture the business-name h1 BEFORE extraction expands the hours: expanding them makes
             # Google swap the first h1 for « Horaires », which would then poison the identity guard.
             place_title = await self._read_place_title(tab)
-            # Grab the Google photos on the CLEAN panel FIRST — a trusted click loads them inline and
-            # keeps the panel intact — before extraction expands the hours and can hide the button.
-            photos = EnrichmentData()
-            await self._grab_more_photos(tab, photos)
             data = await self._extract_with_retries(tab, business_name=business_name, city=city)
-            if photos.photos:
-                known = {url for url in data.photos if url}
-                data.photos = (data.photos + [url for url in photos.photos if url not in known])[:40]
             if place_title:
                 data.place_title = place_title
+            # The full set of place photos is embedded in the page HTML (no gallery click needed).
+            await self._grab_more_photos(tab, data)
             return data
         except Exception as exc:
             logger.warning("Enrichment scrape failed for %s: %s", business_name, exc)
@@ -750,50 +747,26 @@ class EnrichmentScraper:
             pass
 
     async def _grab_more_photos(self, tab: Any, data: EnrichmentData) -> None:
-        """Open the photo section and merge its images into ``data.photos``.
+        """Merge the place's photos into ``data.photos``.
 
-        Google reworked the gallery: opening it needs a TRUSTED click (a synthetic ``.click()`` is
-        ignored, and the old ``a.MIgS0d`` background-image grid is gone). Logged IN it expands an inline
-        grid; logged OUT it opens a one-photo-at-a-time lightbox. So we drive a real nodriver click on
-        « Voir les photos », then keep reading the panel images while advancing « Photo suivante »
-        (lightbox) or step-scrolling (grid) until nothing new comes. Best-effort: any failure leaves the
-        photos already found.
+        Google embeds the full set of place-photo URLs (~20) in the page HTML at load, so we read them
+        straight from there and skip the gallery entirely — opening it now needs a trusted click and
+        yields only one photo at a time (a lightbox) logged out. Best-effort: any failure leaves the
+        photos already found (e.g. the hero from the panel extraction).
         """
         try:
-            if not await NodriverDom.click(tab, "button.Dx2nRe"):
-                return
-            await asyncio.sleep(1.2)
             seen: set[str] = {url for url in data.photos if url}
-            merged: list[str] = list(data.photos)
-
-            async def collect() -> int:
-                added = 0
-                for url in await self._read_panel_photos(tab):
-                    if url and url not in seen:
-                        seen.add(url)
-                        merged.append(url)
-                        added += 1
-                return added
-
-            await collect()
-            stable_rounds = 0
-            for _ in range(40):
-                advanced = await NodriverDom.click_first_matching(
-                    tab, ["button[aria-label*='uivante']", "button[aria-label*='ext photo']"]
-                )
-                if not advanced:
-                    await NodriverDom.scroll_element(tab, "div[role='main']", 1200)
-                await asyncio.sleep(0.4)
-                stable_rounds = 0 if await collect() else stable_rounds + 1
-                if stable_rounds >= 4 or len(merged) >= 40:
-                    break
-            data.photos = merged[:40]
+            for url in await self._read_html_photos(tab):
+                if url and url not in seen:
+                    seen.add(url)
+                    data.photos.append(url)
+            data.photos = data.photos[:40]
         except Exception as exc:
-            logger.info("Google photo section pass failed: %s", exc)
+            logger.info("Google photo HTML pass failed: %s", exc)
 
-    async def _read_panel_photos(self, tab: Any) -> list[str]:
-        """Read the googleusercontent photos currently loaded in the panel (avatars/icons excluded)."""
-        raw = await NodriverDom.evaluate(tab, f"JSON.stringify({_PANEL_PHOTOS_JS})", by_value=True)
+    async def _read_html_photos(self, tab: Any) -> list[str]:
+        """Read the place photos embedded in the page HTML (avatars / panoramas excluded, upscaled)."""
+        raw = await NodriverDom.evaluate(tab, f"JSON.stringify({_HTML_PHOTOS_JS})", by_value=True)
         if not isinstance(raw, str):
             return []
         try:
