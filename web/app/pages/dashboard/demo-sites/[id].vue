@@ -62,7 +62,7 @@
       </header>
 
       <div class="grid items-start gap-6 @4xl:grid-cols-[360px_1fr]">
-        <aside class="card sticky top-6 max-h-[calc(100vh-3rem)] space-y-5 overflow-y-auto p-5">
+        <aside ref="asideRef" class="card sticky top-6 max-h-[calc(100vh-3rem)] space-y-5 overflow-y-auto p-5">
           <UiTabs v-model="activeTab" :tabs="asideTabs" />
 
           <template v-if="activeTab === 'resume'">
@@ -311,7 +311,7 @@
             />
 
             <div v-if="siteImages && siteImages.pool.length" class="border-t border-[var(--app-line)] pt-4">
-              <DemoSitesImageSlots :pool="siteImages.pool" :order="imagesOrder" @update:order="imagesOrder = $event" />
+              <DemoSitesImageSlots :pool="siteImages.pool" :order="imagesOrder" @update:order="onImageOrderChange" />
             </div>
             <p
               v-else
@@ -451,6 +451,7 @@ const generatingVideo: Ref<boolean> = ref(false)
 const deletingVideo: Ref<boolean> = ref(false)
 const deleteVideoModalRef: Ref<{ open: () => void } | null> = ref(null)
 const deleteSiteModalRef: Ref<{ open: () => void } | null> = ref(null)
+const asideRef: Ref<HTMLElement | null> = ref(null)
 let videoPollTimer: ReturnType<typeof setInterval> | null = null
 
 const templateLabel: ComputedRef<string> = computed(() => {
@@ -611,6 +612,19 @@ const stats: ComputedRef<DemoSiteStat[]> = computed(() => {
     },
   ]
 })
+
+/**
+ * Apply a new photo placement while keeping the scrollable panel steady — removing or moving a
+ * row otherwise reflows the aside and makes the next click land on the wrong photo.
+ * @param next - The reordered list of placed photo URLs.
+ */
+function onImageOrderChange(next: string[]): void {
+  const scrollTop: number = asideRef.value?.scrollTop ?? 0
+  imagesOrder.value = next
+  nextTick((): void => {
+    if (asideRef.value) asideRef.value.scrollTop = scrollTop
+  })
+}
 
 /**
  * Drop every pending edit: back to the published template, colours and photo placement.
