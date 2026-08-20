@@ -27,6 +27,7 @@ import asyncio
 import json
 import os
 import sys
+from dataclasses import asdict
 
 import httpx
 
@@ -157,7 +158,7 @@ async def _persist(client: httpx.AsyncClient, prospect_id: int, data: Enrichment
     response = await client.post(
         f"{_api_base()}{_API_PREFIX}/prospects/{prospect_id}/enrichment/run",
         headers=_auth_headers(),
-        json=data.model_dump(mode="json"),
+        json=asdict(data),
     )
     response.raise_for_status()
     return str(response.json().get("status") or "unknown")
