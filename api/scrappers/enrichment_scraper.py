@@ -661,13 +661,21 @@ class EnrichmentScraper:
             # photo gallery); reload until it renders the full one so the count and photos survive.
             await self._ensure_complete_panel(tab, url)
             await self._wait_for_maps_hydration(tab)
+            place_url = NodriverDom.tab_url(tab)
             # Capture the business-name h1 BEFORE extraction expands the hours: expanding them makes
             # Google swap the first h1 for « Horaires », which would then poison the identity guard.
             place_title = await self._read_place_title(tab)
             data = await self._extract_with_retries(tab, business_name=business_name, city=city)
             if place_title:
                 data.place_title = place_title
-            # Open the photo grid and merge the prospect's photos (grid = only THIS place's photos).
+            # Photos come ONLY from the grid, which shows just this place's shots. Extraction has already
+            # expanded the hours (hiding the « Voir les photos » button) and scrolled « Restaurants à
+            # proximité » thumbnails (OTHER businesses) into the panel — so drop what it gathered,
+            # re-anchor to a FRESH panel, and read the grid there (verified logged-out: 10 tiles).
+            data.photos = []
+            if "/maps/place/" in place_url:
+                await NodriverDom.navigate(tab, place_url)
+                await self._open_place_panel(tab)
             await self._grab_more_photos(tab, data)
             return data
         except Exception as exc:
