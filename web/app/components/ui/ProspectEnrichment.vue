@@ -379,21 +379,33 @@
           </div>
         </div>
 
-        <div v-if="form.opening_hours.length">
+        <div>
           <label class="mb-1 block text-[10px] text-[var(--app-ink-soft)]">Horaires</label>
-          <div class="space-y-1">
+          <div v-if="form.opening_hours.length" class="space-y-1">
             <div
               v-for="(row, i) in form.opening_hours"
               :key="i"
-              class="flex items-center justify-between rounded border border-[var(--app-line)] bg-[var(--app-surface)] px-2 py-1 text-[11px]"
+              class="flex items-center gap-2 rounded border border-[var(--app-line)] bg-[var(--app-surface)] px-2 py-1 text-[11px]"
             >
-              <span class="text-[var(--app-ink)]">{{ row.day }}</span>
-              <span class="text-[var(--app-ink-soft)]">{{ row.hours }}</span>
-              <button class="text-[var(--app-ink-soft)] hover:text-[var(--app-red)]" @click="removeHours(i)">
+              <span class="w-16 shrink-0 text-[var(--app-ink)] capitalize">{{ row.day }}</span>
+              <input
+                v-model="row.hours"
+                type="text"
+                class="input-field flex-1 text-[11px]"
+                placeholder="08:00–12:00 ou « Fermé »"
+              />
+              <button
+                class="shrink-0 text-[var(--app-ink-soft)] hover:text-[var(--app-red)]"
+                aria-label="Retirer ce jour"
+                @click="removeHours(i)"
+              >
                 <UIcon name="i-lucide-x" class="h-3 w-3" />
               </button>
             </div>
           </div>
+          <button v-if="canAddWeekday" class="btn-secondary mt-1.5 w-full text-xs" @click="addWeekday">
+            Ajouter un jour
+          </button>
         </div>
 
         <p v-if="record.error_message" class="text-[11px] text-[var(--app-red)]">{{ record.error_message }}</p>
@@ -421,7 +433,7 @@ import type { UseToastReturn } from '~/types/Composables'
 import type { EnrichmentForm, UiProspectEnrichmentProps } from '~/types/UiProspectEnrichment'
 import type { ComputedRef, PropType, Ref } from 'vue'
 import { ref, computed, watch } from 'vue'
-import type { ProspectEnrichment } from '~/services/enrichmentService'
+import type { EnrichmentOpeningHours, ProspectEnrichment } from '~/services/enrichmentService'
 import { EnrichmentService } from '~/services/enrichmentService'
 import { useToast } from '~/composables/useToast'
 
@@ -565,7 +577,8 @@ function syncForm(): void {
     photos: [...(r?.photos ?? [])],
     services: [...(r?.services ?? [])],
     reviews: [...(r?.reviews ?? [])],
-    opening_hours: [...(r?.opening_hours ?? [])],
+    // Deep-copy each row: hours are edited inline, so the form must not mutate the record's objects.
+    opening_hours: (r?.opening_hours ?? []).map((row: EnrichmentOpeningHours) => ({ ...row })),
     contact_first_name: r?.contact_first_name ?? '',
     contact_last_name: r?.contact_last_name ?? '',
   }
@@ -794,9 +807,30 @@ function removeReview(index: number): void {
   form.value.reviews.splice(index, 1)
 }
 
+const WEEKDAYS: readonly string[] = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
+
+/**
+ * Whether a given weekday is not yet listed in the hours (case-insensitive).
+ * @param day Lowercase weekday name to look for.
+ * @returns True when no row already carries that day.
+ */
+function isWeekdayMissing(day: string): boolean {
+  return !form.value.opening_hours.some((row: EnrichmentOpeningHours) => (row.day ?? '').toLowerCase() === day)
+}
+
+const canAddWeekday: ComputedRef<boolean> = computed((): boolean => WEEKDAYS.some(isWeekdayMissing))
+
 /** Remove an opening-hours row by index. */
 function removeHours(index: number): void {
   form.value.opening_hours.splice(index, 1)
+}
+
+/** Append the next standard weekday not yet listed, ready to receive its hours. */
+function addWeekday(): void {
+  const nextDay: string | undefined = WEEKDAYS.find(isWeekdayMissing)
+  if (nextDay) {
+    form.value.opening_hours.push({ day: nextDay, hours: '' })
+  }
 }
 
 watch(
