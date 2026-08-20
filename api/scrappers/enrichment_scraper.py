@@ -621,11 +621,19 @@ class EnrichmentScraper:
             # Capture the business-name h1 BEFORE extraction expands the hours: expanding them makes
             # Google swap the first h1 for « Horaires », which would then poison the identity guard.
             place_title = await self._read_place_title(tab)
+            # Read the place photos from the fresh page HTML BEFORE extraction expands the hours: on a
+            # logged-out listing that can swap the panel to a « Horaires » view no longer carrying the
+            # embedded photo data. No gallery click is needed — the full set is in the HTML.
+            html_photos = await self._read_html_photos(tab)
             data = await self._extract_with_retries(tab, business_name=business_name, city=city)
             if place_title:
                 data.place_title = place_title
-            # The full set of place photos is embedded in the page HTML (no gallery click needed).
-            await self._grab_more_photos(tab, data)
+            seen_photos: set[str] = {url for url in data.photos if url}
+            for photo_url in html_photos:
+                if photo_url and photo_url not in seen_photos:
+                    seen_photos.add(photo_url)
+                    data.photos.append(photo_url)
+            data.photos = data.photos[:40]
             return data
         except Exception as exc:
             logger.warning("Enrichment scrape failed for %s: %s", business_name, exc)
@@ -746,27 +754,17 @@ class EnrichmentScraper:
         except Exception:
             pass
 
-    async def _grab_more_photos(self, tab: Any, data: EnrichmentData) -> None:
-        """Merge the place's photos into ``data.photos``.
+    async def _read_html_photos(self, tab: Any) -> list[str]:
+        """Read the place photos embedded in the page HTML (avatars / panoramas excluded, upscaled).
 
-        Google embeds the full set of place-photo URLs (~20) in the page HTML at load, so we read them
-        straight from there and skip the gallery entirely — opening it now needs a trusted click and
-        yields only one photo at a time (a lightbox) logged out. Best-effort: any failure leaves the
-        photos already found (e.g. the hero from the panel extraction).
+        Google embeds the full set of place-photo URLs in the page HTML at load, so we read them straight
+        from there and skip the gallery entirely — opening it now needs a trusted click and yields only
+        one photo at a time (a lightbox) logged out. Returns [] on any failure.
         """
         try:
-            seen: set[str] = {url for url in data.photos if url}
-            for url in await self._read_html_photos(tab):
-                if url and url not in seen:
-                    seen.add(url)
-                    data.photos.append(url)
-            data.photos = data.photos[:40]
-        except Exception as exc:
-            logger.info("Google photo HTML pass failed: %s", exc)
-
-    async def _read_html_photos(self, tab: Any) -> list[str]:
-        """Read the place photos embedded in the page HTML (avatars / panoramas excluded, upscaled)."""
-        raw = await NodriverDom.evaluate(tab, f"JSON.stringify({_HTML_PHOTOS_JS})", by_value=True)
+            raw = await NodriverDom.evaluate(tab, f"JSON.stringify({_HTML_PHOTOS_JS})", by_value=True)
+        except Exception:
+            return []
         if not isinstance(raw, str):
             return []
         try:
