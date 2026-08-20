@@ -222,10 +222,14 @@ def test_dedupe_photos_collapses_same_image_across_sizes() -> None:
 
 
 def test_base_url_collapses_permalinks_to_numeric_id() -> None:
-    """« /p/{slug}-{id} » and « profile.php?id={id} » don't accept /photos_by — use the id root."""
+    """« /p/{slug}-{id} », « /people/{name}/{id} » and « profile.php?id={id} » don't accept /photos_by — use the id root."""
     base = FacebookEnrichmentScraper._base_url
     assert base("https://www.facebook.com/p/Tasty-Korea-61580535121729/") == "https://www.facebook.com/61580535121729"
     assert base("https://www.facebook.com/profile.php?id=100063586360699") == "https://www.facebook.com/100063586360699"
+    assert (
+        base("https://www.facebook.com/people/Cr%C3%AAperie-Doc-krampouz/100063598419514/?sk=photos")
+        == "https://www.facebook.com/100063598419514"
+    )
     # Username and bare-id URLs already accept the sub-pages — leave them untouched.
     assert base("https://www.facebook.com/TacosMexicanosMaru/") == "https://www.facebook.com/TacosMexicanosMaru"
     assert base("https://www.facebook.com/100063586360699") == "https://www.facebook.com/100063586360699"

@@ -748,15 +748,19 @@ class FacebookEnrichmentScraper:
     @staticmethod
     def _base_url(facebook_url: str) -> str:
         """Normalize a Facebook page URL to a root that the /photos_by, /photos_of, /reviews
-        sub-pages actually accept. A « /p/{slug}-{id}/ » permalink or a « profile.php?id={id} » URL
-        does NOT support those sub-pages — Facebook redirects « /p/…/photos_by » to a generic
-        « facebook.com/photos_by » (no page → 0 photos). Collapse both to the numeric-id root
-        « facebook.com/{id} », which the sub-pages DO accept.
+        sub-pages actually accept. A « /p/{slug}-{id}/ » permalink, a « /people/{name}/{id}/ »
+        profile URL or a « profile.php?id={id} » URL does NOT support those sub-pages — Facebook
+        redirects « /…/photos_by » to a generic « facebook.com/photos_by » (no page → 0 photos).
+        Collapse them all to the numeric-id root « facebook.com/{id} », which the sub-pages DO accept.
         """
         raw = facebook_url.strip()
         if not raw.startswith("http"):
             raw = f"https://{raw}"
-        match = re.search(r"profile\.php\?id=(\d+)", raw) or re.search(r"/p/[^/?#]*?-(\d{6,})(?:[/?#]|$)", raw)
+        match = (
+            re.search(r"profile\.php\?id=(\d+)", raw)
+            or re.search(r"/people/[^/]+/(\d{6,})", raw)
+            or re.search(r"/p/[^/?#]*?-(\d{6,})(?:[/?#]|$)", raw)
+        )
         if match:
             return f"https://www.facebook.com/{match.group(1)}"
         return raw.split("?")[0].rstrip("/")
