@@ -148,10 +148,12 @@ _EXTRACT_JS = r"""
         if (href && !/google\.[a-z.]+\/maps/i.test(href)) out.website = href.trim() || null;
     } catch (e) {}
 
-    // Photos (large googleusercontent images, deduplicated)
+    // Photos (large googleusercontent images, deduplicated). Scoped to the place panel: the page also
+    // carries « Restaurants à proximité » thumbnails from OTHER businesses, outside div[role="main"].
     try {
         const seen = new Set();
-        document.querySelectorAll('img').forEach((img) => {
+        const scope = document.querySelector('div[role="main"]') || document;
+        scope.querySelectorAll('img').forEach((img) => {
             let src = img.getAttribute('src') || '';
             if (!src || src.indexOf('googleusercontent') === -1) return;
             // keep only reasonably large images (skip tiny avatars)
@@ -281,25 +283,28 @@ _PREPARE_PANEL_JS = r"""
 })()
 """
 
-# Google embeds ~20 place-photo URLs in the page HTML at load — the whole set, no gallery to open (which
-# now needs a trusted click and behaves as a one-photo lightbox logged-out). We read them straight from
-# the HTML (JSON-escaped, hence the \/ and = un-escaping), keep only rectangular place photos
-# (``=w{W}-h{H}``), drop circle-cropped reviewer avatars (``=s{N}-c``, ``-rp``, ``-mo``) and 360
-# panoramas (``-ya{N}``), and upgrade each to the large ``=s1600`` variant (verified: 32² → 1600²).
-_HTML_PHOTOS_JS = r"""
+# The place's own photos load into the panel (``div[role="main"]``) as <img> at page load — no gallery
+# to open (which now needs a trusted click and behaves as a one-photo lightbox logged-out). We MUST scope
+# to the panel: the whole page also carries « Restaurants à proximité » thumbnails, whose photos (a
+# different business!) sit OUTSIDE ``div[role="main"]`` — reading the raw page mixed them in. Inside the
+# panel we keep rectangular place photos (``=w{W}-h{H}``), drop reviewer avatars (in a review block, or
+# circle-cropped) and 360 panoramas (``-ya{N}``), and upscale each to ``=s1600`` (verified: → 1600²).
+_MAIN_PHOTOS_JS = r"""
 (() => {
-    const norm = document.documentElement.innerHTML
-        .replace(/\\\//g, '/').replace(/\\u003d/gi, '=').replace(/\\u0026/gi, '&');
-    const re = /https:\/\/lh\d+\.googleusercontent\.com\/[A-Za-z0-9_\-]+\/[A-Za-z0-9_\-]+=[A-Za-z0-9\-]+/g;
+    const main = document.querySelector('div[role="main"]');
+    if (!main) return [];
     const out = [];
     const seen = new Set();
-    for (const u of (norm.match(re) || [])) {
-        const size = (u.match(/=([A-Za-z0-9\-]+)$/) || [])[1] || '';
-        if (!/^w\d+-h\d+/.test(size)) continue;
-        if (/-rp-|-mo\b|-ya\d/.test(size)) continue;
-        const big = u.replace(/=[\w-]+$/, '=s1600');
+    main.querySelectorAll('img').forEach((img) => {
+        const src = img.getAttribute('src') || '';
+        if (!src || src.indexOf('googleusercontent') === -1) return;
+        if (img.closest('.jftiEf, [data-review-id]')) return;
+        const size = (src.match(/=([\w-]+)$/) || [])[1] || '';
+        if (!/^w\d+-h\d+/.test(size)) return;
+        if (/-ya\d/.test(size)) return;
+        const big = src.replace(/=[\w-]+$/, '=s1600');
         if (!seen.has(big)) { seen.add(big); out.push(big); }
-    }
+    });
     return out.slice(0, 40);
 })()
 """
@@ -621,15 +626,15 @@ class EnrichmentScraper:
             # Capture the business-name h1 BEFORE extraction expands the hours: expanding them makes
             # Google swap the first h1 for « Horaires », which would then poison the identity guard.
             place_title = await self._read_place_title(tab)
-            # Read the place photos from the fresh page HTML BEFORE extraction expands the hours: on a
-            # logged-out listing that can swap the panel to a « Horaires » view no longer carrying the
-            # embedded photo data. No gallery click is needed — the full set is in the HTML.
-            html_photos = await self._read_html_photos(tab)
+            # Read the place's own photos from the panel BEFORE extraction expands the hours: on a
+            # logged-out listing that can swap the panel to a « Horaires » view no longer holding them.
+            # No gallery click needed — they are already in div[role="main"] on load.
+            place_photos = await self._read_place_photos(tab)
             data = await self._extract_with_retries(tab, business_name=business_name, city=city)
             if place_title:
                 data.place_title = place_title
             seen_photos: set[str] = {url for url in data.photos if url}
-            for photo_url in html_photos:
+            for photo_url in place_photos:
                 if photo_url and photo_url not in seen_photos:
                     seen_photos.add(photo_url)
                     data.photos.append(photo_url)
@@ -754,15 +759,16 @@ class EnrichmentScraper:
         except Exception:
             pass
 
-    async def _read_html_photos(self, tab: Any) -> list[str]:
-        """Read the place photos embedded in the page HTML (avatars / panoramas excluded, upscaled).
+    async def _read_place_photos(self, tab: Any) -> list[str]:
+        """Read the place's own photos from the panel (nearby-business thumbnails / avatars excluded).
 
-        Google embeds the full set of place-photo URLs in the page HTML at load, so we read them straight
-        from there and skip the gallery entirely — opening it now needs a trusted click and yields only
-        one photo at a time (a lightbox) logged out. Returns [] on any failure.
+        The photos are in ``div[role="main"]`` at page load, so no gallery click is needed — opening it
+        now needs a trusted click and yields only one photo at a time (a lightbox) logged out, and its
+        content mixes in « Restaurants à proximité » thumbnails from other businesses. Returns [] on
+        any failure.
         """
         try:
-            raw = await NodriverDom.evaluate(tab, f"JSON.stringify({_HTML_PHOTOS_JS})", by_value=True)
+            raw = await NodriverDom.evaluate(tab, f"JSON.stringify({_MAIN_PHOTOS_JS})", by_value=True)
         except Exception:
             return []
         if not isinstance(raw, str):
