@@ -465,12 +465,16 @@ def _dedupe_reviews(reviews: list[Any]) -> list[dict[str, Any]]:
     return unique
 
 
-async def _perceptual_dedupe_photos(urls: list[str], *, threshold: int = 6) -> list[str]:
+async def _perceptual_dedupe_photos(urls: list[str], *, threshold: int = 4) -> list[str]:
     """Drop VISUALLY duplicate photos (same image re-uploaded → new file id, same look).
 
     Downloads each image once (parallel, best-effort), average-hashes it, and keeps a photo only if
     it isn't within ``threshold`` bits of one already kept. On any download/decode failure the URL is
     kept (never silently dropped). No-ops on fewer than two photos.
+
+    The average hash is coarse (8×8), so the SAME image re-served sits at distance ~0-2 while two
+    DISTINCT shots of one subject can reach ~6 — a threshold of 6 dropped real, different photos
+    (measured on a live listing), so 4 keeps them while still collapsing genuine re-uploads.
     """
     if len(urls) < 2:
         return list(urls)
