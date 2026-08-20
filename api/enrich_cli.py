@@ -15,7 +15,9 @@ Usage:
 
 Environment:
     DLH_API_BASE   API base URL (default: https://api.devleadhunter.dibodev.fr).
-    DLH_API_TOKEN  Bearer JWT of the operator's account (always required — selection hits the API).
+    DLH_API_TOKEN  Bearer JWT of the operator's account. Optional: when unset, the CLI logs in
+                   with ADMIN_EMAIL / ADMIN_PASSWORD from the .env and mints a fresh token itself,
+                   so no token ever has to be pasted by hand.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ import sys
 
 import httpx
 
+from core.config import settings
 from core.win32_asyncio import ensure_proactor_event_loop
 from scrappers.enrichment_scraper import EnrichmentData, enrichment_scraper
 
@@ -35,18 +38,54 @@ _DEFAULT_API_BASE = "https://api.devleadhunter.dibodev.fr"
 _API_PREFIX = "/api/v1"
 _HTTP_TIMEOUT = 60.0
 
+# Resolved once per run by ``_ensure_authenticated`` and read by ``_auth_headers``.
+_access_token: str | None = None
+
 
 def _api_base() -> str:
     """Return the API base URL, from ``DLH_API_BASE`` or the production default."""
     return (os.environ.get("DLH_API_BASE") or _DEFAULT_API_BASE).rstrip("/")
 
 
-def _auth_headers() -> dict[str, str]:
-    """Return the Bearer auth header, exiting when no token is configured."""
-    token = (os.environ.get("DLH_API_TOKEN") or "").strip()
+async def _ensure_authenticated(client: httpx.AsyncClient) -> None:
+    """Resolve the operator's Bearer token once, before any authenticated call.
+
+    Prefers ``DLH_API_TOKEN`` when set (handy to force a specific token or another
+    account while debugging); otherwise logs in with the operator credentials already
+    present in the ``.env`` (``ADMIN_EMAIL`` / ``ADMIN_PASSWORD``) and mints a fresh
+    token, so the run never needs a hand-pasted token.
+    """
+    global _access_token
+
+    env_token = (os.environ.get("DLH_API_TOKEN") or "").strip()
+    if env_token:
+        _access_token = env_token
+        return
+
+    email = (settings.admin_email or "").strip()
+    password = settings.admin_password or ""
+    if not email or not password:
+        raise SystemExit("No DLH_API_TOKEN and no ADMIN_EMAIL / ADMIN_PASSWORD in the .env — cannot authenticate.")
+
+    response = await client.post(
+        f"{_api_base()}{_API_PREFIX}/auth/login",
+        json={"email": email, "password": password},
+    )
+    if response.status_code == 401:
+        raise SystemExit(f"Login rejected for {email} — check ADMIN_PASSWORD in the .env.")
+    response.raise_for_status()
+
+    token = str(response.json().get("access_token") or "").strip()
     if not token:
-        raise SystemExit("DLH_API_TOKEN is not set — export the operator's API token first.")
-    return {"Authorization": f"Bearer {token}"}
+        raise SystemExit("Login succeeded but the API returned no access_token.")
+    _access_token = token
+
+
+def _auth_headers() -> dict[str, str]:
+    """Return the Bearer auth header resolved by ``_ensure_authenticated``."""
+    if not _access_token:
+        raise SystemExit("Not authenticated — _ensure_authenticated must run before any API call.")
+    return {"Authorization": f"Bearer {_access_token}"}
 
 
 async def _list_prospects(client: httpx.AsyncClient) -> list[dict[str, object]]:
@@ -186,6 +225,7 @@ def _preflight() -> None:
 async def _run(args: argparse.Namespace) -> int:
     """Select, scrape and persist; stream one JSON line per prospect plus a final summary."""
     async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+        await _ensure_authenticated(client)
         targets = await _select_targets(client, args)
 
         if not targets:
