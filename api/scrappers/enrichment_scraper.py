@@ -311,12 +311,12 @@ _OPEN_FIRST_PLACE_JS = r"""
 })()
 """
 
-# A « complete » place panel carries the « Voir les photos » button, a rating+review count, or an
-# « Avis » tab. Google intermittently serves logged-out scrapers a STRIPPED panel (no count, no
-# gallery, only Présentation / À propos) — that render has none of these, so we reload for the full one.
+# A « complete » place panel carries a rating+review count or an « Avis » tab. Google intermittently
+# serves logged-out scrapers a STRIPPED panel (no count, only Présentation / À propos) — but that
+# render still has the « Voir les photos » button, so the button is NOT a completeness signal (it would
+# wrongly pass the stripped panel); the review count / Avis tab are what the stripped render lacks.
 _PANEL_COMPLETE_JS = r"""
 (() => {
-    if (document.querySelector('button.Dx2nRe')) return true;
     const f = document.querySelector('div.F7nice');
     if (f && /\([\d\s.,]+\)/.test(f.innerText || f.textContent || '')) return true;
     for (const el of document.querySelectorAll('[role="tab"], button')) {
@@ -753,29 +753,40 @@ class EnrichmentScraper:
         """Open the photo section and merge its images into ``data.photos``.
 
         Google reworked the gallery: opening it needs a TRUSTED click (a synthetic ``.click()`` is
-        ignored), and the photos then load as panel ``<img>`` — the old ``a.MIgS0d`` background-image
-        grid is gone. So we drive a real nodriver click on « Voir les photos » and read the images,
-        step-scrolling to lazy-load the rest. Best-effort: any failure leaves the photos already found.
+        ignored, and the old ``a.MIgS0d`` background-image grid is gone). Logged IN it expands an inline
+        grid; logged OUT it opens a one-photo-at-a-time lightbox. So we drive a real nodriver click on
+        « Voir les photos », then keep reading the panel images while advancing « Photo suivante »
+        (lightbox) or step-scrolling (grid) until nothing new comes. Best-effort: any failure leaves the
+        photos already found.
         """
         try:
             if not await NodriverDom.click(tab, "button.Dx2nRe"):
                 return
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(1.2)
             seen: set[str] = {url for url in data.photos if url}
             merged: list[str] = list(data.photos)
-            stable_rounds = 0
-            for _ in range(14):
+
+            async def collect() -> int:
                 added = 0
                 for url in await self._read_panel_photos(tab):
                     if url and url not in seen:
                         seen.add(url)
                         merged.append(url)
                         added += 1
-                stable_rounds = 0 if added else stable_rounds + 1
-                if stable_rounds >= 3 or len(merged) >= 40:
+                return added
+
+            await collect()
+            stable_rounds = 0
+            for _ in range(40):
+                advanced = await NodriverDom.click_first_matching(
+                    tab, ["button[aria-label*='uivante']", "button[aria-label*='ext photo']"]
+                )
+                if not advanced:
+                    await NodriverDom.scroll_element(tab, "div[role='main']", 1200)
+                await asyncio.sleep(0.4)
+                stable_rounds = 0 if await collect() else stable_rounds + 1
+                if stable_rounds >= 4 or len(merged) >= 40:
                     break
-                await NodriverDom.scroll_element(tab, "div[role='main']", 1200)
-                await asyncio.sleep(0.5)
             data.photos = merged[:40]
         except Exception as exc:
             logger.info("Google photo section pass failed: %s", exc)
