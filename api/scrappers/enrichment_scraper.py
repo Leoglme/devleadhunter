@@ -347,6 +347,21 @@ _GRID_SCROLL_JS = r"""
 })()
 """
 
+# Close the open photo gallery (its « Retour » / back control) so the place panel comes back WITHOUT a
+# page reload. Best-effort: if no control matches, the caller's panel-completeness check re-anchors.
+_CLOSE_GALLERY_JS = r"""
+(() => {
+    const labels = ['retour', 'back', 'fermer', 'close'];
+    for (const el of document.querySelectorAll('button, [role="button"], a[aria-label]')) {
+        const t = (el.getAttribute('aria-label') || el.innerText || el.textContent || '').trim().toLowerCase();
+        if (labels.some((l) => t === l || t.startsWith(l + ' '))) {
+            try { el.click(); return true; } catch (e) {}
+        }
+    }
+    return false;
+})()
+"""
+
 # Click the first result when a « nom + ville » search lands on the results feed instead of a place.
 _OPEN_FIRST_PLACE_JS = r"""
 (() => {
@@ -669,18 +684,34 @@ class EnrichmentScraper:
             # Capture the business-name h1 BEFORE extraction expands the hours: expanding them makes
             # Google swap the first h1 for « Horaires », which would then poison the identity guard.
             place_title = await self._read_place_title(tab)
+
+            # Photos come ONLY from the grid (this place's shots; the panel/page also carry « Restaurants
+            # à proximité » thumbnails from OTHER businesses). Read it HERE, on the still-fresh panel,
+            # before extraction expands the hours and hides the « Voir les photos » button — reading now
+            # avoids the ~3s re-anchor reload the button-gone path would need. The gallery is closed after.
+            early_photos = await self._read_photo_grid_then_close(tab)
+            # If the fresh-panel read left us off the place panel (gallery still open / navigated away),
+            # re-anchor so extraction runs on a real panel — the same reload the old order always paid,
+            # now paid only when the gallery didn't close cleanly.
+            if "/maps/place/" not in NodriverDom.tab_url(tab) or not await self._panel_is_complete(tab):
+                if "/maps/place/" in place_url:
+                    await NodriverDom.navigate(tab, place_url)
+                    await self._open_place_panel(tab)
+
             data = await self._extract_with_retries(tab, business_name=business_name, city=city)
             if place_title:
                 data.place_title = place_title
-            # Photos come ONLY from the grid, which shows just this place's shots. Extraction has already
-            # expanded the hours (hiding the « Voir les photos » button) and scrolled « Restaurants à
-            # proximité » thumbnails (OTHER businesses) into the panel — so drop what it gathered,
-            # re-anchor to a FRESH panel, and read the grid there (verified logged-out: 10 tiles).
-            data.photos = []
-            if "/maps/place/" in place_url:
-                await NodriverDom.navigate(tab, place_url)
-                await self._open_place_panel(tab)
-            await self._grab_more_photos(tab, data)
+
+            if early_photos:
+                data.photos = early_photos
+            else:
+                # The fresh-panel read found nothing; extraction has since hidden the button, so re-anchor
+                # to a fresh panel and read the grid the proven way (verified logged-out: 10 tiles).
+                data.photos = []
+                if "/maps/place/" in place_url:
+                    await NodriverDom.navigate(tab, place_url)
+                    await self._open_place_panel(tab)
+                await self._grab_more_photos(tab, data)
             return data
         except Exception as exc:
             logger.warning("Enrichment scrape failed for %s: %s", business_name, exc)
@@ -801,39 +832,71 @@ class EnrichmentScraper:
         except Exception:
             pass
 
-    async def _grab_more_photos(self, tab: Any, data: EnrichmentData) -> None:
-        """Open « Voir les photos » and merge the full photo grid into ``data.photos``.
+    async def _collect_open_grid(self, tab: Any, *, seed: list[str] | None = None) -> list[str] | None:
+        """Open « Voir les photos » and read the full photo grid, returning THIS place's photo URLs.
 
         The grid is the only reliably prospect-scoped source (the panel and page also carry nearby
         businesses' thumbnails). We open the grid, step-scroll its own virtualised container, and collect
-        the tile URLs after each step. Isolated + best-effort: runs AFTER extraction and only ADDS photos,
-        so a failure never touches what we already have.
+        the tile URLs after each step, optionally starting from ``seed`` (already-known URLs). Returns
+        ``None`` when the button or tiles never appear, so the caller can pick its fallback.
+        """
+        opened = await NodriverDom.evaluate(tab, _OPEN_PHOTOS_JS, by_value=True)
+        if opened is not True:
+            return None
+        if not await NodriverDom.wait_for_selector(tab, "a.MIgS0d[data-photo-index]", timeout_s=6.0):
+            return None
+
+        seen: set[str] = {url for url in (seed or []) if url}
+        merged: list[str] = [url for url in (seed or []) if url]
+        stable_rounds = 0
+        for _ in range(28):
+            added = 0
+            for url in await self._read_grid_photos(tab):
+                if url and url not in seen:
+                    seen.add(url)
+                    merged.append(url)
+                    added += 1
+            stable_rounds = 0 if added else stable_rounds + 1
+            if stable_rounds >= 3 or len(merged) >= 40:
+                break
+            await NodriverDom.evaluate(tab, _GRID_SCROLL_JS, by_value=True)
+            await asyncio.sleep(0.5)
+        return merged[:40]
+
+    async def _grab_more_photos(self, tab: Any, data: EnrichmentData) -> None:
+        """Fallback grid read (post-extraction, re-anchored panel): merge the grid into ``data.photos``.
+
+        Isolated + best-effort: only ADDS photos, so a failure never touches what we already have.
         """
         try:
-            opened = await NodriverDom.evaluate(tab, _OPEN_PHOTOS_JS, by_value=True)
-            if opened is not True:
-                return
-            if not await NodriverDom.wait_for_selector(tab, "a.MIgS0d[data-photo-index]", timeout_s=6.0):
-                return
-
-            seen: set[str] = {url for url in data.photos if url}
-            merged: list[str] = list(data.photos)
-            stable_rounds = 0
-            for _ in range(28):
-                added = 0
-                for url in await self._read_grid_photos(tab):
-                    if url and url not in seen:
-                        seen.add(url)
-                        merged.append(url)
-                        added += 1
-                stable_rounds = 0 if added else stable_rounds + 1
-                if stable_rounds >= 3 or len(merged) >= 40:
-                    break
-                await NodriverDom.evaluate(tab, _GRID_SCROLL_JS, by_value=True)
-                await asyncio.sleep(0.5)
-            data.photos = merged[:40]
+            collected = await self._collect_open_grid(tab, seed=data.photos)
+            if collected is not None:
+                data.photos = collected
         except Exception as exc:
             logger.info("Extra Google photo pass failed: %s", exc)
+
+    async def _read_photo_grid_then_close(self, tab: Any) -> list[str]:
+        """Read the photo grid on the STILL-FRESH panel (before extraction hides the button), then close
+        the gallery so extraction reads the place panel again.
+
+        Reading here avoids the ~3s re-anchor page reload the post-extraction path needs to bring the
+        « Voir les photos » button back. Best-effort close: if it doesn't restore the panel, the caller's
+        completeness check re-anchors — never worse than the old order, which reloaded then read the grid.
+        Returns ``[]`` when the grid never opened, so the caller falls back to the proven path.
+        """
+        try:
+            collected = await self._collect_open_grid(tab)
+        except Exception as exc:
+            logger.info("Fresh-panel photo grid read failed: %s", exc)
+            return []
+        if not collected:
+            return []
+        try:
+            await NodriverDom.evaluate(tab, _CLOSE_GALLERY_JS, by_value=True)
+            await asyncio.sleep(0.4)
+        except Exception:
+            pass
+        return collected
 
     async def _read_grid_photos(self, tab: Any) -> list[str]:
         """Read the currently-loaded tiles from the open photo grid (videos excluded)."""
