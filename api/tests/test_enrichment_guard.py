@@ -129,6 +129,38 @@ def test_service_parses_prospect_postal_code_from_address() -> None:
     assert "département" in reason
 
 
+# ── Exact-anchor bypass (guard is a name-SEARCH safeguard only) ──────────────
+
+
+def test_guard_skipped_when_anchored_on_maps_url() -> None:
+    """A stored Maps place URL is an exact anchor → the name guard is skipped, even when the owner
+    stuffed prices into the listing name (« L'Elégance Barber … Coupe Adulte 23€ »)."""
+    prospect = SimpleNamespace(google_maps_url="https://www.google.com/maps/place/L'Elegance+Barber/@43.5,1.4,17z")
+    data = EnrichmentData(source="google", place_title="L'Elégance Barber Avec ou Sans RDV Coupe Adulte 23€")
+    assert EnrichmentService._anchored_on_exact_listing(prospect, data) is True
+
+
+def test_guard_skipped_for_facebook_source() -> None:
+    """Facebook data comes from the page pasted for this prospect → also an exact anchor."""
+    prospect = SimpleNamespace(google_maps_url=None)
+    data = EnrichmentData(source="facebook", place_title="Anything at all")
+    assert EnrichmentService._anchored_on_exact_listing(prospect, data) is True
+
+
+def test_guard_applies_without_an_exact_anchor() -> None:
+    """No Maps URL and a name-search (google) source → the homonym guard still runs."""
+    prospect = SimpleNamespace(google_maps_url=None)
+    data = EnrichmentData(source="google", place_title="Boulangerie Martin")
+    assert EnrichmentService._anchored_on_exact_listing(prospect, data) is False
+
+
+def test_guard_applies_when_maps_url_is_blank() -> None:
+    """An empty Maps URL is not an anchor — the guard must not be skipped."""
+    prospect = SimpleNamespace(google_maps_url="")
+    data = EnrichmentData(source="google", place_title="Whatever")
+    assert EnrichmentService._anchored_on_exact_listing(prospect, data) is False
+
+
 # ── Cross-source identity check (registry ↔ Maps place) ─────────────────────
 
 

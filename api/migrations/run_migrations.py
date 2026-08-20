@@ -80,6 +80,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_order_payment_link_id", "migrations.add_order_payment_link_id"),
     ("purge_orphan_deleted_demo_sites", "migrations.purge_orphan_deleted_demo_sites"),
     ("demote_social_websites", "migrations.demote_social_websites"),
+    ("demote_platform_websites", "migrations.demote_platform_websites"),
     ("add_demo_site_use_brand_color", "migrations.add_demo_site_use_brand_color"),
     ("add_demo_site_image_order", "migrations.add_demo_site_image_order"),
     ("add_demo_site_storyblok_collaborator_status", "migrations.add_demo_site_storyblok_collaborator_status"),

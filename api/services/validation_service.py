@@ -47,6 +47,30 @@ class ValidationService:
         }
     )
 
+    # Booking / marketplace / directory platforms a business may list as its "website" — a third-party
+    # listing or reservation page, never the business's OWN site. Demoting them keeps the « no website »
+    # targeting valid (many barbers/salons only have a Planity page, not a real site).
+    _PLATFORM_DOMAINS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "planity.com",
+            "treatwell.fr",
+            "treatwell.com",
+            "fresha.com",
+            "kiute.fr",
+            "resalib.fr",
+            "balinea.com",
+            "wavy.pro",
+            "pagesjaunes.fr",
+            "thefork.fr",
+            "thefork.com",
+            "lafourchette.com",
+            "deliveroo.fr",
+            "deliveroo.com",
+            "ubereats.com",
+            "just-eat.fr",
+        }
+    )
+
     # Media assets a business may list as its "website" by mistake — a poster/logo pulled from a
     # Facebook post, a cloudinary image, an fbcdn photo… — never a real website.
     _ASSET_EXTENSIONS: ClassVar[tuple[str, ...]] = (
@@ -91,6 +115,15 @@ class ValidationService:
         return any(host == domain or host.endswith("." + domain) for domain in cls._SOCIAL_DOMAINS)
 
     @classmethod
+    def is_platform_url(cls, url: str | None) -> bool:
+        """Whether a URL points to a booking/marketplace/directory platform, not the business's own site."""
+        if not url:
+            return False
+        cleaned = url.lower().replace("http://", "").replace("https://", "").replace("www.", "").strip()
+        host = cleaned.split("/")[0]
+        return any(host == domain or host.endswith("." + domain) for domain in cls._PLATFORM_DOMAINS)
+
+    @classmethod
     def is_valid_website(cls, url: str | None) -> bool:
         """
         Check if a website URL is valid (not a social media platform).
@@ -118,6 +151,11 @@ class ValidationService:
             return False
 
         if cls.is_social_url(url):
+            return False
+
+        # A third-party booking/directory page (Planity, Treatwell, PagesJaunes…) is not the business's
+        # own website — demoting it keeps the « no website » angle valid.
+        if cls.is_platform_url(url):
             return False
 
         # A media asset (image/video/pdf) scraped from a post is not a website.

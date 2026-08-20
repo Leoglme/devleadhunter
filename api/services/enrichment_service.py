@@ -23,6 +23,7 @@ from models.prospect_db import ProspectDB
 from models.prospect_enrichment import ProspectEnrichment
 from scrappers import scrape_signals
 from scrappers.enrichment_scraper import EnrichmentData, enrichment_scraper
+from scrappers.google_scraper import GoogleScraper
 from services.decision_maker.types import NameCandidate, NameResolution
 from services.enrichment_content import EnrichmentContentMapper
 from services.prospect_emails import sync_prospect_emails
@@ -242,8 +243,12 @@ class EnrichmentService:
                 google_maps_url=prospect.google_maps_url,
                 facebook_url=prospect.facebook_url,
             )
-            # Facebook data comes from the URL pasted for THIS prospect — a direct anchor, so the homonym guard is skipped.
-            mismatch = None if (data.source or "").startswith("facebook") else self._place_mismatch(prospect, data)
+            # The homonym guard is a « nom + ville » SEARCH safeguard (it opens the first result, which
+            # could be a homonym). When the scrape is anchored on an EXACT source — a Facebook page pasted
+            # for this prospect, or the Maps place URL stored at discovery — the listing is guaranteed
+            # right, so the guard is skipped (it was wrongly rejecting owners who stuff prices into the
+            # Maps name, e.g. « … Coupe Adulte 23€ »).
+            mismatch = None if self._anchored_on_exact_listing(prospect, data) else self._place_mismatch(prospect, data)
             if mismatch is not None:
                 # An explicit failure beats silently absorbing a homonym's
                 # photos/reviews into the prospect's demo site.
@@ -580,6 +585,19 @@ class EnrichmentService:
             f"Le registre (CP {siege_postal}) et la fiche Google Maps (CP {place_postal}) "
             "ne désignent probablement pas la même entreprise — homonyme possible",
         )
+
+    @staticmethod
+    def _anchored_on_exact_listing(prospect: ProspectDB, data: EnrichmentData) -> bool:
+        """True when the scrape hit an EXACT source, making the homonym guard (a search safeguard) moot.
+
+        The guard exists only for the « nom + ville » search, which opens the first result and could land
+        on a homonym. Two anchors bypass it: a Facebook page pasted for this prospect (``data.source``
+        starts with "facebook"), or the Google Maps place URL stored at discovery — the scraper opens that
+        exact listing, so its title need not match the prospect name (owners stuff prices into it).
+        """
+        if (data.source or "").startswith("facebook"):
+            return True
+        return GoogleScraper.is_maps_url(prospect.google_maps_url or "")
 
     @staticmethod
     def _place_mismatch(prospect: ProspectDB, data: EnrichmentData) -> str | None:
