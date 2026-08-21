@@ -101,6 +101,8 @@ export type DemoSite = {
   /** CMS handover state: not_invited / pending / joined (null until first observed). */
   storyblok_collaborator_status?: StoryblokCollaboratorStatus | null
   storyblok_joined_at?: string | null
+  /** When the demo link was first emailed — null until then (TTL not started). */
+  demo_link_sent_at?: string | null
   expires_at: string
   created_at: string
   error_message?: string | null
@@ -312,6 +314,13 @@ export class DemoSiteService {
     link.click()
     link.remove()
     URL.revokeObjectURL(url)
+  }
+
+  /**
+   * Whether the 21-day countdown has not started yet (demo link not emailed).
+   */
+  static isTtlPending(site: DemoSite): boolean {
+    return !site.demo_link_sent_at
   }
 
   /**

@@ -493,10 +493,9 @@ class CampaignQueueService:
         """
         Whether a follow-up may be queued, i.e. its demo link will still be alive.
 
-        A demo site dies ``DEMO_SITE_TTL_DAYS`` after its **generation**, not after
-        the first send, so a late follow-up can ship a dead ``{lien_demo}`` — worse
-        than sending nothing. The J1 has the same guard at enqueue time; this is its
-        counterpart for a follow-up, whose date is only known once the J1 has left.
+        A demo site dies ``DEMO_SITE_TTL_DAYS`` after its demo link is **first emailed**
+        to the prospect (``demo_link_sent_at``). Before that send the site stays live
+        so batches can be generated ahead of a slow outreach cadence.
 
         The refusal is recorded as a ``skipped`` queue row so the campaign page shows
         why the sequence stopped, instead of the follow-up silently never existing.

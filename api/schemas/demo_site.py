@@ -129,6 +129,7 @@ class DemoSiteResponse(BaseModel):
     # CMS handover state: not_invited / pending / joined (NULL until first observed).
     storyblok_collaborator_status: str | None = None
     storyblok_joined_at: datetime | None = None
+    demo_link_sent_at: datetime | None = None
     expires_at: datetime
     created_at: datetime
     error_message: str | None = None

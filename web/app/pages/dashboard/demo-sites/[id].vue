@@ -95,7 +95,10 @@
                 </div>
                 <div class="flex justify-between gap-3">
                   <dt class="text-[var(--app-ink-soft)]">Expire dans</dt>
-                  <dd class="text-right text-[var(--app-ink)]">{{ daysLeft }} jours</dd>
+                  <dd class="text-right text-[var(--app-ink)]">
+                    <template v-if="site && DemoSiteService.isTtlPending(site)">En attente d'envoi</template>
+                    <template v-else>{{ daysLeft }} jours</template>
+                  </dd>
                 </div>
                 <div class="flex justify-between gap-3">
                   <dt class="text-[var(--app-ink-soft)]">Créé le</dt>
@@ -597,7 +600,7 @@ const stats: ComputedRef<DemoSiteStat[]> = computed(() => {
     },
     {
       label: 'Jours restants',
-      value: String(daysLeft.value),
+      value: site.value && DemoSiteService.isTtlPending(site.value) ? 'En attente' : String(daysLeft.value),
       tone: undefined,
     },
     {
