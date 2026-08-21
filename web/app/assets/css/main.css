@@ -557,11 +557,7 @@ html {
   }
 }
 
-/* ─── Responsive tables ──────────────────────────────────────
-   Add `dlh-card-table` to a <table> (native or via BaseTable) so that under the
-   md breakpoint each row collapses into a stacked card. Give a <td> a `data-label`
-   to render « LABEL … value »; cells without one (title, checkbox, actions) stay
-   full-width. */
+/* Responsive tables — `dlh-card-table` stacks rows into cards under md; a <td>'s `data-label` prefixes its value. */
 @media (max-width: 767px) {
   .dlh-card-table {
     display: block;
