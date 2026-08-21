@@ -350,8 +350,8 @@
       <div v-if="incidents.length === 0" class="py-6 text-center text-sm text-[var(--app-ink-soft)]">
         Aucun email rejeté, signalement spam ou échec récent — rien à signaler.
       </div>
-      <div v-else class="overflow-x-auto">
-        <table class="w-full min-w-[640px] text-sm">
+      <div v-else class="md:overflow-x-auto">
+        <table class="dlh-card-table w-full min-w-[640px] text-sm">
           <thead>
             <tr class="border-b border-[var(--app-line)] text-left">
               <th class="py-2 pr-3 text-[10px] font-medium tracking-wide text-[var(--app-ink-soft)] uppercase">Date</th>
@@ -368,10 +368,10 @@
               :key="incident.id"
               class="border-b border-[var(--app-line-soft)] last:border-b-0"
             >
-              <td class="py-2 pr-3 whitespace-nowrap text-[var(--app-ink-soft)] tabular-nums">
+              <td data-label="Date" class="py-2 pr-3 whitespace-nowrap text-[var(--app-ink-soft)] tabular-nums">
                 {{ formatNumericDayMonthTime(incident.at) || '—' }}
               </td>
-              <td class="py-2 pr-3">
+              <td data-label="Type" class="py-2 pr-3">
                 <span
                   class="rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
                   :style="{
@@ -382,8 +382,11 @@
                   {{ incidentLabel(incident.kind) }}
                 </span>
               </td>
-              <td class="py-2 pr-3 font-medium text-[var(--app-ink)]">{{ incident.recipient_email }}</td>
+              <td data-label="Destinataire" class="py-2 pr-3 font-medium text-[var(--app-ink)]">
+                {{ incident.recipient_email }}
+              </td>
               <td
+                data-label="Motif"
                 class="max-w-[280px] truncate py-2 text-xs text-[var(--app-ink-soft)]"
                 :title="incident.error_message ?? ''"
               >
@@ -397,8 +400,8 @@
 
     <section v-if="overview && overview.accounts.length > 0" class="app-card p-5 md:p-6">
       <h2 class="mb-4 text-sm font-semibold text-[var(--app-ink)]">Comptes d'envoi</h2>
-      <div class="overflow-x-auto">
-        <table class="w-full min-w-[640px] text-sm">
+      <div class="md:overflow-x-auto">
+        <table class="dlh-card-table w-full min-w-[640px] text-sm">
           <thead>
             <tr class="border-b border-[var(--app-line)] text-left">
               <th class="py-2 pr-3 text-[10px] font-medium tracking-wide text-[var(--app-ink-soft)] uppercase">
@@ -442,22 +445,24 @@
                 </p>
                 <p class="text-[11px] text-[var(--app-ink-soft)]">{{ accountTypeLabel(account.account_type) }}</p>
               </td>
-              <td class="py-2 pr-3 text-right text-[var(--app-ink)] tabular-nums">
+              <td data-label="Envoyés" class="py-2 pr-3 text-right text-[var(--app-ink)] tabular-nums">
                 {{ formatInt(account.stats.sent) }}
               </td>
-              <td class="py-2 pr-3 text-right text-[var(--app-ink)] tabular-nums">
+              <td data-label="Délivrés" class="py-2 pr-3 text-right text-[var(--app-ink)] tabular-nums">
                 {{ formatInt(account.stats.delivered) }}
                 <span class="text-[11px] text-[var(--app-ink-soft)]"
                   >({{ formatRate(account.stats.delivery_rate) }} %)</span
                 >
               </td>
               <td
+                data-label="Rejetés"
                 class="py-2 pr-3 text-right tabular-nums"
                 :style="{ color: rateColor(account.stats.bounce_rate, 2, 5) }"
               >
                 {{ formatRate(account.stats.bounce_rate) }} %
               </td>
               <td
+                data-label="Signalés spam"
                 class="py-2 text-right tabular-nums"
                 :style="{ color: rateColor(account.stats.complaint_rate, 0.1, 0.3) }"
               >

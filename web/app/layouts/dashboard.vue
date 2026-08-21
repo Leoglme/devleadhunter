@@ -14,7 +14,9 @@
         class="ml-0 flex flex-1 flex-col overflow-hidden transition-[margin] duration-200 md:ml-64"
         :class="drawerPushClass"
       >
-        <header class="sticky top-0 z-10 border-b border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-3 md:hidden">
+        <header
+          class="sticky top-0 z-10 border-b border-[var(--app-line)] bg-[var(--app-surface)] px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3 md:hidden"
+        >
           <div v-if="showCreditsPopover && isMobile" class="fixed inset-0 z-40" @click="handleClickOutside"></div>
           <div class="flex items-center justify-between">
             <button
@@ -63,7 +65,7 @@
 
         <main
           :id="DASHBOARD_SCROLL_CONTAINER_ID"
-          class="@container flex-1 scroll-pb-28 overflow-x-hidden overflow-y-auto px-4 py-5 md:px-6 md:py-6"
+          class="@container flex-1 scroll-pb-28 overflow-x-hidden overflow-y-auto px-4 pt-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] md:px-6 md:pt-6 md:pb-6"
         >
           <slot />
         </main>

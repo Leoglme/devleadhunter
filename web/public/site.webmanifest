@@ -3,10 +3,10 @@
   "short_name": "DevLeadHunter",
   "description": "Turn local businesses without a website into paying clients — end-to-end prospecting automation on web, desktop and mobile.",
   "id": "/",
-  "start_url": "/",
+  "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
-  "lang": "en",
+  "lang": "fr",
   "theme_color": "#f4f1e9",
   "background_color": "#f4f1e9",
   "icons": [

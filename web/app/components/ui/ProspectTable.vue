@@ -83,21 +83,22 @@
           </button>
         </BaseTableTd>
 
-        <BaseTableTd class="text-sm text-[var(--app-ink-soft)]">{{ prospect.city || '—' }}</BaseTableTd>
+        <BaseTableTd label="Ville" class="text-sm text-[var(--app-ink-soft)]">{{ prospect.city || '—' }}</BaseTableTd>
 
         <BaseTableTd
+          label="Téléphone"
           class="font-label text-xs whitespace-nowrap text-[var(--app-ink-soft)] tabular-nums"
           :class="isLockedForMe(prospect) && 'blur-[3px] select-none'"
         >
           {{ prospect.phone || '—' }}
         </BaseTableTd>
 
-        <BaseTableTd :class="isLockedForMe(prospect) && 'blur-[3px] select-none'">
+        <BaseTableTd label="Email" :class="isLockedForMe(prospect) && 'blur-[3px] select-none'">
           <span v-if="prospect.email" class="font-label text-xs text-[var(--app-ink)]">{{ prospect.email }}</span>
           <span v-else class="text-sm text-[var(--app-faint)]">—</span>
         </BaseTableTd>
 
-        <BaseTableTd>
+        <BaseTableTd label="Site web">
           <span
             v-if="prospect.website_status === 'dead'"
             class="app-badge app-badge--danger"
@@ -124,7 +125,7 @@
           </span>
         </BaseTableTd>
 
-        <BaseTableTd>
+        <BaseTableTd label="Contacté">
           <span v-if="prospect.contacted" class="app-badge app-badge--success">
             <UIcon name="i-lucide-circle-check" class="h-3 w-3" />
             Oui
@@ -132,11 +133,11 @@
           <span v-else class="app-badge">Non</span>
         </BaseTableTd>
 
-        <BaseTableTd>
+        <BaseTableTd label="Source">
           <UiProspectSourceBadge :source="prospect.source" />
         </BaseTableTd>
 
-        <BaseTableTd v-if="showAbVariant" align="center">
+        <BaseTableTd v-if="showAbVariant" label="Variante" align="center">
           <span
             v-if="abVariants?.[prospect.id]"
             :class="[

@@ -87,7 +87,7 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
+    <div class="grid grid-cols-2 gap-4 @4xl:grid-cols-4">
       <UiStatCard label="Total Prospects" :value="totalProspects" icon="i-lucide-users" accent="neutral" />
       <UiStatCard label="Avec Email" :value="prospectsWithEmail" icon="i-lucide-mail" accent="emerald" />
       <UiStatCard label="Sans Site Web" :value="prospectsWithoutWebsite" icon="i-lucide-globe-lock" accent="danger" />
@@ -111,7 +111,7 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
+      <div class="grid grid-cols-2 gap-4 @4xl:grid-cols-4">
         <div>
           <label class="app-label mb-1.5 block">Site web</label>
           <UiSelectField v-model="filterWebsite" :options="websiteFilterOptions" />
@@ -264,7 +264,10 @@
     />
 
     <Transition name="bulkbar">
-      <div v-if="selectedProspects.length > 0" class="fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
+      <div
+        v-if="selectedProspects.length > 0"
+        class="fixed inset-x-0 bottom-[calc(1.5rem+env(safe-area-inset-bottom))] z-40 flex justify-center px-4"
+      >
         <div
           class="app-card flex flex-wrap items-center justify-center gap-2 rounded-full px-4 py-2.5 shadow-[var(--app-shadow-soft)] backdrop-blur"
         >
