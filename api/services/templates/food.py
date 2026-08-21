@@ -67,18 +67,6 @@ EXTRA_SECTION_IMAGES: dict[str, list[dict[str, str]]] = {
     "reviews": [{"field": "testimonial", "label": "Photo de l'avis mis en avant"}],
 }
 
-# Default dish photos — EXACT mirror of ``FALLBACK_DISH_IMAGES`` in the layer (food.ts). Seeded onto each
-# menu item + the about-collage side vignettes + the testimonial photo so those CMS fields ship with a real
-# food image (never an empty slot) that the client can replace. All already absolute Unsplash URLs.
-_DEFAULT_DISH_IMAGES: list[str] = [
-    "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=800&q=70",
-    "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?auto=format&fit=crop&w=800&q=70",
-    "https://images.unsplash.com/photo-1553979459-d2229ba7433b?auto=format&fit=crop&w=800&q=70",
-    "https://images.unsplash.com/photo-1572490122747-3968b75cc699?auto=format&fit=crop&w=800&q=70",
-    "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=70",
-    "https://images.unsplash.com/photo-1572802419224-296b0aeee0d9?auto=format&fit=crop&w=800&q=70",
-]
-
 
 def default_subtitle(area: str) -> str:
     """Food-truck-aware default hero subtitle when the prospect has no description.
@@ -227,16 +215,35 @@ def build_site_content(
     site["faq"] = FOOD_FAQ
     site.update(_EDITORIAL_DEFAULTS)
     _apply_real_food_stats(site, enrichment)
-    # Seed the editable photo slots so each ships with a real default the client can replace in the CMS:
-    # one dish photo per menu item (its service blok's ``image``), and the about-collage side vignettes +
-    # the featured-review photo (via ``images``). The collage CENTRE stays ``aboutImage`` and the hero stays
-    # ``heroImage`` — both already editable, untouched here.
-    for index, service in enumerate(site["services"]):
-        if isinstance(service, dict):
-            service["image"] = _DEFAULT_DISH_IMAGES[index % len(_DEFAULT_DISH_IMAGES)]
-    site["images"] = {
-        "aboutCollageLeft": _DEFAULT_DISH_IMAGES[0],
-        "aboutCollageRight": _DEFAULT_DISH_IMAGES[2],
-        "testimonial": _DEFAULT_DISH_IMAGES[3],
-    }
+    _seed_photo_slots(site)
     return site
+
+
+def _seed_photo_slots(site: dict[str, Any]) -> None:
+    """Fill the menu / collage / testimonial photo slots from the prospect's REAL photos.
+
+    ``gallery`` holds the prospect's real photos (``photos[2:]``). We seed one per menu item plus the
+    about-collage side vignettes and the featured-review photo from that pool — never a generic stock
+    dish (a burger under « tacos » gives away the template). A slot with no real photo is left empty:
+    the layer then falls back to another real prospect photo (hero / about), never a typed dish. The
+    collage CENTRE stays ``aboutImage`` and the hero stays ``heroImage`` — both already editable.
+    """
+    gallery_photos: list[str] = [
+        photo["url"]
+        for photo in site.get("gallery", [])
+        if isinstance(photo, dict) and isinstance(photo.get("url"), str) and photo["url"].strip()
+    ]
+    for index, service in enumerate(site.get("services", [])):
+        if not isinstance(service, dict):
+            continue
+        has_image: bool = isinstance(service.get("image"), str) and bool(service["image"].strip())
+        if not has_image and index < len(gallery_photos):
+            service["image"] = gallery_photos[index]
+    images: dict[str, str] = {}
+    if len(gallery_photos) >= 1:
+        images["aboutCollageLeft"] = gallery_photos[0]
+    if len(gallery_photos) >= 2:
+        images["aboutCollageRight"] = gallery_photos[1]
+    if len(gallery_photos) >= 3:
+        images["testimonial"] = gallery_photos[2]
+    site["images"] = images
