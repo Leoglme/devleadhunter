@@ -266,10 +266,66 @@
     <Transition name="bulkbar">
       <div
         v-if="selectedProspects.length > 0"
-        class="fixed inset-x-0 bottom-[calc(1.5rem+env(safe-area-inset-bottom))] z-40 flex justify-center px-4"
+        class="fixed inset-x-0 bottom-0 z-40 flex justify-center px-0 sm:bottom-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-4"
       >
+        <!-- Mobile (< sm) : bottom sheet ancrée au bas de l'écran. -->
         <div
-          class="app-card flex flex-wrap items-center justify-center gap-2 rounded-full px-4 py-2.5 shadow-[var(--app-shadow-soft)] backdrop-blur"
+          class="app-card w-full rounded-t-2xl rounded-b-none border-x-0 border-b-0 px-4 pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-[var(--app-shadow-soft)] backdrop-blur sm:hidden"
+        >
+          <div class="mx-auto mb-3 h-1 w-9 rounded-full bg-[var(--app-line)]"></div>
+          <div class="mb-3 flex items-center justify-between">
+            <span class="font-label text-xs font-medium text-[var(--app-ink)]">
+              {{ selectedProspects.length }} sélectionné{{ selectedProspects.length > 1 ? 's' : '' }}
+            </span>
+            <button
+              type="button"
+              class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
+              aria-label="Désélectionner tout"
+              @click="clearSelection"
+            >
+              <UIcon name="i-lucide-x" class="h-4 w-4" />
+            </button>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" class="app-btn-primary col-span-2 h-11 w-full" @click="goToSiteGeneration">
+              <UIcon name="i-lucide-globe" class="h-4 w-4" />Générer les sites
+            </button>
+            <button type="button" class="app-btn-secondary h-11 w-full" @click="exportSelected">
+              <UIcon name="i-lucide-download" class="h-4 w-4" />Exporter
+            </button>
+            <button type="button" class="app-btn-secondary h-11 w-full" @click="bulkCampaignOpen = true">
+              <UIcon name="i-lucide-megaphone" class="h-4 w-4" />Campagne
+            </button>
+            <button
+              type="button"
+              class="app-btn-secondary h-11 w-full disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="bulkBusy"
+              @click="bulkEnrich"
+            >
+              <UIcon
+                :name="bulkBusy ? 'i-lucide-loader-circle' : 'i-lucide-sparkles'"
+                :class="['h-4 w-4', bulkBusy && 'animate-spin']"
+              />
+              {{ bulkEnrichLabel }}
+            </button>
+            <button
+              type="button"
+              class="app-btn-danger h-11 w-full disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="bulkDeleting"
+              @click="bulkDeleteConfirmModal?.open()"
+            >
+              <UIcon
+                :name="bulkDeleting ? 'i-lucide-loader-circle' : 'i-lucide-trash-2'"
+                :class="['h-4 w-4', bulkDeleting && 'animate-spin']"
+              />
+              Supprimer
+            </button>
+          </div>
+        </div>
+
+        <!-- Desktop (≥ sm) : pilule flottante inchangée. -->
+        <div
+          class="app-card hidden flex-wrap items-center justify-center gap-2 rounded-full px-4 py-2.5 shadow-[var(--app-shadow-soft)] backdrop-blur sm:flex"
         >
           <span class="font-label px-1.5 text-xs font-medium text-[var(--app-ink)]">
             {{ selectedProspects.length }} sélectionné{{ selectedProspects.length > 1 ? 's' : '' }}
