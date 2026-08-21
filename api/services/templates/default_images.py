@@ -105,16 +105,13 @@ DEFAULT_IMAGES: dict[str, dict[str, Any]] = {
         ],
     },
     "food": {
+        # Generic food-truck / street-food establishing shots (NOT dishes) — safe for any cuisine.
         "heroImage": "https://images.unsplash.com/photo-1565123409695-7b5ef63a2efb?auto=format&fit=crop&w=1400&q=75",
         "aboutImage": "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=1200&q=70",
-        "gallery": [
-            "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=800&q=70",
-            "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?auto=format&fit=crop&w=800&q=70",
-            "https://images.unsplash.com/photo-1553979459-d2229ba7433b?auto=format&fit=crop&w=800&q=70",
-            "https://images.unsplash.com/photo-1572490122747-3968b75cc699?auto=format&fit=crop&w=800&q=70",
-            "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=70",
-            "https://images.unsplash.com/photo-1572802419224-296b0aeee0d9?auto=format&fit=crop&w=800&q=70",
-        ],
+        # No default gallery: a typed dish (burger/wings) clashes with a Mexican / Korean / veggie truck
+        # and reads as a template. An empty gallery → the layer keeps a real prospect photo or a text-only
+        # menu card, never an off-cuisine stock dish. (Same choice as barber.)
+        "gallery": [],
     },
     "barber": {
         "heroImage": "https://images.unsplash.com/photo-1585747860715-2ba37e788b70?auto=format&fit=crop&w=1600&q=80",
