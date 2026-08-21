@@ -422,6 +422,20 @@ class CampaignQueueService:
             self.db.commit()
             return
 
+        if uses_demo and demo_link:
+            demo_site = self._active_demo_for_prospect(prospect.id, item.user_id)
+            if demo_site is not None and demo_site.demo_link_sent_at is None:
+                from services.demo_site_service import demo_site_service
+
+                try:
+                    await demo_site_service.ensure_storyblok_space_for_outreach(self.db, demo_site)
+                except Exception:
+                    logger.warning(
+                        "[Queue] Storyblok outreach swap failed for prospect %d — sending anyway",
+                        prospect.id,
+                        exc_info=True,
+                    )
+
         # Video: attach it only when the template uses it AND the campaign's video
         # toggle is on. A video-only template (no {lien_demo} fallback) with no
         # usable video has nothing to say and is skipped; a combo template just

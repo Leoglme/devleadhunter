@@ -86,6 +86,16 @@ class Settings(BaseSettings):
         alias="DEMO_SITE_TTL_DAYS",
         description="Number of days a demo site stays online after its link is first emailed",
     )
+    storyblok_trial_days: int = Field(
+        default=45,
+        alias="STORYBLOK_TRIAL_DAYS",
+        description="Storyblok Growth Plus trial length per space (days from space creation)",
+    )
+    storyblok_preswap_lead_minutes: int = Field(
+        default=30,
+        alias="STORYBLOK_PRESWAP_LEAD_MINUTES",
+        description="Minutes before a scheduled outreach email to pre-swap an expiring Storyblok space",
+    )
     demo_site_verify_retries: int = Field(
         default=3,
         alias="DEMO_SITE_VERIFY_RETRIES",

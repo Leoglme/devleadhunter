@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import unicodedata
@@ -31,9 +32,11 @@ from services.storyblok_service import (
     storyblok_service,
 )
 from services.templates import registry as template_registry
-from services.templates.site_content import usable_site_photos
+from services.templates.site_content import from_storyblok_site_content, usable_site_photos
 
 logger = logging.getLogger(__name__)
+
+_storyblok_swap_locks: dict[int, asyncio.Lock] = {}
 
 # Sentinel expiry while the demo link has not been emailed yet (TTL not started).
 _PENDING_TTL_EXPIRES: datetime = datetime(2099, 12, 31, 23, 59, 59, tzinfo=UTC)
@@ -562,6 +565,7 @@ class DemoSiteService:
             demo_site.storyblok_login_email = provision.login_email
             demo_site.storyblok_login_password = provision.login_password
             demo_site.storyblok_invite_sent = provision.invite_sent
+            demo_site.storyblok_space_created_at = datetime.now(UTC)
             demo_site.content_json = provision.content_json
             demo_site.demo_url = self.demo_url_for_slug(slug)
             demo_site.vercel_deployment_url = demo_site.demo_url
@@ -730,6 +734,151 @@ class DemoSiteService:
         if site is None or not self.email_body_contains_demo_link(site, body_html):
             return
         self.start_demo_ttl(db, site, sent_at)
+
+    @staticmethod
+    def _storyblok_swap_lock(site_id: int) -> asyncio.Lock:
+        lock = _storyblok_swap_locks.get(site_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            _storyblok_swap_locks[site_id] = lock
+        return lock
+
+    def storyblok_space_age_days(self, site: DemoSite, at: datetime) -> float:
+        """Return the age in days of the current Storyblok space."""
+        anchor: datetime | None = site.storyblok_space_created_at or site.created_at
+        if anchor is None:
+            return 0.0
+        delta = self._as_utc(at) - self._as_utc(anchor)
+        return max(delta.total_seconds(), 0.0) / 86400.0
+
+    def needs_storyblok_space_swap(self, site: DemoSite, at: datetime) -> bool:
+        """
+        Return True when the Storyblok trial would expire before the demo TTL ends.
+
+        Only applies before the first outreach email carrying the demo link.
+        """
+        if site.demo_link_sent_at is not None:
+            return False
+        if not storyblok_service.is_configured:
+            return False
+        if not site.storyblok_space_id and not site.storyblok_public_token:
+            return False
+        if site.status not in (
+            DemoSiteStatus.ACTIVE.value,
+            DemoSiteStatus.UNAVAILABLE.value,
+        ):
+            return False
+        remaining_trial: float = settings.storyblok_trial_days - self.storyblok_space_age_days(site, at)
+        return remaining_trial < settings.demo_site_ttl_days
+
+    async def sync_content_json_from_storyblok_published(self, db: Session, site: DemoSite) -> bool:
+        """
+        Refresh ``content_json`` from the published Storyblok home story.
+
+        Same source-of-truth path as the publish webhook (published only, never draft).
+        """
+        token: str | None = site.storyblok_public_token
+        if not token:
+            return False
+
+        story_content = await storyblok_service.fetch_published_home_content(token)
+        if story_content is None:
+            return False
+
+        flat_content = from_storyblok_site_content(story_content)
+        if flat_content is None:
+            return False
+
+        previous = site.content_json if isinstance(site.content_json, dict) else {}
+        for key in ("address", "rating", "reviewsCount", "lat", "lng"):
+            if key not in flat_content and previous.get(key) is not None:
+                flat_content[key] = previous[key]
+
+        site.content_json = flat_content
+        db.commit()
+        db.refresh(site)
+        return True
+
+    def _apply_storyblok_provision(self, site: DemoSite, provision: StoryblokProvisionResult) -> None:
+        """Copy Storyblok provisioning fields onto a demo site row."""
+        site.storyblok_space_id = provision.space_id
+        site.storyblok_public_token = provision.public_token
+        site.storyblok_preview_token = provision.preview_token
+        site.storyblok_editor_url = provision.editor_url
+        site.storyblok_login_email = provision.login_email
+        site.storyblok_login_password = provision.login_password
+        site.storyblok_invite_sent = provision.invite_sent
+        site.storyblok_space_created_at = datetime.now(UTC)
+        site.storyblok_collaborator_status = None
+        site.storyblok_joined_at = None
+        site.content_json = provision.content_json
+
+    async def swap_storyblok_space_for_outreach(self, db: Session, site: DemoSite) -> bool:
+        """
+        Replace the Storyblok space with a fresh trial, preserving published edits.
+
+        Returns:
+            True when a new space was provisioned.
+        """
+        if not self.needs_storyblok_space_swap(site, datetime.now(UTC)):
+            return False
+
+        lock = self._storyblok_swap_lock(site.id)
+        async with lock:
+            db.refresh(site)
+            if not self.needs_storyblok_space_swap(site, datetime.now(UTC)):
+                return False
+
+            await self.sync_content_json_from_storyblok_published(db, site)
+            content_json: dict = site.content_json if isinstance(site.content_json, dict) else {}
+            if not content_json:
+                logger.warning("Storyblok swap skipped for site %s — empty content_json", site.id)
+                return False
+
+            old_space_id = site.storyblok_space_id
+            old_editor_url = site.storyblok_editor_url
+
+            provision = await storyblok_service.provision_space_with_content(
+                business_name=site.business_name,
+                slug=site.slug,
+                template_id=site.template_id,
+                collaborator_email=(site.email or site.storyblok_login_email or "").strip(),
+                preview_url=self.demo_url_for_slug(site.slug),
+                content_json=content_json,
+                invite_client=False,
+                rehost_all_assets=True,
+            )
+
+            self._apply_storyblok_provision(site, provision)
+            db.commit()
+            db.refresh(site)
+
+            try:
+                await storyblok_service.delete_demo_space(
+                    space_id=old_space_id,
+                    editor_url=old_editor_url,
+                    business_name=site.business_name,
+                    slug=site.slug,
+                )
+            except Exception:
+                logger.warning(
+                    "Old Storyblok space cleanup failed after swap for site %s",
+                    site.id,
+                    exc_info=True,
+                )
+
+            logger.info(
+                "Storyblok space swapped for outreach slug=%s new_space_id=%s",
+                site.slug,
+                site.storyblok_space_id,
+            )
+            return True
+
+    async def ensure_storyblok_space_for_outreach(self, db: Session, site: DemoSite) -> None:
+        """Sync published CMS content and swap the space when the trial would not cover the demo TTL."""
+        if not self.needs_storyblok_space_swap(site, datetime.now(UTC)):
+            return
+        await self.swap_storyblok_space_for_outreach(db, site)
 
     def get_public_by_domain(self, db: Session, host: str) -> DemoSite | None:
         """

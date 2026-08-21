@@ -47,6 +47,8 @@ class DemoSite(Base):
     storyblok_login_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     storyblok_login_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     storyblok_invite_sent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # When the current Storyblok space was provisioned (reset after an outreach swap).
+    storyblok_space_created_at: Mapped[datetime | None] = mapped_column(nullable=True)
     # Where the client stands on the CMS handover (see StoryblokCollaboratorStatus): NULL until
     # first observed, then not_invited / pending / joined. Refreshed on demand from Storyblok.
     storyblok_collaborator_status: Mapped[str | None] = mapped_column(String(16), nullable=True)

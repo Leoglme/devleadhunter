@@ -360,12 +360,22 @@ class StoryblokService:
         except (httpx.HTTPError, ValueError, KeyError):
             return None
 
-    async def _upload_external_assets(self, client: httpx.AsyncClient, space_id: int, content: dict[str, Any]) -> None:
+    async def _upload_external_assets(
+        self,
+        client: httpx.AsyncClient,
+        space_id: int,
+        content: dict[str, Any],
+        *,
+        rehost_all_assets: bool = False,
+    ) -> None:
         """Upload every external-URL asset in the story content into the space library, in place.
 
         Storyblok can't preview an extension-less external URL (Google photos) and its picker stays
         empty; uploading each photo makes it a real library asset (CDN URL + extension) so the client
         sees a thumbnail and "Replace" works. Best-effort — a failed upload keeps the external URL.
+
+        When ``rehost_all_assets`` is True (outreach space swap), Storyblok CDN URLs from the old
+        space are downloaded and re-uploaded into the new space so images survive the old space deletion.
         """
         asset_nodes: list[dict[str, Any]] = []
 
@@ -382,7 +392,9 @@ class StoryblokService:
 
         _walk(content)
         external_urls: set[str] = {
-            node["filename"] for node in asset_nodes if not node["filename"].startswith("https://a.storyblok.com/")
+            node["filename"]
+            for node in asset_nodes
+            if node["filename"] and (rehost_all_assets or not node["filename"].startswith("https://a.storyblok.com/"))
         }
         if not external_urls:
             return
@@ -409,10 +421,11 @@ class StoryblokService:
         *,
         story_id: int | None = None,
         template_id: str | None = None,
+        rehost_all_assets: bool = False,
     ) -> None:
         """Create or update the home story and publish it."""
         storyblok_content = self._to_storyblok_content(content_json, template_id)
-        await self._upload_external_assets(client, space_id, storyblok_content)
+        await self._upload_external_assets(client, space_id, storyblok_content, rehost_all_assets=rehost_all_assets)
         if story_id is None:
             story_id = await self._find_home_story_id(client, space_id)
 
@@ -447,6 +460,7 @@ class StoryblokService:
                         content_json,
                         story_id=existing_id,
                         template_id=template_id,
+                        rehost_all_assets=rehost_all_assets,
                     )
                     return
             raise ValueError(self._storyblok_error_message(exc)) from exc
@@ -639,6 +653,33 @@ class StoryblokService:
             enrichment=enrichment,
         )
 
+        return await self.provision_space_with_content(
+            business_name=business_name,
+            slug=slug,
+            template_id=template_id,
+            collaborator_email=collaborator_email,
+            preview_url=preview_url,
+            content_json=content_json,
+            invite_client=invite_client,
+        )
+
+    async def provision_space_with_content(
+        self,
+        *,
+        business_name: str,
+        slug: str,
+        template_id: str,
+        collaborator_email: str,
+        preview_url: str,
+        content_json: dict[str, Any],
+        invite_client: bool = False,
+        rehost_all_assets: bool = False,
+    ) -> StoryblokProvisionResult:
+        """
+        Create a Storyblok space and seed the home story from an existing ``content_json``.
+
+        Used for initial provisioning and for outreach swaps that must preserve published edits.
+        """
         if not self.is_configured:
             mock_password: str = self._generate_password()
             return StoryblokProvisionResult(
@@ -654,7 +695,7 @@ class StoryblokService:
             )
 
         space_name: str = self.expected_space_name(business_name, slug)
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             space_resp = await client.post(
                 f"{self._base_url}/spaces/",
                 headers=self._headers(),
@@ -670,15 +711,18 @@ class StoryblokService:
             editor_url: str = f"https://app.storyblok.com/#/me/spaces/{space_id}/dashboard"
 
             try:
-                # These three are independent of each other → run concurrently
-                # (webhook registration is best-effort and never raises).
                 await asyncio.gather(
                     self._configure_preview_url(client, space_id, preview_url),
                     self._ensure_template_components(client, space_id, template_id),
                     self._register_publish_webhook(client, space_id),
                 )
-                # Publish last: the home story references the ``site_content`` component.
-                await self._publish_home_story(client, space_id, content_json, template_id=template_id)
+                await self._publish_home_story(
+                    client,
+                    space_id,
+                    content_json,
+                    template_id=template_id,
+                    rehost_all_assets=rehost_all_assets,
+                )
 
                 space_detail = await client.get(
                     f"{self._base_url}/spaces/{space_id}",
