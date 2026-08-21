@@ -655,6 +655,29 @@ class EnrichmentService:
             return record
         return await self.enrich(db, user_id, prospect)
 
+    async def rehost_existing_photos(self, db: Session, record: ProspectEnrichment) -> ProspectEnrichment:
+        """Move a record's already-collected photos to permanent R2 storage, in place, without scraping.
+
+        Repairs an enrichment captured before the R2 rehost, or whose Facebook photos stayed as fbcdn
+        URLs — the user's curation (which photos, in which order) is preserved because the stored list is
+        rehosted as-is. Each still-live fbcdn URL is downloaded server-side and moved to R2; a Google or
+        already-R2 URL is left untouched.
+
+        Args:
+            db: Active database session.
+            record: The enrichment record to rehost in place.
+
+        Returns:
+            The saved record with its photos (and logo) pointing at permanent R2 URLs where possible.
+        """
+        if record.photos:
+            record.photos = await prospect_photo_storage.rehost_photos(record.prospect_id, list(record.photos))
+        if record.logo_url:
+            record.logo_url = await prospect_photo_storage.rehost_one(record.prospect_id, record.logo_url)
+        db.commit()
+        db.refresh(record)
+        return record
+
     def update(self, db: Session, record: ProspectEnrichment, updates: dict[str, Any]) -> ProspectEnrichment:
         """Apply manual edits (add / modify / remove fields) to an enrichment record."""
         for key, value in updates.items():

@@ -59,6 +59,28 @@ async def run_prospect_enrichment(
     return ProspectEnrichmentResponse.model_validate(record)
 
 
+@router.post("/{prospect_id}/enrichment/rehost-photos", response_model=ProspectEnrichmentResponse)
+async def rehost_prospect_photos(
+    prospect_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> ProspectEnrichmentResponse:
+    """Move a prospect's already-collected photos to permanent R2 storage, without re-scraping.
+
+    Repairs an enrichment whose Facebook photos are still fbcdn URLs (or predate the R2 rehost): each
+    live link is downloaded server-side and rehosted, the user's photo order/selection preserved. The
+    demo site must be regenerated afterwards to pick up the new URLs.
+    """
+    prospect = enrichment_service.get_prospect_for_user(db, current_user.id, prospect_id)
+    if not prospect:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
+    record = enrichment_service.get_for_prospect(db, current_user.id, prospect_id)
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No enrichment for this prospect")
+    record = await enrichment_service.rehost_existing_photos(db, record)
+    return ProspectEnrichmentResponse.model_validate(record)
+
+
 @router.post("/{prospect_id}/enrichment/resolve-contact", response_model=ProspectEnrichmentResponse)
 async def resolve_prospect_contact(
     prospect_id: int,
