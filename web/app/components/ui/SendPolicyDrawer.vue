@@ -41,12 +41,12 @@
           </form>
         </div>
 
-        <div class="flex gap-2 border-t border-[var(--app-line)] px-5 py-4">
-          <button type="button" class="app-btn-secondary flex-1" @click="emit('close')">Fermer</button>
+        <div class="flex flex-col gap-2 border-t border-[var(--app-line)] px-5 py-4 sm:flex-row">
+          <button type="button" class="app-btn-secondary w-full sm:flex-1" @click="emit('close')">Fermer</button>
           <button
             type="submit"
             form="send-policy-form"
-            class="app-btn-primary flex-1 disabled:cursor-not-allowed disabled:opacity-50"
+            class="app-btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50 sm:flex-1"
             :disabled="isSaving || isLoading || !isWindowValid"
           >
             <UIcon v-if="isSaving" name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
