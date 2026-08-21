@@ -22,7 +22,7 @@ from enums.identity_check_status import IdentityCheckStatus
 from models.prospect_db import ProspectDB
 from models.prospect_enrichment import ProspectEnrichment
 from scrappers import scrape_signals
-from scrappers.enrichment_scraper import EnrichmentData, enrichment_scraper
+from scrappers.enrichment_scraper import EnrichmentData, _dedupe_reviews, enrichment_scraper
 from scrappers.google_scraper import GoogleScraper
 from services.decision_maker.types import NameCandidate, NameResolution
 from services.enrichment_content import EnrichmentContentMapper
@@ -145,28 +145,11 @@ class EnrichmentService:
         return len(incoming_rows) >= len(existing_rows)
 
     @staticmethod
-    def _review_dedupe_key(review: dict[str, Any]) -> str:
-        """Stable key to deduplicate review snippets."""
-        text: str = str(review.get("text") or "").strip().lower()
-        author: str = str(review.get("author") or "").strip().lower()
-        return text or author
-
-    @staticmethod
     def _merge_reviews(existing: list | None, incoming: list) -> list[dict[str, Any]]:
-        """Append new review snippets without dropping existing ones."""
-        merged: list[dict[str, Any]] = [row for row in (existing or []) if isinstance(row, dict)]
-        seen: set[str] = {
-            EnrichmentService._review_dedupe_key(row) for row in merged if EnrichmentService._review_dedupe_key(row)
-        }
-        for review in incoming:
-            if not isinstance(review, dict):
-                continue
-            key: str = EnrichmentService._review_dedupe_key(review)
-            if not key or key in seen:
-                continue
-            merged.append(review)
-            seen.add(key)
-        return merged
+        """Append new review snippets without dropping existing ones or re-adding the same author."""
+        merged_source: list[dict[str, Any]] = [row for row in (existing or []) if isinstance(row, dict)]
+        merged_source.extend(row for row in incoming if isinstance(row, dict))
+        return _dedupe_reviews(merged_source)
 
     def _apply_data(self, record: ProspectEnrichment, data: EnrichmentData) -> None:
         """Copy the scraped data onto the record. « Relancer l'enrichissement » is a REFRESH: the
@@ -195,9 +178,11 @@ class EnrichmentService:
             # Facebook re-scrapes often start from a single stale DOM review; prefer
             # a fuller incoming list instead of forever appending the first one.
             if (data.source or "").startswith("facebook") and len(data.reviews) >= len(record.reviews or []):
-                record.reviews = data.reviews
+                record.reviews = list(data.reviews)
             else:
                 record.reviews = self._merge_reviews(record.reviews, data.reviews)
+            # Same Facebook author often comes back with extra DOM chrome on a relance.
+            record.reviews = _dedupe_reviews(record.reviews)
         if data.opening_hours and self._should_apply_opening_hours(record.opening_hours, data.opening_hours):
             record.opening_hours = self._valid_hour_rows(data.opening_hours)
         if data.services:

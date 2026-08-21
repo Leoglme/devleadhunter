@@ -456,26 +456,55 @@ def _hamming_distance(left: int, right: int) -> int:
     return bin(left ^ right).count("1")
 
 
+# Placeholder authors that can legitimately leave several distinct snippets in one scrape.
+_GENERIC_REVIEW_AUTHORS = frozenset(
+    {
+        "client",
+        "anonyme",
+        "anonymous",
+        "google user",
+        "a google user",
+        "utilisateur google",
+    }
+)
+
+
+def _norm_review_value(value: Any) -> str:
+    """Collapse whitespace/case so the same snippet scraped twice still matches."""
+    return re.sub(r"\s+", " ", str(value or "")).strip().lower()
+
+
+def _is_distinctive_review_author(author: str) -> bool:
+    """True when the author is a real name we can use as a review identity."""
+    key = _norm_review_value(author)
+    return bool(key) and key not in _GENERIC_REVIEW_AUTHORS
+
+
 def _dedupe_reviews(reviews: list[Any]) -> list[dict[str, Any]]:
-    """Drop duplicate reviews (same author+text). The same review is sometimes captured twice — the
-    Google panel + its expanded list, or a Facebook page rendering it more than once. Preserves order;
-    text-less entries are dropped."""
+    """Drop duplicate reviews, preserving first-seen order.
 
-    def _norm(value: Any) -> str:
-        return re.sub(r"\s+", " ", str(value or "")).strip().lower()
-
-    seen: set[str] = set()
+    Exact same body (whitespace/case-insensitive) is always collapsed. A named author is
+    kept once: Facebook re-emits the same person with a slightly different body (Relay JSON
+    vs DOM chrome, or a second enrichment run), and Google's panel + expanded list do the
+    same. Generic placeholders like « Client » still keep distinct texts.
+    """
+    seen_texts: set[str] = set()
+    seen_authors: set[str] = set()
     unique: list[dict[str, Any]] = []
     for review in reviews:
         if not isinstance(review, dict):
             continue
-        text = _norm(review.get("text"))
+        text = _norm_review_value(review.get("text"))
         if not text:
             continue
-        key = f"{_norm(review.get('author'))}|{text}"
-        if key in seen:
+        author = _norm_review_value(review.get("author"))
+        if text in seen_texts:
             continue
-        seen.add(key)
+        if _is_distinctive_review_author(author) and author in seen_authors:
+            continue
+        seen_texts.add(text)
+        if _is_distinctive_review_author(author):
+            seen_authors.add(author)
         unique.append(review)
     return unique
 
@@ -934,20 +963,7 @@ class EnrichmentScraper:
     @staticmethod
     def _merge_attempt_data(current: EnrichmentData, incoming: EnrichmentData) -> EnrichmentData:
         """Keep the richest fields seen across extraction attempts."""
-        merged_reviews: list[dict[str, Any]] = list(current.reviews)
-        seen_reviews: set[str] = {
-            str(review.get("text") or review.get("author") or "").strip().lower()
-            for review in merged_reviews
-            if isinstance(review, dict)
-        }
-        for review in incoming.reviews:
-            if not isinstance(review, dict):
-                continue
-            key: str = str(review.get("text") or review.get("author") or "").strip().lower()
-            if not key or key in seen_reviews:
-                continue
-            merged_reviews.append(review)
-            seen_reviews.add(key)
+        merged_reviews: list[dict[str, Any]] = _dedupe_reviews([*current.reviews, *incoming.reviews])
 
         merged_photos: list[str] = [url for url in current.photos if url]
         seen_photos: set[str] = set(merged_photos)

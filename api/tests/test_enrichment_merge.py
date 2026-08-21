@@ -88,6 +88,49 @@ def test_apply_data_keeps_existing_reviews_when_scrape_is_poorer() -> None:
     assert len(record.reviews) == 3
 
 
+def test_apply_data_facebook_poorer_rerun_does_not_readd_same_author() -> None:
+    """A Facebook relance that only paints one DOM review must not duplicate that author."""
+    record = _record(
+        reviews=[
+            {"author": "Fox Emmanuel", "text": "Copieux et délicieux Merci beaucoup", "rating": 5},
+            {"author": "Marie Breton", "text": "Assaisonnement parfait", "rating": 5},
+        ]
+    )
+    incoming = EnrichmentData(
+        source="facebook",
+        reviews=[
+            {
+                "author": "Fox Emmanuel",
+                "text": "Copieux et délicieux Merci beaucoup Plats excellents",
+                "rating": 5,
+            }
+        ],
+    )
+    EnrichmentService()._apply_data(record, incoming)
+    authors = [review["author"] for review in record.reviews]
+    assert authors == ["Fox Emmanuel", "Marie Breton"]
+    assert "Plats excellents" not in record.reviews[0]["text"]
+
+
+def test_apply_data_facebook_replace_dedupes_incoming() -> None:
+    """A fuller Facebook re-scrape still collapses Relay + DOM copies of the same author."""
+    record = _record(reviews=[])
+    incoming = EnrichmentData(
+        source="facebook",
+        reviews=[
+            {"author": "Fox Emmanuel", "text": "Copieux et délicieux Merci beaucoup", "rating": 5},
+            {
+                "author": "Fox Emmanuel",
+                "text": "Copieux et délicieux Merci beaucoup Plats excellents",
+                "rating": 5,
+            },
+        ],
+    )
+    EnrichmentService()._apply_data(record, incoming)
+    assert len(record.reviews) == 1
+    assert record.reviews[0]["author"] == "Fox Emmanuel"
+
+
 def test_merge_attempt_data_keeps_best_hours_across_attempts() -> None:
     """Retry loop keeps the richest attempt instead of the last partial one."""
     partial = EnrichmentData(

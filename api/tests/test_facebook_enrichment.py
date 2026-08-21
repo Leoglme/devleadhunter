@@ -280,3 +280,25 @@ def test_build_from_raw_produces_facebook_enrichment() -> None:
     assert "Guillaume Fournier" in authors
     # Disabled-comments chrome must never become a review body.
     assert all("commentaires ont été désactivés" not in review["text"].lower() for review in data.reviews)
+
+
+def test_build_from_raw_does_not_duplicate_reviews_across_dom_and_relay() -> None:
+    """Relay JSON and the visible DOM list the same people — keep each author once."""
+    dom = {
+        "place_title": "Food truck mexicain Tacos Maru",
+        "about_text": _ABOUT_TEXT,
+        "intro_text": _INTRO_TEXT,
+        "og_description": _OG_DESCRIPTION,
+        "embedded_texts": _PAGE_EMBEDDED_BIO,
+        "social": {},
+        "website": None,
+        "profile_photo": None,
+    }
+    data = FacebookEnrichmentScraper._build_from_raw(dom, _REVIEWS_TEXT, None, _EMBEDDED_TEXTS)
+    authors = [review["author"] for review in data.reviews]
+    assert authors == list(dict.fromkeys(authors))
+    assert authors.count("Fox Emmanuel") == 1
+    fox = next(review for review in data.reviews if review["author"] == "Fox Emmanuel")
+    # First-seen is the Relay body (no « Plats excellents » DOM chrome).
+    assert "Copieux et délicieux" in fox["text"]
+    assert "Plats excellents" not in fox["text"]

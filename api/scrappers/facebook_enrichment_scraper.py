@@ -34,7 +34,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import httpx
 
-from scrappers.enrichment_scraper import EnrichmentData
+from scrappers.enrichment_scraper import EnrichmentData, _dedupe_reviews
 from scrappers.nodriver_browser import NODRIVER_AVAILABLE, NodriverBrowser
 from scrappers.nodriver_dom import NodriverDom
 from scrappers.nodriver_executor import run_nodriver_task
@@ -583,21 +583,11 @@ def _parse_reviews_from_embedded_texts(texts: list[str]) -> list[dict[str, Any]]
 
 
 def _merge_review_lists(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Union review rows by author+text, preserving first-seen order."""
-    merged: list[dict[str, Any]] = []
-    seen: set[str] = set()
+    """Union review rows by named author, preserving first-seen order (Relay before DOM)."""
+    concatenated: list[dict[str, Any]] = []
     for group in groups:
-        for review in group:
-            author = str(review.get("author") or "").strip().lower()
-            text = str(review.get("text") or "").strip().lower()
-            key = f"{author}|{text}"
-            if not text or key in seen:
-                continue
-            seen.add(key)
-            merged.append(review)
-            if len(merged) >= _MAX_REVIEWS:
-                return merged
-    return merged
+        concatenated.extend(group)
+    return _dedupe_reviews(concatenated)[:_MAX_REVIEWS]
 
 
 def _upgrade_fb_photo_url(url: str) -> str:
