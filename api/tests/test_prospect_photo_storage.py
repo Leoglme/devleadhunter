@@ -7,6 +7,7 @@ best-effort so a storage hiccup never breaks enrichment.
 
 import base64
 
+import httpx
 import pytest
 
 from api.v1.routes.admin_storage import _classify, _prospect_id_from_key
@@ -16,6 +17,34 @@ from services.r2_storage_service import r2_storage
 
 def _jpeg_data_uri(content: bytes) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(content).decode("ascii")
+
+
+class _FakeResponse:
+    """Minimal stand-in for an ``httpx.Response`` in the download tests."""
+
+    def __init__(self, status_code: int, content: bytes = b"", content_type: str = "image/jpeg") -> None:
+        self.status_code = status_code
+        self.content = content
+        self.headers = {"content-type": content_type}
+
+
+class _FakeClient:
+    """Async-context httpx client serving canned responses (or raising for an unknown URL)."""
+
+    def __init__(self, responses: dict[str, _FakeResponse]) -> None:
+        self._responses = responses
+
+    async def __aenter__(self) -> "_FakeClient":
+        return self
+
+    async def __aexit__(self, *_exc: object) -> bool:
+        return False
+
+    async def get(self, url: str) -> _FakeResponse:
+        response = self._responses.get(url)
+        if response is None:
+            raise httpx.ConnectError("no route")
+        return response
 
 
 def test_decode_valid_jpeg_data_uri() -> None:
@@ -128,6 +157,52 @@ async def test_delete_for_prospect_deletes_listed_keys(monkeypatch) -> None:
 
     assert count == 2
     assert deleted["keys"] == ["images/prospects/29/a.jpg", "images/prospects/29/b.jpg"]
+
+
+@pytest.mark.asyncio
+async def test_rehost_one_downloads_and_stores_fbcdn_url(monkeypatch) -> None:
+    fbcdn = "https://scontent-cdg4-1.xx.fbcdn.net/v/t39.30808-6/123_abc_n.jpg?oh=1&oe=2"
+    monkeypatch.setattr(r2_storage, "is_configured", lambda: True)
+    monkeypatch.setattr(
+        r2_storage, "prospect_photo_key", lambda pid, digest, ext: f"images/prospects/{pid}/{digest}{ext}"
+    )
+    monkeypatch.setattr(
+        "services.prospect_photo_storage_service.httpx.AsyncClient",
+        lambda *args, **kwargs: _FakeClient({fbcdn: _FakeResponse(200, b"real-tacos-bytes", "image/jpeg")}),
+    )
+
+    async def fake_upload(key: str, data: bytes, content_type: str) -> str:
+        return f"https://cdn/{key}"
+
+    monkeypatch.setattr(r2_storage, "upload_bytes_async", fake_upload)
+
+    result = await prospect_photo_storage.rehost_one(29, fbcdn)
+
+    assert result.startswith("https://cdn/images/prospects/29/")
+    assert result.endswith(".jpg")
+
+
+@pytest.mark.asyncio
+async def test_rehost_one_never_downloads_a_google_url(monkeypatch) -> None:
+    google = "https://lh3.googleusercontent.com/gps-cs-s/ABC=s1600"
+    monkeypatch.setattr(r2_storage, "is_configured", lambda: True)
+
+    def boom(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("a non-fbcdn URL must never be downloaded")
+
+    monkeypatch.setattr("services.prospect_photo_storage_service.httpx.AsyncClient", boom)
+    assert await prospect_photo_storage.rehost_one(29, google) == google
+
+
+@pytest.mark.asyncio
+async def test_rehost_one_keeps_fbcdn_when_download_fails(monkeypatch) -> None:
+    dead = "https://scontent.xx.fbcdn.net/v/dead.jpg?oh=1"
+    monkeypatch.setattr(r2_storage, "is_configured", lambda: True)
+    monkeypatch.setattr(
+        "services.prospect_photo_storage_service.httpx.AsyncClient",
+        lambda *args, **kwargs: _FakeClient({dead: _FakeResponse(403)}),
+    )
+    assert await prospect_photo_storage.rehost_one(29, dead) == dead
 
 
 def test_classify_recognises_prospect_photos() -> None:

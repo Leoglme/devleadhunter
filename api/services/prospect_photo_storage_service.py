@@ -1,14 +1,17 @@
 """Rehost a prospect's enrichment photos onto permanent R2 storage.
 
 Facebook photos are served from ``fbcdn.net`` on **signed URLs that expire within days**, so a demo
-site generated a few days after the scrape would fetch a dead link. The desktop scraper captures those
-photos as base64 ``data:`` URIs while the links are still fresh (residential IP); this service turns
-those data URIs into permanent R2 objects, so the enrichment record stores light, never-expiring URLs
-that every later generation (and re-generation) can reuse.
+site generated a few days after the scrape would fetch a dead link. Two kinds of value reach a durable
+R2 home here:
 
-Non-``data:`` URLs (a Google photo, an already-rehosted R2 URL) are passed through untouched: only the
-transient captured bytes need a durable home. Everything is best-effort — a rehost failure returns the
-original value so enrichment never breaks over a storage hiccup.
+- a base64 ``data:`` URI the desktop scraper captured (the preferred path — bytes grabbed on the
+  residential IP while the link was fresh); it is decoded and uploaded, no network needed;
+- a raw ``fbcdn``/``scontent`` URL still live — downloaded server-side then uploaded. This recovers a
+  photo the scraper left as a URL (older capture, over the cap), and lets a re-hosting pass fix an
+  existing enrichment without re-scraping (the user's photo curation is preserved).
+
+Other URLs (a Google photo, an already-rehosted R2 URL) are passed through untouched. Everything is
+best-effort — a rehost failure returns the original value so enrichment never breaks over a hiccup.
 """
 
 from __future__ import annotations
@@ -19,6 +22,8 @@ import hashlib
 import logging
 import re
 
+import httpx
+
 from services.r2_storage_service import r2_storage
 
 logger = logging.getLogger(__name__)
@@ -27,6 +32,16 @@ logger = logging.getLogger(__name__)
 _MAX_PHOTO_BYTES = 8 * 1024 * 1024
 # Bound the concurrent uploads so a large gallery never opens dozens of R2 connections at once.
 _UPLOAD_CONCURRENCY = 4
+# Browser-like headers so fbcdn serves our client the same signed URL it served the <img> tag.
+_DOWNLOAD_HEADERS: dict[str, str] = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    "Referer": "https://www.facebook.com/",
+}
+_DOWNLOAD_TIMEOUT_SECONDS = 15.0
 
 _DATA_URI_RE = re.compile(r"^data:(image/[a-zA-Z0-9.+-]+);base64,(.+)$", re.DOTALL)
 # Explicit extension per image MIME — ``mimetypes.guess_extension`` is platform-dependent
@@ -68,19 +83,67 @@ class ProspectPhotoStorageService:
         extension = _EXTENSION_BY_MIME.get(content_type, ".jpg")
         return data, content_type, extension
 
+    @staticmethod
+    def _is_fb_cdn(url: str) -> bool:
+        """Whether a URL is a Facebook-CDN photo (the expiring kind worth downloading to R2)."""
+        lowered = url.lower()
+        return "fbcdn" in lowered or "scontent" in lowered
+
+    async def _download_fb_image(self, url: str) -> tuple[bytes, str, str] | None:
+        """Download a live fbcdn/scontent photo into bytes for rehosting, or None.
+
+        Only the expiring Facebook CDN is fetched — a Google photo (already durable) is left as its own
+        URL. Returns None on any failure (dead/expired link, non-image, oversized) so rehosting degrades
+        to keeping the original value.
+
+        Args:
+            url: A candidate photo URL.
+
+        Returns:
+            A ``(bytes, content_type, extension)`` tuple, or None.
+        """
+        if not isinstance(url, str) or not self._is_fb_cdn(url):
+            return None
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(_DOWNLOAD_TIMEOUT_SECONDS),
+                headers=_DOWNLOAD_HEADERS,
+                follow_redirects=True,
+            ) as client:
+                response = await client.get(url)
+        except httpx.HTTPError:
+            return None
+        if response.status_code != 200:
+            return None
+        data = response.content
+        if not data or len(data) > _MAX_PHOTO_BYTES:
+            return None
+        content_type = (response.headers.get("content-type") or "").split(";")[0].strip().lower()
+        if content_type and not content_type.startswith("image/"):
+            return None
+        content_type = content_type or "image/jpeg"
+        return data, content_type, _EXTENSION_BY_MIME.get(content_type, ".jpg")
+
     async def rehost_one(self, prospect_id: int, photo: str) -> str:
-        """Rehost a single photo to R2 when it is a captured data URI, else return it unchanged.
+        """Move a single photo to permanent R2 storage, else return it unchanged.
+
+        A captured base64 data URI is decoded; a live fbcdn/scontent URL is downloaded server-side.
+        Anything else (a Google photo, an already-rehosted R2 URL) is left as-is.
 
         Args:
             prospect_id: Owner prospect — folders the object and scopes later cleanup.
             photo: A photo value from the enrichment (data URI, http(s) URL, or already an R2 URL).
 
         Returns:
-            The permanent R2 URL when the photo was a rehostable data URI, otherwise the original value
-            (also on any storage failure — rehosting never breaks enrichment).
+            The permanent R2 URL when the photo could be rehosted, otherwise the original value (also on
+            any storage failure — rehosting never breaks enrichment).
         """
+        if not r2_storage.is_configured():
+            return photo
         decoded = self._decode_data_uri(photo)
-        if decoded is None or not r2_storage.is_configured():
+        if decoded is None:
+            decoded = await self._download_fb_image(photo)
+        if decoded is None:
             return photo
         data, content_type, extension = decoded
         digest = hashlib.sha1(data).hexdigest()[:16]
