@@ -49,7 +49,8 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      title: 'DevLeadHunter — Turn businesses without a website into paying clients',
+      title: 'devleadHunter',
+      titleTemplate: '%s',
       htmlAttrs: {
         lang: 'en',
       },
@@ -84,7 +85,7 @@ export default defineNuxtConfig({
         { name: 'mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
-        { name: 'apple-mobile-web-app-title', content: 'DevLeadHunter' },
+        { name: 'apple-mobile-web-app-title', content: 'devleadHunter' },
       ],
       link: [
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },

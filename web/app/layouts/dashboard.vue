@@ -119,6 +119,13 @@ useSeoMeta({
   robots: 'noindex, nofollow',
 })
 
+// Short document title for Safari "Add to Home Screen" (iOS uses <title>, not the marketing default).
+useHead({
+  title: 'devleadHunter',
+  titleTemplate: (): string => 'devleadHunter',
+  meta: [{ name: 'apple-mobile-web-app-title', content: 'devleadHunter' }],
+})
+
 /**
  * Right margin pushing the content aside so the open drawer hides nothing.
  * Matches each drawer's width; only from xl up — below, the drawer overlays,
