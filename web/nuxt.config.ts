@@ -49,7 +49,7 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      title: 'devleadHunter',
+      title: 'DevleadHunter',
       titleTemplate: '%s',
       htmlAttrs: {
         lang: 'en',
@@ -85,7 +85,7 @@ export default defineNuxtConfig({
         { name: 'mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
-        { name: 'apple-mobile-web-app-title', content: 'devleadHunter' },
+        { name: 'apple-mobile-web-app-title', content: 'DevleadHunter' },
       ],
       link: [
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },

@@ -121,9 +121,9 @@ useSeoMeta({
 
 // Short document title for Safari "Add to Home Screen" (iOS uses <title>, not the marketing default).
 useHead({
-  title: 'devleadHunter',
-  titleTemplate: (): string => 'devleadHunter',
-  meta: [{ name: 'apple-mobile-web-app-title', content: 'devleadHunter' }],
+  title: 'DevleadHunter',
+  titleTemplate: (): string => 'DevleadHunter',
+  meta: [{ name: 'apple-mobile-web-app-title', content: 'DevleadHunter' }],
 })
 
 /**
