@@ -14,7 +14,7 @@
     <UiLoader v-if="isLoading" label="Chargement de la comptabilité…" />
 
     <template v-else>
-      <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
+      <div class="grid grid-cols-2 gap-4 @4xl:grid-cols-4">
         <UiStatCard
           label="Total reçu"
           :value="`€${formatCurrency(accountingData?.summary?.total_paid || 0)}`"
@@ -64,7 +64,7 @@
             <p class="mt-0.5 text-xs text-[var(--app-ink-soft)]">Paiements synchronisés depuis Stripe</p>
           </div>
 
-          <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
+          <div class="grid grid-cols-2 gap-4 @4xl:grid-cols-4">
             <div class="@4xl:col-span-2">
               <label class="app-label mb-1.5 block">Rechercher</label>
               <div class="relative">
@@ -116,8 +116,8 @@
         </div>
 
         <template v-else>
-          <div class="overflow-x-auto">
-            <table class="w-full min-w-[960px] border-collapse">
+          <div class="md:overflow-x-auto">
+            <table class="dlh-card-table w-full min-w-[960px] border-collapse">
               <thead>
                 <tr class="bg-[var(--app-surface-2)]">
                   <th class="app-label border-b border-[var(--app-line)] px-4 py-2.5 text-left">Statut</th>
@@ -140,7 +140,7 @@
                   <tr
                     class="border-b border-[var(--app-line-soft)] transition-colors last:border-b-0 hover:bg-[var(--app-surface-2)]/60"
                   >
-                    <td class="px-4 py-3">
+                    <td data-label="Statut" class="px-4 py-3">
                       <span :class="['app-badge', getStatusClass(transaction.payment_info?.status || 'unknown')]">
                         {{ getStatusLabel(transaction.payment_info?.status || 'unknown') }}
                       </span>
@@ -151,47 +151,47 @@
                       <div class="text-xs text-[var(--app-ink-soft)]">{{ transaction.user_email }}</div>
                     </td>
 
-                    <td class="font-label px-4 py-3 text-xs text-[var(--app-ink)]">
+                    <td data-label="Date" class="font-label px-4 py-3 text-xs text-[var(--app-ink)]">
                       {{ formatNumericDate(transaction.credits_available_date) }}
                     </td>
 
-                    <td class="px-4 py-3 text-sm font-medium text-[var(--app-ink)] tabular-nums">
+                    <td data-label="Crédits" class="px-4 py-3 text-sm font-medium text-[var(--app-ink)] tabular-nums">
                       {{ transaction.credits_amount }}
                     </td>
 
-                    <td class="px-4 py-3 text-sm font-medium text-[var(--app-ink)] tabular-nums">
+                    <td data-label="Montant" class="px-4 py-3 text-sm font-medium text-[var(--app-ink)] tabular-nums">
                       <span v-if="transaction.payment_info"
                         >€{{ formatCurrency(transaction.payment_info.amount) }}</span
                       >
                       <span v-else class="text-[var(--app-faint)]">—</span>
                     </td>
 
-                    <td class="px-4 py-3 text-sm text-[var(--app-red)] tabular-nums">
+                    <td data-label="Frais Stripe" class="px-4 py-3 text-sm text-[var(--app-red)] tabular-nums">
                       <span v-if="transaction.payment_info?.application_fee_amount">
                         -€{{ formatCurrency(transaction.payment_info.application_fee_amount) }}
                       </span>
                       <span v-else class="text-[var(--app-faint)]">—</span>
                     </td>
 
-                    <td class="px-4 py-3 text-sm font-medium text-[var(--app-ink)] tabular-nums">
+                    <td data-label="Net" class="px-4 py-3 text-sm font-medium text-[var(--app-ink)] tabular-nums">
                       <span v-if="transaction.payment_info?.net_amount">
                         €{{ formatCurrency(transaction.payment_info.net_amount) }}
                       </span>
                       <span v-else class="text-[var(--app-faint)]">—</span>
                     </td>
 
-                    <td class="px-4 py-3 text-xs text-[var(--app-ink-soft)]">
+                    <td data-label="Dispo. fonds" class="px-4 py-3 text-xs text-[var(--app-ink-soft)]">
                       {{ formatAvailability(transaction.payment_info) }}
                     </td>
 
-                    <td class="px-4 py-3 text-xs text-[var(--app-ink)]">
+                    <td data-label="Paiement" class="px-4 py-3 text-xs text-[var(--app-ink)]">
                       <div class="font-medium">
                         {{ transaction.payment_info?.payment_method_type?.toUpperCase() || '—' }}
                       </div>
                       <div class="text-[var(--app-ink-soft)]">{{ formatPaymentDetails(transaction.payment_info) }}</div>
                     </td>
 
-                    <td class="px-4 py-3 text-sm text-[var(--app-ink)]">
+                    <td data-label="Pays" class="px-4 py-3 text-sm text-[var(--app-ink)]">
                       <span
                         v-if="transaction.payment_info?.customer_country"
                         :title="getCountryName(transaction.payment_info.customer_country)"
@@ -203,11 +203,11 @@
                       <span v-else class="text-[var(--app-faint)]">—</span>
                     </td>
 
-                    <td class="font-label px-4 py-3 text-xs text-[var(--app-ink-soft)]">
+                    <td data-label="IP" class="font-label px-4 py-3 text-xs text-[var(--app-ink-soft)]">
                       {{ transaction.payment_info?.ip_address || '—' }}
                     </td>
 
-                    <td class="px-4 py-3 text-xs text-[var(--app-ink-soft)]">
+                    <td data-label="Appareil" class="px-4 py-3 text-xs text-[var(--app-ink-soft)]">
                       {{ parseUserAgent(transaction.payment_info?.user_agent) }}
                     </td>
 

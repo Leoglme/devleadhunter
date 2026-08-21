@@ -85,20 +85,26 @@
             </span>
           </BaseTableTd>
 
-          <BaseTableTd class="font-label text-xs text-[var(--app-ink-soft)]">{{ user.email }}</BaseTableTd>
+          <BaseTableTd label="Email" class="font-label text-xs text-[var(--app-ink-soft)]">{{
+            user.email
+          }}</BaseTableTd>
 
-          <BaseTableTd align="center">
+          <BaseTableTd label="Rôle" align="center">
             <span :class="['app-badge', user.role === 'ADMIN' ? 'app-badge--info' : '']">
               {{ user.role === 'ADMIN' ? 'Administrateur' : 'Utilisateur' }}
             </span>
           </BaseTableTd>
 
-          <BaseTableTd align="right" class="text-sm text-[var(--app-ink)] tabular-nums">
+          <BaseTableTd label="Crédits dispo." align="right" class="text-sm text-[var(--app-ink)] tabular-nums">
             <span v-if="hasUnlimitedCredits(user)" class="text-[var(--app-ink-soft)]">Illimités</span>
             <span v-else class="font-semibold">{{ user.credits_available }}</span>
           </BaseTableTd>
 
-          <BaseTableTd align="right" class="text-sm font-semibold text-[var(--app-ink)] tabular-nums">
+          <BaseTableTd
+            label="Crédits consommés"
+            align="right"
+            class="text-sm font-semibold text-[var(--app-ink)] tabular-nums"
+          >
             {{ user.credits_consumed ?? 0 }}
           </BaseTableTd>
 

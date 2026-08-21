@@ -55,7 +55,7 @@ export default defineNuxtConfig({
       },
       meta: [
         { charset: 'utf-8' },
-        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
         {
           name: 'description',
           content:
@@ -80,6 +80,11 @@ export default defineNuxtConfig({
         { name: 'twitter:image', content: 'https://devleadhunter.dibodev.fr/og-image.png' },
         { name: 'twitter:site', content: '@devleadhunter' },
         { name: 'theme-color', content: '#f4f1e9' },
+        // PWA — installable dashboard on the iPhone/Android home screen (standalone).
+        { name: 'mobile-web-app-capable', content: 'yes' },
+        { name: 'apple-mobile-web-app-capable', content: 'yes' },
+        { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
+        { name: 'apple-mobile-web-app-title', content: 'DevLeadHunter' },
       ],
       link: [
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },

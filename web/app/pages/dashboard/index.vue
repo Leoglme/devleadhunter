@@ -39,7 +39,7 @@
     </div>
 
     <div v-if="isLoading && !stats" class="space-y-8">
-      <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
+      <div class="grid grid-cols-2 gap-4 @4xl:grid-cols-4">
         <div v-for="n in 4" :key="n" class="app-card h-28 animate-pulse"></div>
       </div>
       <div class="grid grid-cols-1 gap-6 @4xl:grid-cols-3">
@@ -50,7 +50,7 @@
 
     <template v-else-if="stats">
       <section>
-        <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
+        <div class="grid grid-cols-2 gap-4 @4xl:grid-cols-4">
           <NuxtLink
             v-for="stage in pipelineTiles"
             :key="stage.label"

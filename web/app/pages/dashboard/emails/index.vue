@@ -78,7 +78,7 @@
     </div>
 
     <div class="card">
-      <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
+      <div class="grid grid-cols-2 gap-4 @4xl:grid-cols-4">
         <div>
           <label class="text-muted mb-1.5 block text-xs font-medium">Rechercher</label>
           <input v-model="searchQuery" type="text" placeholder="Email, nom, sujet..." class="input-field" />
@@ -122,8 +122,8 @@
     </div>
 
     <div v-else class="card overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="w-full min-w-[720px] border-collapse">
+      <div class="md:overflow-x-auto">
+        <table class="dlh-card-table w-full min-w-[720px] border-collapse">
           <thead>
             <tr class="bg-[var(--app-bg)]">
               <th class="text-muted border-muted border-b px-3 py-2.5 text-left text-xs font-semibold">Destinataire</th>
@@ -147,18 +147,18 @@
                 </div>
                 <div class="text-muted text-xs">{{ log.recipient_email }}</div>
               </td>
-              <td class="text-muted max-w-[200px] truncate px-3 py-2.5 text-sm">
+              <td data-label="Sujet" class="text-muted max-w-[200px] truncate px-3 py-2.5 text-sm">
                 {{ log.subject }}
               </td>
-              <td class="text-muted px-3 py-2.5 text-sm">
+              <td data-label="Campagne" class="text-muted px-3 py-2.5 text-sm">
                 {{ resolveCampaignName(log.campaign_id) ?? '—' }}
               </td>
-              <td class="px-3 py-2.5">
+              <td data-label="Statut" class="px-3 py-2.5">
                 <div class="flex flex-wrap gap-1">
                   <UiEmailStatusBadge v-for="s in getEmailBadges(log)" :key="s" :status="s" />
                 </div>
               </td>
-              <td class="px-3 py-2.5">
+              <td data-label="Activité" class="px-3 py-2.5">
                 <div class="flex items-center gap-2">
                   <span
                     v-for="step in getEngagement(log)"
@@ -177,7 +177,7 @@
                   </span>
                 </div>
               </td>
-              <td class="px-3 py-2.5 text-sm">
+              <td data-label="Envoyé le" class="px-3 py-2.5 text-sm">
                 <div class="text-[var(--app-ink)]">{{ log.sent_at ? formatCompactDateTime(log.sent_at) : '—' }}</div>
                 <div
                   v-if="lastActivityAt(log) && lastActivityAt(log) !== log.sent_at"

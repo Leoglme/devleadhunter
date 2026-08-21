@@ -3,7 +3,7 @@
     <Transition name="drawer-panel">
       <div
         v-if="open"
-        class="fixed top-0 right-0 z-50 flex h-dvh w-full max-w-[480px] flex-col border-l border-[var(--app-line)] bg-[var(--app-surface)] shadow-2xl"
+        class="fixed top-0 right-0 z-50 flex h-dvh w-full max-w-[480px] flex-col border-l border-[var(--app-line)] bg-[var(--app-surface)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-2xl"
       >
         <div class="flex items-start gap-3 border-b border-[var(--app-line)] px-5 py-4">
           <button
@@ -110,14 +110,14 @@
           </form>
         </div>
 
-        <div class="flex gap-2 border-t border-[var(--app-line)] px-5 py-4">
-          <button type="button" class="app-btn-secondary flex-1" :disabled="isSaving" @click="emit('close')">
+        <div class="flex flex-col gap-2 border-t border-[var(--app-line)] px-5 py-4 sm:flex-row">
+          <button type="button" class="app-btn-secondary w-full sm:flex-1" :disabled="isSaving" @click="emit('close')">
             Annuler
           </button>
           <button
             type="submit"
             form="user-form"
-            class="app-btn-primary flex-1 disabled:cursor-not-allowed disabled:opacity-50"
+            class="app-btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50 sm:flex-1"
             :disabled="isSaving || !canSave"
           >
             <UIcon v-if="isSaving" name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />

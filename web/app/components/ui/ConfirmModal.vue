@@ -10,11 +10,11 @@
         <h2 class="font-display mb-2 text-lg font-semibold text-[var(--app-ink)]">{{ props.title }}</h2>
         <p class="mb-6 text-sm leading-relaxed text-[var(--app-ink-soft)]">{{ props.message }}</p>
 
-        <div class="flex gap-3">
-          <button class="app-btn-secondary flex-1" @click="handleCancel">
+        <div class="flex flex-col gap-3 sm:flex-row">
+          <button class="app-btn-secondary w-full sm:flex-1" @click="handleCancel">
             {{ props.cancelText }}
           </button>
-          <button class="flex-1" :class="confirmButtonClass" @click="handleConfirm">
+          <button class="w-full sm:flex-1" :class="confirmButtonClass" @click="handleConfirm">
             {{ props.confirmText }}
           </button>
         </div>

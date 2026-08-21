@@ -557,6 +557,53 @@ html {
   }
 }
 
+/* Responsive tables — `dlh-card-table` stacks rows into cards under md; a <td>'s `data-label` prefixes its value. */
+@media (max-width: 767px) {
+  .dlh-card-table {
+    display: block;
+    min-width: 0 !important;
+  }
+  .dlh-card-table thead {
+    display: none;
+  }
+  .dlh-card-table tbody {
+    display: block;
+  }
+  .dlh-card-table tr {
+    display: block;
+    margin-bottom: 0.625rem;
+    border: 1px solid var(--app-line);
+    border-radius: 0.75rem;
+    padding: 0.375rem 0.875rem;
+  }
+  .dlh-card-table tr:last-child {
+    margin-bottom: 0;
+  }
+  .dlh-card-table td {
+    display: block;
+    padding: 0.375rem 0;
+    text-align: left;
+  }
+  .dlh-card-table td[data-label] {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    text-align: right;
+  }
+  .dlh-card-table td[data-label]::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-family: var(--app-font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--app-ink-soft);
+    text-align: left;
+    white-space: nowrap;
+  }
+}
+
 /* ============================================================
    Landing — editorial light theme (« Atelier »)
    Warm paper background, black & white DA: ink is the only

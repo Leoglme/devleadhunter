@@ -5,7 +5,7 @@
       isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
     ]"
   >
-    <div class="border-b border-[var(--app-line)] px-4 pt-4 pb-3">
+    <div class="border-b border-[var(--app-line)] px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-3">
       <div class="flex items-center gap-2.5 px-1">
         <svg
           class="h-4 w-4 fill-current text-[var(--app-ink)]"

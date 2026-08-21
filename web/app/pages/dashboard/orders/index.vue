@@ -27,7 +27,7 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-4 @sm:grid-cols-2 @4xl:grid-cols-4">
+    <div class="grid grid-cols-2 gap-4 @4xl:grid-cols-4">
       <UiStatCard
         label="Chiffre d'affaires"
         :value="formatCents(stats?.revenue_cents ?? 0)"
@@ -89,17 +89,17 @@
             </span>
           </BaseTableTd>
 
-          <BaseTableTd align="right" class="text-sm font-semibold text-[var(--app-ink)] tabular-nums">
+          <BaseTableTd label="Montant" align="right" class="text-sm font-semibold text-[var(--app-ink)] tabular-nums">
             {{ formatCents(order.amount_cents) }}
           </BaseTableTd>
 
-          <BaseTableTd align="center">
+          <BaseTableTd label="Statut" align="center">
             <span :class="['app-badge', STATUS_BADGE_CLASS[order.status] ?? '']">
               {{ statusLabel(order.status) }}
             </span>
           </BaseTableTd>
 
-          <BaseTableTd align="right" class="font-label text-xs text-[var(--app-ink-soft)]">
+          <BaseTableTd label="Date" align="right" class="font-label text-xs text-[var(--app-ink-soft)]">
             {{ formatShortMonthDate(order.created_at) }}
           </BaseTableTd>
         </BaseTableTr>

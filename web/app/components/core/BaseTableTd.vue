@@ -1,5 +1,5 @@
 <template>
-  <td class="px-4 py-3" :class="alignClass" v-bind="$attrs">
+  <td class="px-4 py-3" :class="alignClass" :data-label="label || undefined" v-bind="$attrs">
     <slot />
   </td>
 </template>
@@ -13,6 +13,10 @@ const props: BaseTableTdProps = defineProps({
   align: {
     type: String as () => BaseTableAlign,
     default: 'left',
+  },
+  label: {
+    type: String,
+    default: '',
   },
 })
 

@@ -1,6 +1,6 @@
 <template>
-  <div class="overflow-x-auto">
-    <table class="w-full border-collapse" :style="tableStyle">
+  <div class="md:overflow-x-auto">
+    <table class="dlh-card-table w-full border-collapse" :style="tableStyle">
       <thead v-if="$slots.head">
         <tr class="bg-[var(--app-surface-2)]">
           <slot name="head" />

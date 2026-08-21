@@ -522,7 +522,7 @@
                 </span>
               </BaseTableTd>
 
-              <BaseTableTd>
+              <BaseTableTd label="Type">
                 <span class="flex items-center gap-1.5">
                   <span
                     :class="['app-badge', item.queue_type === 'initial' ? 'app-badge--info' : 'app-badge--progress']"
@@ -543,11 +543,11 @@
                 </span>
               </BaseTableTd>
 
-              <BaseTableTd class="font-label text-xs text-[var(--app-ink-soft)]">
+              <BaseTableTd label="Planifié" class="font-label text-xs text-[var(--app-ink-soft)]">
                 {{ formatCompactDateTime(item.scheduled_at) }}
               </BaseTableTd>
 
-              <BaseTableTd align="center">
+              <BaseTableTd label="Statut" align="center">
                 <span :class="['app-badge', QUEUE_STATUS_BADGE_CLASS[item.status] ?? '']">
                   {{ QUEUE_STATUS_LABELS[item.status] ?? item.status }}
                 </span>

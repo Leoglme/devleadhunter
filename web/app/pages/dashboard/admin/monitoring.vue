@@ -64,7 +64,7 @@
       >
         Aucune exécution de scraping ces dernières 24 h.
       </div>
-      <div v-else class="grid grid-cols-1 gap-3 @sm:grid-cols-2 @4xl:grid-cols-4">
+      <div v-else class="grid grid-cols-2 gap-3 @4xl:grid-cols-4">
         <div
           v-for="s in overview.sources"
           :key="s.source"
@@ -125,10 +125,10 @@
             <BaseTableTd class="font-label text-xs whitespace-nowrap text-[var(--app-ink-soft)] tabular-nums">
               {{ incident.created_at ? formatNumericDayMonthTime(incident.created_at) : '—' }}
             </BaseTableTd>
-            <BaseTableTd class="text-sm font-semibold text-[var(--app-ink)]">{{
+            <BaseTableTd label="Source" class="text-sm font-semibold text-[var(--app-ink)]">{{
               sourceLabel(incident.source)
             }}</BaseTableTd>
-            <BaseTableTd>
+            <BaseTableTd label="Statut">
               <span
                 class="app-badge"
                 :style="{ color: statusColor(incident.status), backgroundColor: statusSoft(incident.status) }"
@@ -136,19 +136,19 @@
                 {{ statusLabel(incident.status) }}
               </span>
             </BaseTableTd>
-            <BaseTableTd class="text-sm text-[var(--app-ink-soft)]">
+            <BaseTableTd label="Recherche" class="text-sm text-[var(--app-ink-soft)]">
               <span v-if="incident.category || incident.city">{{
                 [incident.category, incident.city].filter(Boolean).join(' · ')
               }}</span>
               <span v-else>—</span>
             </BaseTableTd>
-            <BaseTableTd align="right" class="text-sm text-[var(--app-ink)] tabular-nums">
+            <BaseTableTd label="Résultats" align="right" class="text-sm text-[var(--app-ink)] tabular-nums">
               {{ incident.results_count
               }}<span v-if="incident.expected_count" class="text-[var(--app-faint)]">
                 / {{ incident.expected_count }}</span
               >
             </BaseTableTd>
-            <BaseTableTd>
+            <BaseTableTd label="Détail">
               <button
                 v-if="incident.has_html"
                 type="button"
