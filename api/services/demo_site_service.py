@@ -35,6 +35,9 @@ from services.templates.site_content import usable_site_photos
 
 logger = logging.getLogger(__name__)
 
+# Sentinel expiry while the demo link has not been emailed yet (TTL not started).
+_PENDING_TTL_EXPIRES: datetime = datetime(2099, 12, 31, 23, 59, 59, tzinfo=UTC)
+
 AVAILABLE_TEMPLATES: list[dict[str, object]] = template_registry.AVAILABLE_TEMPLATES
 
 
@@ -511,7 +514,7 @@ class DemoSiteService:
             raise ValueError("Client email is required for the demo site record.")
 
         slug: str = self.unique_slug(db, business_name)
-        expires_at: datetime = datetime.now(UTC) + timedelta(days=settings.demo_site_ttl_days)
+        expires_at: datetime = self._pending_ttl_expires_at()
 
         demo_site: DemoSite = DemoSite(
             user_id=user.id,
@@ -649,14 +652,84 @@ class DemoSiteService:
         if not site:
             return None
 
-        expires_at: datetime = site.expires_at
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=UTC)
+        if site.demo_link_sent_at is not None:
+            expires_at: datetime = site.expires_at
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=UTC)
 
-        if expires_at <= now:
-            return None
+            if expires_at <= now:
+                return None
 
         return site
+
+    @staticmethod
+    def _pending_ttl_expires_at() -> datetime:
+        """Expiry placeholder until the demo link is first emailed to the prospect."""
+        return _PENDING_TTL_EXPIRES
+
+    @staticmethod
+    def _as_utc(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+    def ttl_is_pending(self, site: DemoSite) -> bool:
+        """True when the 21-day countdown has not started yet (link not emailed)."""
+        return site.demo_link_sent_at is None and site.status != DemoSiteStatus.DELIVERED.value
+
+    def email_body_contains_demo_link(self, site: DemoSite, body_html: str) -> bool:
+        """Whether rendered outreach HTML includes this site's public demo URL."""
+        haystack: str = body_html or ""
+        if site.slug and f"/{site.slug}" in haystack:
+            return True
+        return bool(site.demo_url and site.demo_url in haystack)
+
+    def start_demo_ttl(self, db: Session, site: DemoSite, sent_at: datetime) -> bool:
+        """
+        Start (or leave unchanged) the demo TTL from the first email carrying the link.
+
+        Returns:
+            True when ``expires_at`` was set from this send.
+        """
+        if site.demo_link_sent_at is not None:
+            return False
+        if site.status == DemoSiteStatus.DELIVERED.value:
+            return False
+
+        sent_utc: datetime = self._as_utc(sent_at)
+        site.demo_link_sent_at = sent_utc
+        site.expires_at = sent_utc + timedelta(days=settings.demo_site_ttl_days)
+        db.commit()
+        logger.info(
+            "Demo TTL started for slug=%s expires_at=%s",
+            site.slug,
+            site.expires_at.isoformat(),
+        )
+        return True
+
+    def maybe_start_ttl_after_demo_email(
+        self,
+        db: Session,
+        *,
+        user_id: int,
+        prospect_id: int,
+        sent_at: datetime,
+        body_html: str,
+    ) -> None:
+        """Start the demo TTL when an outreach email ships the prospect's demo link."""
+        site: DemoSite | None = (
+            db.query(DemoSite)
+            .filter(
+                DemoSite.prospect_id == prospect_id,
+                DemoSite.user_id == user_id,
+                DemoSite.status == DemoSiteStatus.ACTIVE.value,
+            )
+            .order_by(DemoSite.created_at.desc())
+            .first()
+        )
+        if site is None or not self.email_body_contains_demo_link(site, body_html):
+            return
+        self.start_demo_ttl(db, site, sent_at)
 
     def get_public_by_domain(self, db: Session, host: str) -> DemoSite | None:
         """
@@ -813,6 +886,7 @@ class DemoSiteService:
                         DemoSiteStatus.UNAVAILABLE.value,
                     ]
                 ),
+                DemoSite.demo_link_sent_at.isnot(None),
                 DemoSite.expires_at <= now,
             )
             .all()

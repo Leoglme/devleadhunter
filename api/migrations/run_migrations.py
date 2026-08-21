@@ -84,6 +84,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_demo_site_use_brand_color", "migrations.add_demo_site_use_brand_color"),
     ("add_demo_site_image_order", "migrations.add_demo_site_image_order"),
     ("add_demo_site_storyblok_collaborator_status", "migrations.add_demo_site_storyblok_collaborator_status"),
+    ("add_demo_site_demo_link_sent_at", "migrations.add_demo_site_demo_link_sent_at"),
     ("widen_enrichment_logo_url_to_text", "migrations.widen_enrichment_logo_url_to_text"),
     # Charset drift must be repaired before anything compares strings on those tables.
     ("fix_utf8mb4_collation", "migrations.fix_utf8mb4_collation"),

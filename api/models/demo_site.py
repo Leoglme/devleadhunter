@@ -18,7 +18,8 @@ class DemoSite(Base):
     """
     A temporary demo website generated from a template.
 
-    Hosted at demo.dibodev.fr/{slug} for 21 days by default.
+    Hosted at demo.dibodev.fr/{slug}. The 21-day TTL starts when the demo link
+    is first emailed to the prospect (``demo_link_sent_at``), not at generation.
     """
 
     __tablename__ = "demo_sites"
@@ -71,6 +72,8 @@ class DemoSite(Base):
     local_demo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     verification_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # When the demo link was first emailed to the prospect — NULL until then (TTL not started).
+    demo_link_sent_at: Mapped[datetime | None] = mapped_column(nullable=True)
     expires_at: Mapped[datetime] = mapped_column(nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(onupdate=func.now(), nullable=True)

@@ -294,6 +294,23 @@ class EmailSendingService:
             email_log.provider_message_id = result.get("message_id")
             email_log.sent_at = datetime.utcnow()
             self.db.commit()
+            if not is_transactional and prospect_id:
+                from services.demo_site_service import demo_site_service
+
+                try:
+                    demo_site_service.maybe_start_ttl_after_demo_email(
+                        self.db,
+                        user_id=user_id,
+                        prospect_id=int(prospect_id),
+                        sent_at=email_log.sent_at,
+                        body_html=body_html,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to start demo TTL after email to prospect %s",
+                        prospect_id,
+                        exc_info=True,
+                    )
             self._mark_prospect_contacted(prospect_id)
             await self._capture_email_sent(
                 user_id=user_id,

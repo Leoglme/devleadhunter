@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     demo_site_ttl_days: int = Field(
         default=21,
         alias="DEMO_SITE_TTL_DAYS",
-        description="Number of days before a demo site is auto-deleted",
+        description="Number of days a demo site stays online after its link is first emailed",
     )
     demo_site_verify_retries: int = Field(
         default=3,
