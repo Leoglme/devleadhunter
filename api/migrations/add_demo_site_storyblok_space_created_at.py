@@ -30,7 +30,7 @@ def _column_exists(conn, column_name: str) -> bool:
     return bool(result.scalar())
 
 
-def run() -> None:
+def run_migration() -> None:
     with engine.begin() as conn:
         if not _column_exists(conn, "storyblok_space_created_at"):
             conn.execute(
@@ -56,4 +56,4 @@ def run() -> None:
 
 
 if __name__ == "__main__":
-    run()
+    run_migration()
