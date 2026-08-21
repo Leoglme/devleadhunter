@@ -31,6 +31,15 @@ const ENGAGED_SECONDS_THRESHOLD: number = 20
 const ENGAGED_SCROLL_THRESHOLD: number = 50
 
 /**
+ * First-party proxy path for PostHog (server/routes/dibodev/events/[...path].ts).
+ * Deliberately not /ingest, /analytics or /posthog — those are on the uBlock/EasyPrivacy
+ * lists that Firefox ETP, Safari ITP and adblockers apply; a branded path stays first-party.
+ */
+const POSTHOG_PROXY_PATH: string = '/dibodev/events'
+/** PostHog EU UI host (toolbar / replay links only, never an ingestion target). */
+const POSTHOG_UI_HOST: string = 'https://eu.posthog.com'
+
+/**
  * Composable exposing the demo tracking initialiser.
  * @returns An object with the ``init`` method.
  */
@@ -197,7 +206,6 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
     // visit — tracking it would pollute the lead scoring with fake activity.
     if (window.self !== window.top) return
     const key: string = String(config.public.posthogProjectApiKey ?? '')
-    const host: string = String(config.public.posthogIngestionHost ?? '')
     // Never track a delivered/sold site, and skip when PostHog is not configured.
     if (!key || status !== 'active') return
 
@@ -206,7 +214,8 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
     }: typeof import('C:/Users/leogu/Desktop/Projects/devleadhunter/demo-host/node_modules/posthog-js/dist/module') =
       await import('posthog-js')
     posthog.init(key, {
-      api_host: host,
+      api_host: POSTHOG_PROXY_PATH,
+      ui_host: POSTHOG_UI_HOST,
       capture_pageview: true,
       // $pageleave apporte le temps sur page calculé par PostHog, en recoupement du nôtre.
       capture_pageleave: true,

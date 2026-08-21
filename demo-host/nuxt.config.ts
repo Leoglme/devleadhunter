@@ -37,9 +37,9 @@ export default defineNuxtConfig({
     public: {
       apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000',
       // PostHog (behavioural tracking on demo sites). Empty key → tracking disabled.
-      // Project API Key (phc_, publique) + host d'ingestion.
+      // Public project key (phc_); ingestion goes through the first-party proxy
+      // (server/routes/dibodev/events), so no ingestion host is configured client-side.
       posthogProjectApiKey: process.env.NUXT_PUBLIC_POSTHOG_PROJECT_API_KEY || '',
-      posthogIngestionHost: process.env.NUXT_PUBLIC_POSTHOG_INGESTION_HOST || 'https://eu.i.posthog.com',
     },
   },
   routeRules: {
