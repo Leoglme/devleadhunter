@@ -25,11 +25,14 @@ they can be unit-tested without a browser.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import re
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+import httpx
 
 from scrappers.enrichment_scraper import EnrichmentData
 from scrappers.nodriver_browser import NODRIVER_AVAILABLE, NodriverBrowser
@@ -42,9 +45,22 @@ logger = logging.getLogger(__name__)
 # Google's come first, Facebook's are appended as a secondary pool, and the user picks the best.
 _MAX_PHOTOS = 40
 _MAX_REVIEWS = 12
-# How many fbcdn photos to capture in-browser as data URIs (they outlive the short-lived signed URLs).
-# Full-size now, so each is heavier than the old thumbnail — kept modest so the record stays reasonable.
+# How many fbcdn photos to capture as base64 data URIs (they outlive the short-lived signed URLs).
+# A site needs ~8 (hero, about, menu, collage, testimonial); 12 leaves margin without bloating the POST.
 _FB_REHOST_CAP = 12
+# Skip a photo heavier than this (bytes) — a full-size gallery JPEG is well under it.
+_FB_PHOTO_MAX_BYTES = 3_500_000
+# Concurrent photo downloads: quick capture without hammering fbcdn.
+_FB_DOWNLOAD_CONCURRENCY = 4
+# Browser-like headers so fbcdn serves our client the same signed URL it served the <img> tag.
+_FB_DOWNLOAD_HEADERS: dict[str, str] = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    "Referer": "https://www.facebook.com/",
+}
 
 # `\s` matches the thin/no-break spaces Facebook puts before « % », so « 96 % » / « 22 avis » parse verbatim.
 _RECOMMEND_RE = re.compile(r"recommand[ée]?s?\s+par\s*(\d+)\s*%", re.IGNORECASE)
@@ -731,12 +747,12 @@ class FacebookEnrichmentScraper:
                 return EnrichmentData(source="facebook")
             page = await self._extract_json(tab, _FB_PAGE_JS)
             photos = await self._extract_photos(tab, facebook_url)
-            photos = await self._rehost_fb_photos(tab, photos)
-            # The logo is the FB profile photo (fbcdn): rehost it too, else generation drops it as
+            photos = await self._rehost_fb_photos(photos)
+            # The logo is the FB profile photo (fbcdn): capture it too, else generation drops it as
             # unrehostable and the site loses its logo/favicon (#18, applied to the logo this time).
             logo_src = page.get("profile_photo")
             if isinstance(logo_src, str) and logo_src.strip():
-                page["profile_photo"] = (await self._rehost_fb_photos(tab, [logo_src]))[0]
+                page["profile_photo"] = (await self._rehost_fb_photos([logo_src]))[0]
             reviews_text, embedded_texts = await self._extract_reviews(tab, facebook_url)
             return self._build_from_raw(page, reviews_text, photos, embedded_texts)
         except Exception as exc:
@@ -809,22 +825,18 @@ class FacebookEnrichmentScraper:
             return {}
         return parsed if isinstance(parsed, dict) else {}
 
-    async def _rehost_fb_photos(self, tab: Any, photos: list[str]) -> list[str]:
-        """Capture the top Facebook-CDN photos in the browser (fetch → base64 ``data:`` URI), now, while
-        their short-lived signed URLs are still valid.
+    async def _rehost_fb_photos(self, photos: list[str]) -> list[str]:
+        """Capture the top Facebook-CDN photos as base64 ``data:`` URIs, now, while their short-lived
+        signed URLs are still valid.
 
-        fbcdn URLs are signed and expire within hours: by generation time the VPS gets a 403 and FB-only
-        prospects render imageless, so the bytes must be grabbed at scrape time. fbcdn *does* allow a
-        cross-origin read (it serves ``Access-Control-Allow-Origin: *``), and a plain server-side download
-        is refused (fbcdn blocks non-browser clients), so the capture stays in the browser that just
-        displayed the images.
-
-        The whole capture runs inside ONE ``evaluate(await_promise=True)`` call: CDP drives the async IIFE
-        to completion and returns its value. A fire-and-forget script + polling didn't work — the page's JS
-        doesn't run freely between separate CDP commands, so the detached task never progressed. The result
-        comes back as a JSON *string* (not a plain object) because nodriver's deep-serialization mangles an
-        object of long data URIs. Best-effort + additive: any photo we can't capture is left as-is, so
-        generation's drop-then-fallback still yields a complete site.
+        fbcdn URLs are signed and expire within days: by generation time they would be dead, so the bytes
+        must be grabbed at scrape time. This runs on the operator's residential connection (like the whole
+        scrape), where a plain HTTP GET of the signed URL succeeds — no browser, no CORS, no Facebook
+        session needed (the signature travels in the URL itself). Downloading server-side here is far more
+        reliable than the previous in-browser ``fetch`` (which silently lost most photos to CORS/timing).
+        The captured data URIs are later moved to permanent R2 storage when the enrichment is persisted.
+        Best-effort + additive: any photo we cannot capture is left as its original URL, so generation's
+        drop-then-fallback still yields a complete site.
         """
 
         def _is_fb_cdn(url: str) -> bool:
@@ -835,43 +847,54 @@ class FacebookEnrichmentScraper:
         if not targets:
             return photos
 
-        # The URLs are already upgraded to full size (see ``_upgrade_fb_photo_url``); capture the bytes
-        # now, while the short-lived signed URLs are still valid.
-        js: str = (
-            "(async () => { const urls = " + json.dumps(targets) + "; const out = {};"
-            " for (const u of urls) { try {"
-            " const r = await fetch(u); if (!r.ok) continue;"
-            " const b = await r.blob(); if (!b || !b.size || b.size > 3500000) continue;"
-            " const d = await new Promise((res) => { const fr = new FileReader();"
-            " fr.onloadend = () => res(typeof fr.result === 'string' ? fr.result : null);"
-            " fr.onerror = () => res(null); fr.readAsDataURL(b); });"
-            " if (d && d.startsWith('data:image')) out[u] = d;"
-            " } catch (e) {} } return JSON.stringify(out); })()"
-        )
-        try:
-            raw: Any = await NodriverDom.evaluate(tab, js, by_value=True, await_promise=True)
-        except Exception as exc:  # a rehost failure must never break the scrape
-            logger.info("Facebook photo rehost skipped: %s", exc)
-            return photos
-
-        captured: dict[str, str] = {}
-        if isinstance(raw, str) and raw:
-            try:
-                parsed: Any = json.loads(raw)
-            except json.JSONDecodeError:
-                parsed = None
-            if isinstance(parsed, dict):
-                captured = {
-                    key: value
-                    for key, value in parsed.items()
-                    if isinstance(value, str) and value.startswith("data:image")
-                }
-
+        captured: dict[str, str] = await self._download_as_data_uris(targets)
         if captured:
-            logger.info("Facebook enrichment: rehosted %d/%d fbcdn photo(s) in-browser", len(captured), len(targets))
+            logger.info("Facebook enrichment: captured %d/%d fbcdn photo(s) as data URIs", len(captured), len(targets))
         else:
-            logger.warning("Facebook enrichment: 0/%d fbcdn photos rehosted (in-browser capture failed)", len(targets))
+            logger.warning("Facebook enrichment: 0/%d fbcdn photos captured (download failed)", len(targets))
         return [captured.get(p, p) for p in photos]
+
+    @staticmethod
+    async def _download_as_data_uris(urls: list[str]) -> dict[str, str]:
+        """Download image URLs concurrently, returning ``{url: data-uri}`` for the ones that succeeded.
+
+        Args:
+            urls: Full-size fbcdn photo URLs (already upgraded by ``_upgrade_fb_photo_url``).
+
+        Returns:
+            One base64 ``data:`` URI per URL that returned a real image under the size guard; a dead link,
+            oversized body or non-image is simply omitted.
+        """
+        semaphore = asyncio.Semaphore(_FB_DOWNLOAD_CONCURRENCY)
+        captured: dict[str, str] = {}
+
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(15.0),
+            headers=_FB_DOWNLOAD_HEADERS,
+            follow_redirects=True,
+        ) as client:
+
+            async def _grab(url: str) -> None:
+                async with semaphore:
+                    try:
+                        response = await client.get(url)
+                    except httpx.HTTPError:
+                        return
+                    if response.status_code != 200:
+                        return
+                    data: bytes = response.content
+                    if not data or len(data) > _FB_PHOTO_MAX_BYTES:
+                        return
+                    content_type: str = (response.headers.get("content-type") or "").split(";")[0].strip().lower()
+                    # A non-image type means fbcdn served an error/login HTML page, not the photo — skip
+                    # it. A missing type (fbcdn sometimes omits it) is trusted as an image.
+                    if content_type and not content_type.startswith("image/"):
+                        return
+                    encoded: str = base64.b64encode(data).decode("ascii")
+                    captured[url] = f"data:{content_type or 'image/jpeg'};base64,{encoded}"
+
+            await asyncio.gather(*(_grab(url) for url in urls))
+        return captured
 
     async def _extract_photos(self, tab: Any, facebook_url: str) -> list[str]:
         """Read photos from « prises par » then « identifiées », filtered for real media."""

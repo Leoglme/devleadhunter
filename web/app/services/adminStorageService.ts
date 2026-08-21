@@ -7,7 +7,13 @@ import { ApiClient } from './api'
  */
 
 /** Category of a stored object, derived from its key prefix. */
-export type StorageObjectKind = 'website_video' | 'website_thumbnail' | 'presenter' | 'support' | 'other'
+export type StorageObjectKind =
+  | 'website_video'
+  | 'website_thumbnail'
+  | 'presenter'
+  | 'support'
+  | 'prospect_photo'
+  | 'other'
 
 /** One object of the bucket, enriched with business context. */
 export type StorageObject = {
@@ -74,11 +80,28 @@ export class AdminStorageService {
   }
 
   /**
+   * Delete several objects at once (multi-selection on the storage page).
+   * @param keys - Full object keys to remove.
+   * @returns The action result.
+   */
+  static async deleteStorageObjects(keys: string[]): Promise<StorageActionResponse> {
+    return ApiClient.post<StorageActionResponse>('/api/v1/admin/storage/delete-objects', { keys })
+  }
+
+  /**
    * Delete every demo deliverable past its 14-day TTL.
    * @returns The action result.
    */
   static async purgeExpiredStorage(): Promise<StorageActionResponse> {
     return ApiClient.post<StorageActionResponse>('/api/v1/admin/storage/purge-expired', {})
+  }
+
+  /**
+   * Delete rehosted prospect photos no enrichment references any more.
+   * @returns The action result.
+   */
+  static async purgeOrphanProspectPhotos(): Promise<StorageActionResponse> {
+    return ApiClient.post<StorageActionResponse>('/api/v1/admin/storage/purge-orphan-prospect-photos', {})
   }
 
   /**

@@ -358,6 +358,7 @@ class ProspectService:
         from enums.demo_site_status import DemoSiteStatus
         from models.demo_site import DemoSite
         from services.demo_site_service import demo_site_service
+        from services.prospect_photo_storage_service import prospect_photo_storage
 
         db_prospect = db.query(ProspectDB).filter(ProspectDB.id == prospect_id).first()
         if not db_prospect:
@@ -376,6 +377,9 @@ class ProspectService:
         )
         db.delete(db_prospect)
         db.commit()
+
+        # The prospect's rehosted photos on R2 are now unreferenced — reclaim their space (best-effort).
+        await prospect_photo_storage.delete_for_prospect(prospect_id)
         return True
 
     async def get_prospects_count(self, db: Session, user_id: int | None = None) -> int:
