@@ -68,8 +68,43 @@
     <UiLoader v-if="isLoading" label="Lecture du bucket…" />
 
     <div v-else-if="listing && listing.items.length" class="space-y-2">
-      <div v-for="item in listing.items" :key="item.key" class="app-card overflow-hidden p-0">
+      <div class="flex flex-wrap items-center justify-between gap-2 px-1">
+        <label class="flex cursor-pointer items-center gap-2 text-xs text-[var(--app-ink-soft)]">
+          <input
+            type="checkbox"
+            class="h-4 w-4 cursor-pointer accent-[var(--app-ink)]"
+            :checked="allSelected"
+            @change="toggleSelectAll"
+          />
+          Tout sélectionner
+        </label>
+        <button
+          v-if="isProspectPhotosView"
+          type="button"
+          class="app-btn-secondary h-8 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="isActing"
+          title="Supprimer les photos que plus aucun prospect ne référence"
+          @click="askPurgeOrphans"
+        >
+          <UIcon name="i-lucide-recycle" class="h-3.5 w-3.5" />
+          Purger les orphelines
+        </button>
+      </div>
+
+      <div
+        v-for="item in listing.items"
+        :key="item.key"
+        class="app-card overflow-hidden p-0"
+        :class="isSelected(item.key) && 'ring-1 ring-[var(--app-ink)]'"
+      >
         <div class="flex items-center gap-3 px-4 py-3">
+          <input
+            type="checkbox"
+            class="h-4 w-4 shrink-0 cursor-pointer accent-[var(--app-ink)]"
+            :checked="isSelected(item.key)"
+            :aria-label="`Sélectionner ${displayName(item)}`"
+            @change="toggleSelect(item.key)"
+          />
           <button
             type="button"
             class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
@@ -173,6 +208,39 @@
       </div>
     </UiCollapsibleCard>
 
+    <Transition name="bulkbar">
+      <div v-if="selectedKeys.length > 0" class="fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
+        <div
+          class="app-card flex flex-wrap items-center justify-center gap-2 rounded-full px-4 py-2.5 shadow-[var(--app-shadow-soft)] backdrop-blur"
+        >
+          <span class="font-label px-1.5 text-xs font-medium text-[var(--app-ink)]">
+            {{ selectedKeys.length }} sélectionné{{ selectedKeys.length > 1 ? 's' : '' }}
+          </span>
+          <span class="hidden h-5 w-px bg-[var(--app-line)] sm:block"></span>
+          <button
+            type="button"
+            class="app-btn-danger h-9 px-4 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="isActing"
+            @click="askBulkDelete"
+          >
+            <UIcon
+              :name="isActing ? 'i-lucide-loader-circle' : 'i-lucide-trash-2'"
+              :class="['h-3.5 w-3.5', isActing && 'animate-spin']"
+            />
+            Supprimer
+          </button>
+          <button
+            type="button"
+            class="ml-0.5 cursor-pointer rounded-full p-2 text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
+            aria-label="Désélectionner tout"
+            @click="clearSelection"
+          >
+            <UIcon name="i-lucide-x" class="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </Transition>
+
     <UiConfirmModal
       ref="confirmModal"
       :title="confirmTitle"
@@ -187,6 +255,7 @@
 <script lang="ts" setup>
 import { formatShortMonthDate } from '~/utils/date'
 import type { UseToastReturn } from '~/types/Composables'
+import type { PendingStorageAction } from '~/types/StoragePage'
 import type { ComputedRef, Ref } from 'vue'
 import type {
   StorageActionResponse,
@@ -203,12 +272,16 @@ definePageMeta({ layout: 'dashboard', middleware: ['auth'] })
 /** Demo deliverables TTL, mirrored from the API. */
 const TTL_DAYS: number = 14
 
+/** Key prefix of the rehosted prospect photos (the only category with an orphan-purge action). */
+const PROSPECT_PHOTOS_PREFIX: string = 'images/prospects/'
+
 /** Prefix filters shown as pills. */
 const FILTERS: Array<{ label: string; prefix: string }> = [
   { label: 'Tout', prefix: '' },
   { label: 'Vidéos', prefix: 'videos/websites/' },
   { label: 'Vignettes', prefix: 'images/websites/' },
   { label: 'Clips webcam', prefix: 'videos/presenter/' },
+  { label: 'Photos prospects', prefix: PROSPECT_PHOTOS_PREFIX },
   { label: 'Support', prefix: 'images/support/' },
 ]
 
@@ -218,6 +291,7 @@ const KIND_ICONS: Record<string, string> = {
   website_thumbnail: 'i-lucide-image',
   presenter: 'i-lucide-webcam',
   support: 'i-lucide-paperclip',
+  prospect_photo: 'i-lucide-image',
   other: 'i-lucide-file',
 }
 
@@ -227,6 +301,7 @@ const KIND_LABELS: Record<string, string> = {
   website_thumbnail: 'Vignette',
   presenter: 'Clip webcam',
   support: 'Pièce jointe',
+  prospect_photo: 'Photo prospect',
   other: 'Fichier',
 }
 
@@ -240,6 +315,8 @@ const error: Ref<string> = ref('')
 const activePrefix: Ref<string> = ref('')
 const openKey: Ref<string | null> = ref(null)
 const pendingKey: Ref<string | null> = ref(null)
+const pendingAction: Ref<PendingStorageAction | null> = ref(null)
+const selectedKeys: Ref<string[]> = ref([])
 const confirmTitle: Ref<string> = ref('')
 const confirmMessage: Ref<string> = ref('')
 const confirmModal: Ref<{ open: () => void } | null> = ref(null)
@@ -247,6 +324,22 @@ const confirmModal: Ref<{ open: () => void } | null> = ref(null)
 /** Number of objects past their TTL in the current listing. */
 const expiredCount: ComputedRef<number> = computed(
   (): number => listing.value?.items.filter((item: StorageObject): boolean => item.is_expired).length ?? 0,
+)
+
+/** Keys currently listed — the pool that « tout sélectionner » operates on. */
+const visibleKeys: ComputedRef<string[]> = computed(
+  (): string[] => listing.value?.items.map((item: StorageObject): string => item.key) ?? [],
+)
+
+/** Whether every listed object is currently selected. */
+const allSelected: ComputedRef<boolean> = computed(
+  (): boolean =>
+    visibleKeys.value.length > 0 && visibleKeys.value.every((key: string): boolean => selectedKeys.value.includes(key)),
+)
+
+/** Whether the active filter is the rehosted prospect photos (the only category with an orphan purge). */
+const isProspectPhotosView: ComputedRef<boolean> = computed(
+  (): boolean => activePrefix.value === PROSPECT_PHOTOS_PREFIX,
 )
 
 /** Consistency groups, each with a plain-French explanation. */
@@ -326,10 +419,43 @@ function isVideo(item: StorageObject): boolean {
 /**
  * Whether an object can be shown as an image.
  * @param item - Storage object.
- * @returns True for thumbnails and support attachments.
+ * @returns True for thumbnails, support attachments and rehosted prospect photos.
  */
 function isImage(item: StorageObject): boolean {
-  return item.kind === 'website_thumbnail' || item.kind === 'support'
+  return item.kind === 'website_thumbnail' || item.kind === 'support' || item.kind === 'prospect_photo'
+}
+
+/**
+ * Whether an object is in the multi-selection.
+ * @param key - Object key.
+ * @returns True when selected.
+ */
+function isSelected(key: string): boolean {
+  return selectedKeys.value.includes(key)
+}
+
+/**
+ * Toggle one object in the multi-selection.
+ * @param key - Object key.
+ */
+function toggleSelect(key: string): void {
+  selectedKeys.value = isSelected(key)
+    ? selectedKeys.value.filter((selected: string): boolean => selected !== key)
+    : [...selectedKeys.value, key]
+}
+
+/**
+ * Select every listed object, or clear the selection when all are already selected.
+ */
+function toggleSelectAll(): void {
+  selectedKeys.value = allSelected.value ? [] : [...visibleKeys.value]
+}
+
+/**
+ * Clear the multi-selection.
+ */
+function clearSelection(): void {
+  selectedKeys.value = []
 }
 
 /**
@@ -353,6 +479,8 @@ async function load(): Promise<void> {
   error.value = ''
   try {
     listing.value = await AdminStorageService.getStorageObjects(activePrefix.value)
+    // Drop from the selection any object that vanished (deleted elsewhere / filtered out).
+    selectedKeys.value = selectedKeys.value.filter((key: string): boolean => visibleKeys.value.includes(key))
     health.value = await AdminStorageService.getStorageHealth().catch((): StorageHealthResponse | null => null)
   } catch (err: unknown) {
     error.value = err instanceof Error ? err.message : 'Impossible de charger le stockage'
@@ -369,6 +497,7 @@ async function load(): Promise<void> {
 async function applyFilter(prefix: string): Promise<void> {
   activePrefix.value = prefix
   openKey.value = null
+  clearSelection()
   await load()
 }
 
@@ -399,6 +528,7 @@ async function copyLink(url: string): Promise<void> {
  * @param item - Object to delete.
  */
 function askDelete(item: StorageObject): void {
+  pendingAction.value = 'delete'
   pendingKey.value = item.key
   confirmTitle.value = 'Supprimer le fichier'
   confirmMessage.value = `Supprimer « ${displayName(item)} » ? Cette action est irréversible.`
@@ -406,9 +536,21 @@ function askDelete(item: StorageObject): void {
 }
 
 /**
+ * Ask confirmation before deleting every selected object.
+ */
+function askBulkDelete(): void {
+  pendingAction.value = 'bulk-delete'
+  pendingKey.value = null
+  confirmTitle.value = 'Supprimer les fichiers sélectionnés'
+  confirmMessage.value = `Supprimer les ${selectedKeys.value.length} fichier(s) sélectionné(s) ? Cette action est irréversible.`
+  confirmModal.value?.open()
+}
+
+/**
  * Ask confirmation before purging every expired object.
  */
 function askPurge(): void {
+  pendingAction.value = 'purge-expired'
   pendingKey.value = null
   confirmTitle.value = 'Purger les fichiers expirés'
   confirmMessage.value = `Supprimer les ${expiredCount.value} fichier(s) de plus de ${TTL_DAYS} jours ?`
@@ -416,15 +558,24 @@ function askPurge(): void {
 }
 
 /**
- * Run the confirmed action (single delete or purge), then reload.
+ * Ask confirmation before purging prospect photos no enrichment references any more.
+ */
+function askPurgeOrphans(): void {
+  pendingAction.value = 'purge-orphans'
+  pendingKey.value = null
+  confirmTitle.value = 'Purger les photos orphelines'
+  confirmMessage.value = 'Supprimer les photos de prospect que plus aucun enrichissement ne référence ?'
+  confirmModal.value?.open()
+}
+
+/**
+ * Run the confirmed action, then reload.
  * @returns A promise resolving once the action completed.
  */
 async function runConfirmed(): Promise<void> {
   isActing.value = true
   try {
-    const result: StorageActionResponse = pendingKey.value
-      ? await AdminStorageService.deleteStorageObject(pendingKey.value)
-      : await AdminStorageService.purgeExpiredStorage()
+    const result: StorageActionResponse = await runPendingAction()
     toast.success(result.message || 'Action effectuée')
     openKey.value = null
     await load()
@@ -433,10 +584,52 @@ async function runConfirmed(): Promise<void> {
   } finally {
     isActing.value = false
     pendingKey.value = null
+    pendingAction.value = null
   }
+}
+
+/**
+ * Dispatch the pending confirm action to its storage service call.
+ * @returns The action result.
+ */
+function runPendingAction(): Promise<StorageActionResponse> {
+  if (pendingAction.value === 'bulk-delete') {
+    const keys: string[] = [...selectedKeys.value]
+    clearSelection()
+    return AdminStorageService.deleteStorageObjects(keys)
+  }
+  if (pendingAction.value === 'purge-orphans') return AdminStorageService.purgeOrphanProspectPhotos()
+  if (pendingAction.value === 'purge-expired') return AdminStorageService.purgeExpiredStorage()
+  return AdminStorageService.deleteStorageObject(pendingKey.value ?? '')
 }
 
 onMounted(async (): Promise<void> => {
   await load()
 })
 </script>
+
+<style scoped>
+.bulkbar-enter-active,
+.bulkbar-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.bulkbar-enter-from,
+.bulkbar-leave-to {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bulkbar-enter-active,
+  .bulkbar-leave-active {
+    transition: none;
+  }
+  .bulkbar-enter-from,
+  .bulkbar-leave-to {
+    transform: none;
+  }
+}
+</style>

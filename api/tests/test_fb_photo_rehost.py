@@ -1,12 +1,13 @@
 """
-Facebook photos are captured in-browser at scrape time as base64 ``data:`` URIs (fbcdn URLs 403 on the
-VPS). Those data URIs must survive generation — not dropped as "unrehostable" like raw fbcdn — and the
-Storyblok upload decodes them instead of downloading.
+Facebook photos are captured at scrape time as base64 ``data:`` URIs (their signed fbcdn URLs expire
+within days), then moved to permanent R2 storage when the enrichment is persisted. Those data URIs must
+survive generation — not dropped as "unrehostable" like raw fbcdn — and the Storyblok upload decodes
+them instead of downloading.
 """
 
 import base64
-import json
 
+import httpx
 import pytest
 
 from scrappers.facebook_enrichment_scraper import FacebookEnrichmentScraper, _dedupe_photos, _upgrade_fb_photo_url
@@ -84,20 +85,76 @@ def test_raw_fbcdn_is_dropped_but_captured_data_uri_passes() -> None:
 
 @pytest.mark.asyncio
 async def test_rehost_maps_captured_data_uris_and_leaves_the_rest(monkeypatch) -> None:
-    """The single awaited evaluate returns a JSON string: fbcdn→data URI, uncaptured fbcdn stays raw, non-fbcdn untouched."""
+    """fbcdn photos become their captured data URI; an uncaptured fbcdn stays raw; a non-fbcdn URL is
+    never even downloaded."""
     ok_url = "https://scontent.xx.fbcdn.net/a.jpg?oh=1"
     missed_url = "https://scontent.xx.fbcdn.net/b.jpg?oh=2"
     google_url = "https://lh3.googleusercontent.com/x=s1600"
     data_uri = "data:image/jpeg;base64," + base64.b64encode(b"fake").decode("ascii")
 
-    async def fake_evaluate(_tab: object, _js: str, **_kwargs: object) -> str:
-        return json.dumps({ok_url: data_uri})
+    async def fake_download(urls: list[str]) -> dict[str, str]:
+        assert google_url not in urls  # only fbcdn targets are downloaded
+        return {ok_url: data_uri}
 
-    monkeypatch.setattr("scrappers.facebook_enrichment_scraper.NodriverDom.evaluate", fake_evaluate)
+    monkeypatch.setattr(FacebookEnrichmentScraper, "_download_as_data_uris", staticmethod(fake_download))
 
     scraper = FacebookEnrichmentScraper()
-    result = await scraper._rehost_fb_photos(object(), [ok_url, missed_url, google_url])
+    result = await scraper._rehost_fb_photos([ok_url, missed_url, google_url])
 
     assert result[0] == data_uri
     assert result[1] == missed_url  # fbcdn not captured → left raw (generation drops + fallback)
     assert result[2] == google_url  # non-fbcdn → never touched
+
+
+class _FakeResponse:
+    """Minimal stand-in for an ``httpx.Response`` in the download test."""
+
+    def __init__(self, status_code: int, content: bytes = b"", content_type: str = "image/jpeg") -> None:
+        self.status_code = status_code
+        self.content = content
+        self.headers = {"content-type": content_type}
+
+
+class _FakeClient:
+    """Async-context httpx client that serves canned responses (or raises for an unknown URL)."""
+
+    def __init__(self, responses: dict[str, _FakeResponse]) -> None:
+        self._responses = responses
+
+    async def __aenter__(self) -> "_FakeClient":
+        return self
+
+    async def __aexit__(self, *_exc: object) -> bool:
+        return False
+
+    async def get(self, url: str) -> _FakeResponse:
+        response = self._responses.get(url)
+        if response is None:
+            raise httpx.ConnectError("no route")
+        return response
+
+
+@pytest.mark.asyncio
+async def test_download_as_data_uris_captures_only_real_images(monkeypatch) -> None:
+    """A 200 image becomes a data URI; a dead link, an oversized body and a non-image are all skipped."""
+    ok_url = "https://scontent.xx.fbcdn.net/a.jpg?oh=1"
+    dead_url = "https://scontent.xx.fbcdn.net/b.jpg?oh=2"
+    huge_url = "https://scontent.xx.fbcdn.net/c.jpg?oh=3"
+    html_url = "https://scontent.xx.fbcdn.net/d.jpg?oh=4"
+    responses = {
+        ok_url: _FakeResponse(200, b"real-image-bytes", "image/jpeg"),
+        dead_url: _FakeResponse(404),
+        huge_url: _FakeResponse(200, b"x" * (3_500_001), "image/jpeg"),
+        html_url: _FakeResponse(200, b"<html>login</html>", "text/html"),
+    }
+    monkeypatch.setattr(
+        "scrappers.facebook_enrichment_scraper.httpx.AsyncClient",
+        lambda *args, **kwargs: _FakeClient(responses),
+    )
+
+    captured = await FacebookEnrichmentScraper._download_as_data_uris([ok_url, dead_url, huge_url, html_url])
+
+    assert captured[ok_url] == "data:image/jpeg;base64," + base64.b64encode(b"real-image-bytes").decode("ascii")
+    assert dead_url not in captured  # non-200 skipped
+    assert huge_url not in captured  # over the size guard
+    assert html_url not in captured  # not an image

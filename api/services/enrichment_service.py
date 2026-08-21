@@ -27,6 +27,7 @@ from scrappers.google_scraper import GoogleScraper
 from services.decision_maker.types import NameCandidate, NameResolution
 from services.enrichment_content import EnrichmentContentMapper
 from services.prospect_emails import sync_prospect_emails
+from services.prospect_photo_storage_service import prospect_photo_storage
 from services.scraper_diagnostics_service import (
     STATUS_BLOCKED,
     STATUS_EMPTY,
@@ -257,6 +258,12 @@ class EnrichmentService:
                 record.error_message = f"{mismatch}. Données rejetées — relancez ou éditez manuellement."
                 self._record_diagnostic(prospect, None, error=mismatch)
             else:
+                # Facebook photos arrive as short-lived signed fbcdn URLs; the scraper captured the
+                # usable ones as base64 data URIs. Move them to permanent R2 storage now, so the record
+                # (and every later re-generation) holds durable URLs instead of links that die in days.
+                data.photos = await prospect_photo_storage.rehost_photos(prospect.id, data.photos)
+                if data.logo_url:
+                    data.logo_url = await prospect_photo_storage.rehost_one(prospect.id, data.logo_url)
                 self._apply_data(record, data)
                 # A Facebook page on the Maps listing (as the "website" link or a social link) is not a
                 # real website — capture it as the prospect's facebook_url so a later complementary

@@ -38,6 +38,7 @@ class R2StorageService:
         videos/presenter/{user_id}.mp4           source webcam clip, one per user
         images/websites/{slug}.jpg               email thumbnail ({vignette_video})
         images/support/{yyyy}/{mm}/{uuid}.{ext}  support ticket attachments
+        images/prospects/{prospect_id}/{hash}.jpg   rehosted enrichment photos (Facebook/Google)
 
     boto3 calls block, so async callers must go through the `*_async` methods.
     """
@@ -46,6 +47,7 @@ class R2StorageService:
     VIDEOS_PRESENTER_PREFIX = "videos/presenter"
     IMAGES_WEBSITES_PREFIX = "images/websites"
     IMAGES_SUPPORT_PREFIX = "images/support"
+    IMAGES_PROSPECTS_PREFIX = "images/prospects"
 
     def __init__(self) -> None:
         self._client: Any = None
@@ -170,6 +172,36 @@ class R2StorageService:
             extension = f".{extension}"
         now = datetime.now(UTC)
         return f"{cls.IMAGES_SUPPORT_PREFIX}/{now:%Y/%m}/{uuid.uuid4().hex}{extension}"
+
+    @classmethod
+    def prospect_photos_prefix(cls, prospect_id: int) -> str:
+        """
+        Build the key prefix under which a prospect's rehosted photos live.
+
+        Args:
+            prospect_id: Owner prospect — its id folders every one of its photos, so deleting the
+                prospect (or listing its photos) is a single prefix operation.
+
+        Returns:
+            The object key prefix, trailing slash included.
+        """
+        return f"{cls.IMAGES_PROSPECTS_PREFIX}/{prospect_id}/"
+
+    @classmethod
+    def prospect_photo_key(cls, prospect_id: int, digest: str, extension: str) -> str:
+        """
+        Build the key of one rehosted enrichment photo.
+
+        Args:
+            prospect_id: Owner prospect.
+            digest: Short content hash — identical bytes reuse the same key, so a re-enrichment that
+                re-captures the same photo overwrites in place instead of piling up duplicates.
+            extension: File extension including the dot (e.g. ``.jpg``).
+
+        Returns:
+            The object key.
+        """
+        return f"{cls.prospect_photos_prefix(prospect_id)}{digest}{extension}"
 
     @staticmethod
     def public_url(key: str) -> str:

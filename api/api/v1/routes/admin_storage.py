@@ -20,6 +20,7 @@ from core.config import settings
 from core.database import get_db
 from models.demo_site import DemoSite
 from models.prospect_db import ProspectDB
+from models.prospect_enrichment import ProspectEnrichment
 from models.user import User
 from services.auth_service import require_admin
 from services.r2_storage_service import r2_storage
@@ -36,7 +37,7 @@ class StorageObject(BaseModel):
     """One object of the bucket, enriched with business context."""
 
     key: str
-    kind: str  # website_video | website_thumbnail | presenter | support | other
+    kind: str  # website_video | website_thumbnail | presenter | support | prospect_photo | other
     size: int
     last_modified: datetime | None = None
     url: str
@@ -73,6 +74,12 @@ class StorageActionResponse(BaseModel):
     message: str = ""
 
 
+class DeleteObjectsRequest(BaseModel):
+    """Payload for POST /admin/storage/delete-objects — the object keys to remove in one call."""
+
+    keys: list[str]
+
+
 def _classify(key: str) -> str:
     """Map an object key to a human category."""
     if key.startswith(r2_storage.VIDEOS_WEBSITES_PREFIX):
@@ -83,6 +90,8 @@ def _classify(key: str) -> str:
         return "presenter"
     if key.startswith(r2_storage.IMAGES_SUPPORT_PREFIX):
         return "support"
+    if key.startswith(r2_storage.IMAGES_PROSPECTS_PREFIX):
+        return "prospect_photo"
     return "other"
 
 
@@ -91,6 +100,32 @@ def _slug_from_key(key: str) -> str | None:
     if _classify(key) not in ("website_video", "website_thumbnail"):
         return None
     return key.rsplit("/", 1)[-1].rsplit(".", 1)[0] or None
+
+
+def _prospect_id_from_key(key: str) -> int | None:
+    """Extract the prospect id carried by a rehosted photo key (``images/prospects/{id}/{hash}.jpg``)."""
+    if not key.startswith(r2_storage.IMAGES_PROSPECTS_PREFIX):
+        return None
+    parts = key.split("/")
+    return int(parts[2]) if len(parts) >= 4 and parts[2].isdigit() else None
+
+
+def _referenced_prospect_photo_keys(db: Session) -> set[str]:
+    """Collect every ``images/prospects/`` object key still referenced by an enrichment record.
+
+    Compared by KEY (not full URL) so it holds regardless of the dev/prod public base URL. A prospect's
+    ``photos`` list and its ``logo_url`` are the only places a rehosted photo is referenced.
+    """
+    prefix = r2_storage.IMAGES_PROSPECTS_PREFIX
+    keys: set[str] = set()
+    for photos, logo_url in db.query(ProspectEnrichment.photos, ProspectEnrichment.logo_url).all():
+        for value in [*(photos or []), logo_url]:
+            if not isinstance(value, str):
+                continue
+            index = value.find(prefix)
+            if index != -1:
+                keys.add(value[index:])
+    return keys
 
 
 def _ensure_configured() -> None:
@@ -131,6 +166,12 @@ async def list_storage_objects(
         )
         names_by_slug = {slug: name for slug, name in rows if name}
 
+    prospect_ids = {pid for pid in (_prospect_id_from_key(item["key"]) for item in raw) if pid}
+    names_by_prospect_id: dict[int, str] = {}
+    if prospect_ids:
+        prospect_rows = db.query(ProspectDB.id, ProspectDB.name).filter(ProspectDB.id.in_(prospect_ids)).all()
+        names_by_prospect_id = {pid: name for pid, name in prospect_rows if name}
+
     now = datetime.now(UTC)
     items: list[StorageObject] = []
     for entry in raw:
@@ -139,12 +180,15 @@ async def list_storage_objects(
         slug = _slug_from_key(key)
         expires_in: int | None = None
         is_expired = False
-        # Seuls les livrables liés à une démo expirent ; le clip presenter et
-        # les pièces jointes support sont permanents.
+        # Seuls les livrables liés à une démo expirent ; le clip presenter, les pièces jointes support
+        # et les photos de prospect (source durable des sites) sont permanents.
         if kind in ("website_video", "website_thumbnail") and entry["last_modified"]:
             deadline = entry["last_modified"] + timedelta(days=OBJECT_TTL_DAYS)
             expires_in = max(0, (deadline - now).days)
             is_expired = deadline <= now
+        prospect_name = names_by_slug.get(slug or "")
+        if kind == "prospect_photo":
+            prospect_name = names_by_prospect_id.get(_prospect_id_from_key(key) or 0)
         items.append(
             StorageObject(
                 key=key,
@@ -153,7 +197,7 @@ async def list_storage_objects(
                 last_modified=entry["last_modified"],
                 url=r2_storage.public_url(key),
                 slug=slug,
-                prospect_name=names_by_slug.get(slug or ""),
+                prospect_name=prospect_name,
                 expires_in_days=expires_in,
                 is_expired=is_expired,
             )
@@ -228,6 +272,30 @@ async def delete_storage_object(
     return StorageActionResponse(deleted=1, message=f"{key} supprimé.")
 
 
+@router.post("/delete-objects", response_model=StorageActionResponse)
+async def delete_storage_objects(
+    payload: DeleteObjectsRequest,
+    _admin: User = Depends(require_admin),
+) -> StorageActionResponse:
+    """
+    Delete several objects at once (the storage page's multi-selection).
+
+    Args:
+        payload: The object keys to remove; blank entries are ignored.
+
+    Returns:
+        How many objects were removed.
+    """
+    _ensure_configured()
+    keys = [key for key in payload.keys if key.strip()]
+    if not keys:
+        return StorageActionResponse(deleted=0, message="Aucun fichier sélectionné.")
+    import asyncio
+
+    await asyncio.to_thread(r2_storage.delete_many, keys)
+    return StorageActionResponse(deleted=len(keys), message=f"{len(keys)} fichier(s) supprimé(s).")
+
+
 @router.post("/purge-expired", response_model=StorageActionResponse)
 async def purge_expired_objects(
     _admin: User = Depends(require_admin),
@@ -254,6 +322,33 @@ async def purge_expired_objects(
 
         await asyncio.to_thread(r2_storage.delete_many, stale)
     return StorageActionResponse(deleted=len(stale), message=f"{len(stale)} objet(s) expiré(s) supprimé(s).")
+
+
+@router.post("/purge-orphan-prospect-photos", response_model=StorageActionResponse)
+async def purge_orphan_prospect_photos(
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> StorageActionResponse:
+    """
+    Delete rehosted prospect photos that no enrichment record references any more.
+
+    Deleting a prospect removes its photos inline and a re-enrichment reuses content-hash keys, but a
+    replaced photo or an interrupted delete can leave an object behind. This reconciles the bucket
+    against the enrichment table: every ``images/prospects/`` object whose key is referenced by no
+    enrichment (``photos`` or ``logo_url``) is removed.
+
+    Returns:
+        How many orphan objects were removed.
+    """
+    _ensure_configured()
+    referenced = _referenced_prospect_photo_keys(db)
+    objects = await _list_async(r2_storage.IMAGES_PROSPECTS_PREFIX)
+    orphans = [item["key"] for item in objects if item["key"] not in referenced]
+    if orphans:
+        import asyncio
+
+        await asyncio.to_thread(r2_storage.delete_many, orphans)
+    return StorageActionResponse(deleted=len(orphans), message=f"{len(orphans)} photo(s) orpheline(s) supprimée(s).")
 
 
 @router.post("/sync-from-prod", response_model=StorageActionResponse)
