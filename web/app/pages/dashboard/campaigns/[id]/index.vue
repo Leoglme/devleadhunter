@@ -58,6 +58,14 @@
             {{ campaign.status === 'paused' ? 'Relancer' : 'Lancer' }}
           </button>
           <button
+            class="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--app-line)] text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface)] hover:text-[var(--app-ink)] disabled:opacity-50"
+            title="Actualiser"
+            :disabled="isRefreshing"
+            @click="refreshLiveData"
+          >
+            <UIcon name="i-lucide-rotate-cw" :class="['h-4 w-4', { 'animate-spin': isRefreshing }]" />
+          </button>
+          <button
             class="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--app-line)] text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface)] hover:text-[var(--app-ink)]"
             title="Modifier"
             @click="openEditDrawer"
@@ -483,17 +491,12 @@
       </div>
 
       <div v-if="activeTab === 'queue'" class="space-y-4">
-        <div class="flex items-center justify-between">
-          <p class="text-muted text-sm">
-            <span class="font-semibold text-[var(--app-accent-ink)]">{{ queueData?.pending_count ?? 0 }}</span> email{{
-              (queueData?.pending_count ?? 0) !== 1 ? 's' : ''
-            }}
-            en attente
-          </p>
-          <button class="btn-secondary" @click="loadQueue">
-            <UIcon name="i-lucide-rotate-cw" class="mr-1.5 h-4 w-4" />Actualiser
-          </button>
-        </div>
+        <p class="text-muted text-sm">
+          <span class="font-semibold text-[var(--app-accent-ink)]">{{ queueData?.pending_count ?? 0 }}</span> email{{
+            (queueData?.pending_count ?? 0) !== 1 ? 's' : ''
+          }}
+          en attente
+        </p>
 
         <div
           v-if="!queueData || queueData.items.length === 0"
@@ -581,7 +584,7 @@
 <script lang="ts" setup>
 import type { UseToastReturn } from '~/types/Composables'
 import type { TemplateOption } from '~/types/CampaignDetailPage'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { ComputedRef, Ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import type {
@@ -651,6 +654,8 @@ const QUEUE_STATUS_BADGE_CLASS: Record<string, string> = {
   failed: 'app-badge--danger',
 }
 
+const AUTO_REFRESH_INTERVAL_MS: number = 30_000
+
 const campaign: Ref<CampaignDetailResponse | null> = ref(null)
 const stats: Ref<CampaignStats | null> = ref(null)
 const queueData: Ref<CampaignQueueResponse | null> = ref(null)
@@ -663,6 +668,8 @@ const campaignSelectedProspects: Ref<string[]> = ref([])
 const prospectToRemoveId: Ref<number | null> = ref(null)
 const removeProspectModal: Ref<{ open: () => void } | null> = ref(null)
 const confirmDeleteModal: Ref<{ open: () => void } | null> = ref(null)
+const isRefreshing: Ref<boolean> = ref(false)
+const autoRefreshTimer: Ref<ReturnType<typeof setInterval> | null> = ref(null)
 
 const settingsForm: Ref<{
   template_id: number
@@ -729,6 +736,8 @@ const campaignAbVariants: ComputedRef<Record<number, string | null | undefined>>
 )
 
 const canLaunch: ComputedRef<boolean> = computed((): boolean => settingsForm.value.template_id > 0)
+
+const isCampaignActive: ComputedRef<boolean> = computed((): boolean => campaign.value?.status === 'active')
 
 /** Metric cards for the stats strip. */
 const metricCards: ComputedRef<Array<{ label: string; value: number | string; icon: string; color: string }>> =
@@ -870,6 +879,49 @@ function syncSettingsForm(c: CampaignDetailResponse): void {
  */
 async function loadQueue(): Promise<void> {
   queueData.value = await CampaignService.getQueue(campaignId.value, { limit: 100 })
+}
+
+/**
+ * Reload only the live data (campaign, stats, queue), without the full-page spinner and without touching the settings form being edited.
+ * @returns A promise resolved once the three blocks are refreshed.
+ */
+async function refreshLiveData(): Promise<void> {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  try {
+    const [c, s, q]: [CampaignDetailResponse, CampaignStats | null, CampaignQueueResponse | null] = await Promise.all([
+      CampaignService.get(campaignId.value),
+      CampaignService.getStats(campaignId.value).catch((): null => null),
+      CampaignService.getQueue(campaignId.value, { limit: 100 }).catch((): null => null),
+    ])
+    campaign.value = c
+    stats.value = s
+    queueData.value = q
+  } catch {
+    // Silent refresh: keep the last data on screen.
+  } finally {
+    isRefreshing.value = false
+  }
+}
+
+/** Start the auto-refresh (idempotent); each tick only refreshes while the browser tab is visible. */
+function startAutoRefresh(): void {
+  if (autoRefreshTimer.value !== null) return
+  autoRefreshTimer.value = setInterval((): void => {
+    if (document.visibilityState === 'visible') refreshLiveData()
+  }, AUTO_REFRESH_INTERVAL_MS)
+}
+
+/** Stop the auto-refresh if it is running. */
+function stopAutoRefresh(): void {
+  if (autoRefreshTimer.value === null) return
+  clearInterval(autoRefreshTimer.value)
+  autoRefreshTimer.value = null
+}
+
+/** Refresh as soon as the tab becomes visible again while the campaign is running, to avoid waiting for the next tick. */
+function refreshOnTabVisible(): void {
+  if (document.visibilityState === 'visible' && isCampaignActive.value) refreshLiveData()
 }
 
 /**
@@ -1067,14 +1119,26 @@ function removeFollowUp(idx: number): void {
   settingsForm.value.follow_ups.splice(idx, 1)
 }
 
-onMounted((): void => {
-  loadAll()
-})
-
 watch(activeTab, (tab: string): void => {
   if (tab === 'queue') loadQueue()
 })
 
 // La campagne vient d'être renommée depuis son drawer.
 watch((): number => drawerStack.campaignsRefreshCounter, loadAll)
+
+// Soft auto-refresh: starts while the campaign is running, stops otherwise.
+watch(isCampaignActive, (active: boolean): void => {
+  if (active) startAutoRefresh()
+  else stopAutoRefresh()
+})
+
+onMounted((): void => {
+  loadAll()
+  document.addEventListener('visibilitychange', refreshOnTabVisible)
+})
+
+onUnmounted((): void => {
+  stopAutoRefresh()
+  document.removeEventListener('visibilitychange', refreshOnTabVisible)
+})
 </script>
