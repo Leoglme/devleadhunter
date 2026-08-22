@@ -28,8 +28,11 @@
         :key="prospect.id"
         :class="[
           isSelected(prospect) ? 'bg-[var(--app-accent-soft)] hover:bg-[var(--app-accent-soft)]' : '',
-          isLockedForMe(prospect) ? 'bg-[var(--app-surface-2)]/40 hover:bg-[var(--app-surface-2)]/40' : '',
+          isLockedForMe(prospect)
+            ? 'bg-[var(--app-surface-2)]/40 hover:bg-[var(--app-surface-2)]/40'
+            : 'cursor-pointer',
         ]"
+        @click="onRowClick(prospect, $event)"
       >
         <BaseTableTd v-if="!hideSelection">
           <input
@@ -282,5 +285,17 @@ function isSelected(prospect: Prospect): boolean {
  */
 function onToggleAll(event: Event): void {
   emit('toggleSelectAll', (event.target as HTMLInputElement).checked)
+}
+
+/**
+ * Open the prospect drawer when a bare part of the row is clicked, leaving controls to their handlers.
+ * @param prospect - The prospect of the clicked row.
+ * @param event - The native click event.
+ */
+function onRowClick(prospect: Prospect, event: MouseEvent): void {
+  if (isLockedForMe(prospect)) return
+  const target: HTMLElement | null = event.target instanceof HTMLElement ? event.target : null
+  if (target?.closest('button, a, input, label, select, textarea')) return
+  emit('viewProspect', prospect)
 }
 </script>

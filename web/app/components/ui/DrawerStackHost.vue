@@ -194,7 +194,7 @@ import type {
 } from '~/types/DrawerStack'
 import type { EmailTemplate, Prospect } from '~/types'
 import type { Order } from '~/services/ordersService'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import { ProspectsService } from '~/services/prospectsService'
@@ -581,11 +581,45 @@ useHorizontalSwipe((): EventTarget | null => (import.meta.client ? document.body
   },
 })
 
+// Browser/OS back (iOS PWA edge-swipe, Android button) closes the top drawer instead of leaving the page.
+let hasDrawerHistoryBuffer: boolean = false
+
+/**
+ * Close the open drawer when a browser/OS back gesture fires, so it never navigates away from the page.
+ */
+function handleBrowserBack(): void {
+  if (!hasDrawerHistoryBuffer || drawerStack.topEntry === null) return
+  hasDrawerHistoryBuffer = false
+  drawerStack.closeAll()
+}
+
+watch(
+  (): boolean => drawerStack.topEntry !== null,
+  (isOpen: boolean, wasOpen: boolean): void => {
+    if (!import.meta.client) return
+    if (isOpen && !wasOpen) {
+      window.history.pushState({ ...window.history.state, dlhDrawerOpen: true }, '')
+      hasDrawerHistoryBuffer = true
+    } else if (!isOpen && wasOpen && hasDrawerHistoryBuffer) {
+      // Closed from the app (button, Escape, swipe) → drop the buffer we pushed.
+      hasDrawerHistoryBuffer = false
+      window.history.back()
+    }
+  },
+)
+
 onMounted((): void => {
   window.addEventListener('keydown', handleKeydown)
+  window.addEventListener('popstate', handleBrowserBack)
+  // A drawer restored from sessionStorage on load has no buffer yet — arm one so back still closes it.
+  if (drawerStack.topEntry !== null && !hasDrawerHistoryBuffer) {
+    window.history.pushState({ ...window.history.state, dlhDrawerOpen: true }, '')
+    hasDrawerHistoryBuffer = true
+  }
 })
 
 onBeforeUnmount((): void => {
   window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('popstate', handleBrowserBack)
 })
 </script>
