@@ -89,6 +89,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("widen_enrichment_logo_url_to_text", "migrations.widen_enrichment_logo_url_to_text"),
     ("add_push_subscriptions", "migrations.add_push_subscriptions"),
     ("add_notifications_table", "migrations.add_notifications_table"),
+    ("add_user_postmaster_oauth", "migrations.add_user_postmaster_oauth"),
     # Charset drift must be repaired before anything compares strings on those tables.
     ("fix_utf8mb4_collation", "migrations.fix_utf8mb4_collation"),
     # Content rewrites run last, once every schema change is in place.

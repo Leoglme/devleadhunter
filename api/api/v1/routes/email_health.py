@@ -6,13 +6,16 @@ Postmaster reputation and the pre-send spam tester.
 """
 
 import asyncio
+import logging
 import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from core.database import get_db
 from models.campaign import Campaign
 from models.campaign_follow_up import CampaignFollowUp
@@ -23,10 +26,12 @@ from services.auth_service import require_auth
 from services.email_dns_service import email_dns_service
 from services.email_health_service import email_health_service
 from services.email_spam_test_service import email_spam_test_service
+from services.postmaster_oauth_service import PostmasterOAuthService
 from services.postmaster_service import postmaster_service
 from services.sending_identity import describe_sending_config
 
 router = APIRouter(prefix="/email-health", tags=["email-health"])
+logger = logging.getLogger(__name__)
 
 _ALLOWED_PERIODS: tuple[int, ...] = (7, 30, 90)
 
@@ -152,9 +157,98 @@ async def email_health_postmaster(
     current_user: User = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    """Gmail-side domain reputation + user-reported spam rate (when configured)."""
+    """Gmail-side domain reputation + user-reported spam rate (per-user OAuth)."""
     domains = _user_domains(db, current_user)
-    return {"domains": [postmaster_service.domain_stats(domain, min(period_days, 120)) for domain in domains]}
+    depth = min(period_days, 120)
+    return {
+        "connection": postmaster_service.connection_status(current_user),
+        "domains": [postmaster_service.domain_stats(db, current_user, domain, depth) for domain in domains],
+    }
+
+
+@router.post("/postmaster/auth-url", summary="Start Google OAuth for Postmaster Tools")
+async def postmaster_auth_url(current_user: User = Depends(require_auth)) -> dict[str, str]:
+    """Return the Google consent URL for read-only Postmaster access."""
+    oauth = PostmasterOAuthService()
+    if not oauth.is_platform_configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google OAuth n'est pas configuré sur le serveur.",
+        )
+    state = f"postmaster_user_{current_user.id}"
+    return {"auth_url": oauth.get_authorization_url(state)}
+
+
+def _email_health_redirect(outcome: str) -> RedirectResponse:
+    """Redirect back to Santé email with an OAuth outcome flag.
+
+    Args:
+        outcome: ``connected`` or ``error``.
+
+    Returns:
+        A 302 to the email-health dashboard page.
+    """
+    base = (getattr(settings, "frontend_url", "") or "http://localhost:3000").rstrip("/")
+    return RedirectResponse(url=f"{base}/dashboard/email-health?postmaster={outcome}")
+
+
+@router.get("/postmaster/callback")
+async def postmaster_oauth_callback(
+    code: str = Query(default=""),
+    state: str = Query(default=""),
+    error: str = Query(default=""),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """Google OAuth callback — store tokens and redirect to Santé email."""
+    if error or not code:
+        logger.warning("[Postmaster OAuth] Callback without code (error=%r)", error)
+        return _email_health_redirect("error")
+
+    if not state.startswith("postmaster_user_"):
+        logger.warning("[Postmaster OAuth] Callback with unexpected state=%r", state)
+        return _email_health_redirect("error")
+    try:
+        user_id = int(state.removeprefix("postmaster_user_"))
+    except ValueError:
+        return _email_health_redirect("error")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        return _email_health_redirect("error")
+
+    oauth = PostmasterOAuthService()
+    try:
+        tokens = await oauth.exchange_code_for_tokens(code)
+        access_token = tokens.get("access_token")
+        if not access_token:
+            return _email_health_redirect("error")
+        user_info = await oauth.get_user_info(access_token)
+        google_email = user_info.get("email")
+        if not user_info.get("verified_email") or not google_email:
+            return _email_health_redirect("error")
+
+        postmaster_service.store_tokens(
+            db,
+            user,
+            access_token=access_token,
+            refresh_token=tokens.get("refresh_token"),
+            expires_at=tokens["expires_at"],
+            google_email=google_email,
+        )
+        return _email_health_redirect("connected")
+    except Exception as exc:
+        logger.error("[Postmaster OAuth] Callback failed for user %s: %s", user_id, exc)
+        return _email_health_redirect("error")
+
+
+@router.delete("/postmaster/disconnect", summary="Disconnect Google Postmaster OAuth")
+async def postmaster_disconnect(
+    current_user: User = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> dict[str, bool]:
+    """Remove stored Postmaster OAuth tokens for the current user."""
+    postmaster_service.disconnect(db, current_user)
+    return {"disconnected": True}
 
 
 def _follow_up_template_ids(db: Session, user_id: int) -> set[int]:

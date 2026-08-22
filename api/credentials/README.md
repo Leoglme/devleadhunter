@@ -5,23 +5,17 @@ README est versionné, pour que le dossier existe à la sortie du clone.
 
 ## Gmail Postmaster Tools
 
-Dépose ici la clé JSON du compte de service téléchargée depuis Google Cloud, par ex. :
+La réputation Gmail (page **Santé email**) utilise désormais **OAuth par utilisateur** :
+chaque compte connecte son Google Postmaster via le bouton dans l'app.
 
-```
-credentials/google-postmaster.json
-```
+Prérequis côté Google Cloud (une fois pour la plateforme) :
 
-Puis dans `api/.env` :
+1. Activer l'API **Postmaster Tools**.
+2. Ajouter le scope `https://www.googleapis.com/auth/postmaster.traffic.readonly` à
+   l'écran de consentement OAuth.
+3. Enregistrer l'URI de redirection Postmaster dans les identifiants OAuth :
+   `GOOGLE_POSTMASTER_REDIRECT_URI` (défaut local :
+   `http://localhost:8000/api/v1/email-health/postmaster/callback`).
 
-```
-GOOGLE_POSTMASTER_CREDENTIALS_FILE=credentials/google-postmaster.json
-```
-
-Le chemin est résolu par rapport à la racine `api/`, donc cette valeur relative
-marche quel que soit le dossier depuis lequel tu lances le serveur.
-
-> Pour dépanner un collègue : envoie-lui simplement le fichier JSON, il le pose
-> ici avec le même nom et c'est fonctionnel. **Ne commite jamais le JSON.**
->
-> En **production**, on n'utilise pas ce dossier : la clé passe par le secret
-> GitHub `GOOGLE_POSTMASTER_CREDENTIALS_JSON` (base64) écrit dans le `.env` au déploiement.
+Les anciennes variables `GOOGLE_POSTMASTER_CREDENTIALS_*` (service account) ne sont
+plus utilisées par l'interface.

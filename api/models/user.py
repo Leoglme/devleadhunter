@@ -5,7 +5,7 @@ User model for authentication and authorization.
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String
+from sqlalchemy import DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -60,6 +60,11 @@ class User(Base):
     # Website sale price in cents (default 500 €): per-user default for {prix},
     # new orders, and the sale drawer.
     site_sale_price_cents: Mapped[int] = mapped_column(default=50000, nullable=False)
+    # Gmail Postmaster Tools OAuth — per-user read access to Gmail-side reputation.
+    postmaster_google_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    postmaster_oauth_refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    postmaster_oauth_access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    postmaster_oauth_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(onupdate=func.now(), nullable=True)
 

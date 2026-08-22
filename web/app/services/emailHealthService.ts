@@ -132,12 +132,26 @@ export type PostmasterDay = {
 
 /** Gmail Postmaster payload for one domain. */
 export type PostmasterDomain = {
-  configured: boolean
   domain: string
-  reason?: string
-  error?: string
+  error?: string | null
+  needs_connection?: boolean
+  domain_not_found?: boolean
+  no_data?: boolean
   latest?: PostmasterDay | null
   days?: PostmasterDay[]
+}
+
+/** Per-user Postmaster OAuth connection state. */
+export type PostmasterConnection = {
+  connected: boolean
+  google_email?: string | null
+  oauth_available: boolean
+}
+
+/** Postmaster section payload. */
+export type PostmasterResponse = {
+  connection: PostmasterConnection
+  domains: PostmasterDomain[]
 }
 
 /** SpamAssassin verdict for a draft. */
@@ -232,12 +246,27 @@ export class EmailHealthService {
   /**
    * Fetch the Gmail Postmaster reputation for every sending domain.
    * @param periodDays - History depth.
-   * @returns Per-domain reputation payloads (or the not-configured flag).
+   * @returns Connection state and per-domain stats.
    */
-  static async getEmailHealthPostmaster(periodDays: number): Promise<{ domains: PostmasterDomain[] }> {
-    return ApiClient.get<{ domains: PostmasterDomain[] }>('/api/v1/email-health/postmaster', {
+  static async getEmailHealthPostmaster(periodDays: number): Promise<PostmasterResponse> {
+    return ApiClient.get<PostmasterResponse>('/api/v1/email-health/postmaster', {
       params: { period_days: periodDays },
     })
+  }
+
+  /**
+   * Start Google OAuth for Postmaster Tools (browser redirect).
+   * @returns The Google consent URL.
+   */
+  static async getPostmasterAuthUrl(): Promise<{ auth_url: string }> {
+    return ApiClient.post<{ auth_url: string }>('/api/v1/email-health/postmaster/auth-url', {})
+  }
+
+  /**
+   * Disconnect the stored Postmaster OAuth tokens.
+   */
+  static async disconnectPostmaster(): Promise<{ disconnected: boolean }> {
+    return ApiClient.delete<{ disconnected: boolean }>('/api/v1/email-health/postmaster/disconnect')
   }
 
   /**

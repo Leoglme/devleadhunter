@@ -162,19 +162,16 @@ class Settings(BaseSettings):
         alias="PAGESPEED_API_KEY",
         description="Google PageSpeed Insights API key (optional — raises the free quota)",
     )
+    # Legacy service-account Postmaster vars — ignored since per-user OAuth; kept so existing .env files load.
     google_postmaster_credentials_file: str | None = Field(
         default=None,
         alias="GOOGLE_POSTMASTER_CREDENTIALS_FILE",
-        description="Path to the service-account JSON key for Gmail Postmaster Tools (optional, local dev)",
+        description="Deprecated — unused",
     )
     google_postmaster_credentials_json: str | None = Field(
         default=None,
         alias="GOOGLE_POSTMASTER_CREDENTIALS_JSON",
-        description=(
-            "Service-account JSON key for Gmail Postmaster Tools, inline — raw JSON or "
-            "base64 of it. Preferred in production: ships as a single env secret, no key "
-            "file to write on the server. Takes precedence over the file path when both are set."
-        ),
+        description="Deprecated — unused",
     )
     vercel_token: str | None = Field(
         default=None,
@@ -352,6 +349,11 @@ class Settings(BaseSettings):
         default="http://localhost:8000/api/v1/email-accounts/gmail/callback",
         alias="GOOGLE_REDIRECT_URI",
         description="Google OAuth redirect URI",
+    )
+    google_postmaster_redirect_uri: str = Field(
+        default="http://localhost:8000/api/v1/email-health/postmaster/callback",
+        alias="GOOGLE_POSTMASTER_REDIRECT_URI",
+        description="Google OAuth redirect URI for Postmaster Tools (Santé email)",
     )
 
     # Encryption settings (for OAuth tokens)

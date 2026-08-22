@@ -145,82 +145,138 @@
       </div>
     </section>
 
-    <section v-for="postmaster in postmasterDomains" :key="postmaster.domain" class="app-card p-5 md:p-6">
-      <h2 class="text-sm font-semibold text-[var(--app-ink)]">
-        Réputation Gmail — <span class="font-mono text-[var(--app-accent-ink)]">{{ postmaster.domain }}</span>
-      </h2>
+    <section class="app-card p-5 md:p-6">
+      <h2 class="text-sm font-semibold text-[var(--app-ink)]">Réputation Gmail</h2>
+      <p class="mt-1 text-xs text-[var(--app-ink-soft)]">
+        Vue officielle de Gmail sur votre domaine d'envoi — complémentaire aux stats Resend ci-dessus.
+      </p>
 
-      <UiCollapsibleCard
-        v-if="!postmaster.configured"
-        class="mt-3"
-        icon="i-lucide-plug-zap"
-        title="Brancher Google Postmaster Tools"
-        suffix="gratuit"
-      >
-        <div class="px-4 py-4">
-          <p class="text-xs leading-relaxed text-[var(--app-ink-soft)]">
-            Postmaster Tools montre la réputation de votre domaine telle que Gmail la calcule.
-          </p>
-          <ol class="mt-3 list-inside list-decimal space-y-1.5 text-xs leading-relaxed text-[var(--app-ink-soft)]">
-            <li>
-              Vérifiez le domaine sur
-              <a href="https://postmaster.google.com" target="_blank" rel="noopener" class="underline">
-                postmaster.google.com</a
-              >
-              (un enregistrement TXT à poser).
-            </li>
-            <li>
-              Dans Google Cloud : activez l'API « Postmaster Tools », créez un service account et téléchargez sa clé
-              JSON.
-            </li>
-            <li>
-              Dans Postmaster Tools
-              <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> votre domaine
-              <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> « Gérer les utilisateurs »
-              : ajoutez l'email du service account.
-            </li>
-            <li>
-              Ajoutez
-              <code class="rounded bg-[var(--app-surface-2)] px-1">GOOGLE_POSTMASTER_CREDENTIALS_FILE</code> (chemin de
-              la clé JSON) dans le <code class="rounded bg-[var(--app-surface-2)] px-1">.env</code> de l'API.
-            </li>
-          </ol>
-        </div>
-      </UiCollapsibleCard>
-
-      <p v-else-if="postmaster.error" class="mt-3 text-sm text-[var(--app-red)]">{{ postmaster.error }}</p>
-
-      <div v-else class="mt-4 space-y-5">
-        <div class="flex flex-wrap items-center gap-6">
-          <div>
-            <p class="text-[10px] tracking-wide text-[var(--app-ink-soft)] uppercase">Réputation actuelle</p>
-            <p
-              class="mt-1 text-xl font-bold"
-              :style="{ color: reputationColor(postmaster.latest?.domain_reputation ?? null) }"
-            >
-              {{ reputationLabel(postmaster.latest?.domain_reputation ?? null) }}
+      <template v-if="!postmasterConnection?.connected">
+        <UiCollapsibleCard
+          class="mt-4"
+          icon="i-lucide-mail-check"
+          title="Comment brancher la réputation Gmail"
+          suffix="gratuit"
+        >
+          <div class="space-y-6 px-4 py-5">
+            <ol class="space-y-4">
+              <li v-for="(step, index) in postmasterWorkflowSteps" :key="step.title" class="flex items-start gap-3">
+                <span
+                  class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--app-line)] bg-[var(--app-bg)] text-[11px] font-bold text-[var(--app-ink)]"
+                >
+                  {{ index + 1 }}
+                </span>
+                <div class="min-w-0 pt-0.5">
+                  <p class="text-sm font-medium text-[var(--app-ink)]">{{ step.title }}</p>
+                  <p class="text-muted mt-0.5 text-xs leading-relaxed">{{ step.detail }}</p>
+                </div>
+              </li>
+            </ol>
+            <p class="text-muted flex items-start gap-2 text-xs leading-relaxed">
+              <UIcon name="i-lucide-circle-alert" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
+              <span>
+                Utilisez le <strong class="font-semibold text-[var(--app-ink)]">même compte Google</strong> pour
+                Postmaster et pour la connexion ci-dessous.
+              </span>
             </p>
           </div>
-          <div>
-            <p class="text-[10px] tracking-wide text-[var(--app-ink-soft)] uppercase">Taux de spam vu par Gmail</p>
-            <p class="mt-1 text-xl font-bold text-[var(--app-ink)] tabular-nums">
-              {{ formatSpamRatio(postmaster.latest?.user_reported_spam_ratio ?? null) }}
+        </UiCollapsibleCard>
+
+        <div
+          v-if="postmasterConnection?.oauth_available"
+          class="mt-6 flex flex-col items-center gap-4 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] px-6 py-10 text-center"
+        >
+          <UiGoogleLogo class="h-11 w-11" />
+          <div class="space-y-1.5">
+            <h3 class="text-base font-semibold text-[var(--app-ink)]">Connecter Google Postmaster</h3>
+            <p class="text-muted mx-auto max-w-md text-sm leading-relaxed">
+              Un clic pour autoriser la lecture de votre réputation Gmail. La connexion reste active — pas besoin de
+              revenir ici à chaque visite.
             </p>
           </div>
-          <div v-for="auth in postmasterAuthRatios(postmaster)" :key="auth.label">
-            <p class="text-[10px] tracking-wide text-[var(--app-ink-soft)] uppercase">{{ auth.label }}</p>
-            <p class="mt-1 text-xl font-bold text-[var(--app-ink)] tabular-nums">{{ auth.value }}</p>
-          </div>
+          <button type="button" class="btn-primary" :disabled="isConnectingPostmaster" @click="connectPostmaster">
+            <UiGoogleLogo class="h-4 w-4" />
+            {{ isConnectingPostmaster ? 'Redirection…' : 'Connecter avec Google' }}
+          </button>
         </div>
-        <div>
-          <p class="mb-2 text-xs font-medium text-[var(--app-ink-soft)]">Historique de réputation</p>
-          <EmailHealthReputationTimeline :days="reputationDays(postmaster)" />
-        </div>
-        <p v-if="(postmaster.days ?? []).length === 0" class="text-xs text-[var(--app-ink-soft)]">
-          Google n'a pas encore publié de données — il faut un volume d'envoi régulier vers Gmail (souvent quelques
-          centaines d'emails) avant que Postmaster remonte des chiffres.
+        <p v-else class="mt-4 text-sm text-[var(--app-ink-soft)]">
+          La connexion Google n'est pas disponible sur ce serveur — contactez l'administrateur.
         </p>
-      </div>
+      </template>
+
+      <template v-else>
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-2 text-sm text-[var(--app-ink)]">
+            <UiGoogleLogo class="h-5 w-5" />
+            <span>
+              Connecté :
+              <span class="font-medium">{{ postmasterConnection.google_email }}</span>
+            </span>
+          </div>
+          <button
+            type="button"
+            class="btn-secondary text-xs"
+            :disabled="isDisconnectingPostmaster"
+            @click="disconnectPostmaster"
+          >
+            {{ isDisconnectingPostmaster ? 'Déconnexion…' : 'Déconnecter' }}
+          </button>
+        </div>
+
+        <div v-for="postmaster in postmasterDomains" :key="postmaster.domain" class="mt-6 space-y-4">
+          <h3 class="text-xs font-semibold tracking-wide text-[var(--app-ink-soft)] uppercase">
+            Domaine
+            <span class="font-mono text-[var(--app-accent-ink)] normal-case">{{ postmaster.domain }}</span>
+          </h3>
+
+          <p v-if="postmaster.error" class="text-sm text-[var(--app-red)]">{{ postmaster.error }}</p>
+
+          <UiCallout v-else-if="postmaster.domain_not_found" variant="warning">
+            Ce domaine n'apparaît pas dans votre Postmaster Tools. Ajoutez-le sur
+            <a href="https://postmaster.google.com" target="_blank" rel="noopener" class="underline">
+              postmaster.google.com</a
+            >
+            avec le compte <strong>{{ postmasterConnection.google_email }}</strong
+            >, puis validez-le par DNS.
+          </UiCallout>
+
+          <div v-else class="space-y-5">
+            <div class="flex flex-wrap items-center gap-6">
+              <div>
+                <p class="text-[10px] tracking-wide text-[var(--app-ink-soft)] uppercase">Réputation actuelle</p>
+                <p
+                  class="mt-1 text-xl font-bold"
+                  :style="{ color: reputationColor(postmaster.latest?.domain_reputation ?? null) }"
+                >
+                  {{ reputationLabel(postmaster.latest?.domain_reputation ?? null) }}
+                </p>
+              </div>
+              <div>
+                <p class="text-[10px] tracking-wide text-[var(--app-ink-soft)] uppercase">Taux de spam vu par Gmail</p>
+                <p class="mt-1 text-xl font-bold text-[var(--app-ink)] tabular-nums">
+                  {{ formatSpamRatio(postmaster.latest?.user_reported_spam_ratio ?? null) }}
+                </p>
+              </div>
+              <div v-for="auth in postmasterAuthRatios(postmaster)" :key="auth.label">
+                <p class="text-[10px] tracking-wide text-[var(--app-ink-soft)] uppercase">{{ auth.label }}</p>
+                <p class="mt-1 text-xl font-bold text-[var(--app-ink)] tabular-nums">{{ auth.value }}</p>
+              </div>
+            </div>
+            <div>
+              <p class="mb-2 text-xs font-medium text-[var(--app-ink-soft)]">Historique de réputation</p>
+              <EmailHealthReputationTimeline :days="reputationDays(postmaster)" />
+            </div>
+            <p v-if="(postmaster.days ?? []).length === 0" class="text-xs text-[var(--app-ink-soft)]">
+              Google n'a pas encore publié de données — il faut un volume d'envoi régulier vers Gmail (souvent quelques
+              centaines d'emails) avant que Postmaster remonte des chiffres.
+            </p>
+          </div>
+        </div>
+
+        <p v-if="postmasterDomains.length === 0" class="mt-4 text-sm text-[var(--app-ink-soft)]">
+          Aucun domaine d'envoi détecté — configurez d'abord votre méthode d'envoi dans les paramètres.
+        </p>
+      </template>
     </section>
 
     <section class="app-card p-5 md:p-6">
@@ -517,19 +573,27 @@ import type {
   EmailHealthOverview,
   EmailHealthProvider,
   EmailHealthTrendDay,
+  PostmasterConnection,
   PostmasterDay,
   PostmasterDomain,
+  PostmasterResponse,
   SpamLocalCheck,
   TemplateScore,
   TemplateScoresResponse,
 } from '~/services/emailHealthService'
 import { EmailHealthService } from '~/services/emailHealthService'
 import type { EmailHealthChartSeries, EmailHealthChartThreshold } from '~/types/EmailHealthTrendChart'
+import type { UseToastReturn } from '~/types/Composables'
+import { useToast } from '~/composables/useToast'
 
 definePageMeta({
   layout: 'dashboard',
   middleware: ['auth'],
 })
+
+const toast: UseToastReturn = useToast()
+const route: ReturnType<typeof useRoute> = useRoute()
+const router: ReturnType<typeof useRouter> = useRouter()
 
 /** Supported rolling windows (days). */
 const PERIODS: number[] = [7, 30, 90]
@@ -548,11 +612,39 @@ const trendDays: Ref<EmailHealthTrendDay[]> = ref([])
 const providers: Ref<EmailHealthProvider[]> = ref([])
 const incidents: Ref<EmailHealthIncident[]> = ref([])
 const dnsDomains: Ref<EmailDnsDomain[]> = ref([])
+const postmasterConnection: Ref<PostmasterConnection | null> = ref(null)
 const postmasterDomains: Ref<PostmasterDomain[]> = ref([])
+const isConnectingPostmaster: Ref<boolean> = ref(false)
+const isDisconnectingPostmaster: Ref<boolean> = ref(false)
 
 const templateScores: Ref<TemplateScoresResponse | null> = ref(null)
 const isScoringTemplates: Ref<boolean> = ref(false)
 const expandedTemplateId: Ref<number | null> = ref(null)
+
+/** Primary sending domain label for the Postmaster setup guide. */
+const primarySendingDomain: ComputedRef<string> = computed((): string => {
+  const fromPostmaster: string | undefined = postmasterDomains.value[0]?.domain
+  if (fromPostmaster) return fromPostmaster
+  const fromDns: string | undefined = dnsDomains.value[0]?.domain
+  if (fromDns) return fromDns
+  return 'votre-domaine.fr'
+})
+
+/** Numbered steps for the Postmaster onboarding card. */
+const postmasterWorkflowSteps: ComputedRef<{ title: string; detail: string }[]> = computed(
+  (): { title: string; detail: string }[] => [
+    {
+      title: `Vérifiez ${primarySendingDomain.value} sur Postmaster Tools`,
+      detail:
+        "Sur postmaster.google.com, ajoutez votre domaine d'envoi et posez l'enregistrement TXT DNS demandé par Google. Comptez quelques minutes pour la validation.",
+    },
+    {
+      title: 'Connectez le même compte Google',
+      detail:
+        "Cliquez sur le bouton ci-dessous avec le compte Google qui possède ce domaine dans Postmaster. La connexion reste active — vous n'aurez pas à recommencer à chaque visite.",
+    },
+  ],
+)
 
 /** ISO dates of the trend series. */
 const trendLabels: ComputedRef<string[]> = computed((): string[] =>
@@ -1019,11 +1111,71 @@ async function load(): Promise<void> {
   } catch {
     dnsDomains.value = []
   }
+  await loadPostmaster()
+}
+
+/**
+ * Load Postmaster connection state and per-domain stats.
+ * @returns A promise resolved once loaded.
+ */
+async function loadPostmaster(): Promise<void> {
   try {
-    postmasterDomains.value = (await EmailHealthService.getEmailHealthPostmaster(period.value)).domains
+    const response: PostmasterResponse = await EmailHealthService.getEmailHealthPostmaster(period.value)
+    postmasterConnection.value = response.connection
+    postmasterDomains.value = response.domains
   } catch {
+    postmasterConnection.value = { connected: false, oauth_available: true }
     postmasterDomains.value = []
   }
+}
+
+/**
+ * Redirect the browser to Google OAuth for Postmaster Tools.
+ * @returns A promise resolved once the auth URL is fetched.
+ */
+async function connectPostmaster(): Promise<void> {
+  isConnectingPostmaster.value = true
+  try {
+    const { auth_url: authUrl }: { auth_url: string } = await EmailHealthService.getPostmasterAuthUrl()
+    window.location.href = authUrl
+  } catch {
+    toast.error('Impossible de lancer la connexion Google')
+    isConnectingPostmaster.value = false
+  }
+}
+
+/**
+ * Remove the stored Postmaster OAuth connection.
+ * @returns A promise resolved once disconnected.
+ */
+async function disconnectPostmaster(): Promise<void> {
+  isDisconnectingPostmaster.value = true
+  try {
+    await EmailHealthService.disconnectPostmaster()
+    postmasterConnection.value = { connected: false, google_email: null, oauth_available: true }
+    postmasterDomains.value = []
+    toast.success('Postmaster déconnecté')
+  } catch {
+    toast.error('Échec de la déconnexion')
+  } finally {
+    isDisconnectingPostmaster.value = false
+  }
+}
+
+/**
+ * Surface Postmaster OAuth callback feedback and strip the query flag.
+ * @returns A promise resolved once handled.
+ */
+async function handlePostmasterCallbackFeedback(): Promise<void> {
+  const flag: unknown = route.query.postmaster
+  if (flag !== 'connected' && flag !== 'error') return
+  if (flag === 'connected') {
+    toast.success('Google Postmaster connecté')
+    await loadPostmaster()
+  } else {
+    toast.error('La connexion Google Postmaster a échoué')
+  }
+  await router.replace({ query: { ...route.query, postmaster: undefined } })
 }
 
 /**
@@ -1042,8 +1194,9 @@ async function loadTemplateScores(): Promise<void> {
   }
 }
 
-onMounted((): void => {
-  void load()
+onMounted(async (): Promise<void> => {
+  await load()
   void loadTemplateScores()
+  await handlePostmasterCallbackFeedback()
 })
 </script>

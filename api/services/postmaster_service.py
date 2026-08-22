@@ -1,150 +1,131 @@
-"""Gmail Postmaster Tools — the authoritative Gmail-side reputation feed.
+"""Gmail Postmaster Tools — per-user Gmail-side reputation via OAuth.
 
-Free Google API. Setup (one-time, manual):
-1. https://postmaster.google.com → add + verify the sending domain (TXT DNS).
-2. Google Cloud console → enable the "Postmaster Tools API" → create a
-   service account → download its JSON key.
-3. In Postmaster Tools → domain → "Manage users" → add the service-account
-   email address (…@…iam.gserviceaccount.com) — read access is enough.
-4. Point the service at the key, either way:
-   - Local dev: ``GOOGLE_POSTMASTER_CREDENTIALS_FILE`` = path to the JSON key.
-   - Production: ``GOOGLE_POSTMASTER_CREDENTIALS_JSON`` = the key inline (raw JSON
-     or base64 of it), shipped as a single env secret — no file to write on the
-     server. When both are set, the inline JSON wins.
-
-When neither is configured the service reports ``configured: False`` and the
-UI shows the setup card instead of data.
+Each user connects the Google account that owns their sending domain(s) in
+Postmaster Tools (https://postmaster.google.com). Domain verification (TXT DNS)
+remains a one-time manual step on Google's side; OAuth only grants API read
+access to domains already registered under that account.
 """
 
 from __future__ import annotations
 
-import base64
-import binascii
-import json
 import logging
-import os
 import time
 from datetime import datetime, timedelta
 from typing import Any
 
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from sqlalchemy.orm import Session
+
 from core.config import settings
+from models.user import User
+from services.encryption_service import encryption_service
+from services.postmaster_oauth_service import POSTMASTER_SCOPE, PostmasterOAuthService
 
 logger = logging.getLogger(__name__)
 
-_SCOPE: str = "https://www.googleapis.com/auth/postmaster.readonly"
 _CACHE_TTL_SECONDS: float = 3600.0  # Postmaster data is daily — 1 h cache is plenty.
 
 
 class PostmasterService:
-    """Read-only client for the Gmail Postmaster Tools API (cached)."""
+    """Read-only Postmaster client scoped to one user's OAuth credentials."""
 
     def __init__(self) -> None:
         self._cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._oauth = PostmasterOAuthService()
 
-    @property
-    def credentials_file(self) -> str | None:
-        """Path to the service-account JSON key file (None = not set/found).
+    def connection_status(self, user: User) -> dict[str, Any]:
+        """Return whether the user has connected Postmaster OAuth.
 
-        A relative path is resolved against the ``api/`` root, so a value like
-        ``credentials/google-postmaster.json`` works regardless of the current
-        working directory the server was launched from.
-
-        Returns:
-            The absolute path when the file exists on disk.
-        """
-        path = settings.google_postmaster_credentials_file
-        if not path:
-            return None
-        if not os.path.isabs(path):
-            api_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            path = os.path.join(api_root, path)
-        if os.path.isfile(path):
-            return path
-        return None
-
-    @property
-    def is_configured(self) -> bool:
-        """Whether credentials are available via inline JSON or a key file.
+        Args:
+            user: Authenticated user.
 
         Returns:
-            True when the service can authenticate against the API.
+            ``connected``, ``google_email`` and ``oauth_available`` flags.
         """
-        return bool(settings.google_postmaster_credentials_json) or self.credentials_file is not None
+        has_token = bool(user.postmaster_oauth_refresh_token)
+        return {
+            "connected": has_token,
+            "google_email": user.postmaster_google_email,
+            "oauth_available": self._oauth.is_platform_configured,
+        }
 
-    def _service_account_info(self) -> dict[str, Any] | None:
-        """Parse the inline service-account JSON (raw or base64), when set.
-
-        Accepts the key file's contents pasted directly, or a base64 encoding of
-        it (the deploy-safe form: a single line, no quotes/newlines to escape
-        through the CI heredoc → ``.env`` → dotenv chain).
-
-        Returns:
-            The parsed credentials dict, or None when no inline JSON is set.
-        @raises ValueError - When the inline value is set but cannot be decoded.
-        """
-        raw = settings.google_postmaster_credentials_json
-        if not raw:
-            return None
-        text = raw.strip()
-        if not text.startswith("{"):
-            try:
-                text = base64.b64decode(text, validate=True).decode("utf-8")
-            except (binascii.Error, ValueError) as exc:
-                raise ValueError("GOOGLE_POSTMASTER_CREDENTIALS_JSON is neither JSON nor valid base64") from exc
-        return json.loads(text)
-
-    def domain_stats(self, domain: str, days: int = 30) -> dict[str, Any]:
+    def domain_stats(self, db: Session, user: User, domain: str, days: int = 30) -> dict[str, Any]:
         """Fetch Gmail reputation + spam-rate history for a domain.
 
         Args:
-            domain: The sending domain (must be verified in Postmaster Tools).
+            db: Database session (token refresh may persist here).
+            user: Token owner.
+            domain: Sending domain (must exist in the user's Postmaster account).
             days: History depth (Postmaster keeps ~120 days).
 
         Returns:
-            ``configured`` flag, then reputation/spam series when available.
+            Parsed stats, or an ``error`` key when the fetch fails.
         """
-        if not self.is_configured:
-            return {"configured": False, "domain": domain, "reason": "missing_credentials"}
+        if not user.postmaster_oauth_refresh_token:
+            return {"domain": domain, "error": None, "needs_connection": True}
 
-        cache_key = f"{domain}:{days}"
+        cache_key = f"{user.id}:{domain}:{days}"
         cached = self._cache.get(cache_key)
         if cached and (time.monotonic() - cached[0]) < _CACHE_TTL_SECONDS:
             return cached[1]
 
         try:
-            result = self._fetch(domain, days)
+            result = self._fetch(db, user, domain, days)
         except Exception as exc:
-            logger.warning("Postmaster fetch failed for %s: %s", domain, exc)
+            logger.warning("Postmaster fetch failed for user %s domain %s: %s", user.id, domain, exc)
             result = {
-                "configured": True,
                 "domain": domain,
                 "error": self._friendly_error(exc),
             }
         self._cache[cache_key] = (time.monotonic(), result)
         return result
 
-    def _fetch(self, domain: str, days: int) -> dict[str, Any]:
-        """Call the API (import here so the app boots without the lib configured).
+    def clear_user_cache(self, user_id: int) -> None:
+        """Drop cached Postmaster responses for one user.
 
         Args:
-            domain: Verified domain.
+            user_id: Owner whose cache entries should be removed.
+        """
+        prefix = f"{user_id}:"
+        for key in list(self._cache):
+            if key.startswith(prefix):
+                del self._cache[key]
+
+    def disconnect(self, db: Session, user: User) -> None:
+        """Remove stored Postmaster OAuth tokens for a user.
+
+        Args:
+            db: Database session.
+            user: Owner to disconnect.
+        """
+        user.postmaster_google_email = None
+        user.postmaster_oauth_refresh_token = None
+        user.postmaster_oauth_access_token = None
+        user.postmaster_oauth_token_expires_at = None
+        db.commit()
+        self.clear_user_cache(user.id)
+
+    def _fetch(self, db: Session, user: User, domain: str, days: int) -> dict[str, Any]:
+        """Call the Postmaster API v1 traffic stats endpoint.
+
+        Args:
+            db: Database session.
+            user: Token owner.
+            domain: Verified domain name.
             days: History depth.
 
         Returns:
             Parsed daily stats.
-        """
-        from google.oauth2 import service_account  # local import: optional feature
-        from googleapiclient.discovery import build
-        from googleapiclient.errors import HttpError
 
-        info = self._service_account_info()
-        if info is not None:
-            credentials = service_account.Credentials.from_service_account_info(info, scopes=[_SCOPE])
-        else:
-            credentials = service_account.Credentials.from_service_account_file(self.credentials_file, scopes=[_SCOPE])
+        Raises:
+            Exception: When credentials are missing or the API call fails.
+        """
+        credentials = self._ensure_credentials(db, user)
         client = build("gmailpostmastertools", "v1", credentials=credentials, cache_discovery=False)
 
-        # Bounded range (start + end): Postmaster's freshest data is ~2 days old.
         end = datetime.utcnow().date()
         start = end - timedelta(days=days)
         parent = f"domains/{domain}"
@@ -165,16 +146,18 @@ class PostmasterService:
                 .execute()
             )
         except HttpError as exc:
-            # 404 here means the domain is reachable but Postmaster has no traffic
-            # stats yet — Google only publishes them above a minimum daily volume to
-            # Gmail. That is a normal empty state, not a setup error.
             if exc.resp is not None and exc.resp.status == 404:
-                return {"configured": True, "domain": domain, "latest": None, "days": [], "no_data": True}
+                return {
+                    "domain": domain,
+                    "latest": None,
+                    "days": [],
+                    "no_data": True,
+                    "domain_not_found": True,
+                }
             raise
 
         days_out: list[dict[str, Any]] = []
         for stat in response.get("trafficStats", []):
-            # name = domains/<domain>/trafficStats/YYYYMMDD
             raw_date = stat.get("name", "").rsplit("/", 1)[-1]
             iso = f"{raw_date[0:4]}-{raw_date[4:6]}-{raw_date[6:8]}" if len(raw_date) == 8 else raw_date
             days_out.append(
@@ -192,12 +175,82 @@ class PostmasterService:
 
         latest = days_out[-1] if days_out else None
         return {
-            "configured": True,
             "domain": domain,
             "latest": latest,
             "days": days_out,
             "no_data": not days_out,
         }
+
+    def _ensure_credentials(self, db: Session, user: User) -> Credentials:
+        """Return valid Google credentials, refreshing and persisting when needed.
+
+        Args:
+            db: Database session.
+            user: Token owner.
+
+        Returns:
+            OAuth credentials ready for API calls.
+
+        Raises:
+            ValueError: When no refresh token is stored.
+        """
+        refresh_token = user.postmaster_oauth_refresh_token
+        if not refresh_token:
+            raise ValueError("Postmaster not connected")
+
+        decrypted_refresh = encryption_service.decrypt(refresh_token)
+        access_token = (
+            encryption_service.decrypt(user.postmaster_oauth_access_token)
+            if user.postmaster_oauth_access_token
+            else None
+        )
+
+        credentials = Credentials(
+            token=access_token,
+            refresh_token=decrypted_refresh,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=settings.google_client_id,
+            client_secret=settings.google_client_secret,
+            scopes=[POSTMASTER_SCOPE],
+        )
+        if user.postmaster_oauth_token_expires_at:
+            credentials.expiry = user.postmaster_oauth_token_expires_at
+
+        if credentials.expired and credentials.refresh_token:
+            credentials.refresh(Request())
+            user.postmaster_oauth_access_token = encryption_service.encrypt(credentials.token or "")
+            user.postmaster_oauth_token_expires_at = credentials.expiry
+            db.commit()
+
+        return credentials
+
+    def store_tokens(
+        self,
+        db: Session,
+        user: User,
+        *,
+        access_token: str,
+        refresh_token: str | None,
+        expires_at: datetime,
+        google_email: str,
+    ) -> None:
+        """Persist OAuth tokens after a successful connect or reconnect.
+
+        Args:
+            db: Database session.
+            user: Owner.
+            access_token: Short-lived access token.
+            refresh_token: Long-lived refresh token (may be omitted on re-consent).
+            expires_at: Access token expiry.
+            google_email: Connected Google account email.
+        """
+        user.postmaster_google_email = google_email
+        user.postmaster_oauth_access_token = encryption_service.encrypt(access_token)
+        if refresh_token:
+            user.postmaster_oauth_refresh_token = encryption_service.encrypt(refresh_token)
+        user.postmaster_oauth_token_expires_at = expires_at
+        db.commit()
+        self.clear_user_cache(user.id)
 
     @staticmethod
     def _friendly_error(exc: Exception) -> str:
@@ -210,13 +263,19 @@ class PostmasterService:
             A short explanation for the UI.
         """
         text = str(exc)
-        if "403" in text or "permission" in text.lower():
+        lowered = text.lower()
+        if "invalid_grant" in lowered or ("token" in lowered and "revoked" in lowered):
+            return "Session Google expirée — reconnectez Postmaster avec le bouton ci-dessous."
+        if "403" in text or "permission" in lowered:
             return (
-                "Accès refusé : ajoutez l'email du service account comme utilisateur du domaine "
-                "dans Postmaster Tools (Manage users)."
+                "Accès refusé : connectez le compte Google qui possède ce domaine dans Postmaster Tools, "
+                "ou vérifiez que le domaine y est bien enregistré."
             )
         if "404" in text:
-            return "Domaine introuvable dans Postmaster Tools — vérifiez-le d'abord sur postmaster.google.com."
+            return (
+                "Domaine introuvable dans Postmaster Tools — ajoutez-le et vérifiez-le sur postmaster.google.com "
+                "avec le même compte Google que celui connecté ici."
+            )
         return f"Erreur Postmaster : {text[:200]}"
 
 
