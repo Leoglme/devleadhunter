@@ -2,6 +2,7 @@
 Main FastAPI application entry point.
 """
 
+import asyncio
 import logging
 
 
@@ -51,6 +52,7 @@ from scrappers.pagesjaunes_scraper import PagesJaunesScraper
 from services.acquisition_orchestrator import acquisition_orchestrator
 from services.demo_site_cleanup_service import run_demo_site_cleanup_loop
 from services.email_queue_worker import email_queue_worker
+from services.notification_service import notification_service, run_daily_recap_loop
 from services.order_fulfillment_recovery_service import run_order_fulfillment_recovery_loop
 from services.order_payment_reconciliation_service import run_order_payment_reconciliation_loop
 from services.scraper_service import scraper_service
@@ -82,6 +84,9 @@ app.add_middleware(
 )
 
 
+_background_tasks: set[asyncio.Task] = set()
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """
@@ -99,6 +104,16 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         A JSON 500 response with CORS headers when the Origin is allowed.
     """
     logging.getLogger(__name__).exception("Unhandled error on %s %s", request.method, request.url.path)
+    # Notify admins of the crash without blocking the error response (fire-and-forget).
+    task = asyncio.create_task(
+        notification_service.notify_error(
+            context=request.url.path,
+            message=str(exc),
+            tag=f"error:{request.url.path}",
+        )
+    )
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
     headers: dict = {}
     origin = request.headers.get("origin")
     if origin and origin in settings.allowed_cors_origins:
@@ -140,14 +155,13 @@ async def startup_event() -> None:
     brightdata_scraper = BrightDataScraper()
     await scraper_service.add_scraper(brightdata_scraper)
 
-    import asyncio
-
     asyncio.create_task(run_demo_site_cleanup_loop())
     asyncio.create_task(email_queue_worker.run_forever())
     asyncio.create_task(run_order_fulfillment_recovery_loop())
     asyncio.create_task(run_order_payment_reconciliation_loop())
     asyncio.create_task(acquisition_orchestrator.run_forever())
     asyncio.create_task(_warmup_maps_autocomplete())
+    asyncio.create_task(run_daily_recap_loop())
 
 
 async def _warmup_maps_autocomplete() -> None:

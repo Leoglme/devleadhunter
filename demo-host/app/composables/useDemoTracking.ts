@@ -1,4 +1,5 @@
 import type { PostHog } from 'posthog-js'
+import { DemoBeaconUtils } from '~/utils/DemoBeaconUtils'
 
 /**
  * Behavioural tracking for demo sites (PostHog).
@@ -67,10 +68,12 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
   }
 
   /**
-   * Attach DOM listeners that translate interactions into PostHog events.
+   * Attach DOM listeners that translate interactions into PostHog events and beacons.
    * @param posthog - Initialised PostHog instance.
+   * @param slug - Demo slug identifying the prospect.
+   * @param apiBase - DevLeadHunter API base URL for notification beacons.
    */
-  function setupListeners(posthog: PostHog): void {
+  function setupListeners(posthog: PostHog, slug: string, apiBase: string): void {
     const reachedDepths: Set<number> = new Set<number>()
     const seenSections: Set<Element> = new Set<Element>()
     let maxDepth: number = 0
@@ -89,6 +92,7 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
       if (!interacted && engagedSeconds < ENGAGED_SECONDS_THRESHOLD && maxDepth < ENGAGED_SCROLL_THRESHOLD) return
       engagedFired = true
       posthog.capture('demo_engaged', { reason, engaged_seconds: engagedSeconds, max_scroll: maxDepth })
+      DemoBeaconUtils.send(apiBase, slug, 'demo_engaged')
     }
 
     // ── Clicks: phone / email / outbound / CTA, each tagged with its section ──
@@ -107,8 +111,10 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
 
         if (href.startsWith('tel:')) {
           posthog.capture('demo_phone_click', { href, section })
+          DemoBeaconUtils.send(apiBase, slug, 'demo_phone_click')
         } else if (href.startsWith('mailto:')) {
           posthog.capture('demo_contact_click', { href, section })
+          DemoBeaconUtils.send(apiBase, slug, 'demo_contact_click')
         } else if (/^https?:\/\//i.test(href) && !href.includes(window.location.host)) {
           let host: string
           try {
@@ -117,6 +123,7 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
             host = ''
           }
           posthog.capture('demo_outbound_click', { href, host, section })
+          DemoBeaconUtils.send(apiBase, slug, 'demo_outbound_click', { host })
         } else {
           const label: string = (anchor ?? button ?? target).textContent?.trim().slice(0, 80) ?? ''
           posthog.capture('demo_cta_click', {
@@ -125,6 +132,7 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
             section,
             tag: (anchor ?? button)?.tagName.toLowerCase() ?? '',
           })
+          DemoBeaconUtils.send(apiBase, slug, 'demo_cta_click', { label })
         }
         markEngaged('click')
       },
@@ -191,6 +199,9 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
     window.addEventListener('pagehide', (): void => {
       window.clearInterval(ticker)
       sendTime()
+      if (engagedSeconds > 0) {
+        DemoBeaconUtils.send(apiBase, slug, 'demo_time_on_page', { seconds: engagedSeconds, max_scroll: maxDepth })
+      }
     })
   }
 
@@ -202,6 +213,8 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
    */
   async function init(slug: string, status: string, variant: string | null): Promise<void> {
     if (!import.meta.client || initialized) return
+    // The owner's own visit (?internal=1 / ?_edit=1) must not track or notify.
+    if (DemoBeaconUtils.isInternalVisit()) return
     // Embedded rendering = the dashboard's scaled card preview, never a prospect
     // visit — tracking it would pollute the lead scoring with fake activity.
     if (window.self !== window.top) return
@@ -234,7 +247,9 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
     // Ne jamais renommer : les noms demo_* sont lus côté API.
     posthog.register({ surface: 'demo', demo_slug: slug, ...(variant ? { ab_variant: variant } : {}) })
     initialized = true
-    setupListeners(posthog)
+    const apiBase: string = String(config.public.apiBase ?? '')
+    DemoBeaconUtils.send(apiBase, slug, 'demo_opened')
+    setupListeners(posthog, slug, apiBase)
   }
 
   return { init }

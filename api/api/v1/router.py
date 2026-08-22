@@ -16,6 +16,7 @@ from .routes import (
     credit_settings,
     credits,
     dashboard,
+    demo_events,
     demo_sites,
     email_accounts,
     email_health,
@@ -26,6 +27,7 @@ from .routes import (
     exports,
     health,
     interactions,
+    notifications,
     orders,
     organizations,
     payment_accounts,
@@ -66,6 +68,8 @@ router.include_router(campaigns.router)
 router.include_router(unsubscribe.router)
 router.include_router(exports.router)
 router.include_router(interactions.router)
+router.include_router(notifications.router)
+router.include_router(demo_events.router)
 router.include_router(demo_sites.router)
 router.include_router(enrichment.router)
 router.include_router(orders.router)

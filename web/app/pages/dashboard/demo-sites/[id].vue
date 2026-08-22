@@ -37,7 +37,7 @@
           v-if="openUrl"
           type="button"
           class="btn-secondary inline-flex items-center gap-2"
-          @click="openDemoUrl(openUrl)"
+          @click="openDemoUrl(DemoSiteService.withInternalFlag(openUrl))"
         >
           <UIcon name="i-lucide-external-link" class="h-4 w-4" />
           Ouvrir le site
@@ -685,7 +685,8 @@ async function loadImages(): Promise<void> {
 /**
  * Open the live demo URL in a new browser tab.
  */
-async function openDemoUrl(url: string): Promise<void> {
+async function openDemoUrl(url: string | null): Promise<void> {
+  if (!url) return
   await openExternalUrl(url)
 }
 

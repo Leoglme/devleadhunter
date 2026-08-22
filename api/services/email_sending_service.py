@@ -16,6 +16,7 @@ from services.demo_identity import posthog_distinct_id, resolve_demo_slug
 from services.email_attachment import EmailAttachment
 from services.encryption_service import encryption_service
 from services.gmail_oauth_service import GmailOAuthService
+from services.notification_service import notification_service
 from services.posthog_service import posthog_service
 from services.resend_service import ResendService
 from services.sending_identity import SendingIdentity, resolve_sending_identity
@@ -110,6 +111,14 @@ class EmailSendingService:
                     "email_log_id": email_log_id,
                     "$lib": "devleadhunter-api",
                 },
+            )
+            await notification_service.notify_email_event(
+                self.db,
+                user_id=user_id,
+                event_name="email_sent",
+                recipient_email=recipient_email,
+                prospect_id=pid,
+                email_log_id=email_log_id,
             )
         except Exception as exc:
             logger.warning("PostHog email_sent capture failed (log=%s): %s", email_log_id, exc)

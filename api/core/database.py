@@ -76,6 +76,7 @@ def init_db():
     from models.prospect_db import ProspectDB  # noqa: F401
     from models.prospect_enrichment import ProspectEnrichment  # noqa: F401
     from models.prospect_interaction import ProspectInteraction  # noqa: F401
+    from models.push_subscription import PushSubscription  # noqa: F401
     from models.resend_config import ResendConfig  # noqa: F401
     from models.send_policy import SendPolicy  # noqa: F401
     from models.support_attachment import SupportAttachment  # noqa: F401

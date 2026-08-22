@@ -781,14 +781,13 @@ class OrderService:
 
     async def capture_sale_event(self, db: Session, order_id: int) -> None:
         """
-        Push a ``sale`` event to PostHog (best-effort) so it closes the funnel
-        email → démo → vente. distinct_id = the prospect's demo slug (same identity
-        as the email/demo events).
+        Notify the owner and push a ``sale`` event to PostHog (both best-effort) so
+        it closes the funnel email → démo → vente. distinct_id = the prospect's demo
+        slug (same identity as the email/demo events).
         """
+        from services.notification_service import notification_service
         from services.posthog_service import posthog_service
 
-        if not posthog_service.can_capture:
-            return
         order = self.get_by_id(db, order_id)
         if not order:
             return
@@ -799,6 +798,20 @@ class OrderService:
 
             site = db.query(DemoSite).filter(DemoSite.id == order.demo_site_id).first()
             slug = site.slug if site else None
+
+        # The sale is the most important signal — notify regardless of PostHog config.
+        await notification_service.notify_sale(
+            db,
+            user_id=order.user_id,
+            prospect_id=order.prospect_id,
+            amount_cents=order.amount_cents,
+            currency=order.currency,
+            fallback_name=slug or f"commande #{order.id}",
+            order_id=order.id,
+        )
+
+        if not posthog_service.can_capture:
+            return
         distinct_id = slug or (f"prospect_{order.prospect_id}" if order.prospect_id else f"order_{order.id}")
         await posthog_service.capture(
             distinct_id=distinct_id,

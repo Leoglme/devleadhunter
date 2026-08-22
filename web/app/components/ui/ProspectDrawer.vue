@@ -463,7 +463,7 @@
             </div>
             <a
               v-if="demoSite?.demo_url"
-              :href="demoSite.demo_url"
+              :href="DemoSiteService.withInternalFlag(demoSite.demo_url) ?? undefined"
               target="_blank"
               rel="noopener noreferrer"
               class="btn-primary w-full"

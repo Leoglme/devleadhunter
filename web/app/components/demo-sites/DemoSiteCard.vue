@@ -70,7 +70,12 @@
       </p>
 
       <div class="relative z-20 flex flex-wrap gap-2">
-        <button v-if="openUrl" type="button" class="btn-primary h-9 px-4 text-xs" @click="openDemoUrl(openUrl)">
+        <button
+          v-if="openUrl"
+          type="button"
+          class="btn-primary h-9 px-4 text-xs"
+          @click="openDemoUrl(DemoSiteService.withInternalFlag(openUrl))"
+        >
           Ouvrir
         </button>
         <NuxtLink :to="`/dashboard/demo-sites/${site.id}`" class="btn-secondary h-9 px-4 text-xs"> Détails </NuxtLink>
@@ -162,7 +167,8 @@ async function copyDemoUrl(url: string): Promise<void> {
 /**
  * Open the demo URL in a new browser tab.
  */
-async function openDemoUrl(url: string): Promise<void> {
+async function openDemoUrl(url: string | null): Promise<void> {
+  if (!url) return
   emit('open', url)
 }
 </script>

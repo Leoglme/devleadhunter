@@ -1,8 +1,14 @@
 import type { PostHog } from 'posthog-js'
 import type { DemoVideoEvent, DemoVideoEventCapture } from '~/types/demoVideoTracking'
+import { DemoBeaconUtils } from '~/utils/DemoBeaconUtils'
 
 let initialized: boolean = false
 let instance: PostHog | null = null
+let beaconSlug: string = ''
+let beaconBase: string = ''
+
+// Video events worth a real-time owner notification (the rest stay analytics-only).
+const VIDEO_BEACON_EVENTS: Set<string> = new Set(['demo_video_play', 'demo_video_complete', 'demo_video_replay'])
 
 /**
  * PostHog tracking for the prospection-video player page (/v/{slug}).
@@ -25,6 +31,8 @@ export function useDemoVideoTracking(): {
    */
   async function init(slug: string, variant: string | null): Promise<void> {
     if (!import.meta.client || initialized) return
+    // The owner's own visit (?internal=1 / ?_edit=1) must not track or notify.
+    if (DemoBeaconUtils.isInternalVisit()) return
     const key: string = String(config.public.posthogProjectApiKey ?? '')
     const host: string = String(config.public.posthogIngestionHost ?? '')
     if (!key) return
@@ -49,6 +57,9 @@ export function useDemoVideoTracking(): {
     posthog.register({ surface: 'demo', demo_slug: slug, ...(variant ? { ab_variant: variant } : {}) })
     initialized = true
     instance = posthog
+    beaconSlug = slug
+    beaconBase = String(config.public.apiBase ?? '')
+    DemoBeaconUtils.send(beaconBase, beaconSlug, 'demo_video_opened')
   }
 
   /**
@@ -58,6 +69,9 @@ export function useDemoVideoTracking(): {
    */
   const capture: DemoVideoEventCapture = (event: DemoVideoEvent, properties?: Record<string, unknown>): void => {
     instance?.capture(event, properties)
+    if (VIDEO_BEACON_EVENTS.has(event)) {
+      DemoBeaconUtils.send(beaconBase, beaconSlug, event)
+    }
   }
 
   return { init, capture }

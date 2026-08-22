@@ -32,6 +32,7 @@ from models.demo_site import DemoSite
 from models.email_log import EmailLog
 from services.bounce_fallback_service import bounce_fallback_service
 from services.demo_identity import posthog_distinct_id, resolve_demo_slug
+from services.notification_service import notification_service
 from services.posthog_service import posthog_service
 from services.storyblok_service import storyblok_service
 from services.templates.site_content import from_storyblok_site_content
@@ -284,6 +285,17 @@ async def resend_webhook(
                 "$lib": "devleadhunter-api",
             },
             timestamp=now.isoformat(),
+        )
+
+        # Mirror the event into a mobile push notification (best-effort).
+        await notification_service.notify_email_event(
+            db,
+            user_id=email_log.user_id,
+            event_name=event_type.replace(".", "_"),
+            recipient_email=email_log.recipient_email,
+            prospect_id=email_log.prospect_id,
+            subject=email_log.subject,
+            email_log_id=email_log.id,
         )
 
 

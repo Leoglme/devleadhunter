@@ -321,6 +321,28 @@ class Settings(BaseSettings):
         description="Resend webhook signing secret for verifying event payloads",
     )
 
+    # Web Push (VAPID) — mobile PWA notifications for the dashboard user
+    vapid_public_key: str | None = Field(
+        default=None,
+        alias="VAPID_PUBLIC_KEY",
+        description="VAPID public key (base64url) exposed to the browser to subscribe to Web Push",
+    )
+    vapid_private_key_b64: str | None = Field(
+        default=None,
+        alias="VAPID_PRIVATE_KEY_B64",
+        description="VAPID private key as base64 of its PKCS8 PEM (secret — signs push messages)",
+    )
+    vapid_subject: str = Field(
+        default="mailto:contact@dibodev.fr",
+        alias="VAPID_SUBJECT",
+        description="VAPID 'sub' claim — a mailto: or https: contact for the push service",
+    )
+    daily_recap_hour_utc: int = Field(
+        default=19,
+        alias="DAILY_RECAP_HOUR_UTC",
+        description="UTC hour (0-23) for the daily recap push — 19 ≈ 21h Paris in summer",
+    )
+
     # Google OAuth settings (for Gmail)
     google_client_id: str = Field(default="", alias="GOOGLE_CLIENT_ID", description="Google OAuth client ID")
     google_client_secret: str = Field(

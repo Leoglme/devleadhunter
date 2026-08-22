@@ -13,6 +13,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     heading: 'Compte',
     entries: [
+      { to: '/dashboard/settings/notifications', label: 'Notifications', icon: 'i-lucide-bell' },
       { to: '/dashboard/credits', label: 'Mes crédits', icon: 'i-lucide-coins' },
       { to: '/dashboard/settings/billing', label: 'Facturation & paiement', icon: 'i-lucide-receipt' },
     ],

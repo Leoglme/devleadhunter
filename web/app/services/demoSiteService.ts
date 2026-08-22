@@ -345,6 +345,18 @@ export class DemoSiteService {
   }
 
   /**
+   * Append the internal-visit flag so the owner's own opens are excluded from tracking.
+   * Only for a link WE click to view a demo — never a copied/shared link sent to a prospect.
+   */
+  static withInternalFlag(url: string | null | undefined): string | null {
+    if (!url) {
+      return null
+    }
+    const separator: string = url.includes('?') ? '&' : '?'
+    return `${url}${separator}internal=1`
+  }
+
+  /**
    * Whether the demo site is reachable (prod URL or local fallback).
    */
   static isDemoSiteReachable(site: DemoSite): boolean {

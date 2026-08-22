@@ -21,6 +21,7 @@ from models.prospect import Prospect
 from models.prospect_db import ProspectDB
 from models.prospect_enrichment import ProspectEnrichment
 from models.prospect_interaction import ProspectInteraction
+from models.push_subscription import PushSubscription
 from models.scraping_job import ScrapingJob
 from models.search import ProspectSearchRequest, ProspectSearchResponse
 from models.send_policy import SendPolicy
@@ -52,6 +53,7 @@ __all__ = [
     "ProspectInteraction",
     "ProspectSearchRequest",
     "ProspectSearchResponse",
+    "PushSubscription",
     "ScrapingJob",
     "SendPolicy",
     "SupportAttachment",

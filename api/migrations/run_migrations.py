@@ -87,6 +87,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_demo_site_demo_link_sent_at", "migrations.add_demo_site_demo_link_sent_at"),
     ("add_demo_site_storyblok_space_created_at", "migrations.add_demo_site_storyblok_space_created_at"),
     ("widen_enrichment_logo_url_to_text", "migrations.widen_enrichment_logo_url_to_text"),
+    ("add_push_subscriptions", "migrations.add_push_subscriptions"),
     # Charset drift must be repaired before anything compares strings on those tables.
     ("fix_utf8mb4_collation", "migrations.fix_utf8mb4_collation"),
     # Content rewrites run last, once every schema change is in place.

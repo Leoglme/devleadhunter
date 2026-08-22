@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -228,6 +229,31 @@ class PostHogService:
                 }
             )
         return events
+
+    async def count_demo_visits_since(self, slugs: list[str], since: datetime) -> dict[str, int]:
+        """
+        Count demo pageviews and qualified visits for the given slugs since a timestamp.
+
+        Used by the daily recap so it never persists demo events itself. Returns
+        ``{"pageviews": int, "engaged": int}`` — zeros when PostHog is not configured,
+        no slugs are given, or the query fails.
+        """
+        safe_slugs = [self._safe_slug(s) for s in slugs if self._safe_slug(s)]
+        if not self.is_configured or not safe_slugs:
+            return {"pageviews": 0, "engaged": 0}
+        in_list = ", ".join(f"'{s}'" for s in safe_slugs)
+        since_str = since.strftime("%Y-%m-%d %H:%M:%S")
+        query = (
+            "SELECT countIf(event = '$pageview') AS pageviews, "
+            "countIf(event = 'demo_engaged') AS engaged "
+            "FROM events "
+            f"WHERE properties.demo_slug IN ({in_list}) "
+            f"AND timestamp >= '{since_str}'"
+        )
+        rows = await self._run_query(query)
+        if rows and isinstance(rows[0], (list, tuple)) and len(rows[0]) >= 2:
+            return {"pageviews": int(rows[0][0] or 0), "engaged": int(rows[0][1] or 0)}
+        return {"pageviews": 0, "engaged": 0}
 
 
 posthog_service = PostHogService()

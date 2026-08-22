@@ -194,7 +194,7 @@
             <div class="flex shrink-0 items-center gap-1">
               <a
                 v-if="item.demo_url"
-                :href="item.demo_url"
+                :href="DemoSiteService.withInternalFlag(item.demo_url) ?? undefined"
                 target="_blank"
                 rel="noopener"
                 class="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-[var(--app-ink-soft)] transition-colors hover:bg-[var(--app-surface-2)] hover:text-[var(--app-ink)]"
