@@ -225,13 +225,22 @@ async def postmaster_oauth_callback(
         user_info = await oauth.get_user_info(access_token)
         google_email = user_info.get("email")
         if not user_info.get("verified_email") or not google_email:
+            logger.warning(
+                "[Postmaster OAuth] userinfo missing verified email for user %s: %r",
+                user_id,
+                user_info,
+            )
             return _email_health_redirect("error")
 
+        refresh_token = tokens.get("refresh_token")
+        if not refresh_token:
+            logger.error("[Postmaster OAuth] No refresh_token for user %s", user_id)
+            return _email_health_redirect("error")
         postmaster_service.store_tokens(
             db,
             user,
             access_token=access_token,
-            refresh_token=tokens.get("refresh_token"),
+            refresh_token=refresh_token,
             expires_at=tokens["expires_at"],
             google_email=google_email,
         )

@@ -16,6 +16,8 @@ from core.config import settings
 logger = logging.getLogger(__name__)
 
 POSTMASTER_SCOPE: str = "https://www.googleapis.com/auth/postmaster.traffic.readonly"
+USERINFO_EMAIL_SCOPE: str = "https://www.googleapis.com/auth/userinfo.email"
+POSTMASTER_OAUTH_SCOPES: str = f"openid {USERINFO_EMAIL_SCOPE} {POSTMASTER_SCOPE}"
 
 
 class PostmasterOAuthService:
@@ -46,7 +48,7 @@ class PostmasterOAuthService:
         Returns:
             URL to redirect the browser to.
         """
-        scope = quote(POSTMASTER_SCOPE, safe="")
+        scope = quote(POSTMASTER_OAUTH_SCOPES, safe="")
         redirect = quote(self.redirect_uri, safe="")
         return (
             "https://accounts.google.com/o/oauth2/v2/auth?"
