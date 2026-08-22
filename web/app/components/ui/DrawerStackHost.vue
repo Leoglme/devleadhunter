@@ -201,6 +201,7 @@ import { ProspectsService } from '~/services/prospectsService'
 import { OrdersService } from '~/services/ordersService'
 import { useToast } from '~/composables/useToast'
 import { useHorizontalSwipe } from '~/composables/useHorizontalSwipe'
+import { DASHBOARD_SCROLL_CONTAINER_ID } from '~/composables/useDashboardScroll'
 
 const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 
@@ -584,13 +585,46 @@ useHorizontalSwipe((): EventTarget | null => (import.meta.client ? document.body
 // Browser/OS back (iOS PWA edge-swipe, Android button) closes the top drawer instead of leaving the page.
 let hasDrawerHistoryBuffer: boolean = false
 
+// The back pop scrolls the dashboard to top — we save the position on open and put it back on close.
+let pendingScrollRestore: boolean = false
+let savedDashboardScrollTop: number = 0
+
+/**
+ * Resolve the dashboard scroll container (the layout's scrolling <main>).
+ * @returns The container element, or null when the layout is not mounted.
+ */
+function getDashboardScrollElement(): HTMLElement | null {
+  return document.getElementById(DASHBOARD_SCROLL_CONTAINER_ID)
+}
+
+/**
+ * Put the dashboard scroll position back after a drawer close popped the history entry.
+ */
+function restoreDashboardScroll(): void {
+  if (!pendingScrollRestore) return
+  pendingScrollRestore = false
+  const element: HTMLElement | null = getDashboardScrollElement()
+  if (!element) return
+  const top: number = savedDashboardScrollTop
+  // Two frames so the restore lands after the router's own scroll reset.
+  requestAnimationFrame((): void => {
+    element.scrollTop = top
+    requestAnimationFrame((): void => {
+      element.scrollTop = top
+    })
+  })
+}
+
 /**
  * Close the open drawer when a browser/OS back gesture fires, so it never navigates away from the page.
  */
 function handleBrowserBack(): void {
-  if (!hasDrawerHistoryBuffer || drawerStack.topEntry === null) return
-  hasDrawerHistoryBuffer = false
-  drawerStack.closeAll()
+  if (hasDrawerHistoryBuffer && drawerStack.topEntry !== null) {
+    hasDrawerHistoryBuffer = false
+    pendingScrollRestore = true
+    drawerStack.closeAll()
+  }
+  restoreDashboardScroll()
 }
 
 watch(
@@ -598,11 +632,13 @@ watch(
   (isOpen: boolean, wasOpen: boolean): void => {
     if (!import.meta.client) return
     if (isOpen && !wasOpen) {
+      savedDashboardScrollTop = getDashboardScrollElement()?.scrollTop ?? 0
       window.history.pushState({ ...window.history.state, dlhDrawerOpen: true }, '')
       hasDrawerHistoryBuffer = true
     } else if (!isOpen && wasOpen && hasDrawerHistoryBuffer) {
-      // Closed from the app (button, Escape, swipe) → drop the buffer we pushed.
+      // Closed from the app (button, Escape, swipe) → drop the buffer and restore scroll after the pop.
       hasDrawerHistoryBuffer = false
+      pendingScrollRestore = true
       window.history.back()
     }
   },
