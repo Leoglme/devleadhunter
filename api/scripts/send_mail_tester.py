@@ -36,6 +36,7 @@ from core.database import SessionLocal
 from models.email_template import EmailTemplate
 from models.user import User
 from services.email_sending_service import EmailSendingService
+from services.email_variables import EmailVariables
 from services.resend_service import ResendService
 from services.sending_identity import SendingIdentity, resolve_sending_identity
 from services.unsubscribe_service import unsubscribe_service
@@ -58,7 +59,7 @@ _SAMPLE_VARIABLES: dict[str, str] = {
     "metier": "plombier",
     "email": "contact@martin-plomberie.fr",
     "phone": "05 56 12 34 56",
-    "lien_demo": "https://demo.dibodev.fr/martin-plomberie",
+    "lien_demo": EmailVariables.build_demo_link_html("https://demo.dibodev.fr/martin-plomberie"),
     "lien_video": "https://demo.dibodev.fr/v/martin-plomberie",
     "vignette_video": "https://demo.dibodev.fr/v/martin-plomberie/thumbnail.png",
 }

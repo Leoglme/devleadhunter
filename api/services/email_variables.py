@@ -62,6 +62,34 @@ class EmailVariables:
         )
 
     @staticmethod
+    def build_demo_link_html(demo_link: str, text: str = "voir votre site") -> str:
+        """
+        Render `{lien_demo}` as a real ``<a>`` anchor so the click is trackable.
+
+        Resend's click tracking only rewrites ``href`` attributes: a bare URL sitting
+        as plain text in the body is never wrapped, so every demo-link click went
+        untracked (no ``email.clicked`` webhook → no ``clicked_at`` → no PostHog
+        ``email_clicked`` → no push). Wrapping the URL in an anchor closes that gap.
+        The visible text stays a worded CTA, so there is no visible/href mismatch once
+        Resend rewrites the target.
+
+        Args:
+            demo_link: The prospect's demo URL, already carrying the ``?v=A/B`` variant.
+            text: Visible call-to-action. Kept generic so it reads naturally after the
+                  shared "… : " lead-in every template uses before ``{lien_demo}``.
+
+        Returns:
+            The inline anchor HTML, or "" when there is no demo link — unchanged from the
+            previous empty-string behaviour (the queue guard skips demo-less prospects).
+        """
+        if not demo_link:
+            return ""
+        return (
+            f'<a href="{demo_link}" target="_blank" rel="noopener noreferrer" '
+            f'style="color:#111;text-decoration:underline;">{text}</a>'
+        )
+
+    @staticmethod
     def display_website(url: str | None) -> str:
         """
         Format a website URL for the body of an email.
@@ -148,7 +176,7 @@ class EmailVariables:
             cls.EMAIL: prospect.email or "",
             cls.PHONE: prospect.phone or "",
             cls.TRADE: TradeNormalizer.normalize(prospect.category),
-            cls.DEMO_LINK: demo_link,
+            cls.DEMO_LINK: cls.build_demo_link_html(demo_link),
             cls.VIDEO_LINK: video_link,
             cls.VIDEO_THUMBNAIL: cls.build_video_thumbnail_html(video_link, video_thumbnail_url),
             cls.OLD_WEBSITE: cls.display_website(prospect.website),
