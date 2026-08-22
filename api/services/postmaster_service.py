@@ -147,6 +147,14 @@ class PostmasterService:
             )
         except HttpError as exc:
             if exc.resp is not None and exc.resp.status == 404:
+                # 404 on trafficStats often means "no published metrics yet", not a missing domain.
+                if self._domain_registered(client, parent):
+                    return {
+                        "domain": domain,
+                        "latest": None,
+                        "days": [],
+                        "no_data": True,
+                    }
                 return {
                     "domain": domain,
                     "latest": None,
@@ -180,6 +188,25 @@ class PostmasterService:
             "days": days_out,
             "no_data": not days_out,
         }
+
+    @staticmethod
+    def _domain_registered(client: Any, parent: str) -> bool:
+        """Return whether *parent* exists in the user's Postmaster account.
+
+        Args:
+            client: Gmail Postmaster Tools API client.
+            parent: Resource name (``domains/example.com``).
+
+        Returns:
+            True when ``domains.get`` succeeds.
+        """
+        try:
+            client.domains().get(name=parent).execute()
+            return True
+        except HttpError as exc:
+            if exc.resp is not None and exc.resp.status == 404:
+                return False
+            raise
 
     def _ensure_credentials(self, db: Session, user: User) -> Credentials:
         """Return valid Google credentials, refreshing and persisting when needed.
