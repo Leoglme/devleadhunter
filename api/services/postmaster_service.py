@@ -26,7 +26,9 @@ from services.postmaster_oauth_service import POSTMASTER_SCOPE, PostmasterOAuthS
 
 logger = logging.getLogger(__name__)
 
-_CACHE_TTL_SECONDS: float = 3600.0  # Postmaster data is daily — 1 h cache is plenty.
+_CACHE_TTL_SECONDS: float = 21_600.0  # Postmaster data is daily — 6 h cache limits quota use.
+_DOMAINS_CACHE_TTL_SECONDS: float = 86_400.0  # Domain list changes rarely.
+_RETRY_DELAYS_SECONDS: tuple[float, ...] = (2.0, 5.0, 10.0)
 
 
 class PostmasterService:
@@ -34,6 +36,7 @@ class PostmasterService:
 
     def __init__(self) -> None:
         self._cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._domains_cache: dict[int, tuple[float, set[str]]] = {}
         self._oauth = PostmasterOAuthService()
 
     def connection_status(self, user: User) -> dict[str, Any]:
@@ -76,10 +79,11 @@ class PostmasterService:
             result = self._fetch(db, user, domain, days)
         except Exception as exc:
             logger.warning("Postmaster fetch failed for user %s domain %s: %s", user.id, domain, exc)
-            result = {
+            return {
                 "domain": domain,
                 "error": self._friendly_error(exc),
             }
+
         self._cache[cache_key] = (time.monotonic(), result)
         return result
 
@@ -93,6 +97,7 @@ class PostmasterService:
         for key in list(self._cache):
             if key.startswith(prefix):
                 del self._cache[key]
+        self._domains_cache.pop(user_id, None)
 
     def disconnect(self, db: Session, user: User) -> None:
         """Remove stored Postmaster OAuth tokens for a user.
@@ -125,12 +130,13 @@ class PostmasterService:
         """
         credentials = self._ensure_credentials(db, user)
         client = build("gmailpostmastertools", "v1", credentials=credentials, cache_discovery=False)
+        registered_domains = self._registered_domains(client, user.id)
 
         end = datetime.utcnow().date()
         start = end - timedelta(days=days)
         parent = f"domains/{domain}"
         try:
-            response = (
+            response = self._execute(
                 client.domains()
                 .trafficStats()
                 .list(
@@ -143,12 +149,11 @@ class PostmasterService:
                     endDate_day=end.day,
                     pageSize=days,
                 )
-                .execute()
             )
         except HttpError as exc:
             if exc.resp is not None and exc.resp.status == 404:
                 # 404 on trafficStats often means "no published metrics yet", not a missing domain.
-                if self._domain_registered(client, parent):
+                if domain.lower() in registered_domains:
                     return {
                         "domain": domain,
                         "latest": None,
@@ -189,24 +194,60 @@ class PostmasterService:
             "no_data": not days_out,
         }
 
-    @staticmethod
-    def _domain_registered(client: Any, parent: str) -> bool:
-        """Return whether *parent* exists in the user's Postmaster account.
+    def _registered_domains(self, client: Any, user_id: int) -> set[str]:
+        """Return domain names registered in the user's Postmaster account.
 
         Args:
             client: Gmail Postmaster Tools API client.
-            parent: Resource name (``domains/example.com``).
+            user_id: Owner (for cache key).
 
         Returns:
-            True when ``domains.get`` succeeds.
+            Lower-cased FQDNs from ``domains.list``.
         """
-        try:
-            client.domains().get(name=parent).execute()
-            return True
-        except HttpError as exc:
-            if exc.resp is not None and exc.resp.status == 404:
-                return False
-            raise
+        cached = self._domains_cache.get(user_id)
+        if cached and (time.monotonic() - cached[0]) < _DOMAINS_CACHE_TTL_SECONDS:
+            return cached[1]
+
+        response = self._execute(client.domains().list(pageSize=100))
+        names: set[str] = set()
+        for item in response.get("domains", []):
+            resource = item.get("name", "")
+            if resource.startswith("domains/"):
+                names.add(resource.removeprefix("domains/").lower())
+
+        self._domains_cache[user_id] = (time.monotonic(), names)
+        return names
+
+    @staticmethod
+    def _execute(request: Any) -> dict[str, Any]:
+        """Execute a Postmaster API request with short retries on rate limits.
+
+        Args:
+            request: Google API request object.
+
+        Returns:
+            Parsed JSON response.
+
+        Raises:
+            HttpError: When the request fails after retries.
+        """
+        last_error: HttpError | None = None
+        for attempt, delay in enumerate((0.0, *_RETRY_DELAYS_SECONDS)):
+            if delay:
+                time.sleep(delay)
+            try:
+                return request.execute()
+            except HttpError as exc:
+                last_error = exc
+                if exc.resp is not None and exc.resp.status == 429 and attempt < len(_RETRY_DELAYS_SECONDS):
+                    logger.warning(
+                        "Postmaster API rate-limited (429), retry %s/%s", attempt + 1, len(_RETRY_DELAYS_SECONDS)
+                    )
+                    continue
+                raise
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("Postmaster API request failed without response")
 
     def _ensure_credentials(self, db: Session, user: User) -> Credentials:
         """Return valid Google credentials, refreshing and persisting when needed.
@@ -303,7 +344,9 @@ class PostmasterService:
                 "Domaine introuvable dans Postmaster Tools — ajoutez-le et vérifiez-le sur postmaster.google.com "
                 "avec le même compte Google que celui connecté ici."
             )
-        return f"Erreur Postmaster : {text[:200]}"
+        if "429" in text or "rate" in lowered or "quota" in lowered:
+            return "Quota Google Postmaster dépassé — réessayez dans quelques minutes."
+        return "Erreur Postmaster temporaire — réessayez dans quelques minutes."
 
 
 postmaster_service = PostmasterService()
