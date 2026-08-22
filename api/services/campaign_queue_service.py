@@ -731,6 +731,56 @@ class CampaignQueueService:
             or 0
         )
 
+    def next_send_at_by_campaign(self, campaign_ids: list[int]) -> dict[int, datetime]:
+        """
+        Return the earliest still-pending send time per campaign.
+
+        One grouped query for every id, so the campaigns list can show a
+        « prochain envoi » without an N+1.
+
+        Args:
+            campaign_ids: Campaigns to look up.
+
+        Returns:
+            Mapping of campaign id → earliest pending ``scheduled_at``. Campaigns
+            with no pending item are absent from the map.
+        """
+        if not campaign_ids:
+            return {}
+        rows = self.db.execute(
+            select(EmailQueue.campaign_id, func.min(EmailQueue.scheduled_at))
+            .where(
+                EmailQueue.campaign_id.in_(campaign_ids),
+                EmailQueue.status == _STATUS_PENDING,
+            )
+            .group_by(EmailQueue.campaign_id)
+        ).all()
+        return {campaign_id: scheduled_at for campaign_id, scheduled_at in rows if scheduled_at is not None}
+
+    def count_upcoming_sends(self, user_id: int, *, days: int = 7) -> int:
+        """
+        Count a user's pending sends scheduled within the next ``days`` days.
+
+        Args:
+            user_id: Owner of the queue items.
+            days:    Size of the forward window (default 7).
+
+        Returns:
+            The number of pending items scheduled in ``[now, now + days)``.
+        """
+        now = _utcnow()
+        return (
+            self.db.execute(
+                select(func.count()).where(
+                    EmailQueue.user_id == user_id,
+                    EmailQueue.status == _STATUS_PENDING,
+                    EmailQueue.scheduled_at >= now,
+                    EmailQueue.scheduled_at < now + timedelta(days=days),
+                )
+            ).scalar()
+            or 0
+        )
+
     def get_queue_items(
         self,
         campaign_id: int,

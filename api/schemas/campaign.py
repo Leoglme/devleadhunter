@@ -156,6 +156,8 @@ class CampaignResponse(CampaignBase):
     created_at: datetime
     updated_at: datetime | None = None
     prospects_count: int = 0
+    # Earliest still-pending send in the queue, or None when nothing is queued.
+    next_send_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -174,5 +176,7 @@ class CampaignListResponse(BaseModel):
 
     campaigns: list[CampaignResponse]
     total: int
+    # Count of the user's pending sends scheduled within the next 7 days.
+    upcoming_sends_7d: int = 0
 
     model_config = ConfigDict(from_attributes=True)

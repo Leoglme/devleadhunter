@@ -19,6 +19,7 @@ export const useCampaignsStore = defineStore('campaigns', () => {
   const campaigns: Ref<CampaignResponse[]> = ref([])
   const currentCampaign: Ref<CampaignDetailResponse | null> = ref(null)
   const currentStats: Ref<CampaignStats | null> = ref(null)
+  const upcomingSends7d: Ref<number> = ref(0)
   const isLoading: Ref<boolean> = ref(false)
   const error: Ref<string | null> = ref(null)
 
@@ -50,6 +51,7 @@ export const useCampaignsStore = defineStore('campaigns', () => {
 
       const response: CampaignListResponse = await CampaignService.list(0, 1000, status)
       campaigns.value = response.campaigns
+      upcomingSends7d.value = response.upcoming_sends_7d ?? 0
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Échec du chargement des campagnes'
       campaigns.value = []
@@ -269,6 +271,7 @@ export const useCampaignsStore = defineStore('campaigns', () => {
     campaigns,
     currentCampaign,
     currentStats,
+    upcomingSends7d,
     isLoading,
     error,
     // Getters

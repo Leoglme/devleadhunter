@@ -152,6 +152,8 @@ async def list_campaigns(
 ):
     """List all campaigns for the current user."""
     campaigns, total = campaign_service.list_campaigns(db, current_user.id, skip, limit, status)
+    queue_service = CampaignQueueService(db)
+    next_send_at_by_campaign = queue_service.next_send_at_by_campaign([c.id for c in campaigns])
     return CampaignListResponse(
         campaigns=[
             CampaignResponse(
@@ -170,10 +172,12 @@ async def list_campaigns(
                 created_at=c.created_at,
                 updated_at=c.updated_at,
                 prospects_count=len(c.prospects),
+                next_send_at=next_send_at_by_campaign.get(c.id),
             )
             for c in campaigns
         ],
         total=total,
+        upcoming_sends_7d=queue_service.count_upcoming_sends(current_user.id),
     )
 
 

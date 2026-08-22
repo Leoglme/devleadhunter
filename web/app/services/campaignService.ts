@@ -37,6 +37,8 @@ export type CampaignResponse = {
   created_at: string
   updated_at?: string | null
   prospects_count: number
+  /** Earliest still-pending send in the queue (naive UTC), or null when nothing is queued. */
+  next_send_at?: string | null
 }
 
 export interface CampaignDetailResponse extends CampaignResponse {
@@ -47,6 +49,8 @@ export interface CampaignDetailResponse extends CampaignResponse {
 export type CampaignListResponse = {
   campaigns: CampaignResponse[]
   total: number
+  /** Count of the user's pending sends scheduled within the next 7 days. */
+  upcoming_sends_7d?: number
 }
 
 export type CampaignStats = {

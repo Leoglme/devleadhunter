@@ -17,7 +17,7 @@ const LOCALE: string = 'fr-FR'
  * @param iso - ISO-8601 date or date-time string.
  * @returns A `Date` at the correct instant.
  */
-function parseApiDate(iso: string): Date {
+export function parseApiDate(iso: string): Date {
   const hasTime: boolean = iso.includes('T')
   const hasZone: boolean = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(iso)
   return new Date(hasTime && !hasZone ? `${iso}Z` : iso)
