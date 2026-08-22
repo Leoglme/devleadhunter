@@ -597,8 +597,11 @@ function getDashboardScrollElement(): HTMLElement | null {
   return document.getElementById(DASHBOARD_SCROLL_CONTAINER_ID)
 }
 
+/** Frames to keep re-asserting the scroll, long enough to outlast the router's async reset. */
+const SCROLL_RESTORE_FRAME_COUNT: number = 20
+
 /**
- * Put the dashboard scroll position back after a drawer close popped the history entry.
+ * Put the dashboard scroll back after a drawer close, re-asserting each frame so it wins the router's async reset.
  */
 function restoreDashboardScroll(): void {
   if (!pendingScrollRestore) return
@@ -606,13 +609,13 @@ function restoreDashboardScroll(): void {
   const element: HTMLElement | null = getDashboardScrollElement()
   if (!element) return
   const top: number = savedDashboardScrollTop
-  // Two frames so the restore lands after the router's own scroll reset.
-  requestAnimationFrame((): void => {
+  let framesLeft: number = SCROLL_RESTORE_FRAME_COUNT
+  const reassert: () => void = (): void => {
     element.scrollTop = top
-    requestAnimationFrame((): void => {
-      element.scrollTop = top
-    })
-  })
+    framesLeft -= 1
+    if (framesLeft > 0) requestAnimationFrame(reassert)
+  }
+  requestAnimationFrame(reassert)
 }
 
 /**
