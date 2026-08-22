@@ -201,7 +201,6 @@ import { ProspectsService } from '~/services/prospectsService'
 import { OrdersService } from '~/services/ordersService'
 import { useToast } from '~/composables/useToast'
 import { useHorizontalSwipe } from '~/composables/useHorizontalSwipe'
-import { DASHBOARD_SCROLL_CONTAINER_ID } from '~/composables/useDashboardScroll'
 
 const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 
@@ -582,83 +581,46 @@ useHorizontalSwipe((): EventTarget | null => (import.meta.client ? document.body
   },
 })
 
-// Browser/OS back (iOS PWA edge-swipe, Android button) closes the top drawer instead of leaving the page.
-let hasDrawerHistoryBuffer: boolean = false
+// A URL hash marks an open drawer so a browser/OS back (iOS edge-swipe, Android) closes it, not the page.
+const DRAWER_HISTORY_HASH: string = '#drawer'
 
-// The back pop scrolls the dashboard to top — we save the position on open and put it back on close.
-let pendingScrollRestore: boolean = false
-let savedDashboardScrollTop: number = 0
+/** Router used to add/remove the drawer history entry without re-navigating the page. */
+const router: ReturnType<typeof useRouter> = useRouter()
 
-/**
- * Resolve the dashboard scroll container (the layout's scrolling <main>).
- * @returns The container element, or null when the layout is not mounted.
- */
-function getDashboardScrollElement(): HTMLElement | null {
-  return document.getElementById(DASHBOARD_SCROLL_CONTAINER_ID)
-}
+/** Current route — watched to detect a back that strips the drawer hash. */
+const route: ReturnType<typeof useRoute> = useRoute()
 
-/** Frames to keep re-asserting the scroll, long enough to outlast the router's async reset. */
-const SCROLL_RESTORE_FRAME_COUNT: number = 20
+/** Whether any drawer is currently open. */
+const isDrawerOpen: ComputedRef<boolean> = computed((): boolean => drawerStack.topEntry !== null)
 
-/**
- * Put the dashboard scroll back after a drawer close, re-asserting each frame so it wins the router's async reset.
- */
-function restoreDashboardScroll(): void {
-  if (!pendingScrollRestore) return
-  pendingScrollRestore = false
-  const element: HTMLElement | null = getDashboardScrollElement()
-  if (!element) return
-  const top: number = savedDashboardScrollTop
-  let framesLeft: number = SCROLL_RESTORE_FRAME_COUNT
-  const reassert: () => void = (): void => {
-    element.scrollTop = top
-    framesLeft -= 1
-    if (framesLeft > 0) requestAnimationFrame(reassert)
+// Opening pushes the hash entry (same route → no remount), closing from the app pops it back.
+watch(isDrawerOpen, (open: boolean, wasOpen: boolean): void => {
+  if (open && !wasOpen && route.hash !== DRAWER_HISTORY_HASH) {
+    router.push({ path: route.path, query: route.query, hash: DRAWER_HISTORY_HASH })
+  } else if (!open && wasOpen && route.hash === DRAWER_HISTORY_HASH) {
+    router.back()
   }
-  requestAnimationFrame(reassert)
-}
-
-/**
- * Close the open drawer when a browser/OS back gesture fires, so it never navigates away from the page.
- */
-function handleBrowserBack(): void {
-  if (hasDrawerHistoryBuffer && drawerStack.topEntry !== null) {
-    hasDrawerHistoryBuffer = false
-    pendingScrollRestore = true
-    drawerStack.closeAll()
-  }
-  restoreDashboardScroll()
-}
+})
 
 watch(
-  (): boolean => drawerStack.topEntry !== null,
-  (isOpen: boolean, wasOpen: boolean): void => {
-    if (!import.meta.client) return
-    if (isOpen && !wasOpen) {
-      savedDashboardScrollTop = getDashboardScrollElement()?.scrollTop ?? 0
-      window.history.pushState({ ...window.history.state, dlhDrawerOpen: true }, '')
-      hasDrawerHistoryBuffer = true
-    } else if (!isOpen && wasOpen && hasDrawerHistoryBuffer) {
-      // Closed from the app (button, Escape, swipe) → drop the buffer and restore scroll after the pop.
-      hasDrawerHistoryBuffer = false
-      pendingScrollRestore = true
-      window.history.back()
+  (): string => route.hash,
+  (hash: string, previousHash: string): void => {
+    // Back stripped the drawer hash while a drawer is open → close it, the page stays put.
+    if (previousHash === DRAWER_HISTORY_HASH && hash !== DRAWER_HISTORY_HASH && drawerStack.topEntry !== null) {
+      drawerStack.closeAll()
     }
   },
 )
 
 onMounted((): void => {
   window.addEventListener('keydown', handleKeydown)
-  window.addEventListener('popstate', handleBrowserBack)
-  // A drawer restored from sessionStorage on load has no buffer yet — arm one so back still closes it.
-  if (drawerStack.topEntry !== null && !hasDrawerHistoryBuffer) {
-    window.history.pushState({ ...window.history.state, dlhDrawerOpen: true }, '')
-    hasDrawerHistoryBuffer = true
+  // A drawer restored from sessionStorage on load has no hash yet — add one so back still closes it.
+  if (drawerStack.topEntry !== null && route.hash !== DRAWER_HISTORY_HASH) {
+    router.push({ path: route.path, query: route.query, hash: DRAWER_HISTORY_HASH })
   }
 })
 
 onBeforeUnmount((): void => {
   window.removeEventListener('keydown', handleKeydown)
-  window.removeEventListener('popstate', handleBrowserBack)
 })
 </script>
