@@ -612,8 +612,24 @@ watch(
   },
 )
 
+// Left-edge zone (px) where a touch would start iOS's back-swipe — blocked while a drawer is open.
+const EDGE_BACK_GUARD_PX: number = 30
+
+/**
+ * Block iOS's edge back-swipe while a drawer is open so our own swipe closes it cleanly, without the native reset.
+ * @param event - The native touch-start event.
+ */
+function preventEdgeBackSwipe(event: TouchEvent): void {
+  if (drawerStack.topEntry === null) return
+  const startX: number | undefined = event.touches[0]?.clientX
+  if (startX !== undefined && startX <= EDGE_BACK_GUARD_PX) {
+    event.preventDefault()
+  }
+}
+
 onMounted((): void => {
   window.addEventListener('keydown', handleKeydown)
+  document.addEventListener('touchstart', preventEdgeBackSwipe, { passive: false })
   // A drawer restored from sessionStorage on load has no hash yet — add one so back still closes it.
   if (drawerStack.topEntry !== null && route.hash !== DRAWER_HISTORY_HASH) {
     router.push({ path: route.path, query: route.query, hash: DRAWER_HISTORY_HASH })
@@ -622,5 +638,6 @@ onMounted((): void => {
 
 onBeforeUnmount((): void => {
   window.removeEventListener('keydown', handleKeydown)
+  document.removeEventListener('touchstart', preventEdgeBackSwipe)
 })
 </script>
