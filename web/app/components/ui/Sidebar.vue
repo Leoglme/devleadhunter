@@ -1,7 +1,8 @@
 <template>
   <aside
+    ref="sidebarPanel"
     :class="[
-      'fixed top-0 left-0 z-40 flex h-full w-64 flex-col border-r border-[var(--app-line)] bg-[var(--app-surface)] transition-transform duration-300',
+      'fixed top-0 left-0 z-40 flex h-full w-[min(85vw,22rem)] flex-col border-r border-[var(--app-line)] bg-[var(--app-surface)] transition-transform duration-300 md:w-64',
       isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
     ]"
   >
@@ -283,6 +284,7 @@ import { useAppTheme } from '~/composables/useAppTheme'
 import { useCommandPalette } from '~/composables/useCommandPalette'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import { useToast } from '~/composables/useToast'
+import { useHorizontalSwipe } from '~/composables/useHorizontalSwipe'
 
 /** Dashboard sidebar shell with nav groups and user menu. */
 const props: UiSidebarProps = defineProps({
@@ -338,6 +340,15 @@ const showModuleMenu: Ref<boolean> = ref(false)
 
 /** Whether the user account menu (Profil / Thème / Déconnexion) is open. */
 const showUserMenu: Ref<boolean> = ref(false)
+
+/** Sidebar root — target of the swipe-to-close gesture on mobile. */
+const sidebarPanel: Ref<HTMLElement | null> = ref(null)
+
+// Swiping the open sidebar towards the left edge closes it (mirrors the overlay tap).
+useHorizontalSwipe(sidebarPanel, {
+  enabled: (): boolean => props.isMobile && props.isOpen,
+  onSwipeLeft: (): void => emit('toggle'),
+})
 
 /** The three product modules of DevLeadHunter (only websites is live today). */
 const modules: DlhModuleEntry[] = [
@@ -455,7 +466,7 @@ function handleModuleClick(moduleEntry: DlhModuleEntry): void {
  */
 function navItemClass(active: boolean): string {
   const base: string =
-    'relative flex cursor-pointer items-center gap-2.5 rounded-lg py-1.5 pr-3 pl-4 text-sm font-medium transition-colors'
+    'relative flex cursor-pointer items-center gap-2.5 rounded-lg py-2.5 pr-3 pl-4 text-[15px] font-medium transition-colors md:py-1.5 md:text-sm'
   if (active) {
     return `${base} bg-[var(--app-surface-2)] text-[var(--app-ink)]`
   }

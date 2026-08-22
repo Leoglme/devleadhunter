@@ -1,6 +1,7 @@
 <template>
   <div>
     <UiProspectDrawer
+      ref="prospectDrawer"
       :open="prospectEntry !== null"
       :prospect="prospectEntry?.prospect ?? null"
       :start-in-edit="prospectEntry?.startInEdit ?? false"
@@ -170,7 +171,7 @@
 
 <script lang="ts" setup>
 import type { UseToastReturn } from '~/types/Composables'
-import type { ComputedRef } from 'vue'
+import type { ComputedRef, Ref } from 'vue'
 import type {
   AddProspectDrawerEntry,
   CampaignProspectsPickerDrawerEntry,
@@ -193,15 +194,23 @@ import type {
 } from '~/types/DrawerStack'
 import type { EmailTemplate, Prospect } from '~/types'
 import type { Order } from '~/services/ordersService'
-import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import { ProspectsService } from '~/services/prospectsService'
 import { OrdersService } from '~/services/ordersService'
 import { useToast } from '~/composables/useToast'
+import { useHorizontalSwipe } from '~/composables/useHorizontalSwipe'
 
 const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 
 const toast: UseToastReturn = useToast()
+
+/** Matches the dashboard's mobile breakpoint (md = 768px) so swipe gestures stay mobile-only. */
+const isMobile: ComputedRef<boolean> = useMediaQuery('(max-width: 767px)')
+
+/** Prospect drawer instance — read to suspend swipe-to-next while its edit form is open. */
+const prospectDrawer: Ref<{ editMode: boolean } | null> = ref(null)
 
 /** Top entry narrowed to the prospect drawer (null when another kind is on top). */
 const prospectEntry: ComputedRef<ProspectDrawerEntry | null> = computed((): ProspectDrawerEntry | null => {
@@ -552,6 +561,25 @@ function handleKeydown(event: KeyboardEvent): void {
     drawerStack.back()
   }
 }
+
+/** Whether the prospect drawer sits on its edit form (browsing is disabled then). */
+const isProspectEditing: ComputedRef<boolean> = computed(
+  (): boolean => prospectEntry.value !== null && prospectDrawer.value?.editMode === true,
+)
+
+// A single gesture layer for the stack: swipe right pops the top drawer, swipe left steps to the next prospect.
+useHorizontalSwipe((): EventTarget | null => (import.meta.client ? document.body : null), {
+  enabled: (): boolean => isMobile.value && drawerStack.topEntry !== null,
+  onSwipeRight: (): void => {
+    if (isProspectEditing.value) return
+    drawerStack.back()
+  },
+  onSwipeLeft: (): void => {
+    if (prospectEntry.value !== null && !isProspectEditing.value && canBrowseNext.value) {
+      browseToProspect('next')
+    }
+  },
+})
 
 onMounted((): void => {
   window.addEventListener('keydown', handleKeydown)

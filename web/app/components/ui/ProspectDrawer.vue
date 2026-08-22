@@ -356,14 +356,16 @@
 
             <div v-if="prospect.website" class="border-t border-[var(--app-surface-2)]"></div>
 
-            <UiProspectEnrichment
-              :prospect-id="prospect.id"
-              :prospect-name="prospect.name"
-              :prospect-city="prospect.city ?? ''"
-              :prospect-google-maps-url="prospect.google_maps_url ?? ''"
-              :prospect-facebook-url="prospect.facebook_url ?? ''"
-              :open="open"
-            />
+            <div data-swipe-ignore>
+              <UiProspectEnrichment
+                :prospect-id="prospect.id"
+                :prospect-name="prospect.name"
+                :prospect-city="prospect.city ?? ''"
+                :prospect-google-maps-url="prospect.google_maps_url ?? ''"
+                :prospect-facebook-url="prospect.facebook_url ?? ''"
+                :open="open"
+              />
+            </div>
 
             <div class="border-t border-[var(--app-surface-2)]"></div>
 
@@ -560,6 +562,9 @@ const isAuditing: Ref<boolean> = ref(false)
 const isLoadingDemoSite: Ref<boolean> = ref(false)
 const demoSite: Ref<DemoSite | null> = ref(null)
 const deleteConfirmModal: Ref<{ open: () => void } | null> = ref(null)
+
+// Exposed to the drawer host so it can suspend the swipe-to-next gesture while an edit is in progress.
+defineExpose({ editMode })
 
 const deleteMessage: ComputedRef<string> = computed(
   (): string => `Supprimer « ${props.prospect?.name ?? ''} » ? Cette action est irréversible.`,

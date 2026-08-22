@@ -11,6 +11,7 @@
       <UiSidebar :is-open="isSidebarOpen" :is-mobile="isMobile" @toggle="toggleSidebar" />
 
       <div
+        ref="mobileSwipeArea"
         class="ml-0 flex flex-1 flex-col overflow-hidden transition-[margin] duration-200 md:ml-64"
         :class="drawerPushClass"
       >
@@ -88,6 +89,7 @@ import { useAppTheme } from '~/composables/useAppTheme'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import { useAutomationCompletionNotifier } from '~/composables/useAutomationCompletionNotifier'
 import { DASHBOARD_SCROLL_CONTAINER_ID } from '~/composables/useDashboardScroll'
+import { useHorizontalSwipe } from '~/composables/useHorizontalSwipe'
 
 /** Auth initialization state (boot loader overlay). */
 const isInitializing: Ref<boolean> = ref(true)
@@ -100,6 +102,9 @@ const isMobile: Ref<boolean> = ref(false)
 
 /** Credits popover visibility (mobile header). */
 const showCreditsPopover: Ref<boolean> = ref(false)
+
+/** Content column — target of the left-edge swipe that opens the nav on mobile. */
+const mobileSwipeArea: Ref<HTMLElement | null> = ref(null)
 
 /** User store instance. */
 const userStore: ReturnType<typeof useUserStore> = useUserStore()
@@ -211,6 +216,18 @@ function toggleSidebar(): void {
 function handleResize(): void {
   checkMobile()
 }
+
+/** Distance from the left edge (px) within which an edge-swipe opens the menu. */
+const EDGE_SWIPE_START_PX: number = 24
+
+// Edge-swipe from the left opens the nav on mobile — only when no drawer is capturing gestures.
+useHorizontalSwipe(mobileSwipeArea, {
+  enabled: (): boolean => isMobile.value && !isSidebarOpen.value && drawerStack.topEntry === null,
+  edgeStartPx: EDGE_SWIPE_START_PX,
+  onSwipeRight: (): void => {
+    isSidebarOpen.value = true
+  },
+})
 
 onMounted(async (): Promise<void> => {
   initTheme()

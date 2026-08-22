@@ -1,4 +1,4 @@
-import type { ComputedRef, Ref } from 'vue'
+import type { ComputedRef, MaybeRefOrGetter, Ref } from 'vue'
 import type { LoginCredentials, Prospect, SignupPayload, User } from '~/types'
 import type {
   ScrapingJobHydrationPayload,
@@ -64,4 +64,24 @@ export type UseToastReturn = {
   error: (message: string) => void
   info: (message: string) => void
   warning: (message: string) => void
+}
+
+/** Options of the horizontal-swipe gesture composable (`useHorizontalSwipe`). */
+export type HorizontalSwipeOptions = {
+  /** Invoked on a left-to-right swipe (finger travels right). */
+  onSwipeRight?: () => void
+  /** Invoked on a right-to-left swipe (finger travels left). */
+  onSwipeLeft?: () => void
+  /** The gesture only fires while this resolves truthy (default: always enabled). */
+  enabled?: MaybeRefOrGetter<boolean>
+  /** Minimum horizontal travel in pixels before a drag counts as a swipe (default 60). */
+  threshold?: number
+  /** When set, the swipe must start within this many pixels of the left edge. */
+  edgeStartPx?: number
+  /** CSS selector whose elements swallow the gesture (default: form fields + [data-swipe-ignore]). */
+  ignoreSelector?: string
+}
+
+export type UseHorizontalSwipeReturn = {
+  isSwiping: Ref<boolean>
 }
