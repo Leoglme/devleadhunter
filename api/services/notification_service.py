@@ -57,7 +57,7 @@ _EMAIL_EVENT_NOTIFS: dict[str, tuple[str, str, str]] = {
 
 # Live demo / video event → (emoji, level, body). Same title convention.
 _DEMO_EVENT_NOTIFS: dict[str, tuple[str, str, str]] = {
-    "demo_opened": ("🌐", "success", "Est sur sa démo, là"),
+    "demo_opened": ("🌐", "success", "Vient d'ouvrir sa démo"),
     "demo_engaged": ("🔥", "success", "Visite qualifiée — prospect engagé"),
     "demo_cta_click": ("👉", "success", "A cliqué « {label} »"),
     "demo_phone_click": ("📞", "success", "A cliqué ton numéro"),

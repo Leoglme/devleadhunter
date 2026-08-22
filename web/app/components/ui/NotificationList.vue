@@ -67,7 +67,7 @@
 import type { NotificationHistory, NotificationItem, NotificationLevel } from '~/services/notificationsService'
 import type { NotificationLevelPresentation } from '~/types/UiNotificationList'
 import type { Ref } from 'vue'
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { NotificationsService } from '~/services/notificationsService'
 import { formatRelativeTime } from '~/utils/date'
 
@@ -85,6 +85,7 @@ const items: Ref<NotificationItem[]> = ref([])
 const unreadCount: Ref<number> = ref(0)
 const isLoading: Ref<boolean> = ref(false)
 const hasMore: Ref<boolean> = ref(false)
+let pollTimer: ReturnType<typeof setInterval> | undefined
 
 /**
  * Icon + tile classes for a notification level (falls back to info).
@@ -155,5 +156,33 @@ async function markAllRead(): Promise<void> {
   unreadCount.value = 0
 }
 
-onMounted(load)
+/**
+ * Merge notifications newer than the top of the list — near real-time, no reload.
+ * @returns Nothing.
+ */
+async function refresh(): Promise<void> {
+  if (document.visibilityState !== 'visible') {
+    return
+  }
+  const page: NotificationHistory = await NotificationsService.getHistory(undefined, PAGE_SIZE)
+  unreadCount.value = page.unread_count
+  const newestId: number = items.value[0]?.id ?? 0
+  const fresh: NotificationItem[] = page.items.filter((item: NotificationItem): boolean => item.id > newestId)
+  if (fresh.length > 0) {
+    items.value = [...fresh, ...items.value]
+  }
+}
+
+onMounted((): void => {
+  load().catch((): void => {})
+  pollTimer = setInterval((): void => {
+    refresh().catch((): void => {})
+  }, 10000)
+})
+
+onBeforeUnmount((): void => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+  }
+})
 </script>

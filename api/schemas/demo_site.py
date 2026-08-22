@@ -111,6 +111,7 @@ class DemoSiteResponse(BaseModel):
 
     id: int
     slug: str
+    prospect_id: int | None = None
     template_id: str
     business_name: str
     phone: str | None = None
