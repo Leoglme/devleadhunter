@@ -71,6 +71,7 @@ def init_db():
     from models.email_queue import EmailQueue  # noqa: F401
     from models.email_template import EmailTemplate  # noqa: F401
     from models.email_unsubscribe import EmailUnsubscribe  # noqa: F401
+    from models.notification import Notification  # noqa: F401
     from models.order import Order  # noqa: F401
     from models.payment_account import PaymentAccount  # noqa: F401
     from models.prospect_db import ProspectDB  # noqa: F401

@@ -140,3 +140,22 @@ export function formatDayAndShortMonth(iso: string | null | undefined): string {
   if (!iso) return ''
   return parseApiDate(iso).toLocaleDateString(LOCALE, { day: '2-digit', month: 'short' })
 }
+
+/**
+ * Format an ISO date as a short relative label — `À l'instant`, `il y a 3 min`,
+ * `il y a 2 h`, `Hier`, `il y a 4 jours`, then falls back to `01/06/2026`.
+ * @param iso - ISO-8601 date string, or a falsy value for an unknown date.
+ * @returns The relative label, or an empty string when `iso` is falsy.
+ */
+export function formatRelativeTime(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const diffMinutes: number = Math.floor((Date.now() - parseApiDate(iso).getTime()) / 60000)
+  if (diffMinutes < 1) return "À l'instant"
+  if (diffMinutes < 60) return `il y a ${diffMinutes} min`
+  const diffHours: number = Math.floor(diffMinutes / 60)
+  if (diffHours < 24) return `il y a ${diffHours} h`
+  const diffDays: number = Math.floor(diffHours / 24)
+  if (diffDays === 1) return 'Hier'
+  if (diffDays < 7) return `il y a ${diffDays} jours`
+  return formatNumericDate(iso)
+}

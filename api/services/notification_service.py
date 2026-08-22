@@ -1,9 +1,14 @@
 """
-Notification builder — turns business events (email, demo, sale) into mobile push
-notifications and delivers them through ``push_service``.
+Notification builder — turns business events (email, demo, sale, system) into
+mobile push notifications AND a persisted in-app log, per user.
 
-Best-effort by design: every method swallows its own errors so a notification
-failure can never break the request (webhook, send, sale) that triggered it.
+Every notification is **persisted first** (attributed to a user, kept ~90 days),
+then pushed best-effort — so the in-app history stays complete even when no device
+receives the push (not subscribed, app closed, offline). Best-effort throughout:
+a notification failure never breaks the request that raised it.
+
+Notification shape: the title is ``{emoji} {prospect}`` and the action lives in the
+body, so the essential info stays visible on iOS without expanding the notification.
 """
 
 import asyncio
@@ -18,6 +23,7 @@ from enums.demo_site_status import DemoSiteStatus
 from enums.user_role import UserRole
 from models.demo_site import DemoSite
 from models.email_log import EmailLog
+from models.notification import Notification
 from models.order import Order
 from models.prospect_db import ProspectDB
 from models.push_subscription import PushSubscription
@@ -27,45 +33,46 @@ from services.posthog_service import posthog_service
 
 logger = logging.getLogger(__name__)
 
-# Deep link opened when a prospect-related notification is tapped.
+# Deep links opened when a notification is tapped.
 _PROSPECTS_URL = "/dashboard/my-prospects"
+_ORDERS_URL = "/dashboard/orders"
+_DASHBOARD_URL = "/dashboard"
 
-# Email lifecycle event → (title template, body template). ``{prospect}`` is filled
-# with the prospect's business name, ``{subject}`` with the email subject. An event
-# absent from this map is not notified.
-_EMAIL_EVENT_NOTIFS: dict[str, tuple[str, str]] = {
-    "email_sent": ("📤 Mail envoyé à {prospect}", "{subject}"),
-    "email_delivered": ("✅ Mail livré à {prospect}", "{subject}"),
-    "email_opened": ("👀 {prospect} a ouvert ton mail", "{subject}"),
-    "email_clicked": ("🖱️ {prospect} a cliqué ton lien", "{subject}"),
-    "email_bounced": ("⛔ Bounce — {prospect}", "Adresse rejetée, bascule en cours"),
-    "email_complained": ("🚩 {prospect} t'a marqué en spam", ""),
-    "email_failed": ("❌ Échec d'envoi — {prospect}", "{subject}"),
-    "email_delivery_delayed": ("⏳ Livraison retardée — {prospect}", "{subject}"),
-    "email_suppressed": ("🚫 Mail supprimé — {prospect}", "Adresse supprimée"),
+# In-app notification log retention.
+_RETENTION_DAYS = 90
+
+# Email lifecycle event → (emoji, level, body). Title = "{emoji} {prospect}", so the
+# action (body) stays visible on iOS without expanding the notification.
+_EMAIL_EVENT_NOTIFS: dict[str, tuple[str, str, str]] = {
+    "email_sent": ("📤", "info", "Mail envoyé"),
+    "email_delivered": ("✅", "info", "Mail livré"),
+    "email_opened": ("👀", "success", "A ouvert ton mail"),
+    "email_clicked": ("🖱️", "success", "A cliqué le lien du mail"),
+    "email_bounced": ("⛔", "warning", "Mail rejeté (bounce) — bascule en cours"),
+    "email_complained": ("🚩", "warning", "T'a marqué en spam"),
+    "email_failed": ("❌", "error", "Échec d'envoi"),
+    "email_delivery_delayed": ("⏳", "warning", "Livraison retardée"),
+    "email_suppressed": ("🚫", "warning", "Mail supprimé (suppression)"),
 }
 
-# Live demo / video event → (title template, body template). ``{prospect}`` is the
-# prospect name; ``{label}`` / ``{host}`` / ``{seconds}`` / ``{max_scroll}`` fill from
-# the beacon. Only notify-worthy events are listed (section views and scroll depth are
-# covered by the end-of-visit ``demo_time_on_page`` summary).
-_DEMO_EVENT_NOTIFS: dict[str, tuple[str, str]] = {
-    "demo_opened": ("🌐 {prospect} est sur sa démo", "En ce moment"),
-    "demo_engaged": ("🔥 Visite qualifiée — {prospect}", "Prospect engagé"),
-    "demo_cta_click": ("👉 {prospect} a cliqué « {label} »", ""),
-    "demo_phone_click": ("📞 {prospect} a cliqué ton numéro", ""),
-    "demo_contact_click": ("✉️ {prospect} a cliqué ton mail de contact", ""),
-    "demo_outbound_click": ("🔗 {prospect} a cliqué un lien externe", "{host}"),
-    "demo_time_on_page": ("👀 Visite de {prospect}", "{seconds}s · scroll {max_scroll}%"),
-    "demo_video_opened": ("🎬 {prospect} a ouvert ta vidéo", ""),
-    "demo_video_play": ("▶️ {prospect} lance ta vidéo", ""),
-    "demo_video_complete": ("✅ {prospect} a vu ta vidéo en entier", ""),
-    "demo_video_replay": ("🔁 {prospect} revoit ta vidéo", ""),
+# Live demo / video event → (emoji, level, body). Same title convention.
+_DEMO_EVENT_NOTIFS: dict[str, tuple[str, str, str]] = {
+    "demo_opened": ("🌐", "success", "Est sur sa démo, là"),
+    "demo_engaged": ("🔥", "success", "Visite qualifiée — prospect engagé"),
+    "demo_cta_click": ("👉", "success", "A cliqué « {label} »"),
+    "demo_phone_click": ("📞", "success", "A cliqué ton numéro"),
+    "demo_contact_click": ("✉️", "success", "A cliqué ton mail de contact"),
+    "demo_outbound_click": ("🔗", "info", "A cliqué un lien externe : {host}"),
+    "demo_time_on_page": ("👀", "info", "Visite : {seconds}s · {max_scroll}% lu"),
+    "demo_video_opened": ("🎬", "success", "A ouvert ta vidéo"),
+    "demo_video_play": ("▶️", "success", "Lance ta vidéo"),
+    "demo_video_complete": ("✅", "success", "A vu ta vidéo en entier"),
+    "demo_video_replay": ("🔁", "success", "Revoit ta vidéo"),
 }
 
 
 class NotificationService:
-    """Builds and sends mobile push notifications from business events."""
+    """Raises business notifications: persist per user, then push best-effort."""
 
     async def notify_email_event(
         self,
@@ -79,29 +86,34 @@ class NotificationService:
         email_log_id: int | None = None,
     ) -> None:
         """
-        Push a mobile notification for an email lifecycle event.
+        Raise a notification for an email lifecycle event.
 
         Args:
-            db: Active database session (used to resolve the prospect's name).
+            db: Active database session (to resolve the prospect's name).
             user_id: Owner of the email — the notification recipient.
             event_name: Underscore event name (e.g. ``email_opened``).
             recipient_email: Recipient address, used as a name fallback.
             prospect_id: Prospect id, when the email targets a saved prospect.
-            subject: Email subject, shown in the notification body.
-            email_log_id: EmailLog id, tags the email's events so they collapse into one notification.
+            subject: Email subject, appended to the body on opens/clicks.
+            email_log_id: EmailLog id, tags the email's events so the push collapses.
         """
-        try:
-            mapping = _EMAIL_EVENT_NOTIFS.get(event_name)
-            if mapping is None:
-                return
-            title_template, body_template = mapping
-            prospect_name = self._resolve_prospect_name(db, prospect_id, recipient_email)
-            title = title_template.format(prospect=prospect_name)
-            body = body_template.format(subject=subject or "")
-            tag = f"email-{email_log_id}" if email_log_id else None
-            await push_service.notify(user_id, title, body, _PROSPECTS_URL, tag)
-        except Exception as exc:
-            logger.warning("notify_email_event failed (log=%s): %s", email_log_id, exc)
+        mapping = _EMAIL_EVENT_NOTIFS.get(event_name)
+        if mapping is None:
+            return
+        emoji, level, body = mapping
+        prospect_name = self._resolve_prospect_name(db, prospect_id, recipient_email)
+        if subject and event_name in ("email_opened", "email_clicked"):
+            body = f"{body} : « {subject} »"
+        tag = f"email-{email_log_id}" if email_log_id else None
+        await self._dispatch(
+            user_id=user_id,
+            category="email",
+            level=level,
+            title=f"{emoji} {prospect_name}",
+            body=body,
+            url=_PROSPECTS_URL,
+            tag=tag,
+        )
 
     async def notify_demo_event(
         self,
@@ -117,10 +129,10 @@ class NotificationService:
         max_scroll: int | None = None,
     ) -> None:
         """
-        Push a mobile notification for a live demo/video behavioural event.
+        Raise a notification for a live demo/video behavioural event.
 
         Args:
-            db: Active database session (used to resolve the prospect's name).
+            db: Active database session (to resolve the prospect's name).
             user_id: Owner of the demo — the notification recipient.
             prospect_id: Prospect the demo belongs to.
             event_name: Beaconed event name (e.g. ``demo_cta_click``).
@@ -130,21 +142,25 @@ class NotificationService:
             seconds: Engaged seconds, for the end-of-visit summary.
             max_scroll: Max scroll depth (%), for the end-of-visit summary.
         """
-        try:
-            mapping = _DEMO_EVENT_NOTIFS.get(event_name)
-            if mapping is None:
-                return
-            title_template, body_template = mapping
-            prospect_name = self._resolve_prospect_name(db, prospect_id, fallback_name)
-            title = title_template.format(prospect=prospect_name, label=label or "")
-            body = body_template.format(
-                host=host or "",
-                seconds=seconds if seconds is not None else 0,
-                max_scroll=max_scroll if max_scroll is not None else 0,
-            )
-            await push_service.notify(user_id, title, body, _PROSPECTS_URL)
-        except Exception as exc:
-            logger.warning("notify_demo_event failed (event=%s): %s", event_name, exc)
+        mapping = _DEMO_EVENT_NOTIFS.get(event_name)
+        if mapping is None:
+            return
+        emoji, level, body_template = mapping
+        prospect_name = self._resolve_prospect_name(db, prospect_id, fallback_name)
+        body = body_template.format(
+            label=label or "",
+            host=host or "",
+            seconds=seconds if seconds is not None else 0,
+            max_scroll=max_scroll if max_scroll is not None else 0,
+        )
+        await self._dispatch(
+            user_id=user_id,
+            category="demo",
+            level=level,
+            title=f"{emoji} {prospect_name}",
+            body=body,
+            url=_PROSPECTS_URL,
+        )
 
     async def notify_sale(
         self,
@@ -158,10 +174,10 @@ class NotificationService:
         order_id: int,
     ) -> None:
         """
-        Push a mobile notification when a prospect pays — the funnel's final step.
+        Raise a notification when a prospect pays — the funnel's final step.
 
         Args:
-            db: Active database session (used to resolve the prospect's name).
+            db: Active database session (to resolve the prospect's name).
             user_id: Owner of the sale — the notification recipient.
             prospect_id: Prospect who paid, when known.
             amount_cents: Order amount in cents.
@@ -169,39 +185,46 @@ class NotificationService:
             fallback_name: Name shown when the prospect can't be resolved.
             order_id: Order id, tags the notification.
         """
-        try:
-            prospect_name = self._resolve_prospect_name(db, prospect_id, fallback_name)
-            amount = self._format_amount(amount_cents, currency)
-            await push_service.notify(
-                user_id,
-                f"💰 VENTE — {prospect_name}",
-                amount,
-                "/dashboard/orders",
-                f"sale-{order_id}",
-            )
-        except Exception as exc:
-            logger.warning("notify_sale failed (order=%s): %s", order_id, exc)
+        prospect_name = self._resolve_prospect_name(db, prospect_id, fallback_name)
+        amount = self._format_amount(amount_cents, currency)
+        await self._dispatch(
+            user_id=user_id,
+            category="sale",
+            level="success",
+            title=f"💰 {prospect_name}",
+            body=f"A payé {amount}",
+            url=_ORDERS_URL,
+            tag=f"sale-{order_id}",
+        )
 
     async def notify_error(self, *, context: str, message: str, tag: str | None = None) -> None:
         """
-        Push a system-error notification to every active admin.
+        Raise a system-error notification for every active admin.
 
         Args:
             context: Short label of where the error happened (e.g. the request path).
-            message: Error detail, truncated in the notification body.
+            message: Error detail, truncated in the body.
             tag: Optional tag to collapse repeated occurrences of the same error.
         """
         db = SessionLocal()
         try:
             admins = db.query(User).filter(User.role == UserRole.ADMIN.value, User.is_active.is_(True)).all()
-            title = f"🛠️ Erreur — {context}"[:120]
-            body = message[:200]
-            for admin in admins:
-                await push_service.notify(admin.id, title, body, "/dashboard", tag)
+            admin_ids = [admin.id for admin in admins]
         except Exception as exc:
-            logger.warning("notify_error failed (context=%s): %s", context, exc)
+            logger.warning("notify_error admin lookup failed (context=%s): %s", context, exc)
+            admin_ids = []
         finally:
             db.close()
+        for admin_id in admin_ids:
+            await self._dispatch(
+                user_id=admin_id,
+                category="system",
+                level="error",
+                title="🛠️ Erreur serveur",
+                body=f"{context} — {message}"[:200],
+                url=_DASHBOARD_URL,
+                tag=tag,
+            )
 
     async def send_daily_recap(self) -> None:
         """Send each subscribed user their daily activity recap — sent even when everything is zero."""
@@ -238,9 +261,92 @@ class NotificationService:
                     f"{sent} mails · {delivered} livrés · {opened} ouverts · {clicked} clics · "
                     f"{visits['pageviews']} visites ({visits['engaged']} qualifiées) · {sales} vente(s)"
                 )
-                await push_service.notify(user_id, "📊 Récap du jour", body, "/dashboard", "daily-recap")
+                await self._dispatch(
+                    user_id=user_id,
+                    category="recap",
+                    level="info",
+                    title="📊 Récap du jour",
+                    body=body,
+                    url=_DASHBOARD_URL,
+                    tag="daily-recap",
+                )
         except Exception as exc:
             logger.warning("send_daily_recap failed: %s", exc)
+        finally:
+            db.close()
+
+    async def _dispatch(
+        self,
+        *,
+        user_id: int,
+        category: str,
+        level: str,
+        title: str,
+        body: str,
+        url: str,
+        tag: str | None = None,
+    ) -> None:
+        """
+        Persist a notification (guaranteed) then push it to the user's devices (best-effort).
+
+        Args:
+            user_id: Recipient.
+            category: Domain (email / demo / sale / system / recap).
+            level: Visual level (info / success / warning / error).
+            title: Notification title.
+            body: Notification body.
+            url: In-app deep link opened on tap.
+            tag: Optional push tag (collapses same-tag notifications on the device).
+        """
+        await asyncio.to_thread(self._persist, user_id, category, level, title, body, url)
+        await push_service.notify(user_id, title, body, url, tag)
+
+    @staticmethod
+    def _persist(user_id: int, category: str, level: str, title: str, body: str, url: str) -> None:
+        """
+        Store a notification in the in-app log (own session; never raises).
+
+        Args:
+            user_id: Recipient.
+            category: Domain.
+            level: Visual level.
+            title: Notification title.
+            body: Notification body.
+            url: Deep link.
+        """
+        db = SessionLocal()
+        try:
+            db.add(
+                Notification(
+                    user_id=user_id,
+                    category=category,
+                    level=level,
+                    title=title,
+                    body=body,
+                    url=url,
+                )
+            )
+            db.commit()
+        except Exception as exc:
+            logger.warning("notification persist failed (user=%s): %s", user_id, exc)
+        finally:
+            db.close()
+
+    @staticmethod
+    def purge_old(days: int = _RETENTION_DAYS) -> None:
+        """
+        Delete notifications older than ``days`` (in-app log retention).
+
+        Args:
+            days: Retention window in days.
+        """
+        db = SessionLocal()
+        try:
+            cutoff = datetime.utcnow() - timedelta(days=days)
+            db.query(Notification).filter(Notification.created_at < cutoff).delete(synchronize_session=False)
+            db.commit()
+        except Exception as exc:
+            logger.warning("notification purge failed: %s", exc)
         finally:
             db.close()
 
@@ -286,7 +392,7 @@ notification_service = NotificationService()
 
 
 async def run_daily_recap_loop() -> None:
-    """Fire the daily recap once a day at the configured UTC hour (never crashes the loop)."""
+    """Fire the daily recap + purge old notifications, once a day at the configured UTC hour."""
     while True:
         now = datetime.utcnow()
         target = now.replace(hour=settings.daily_recap_hour_utc, minute=0, second=0, microsecond=0)
@@ -295,5 +401,6 @@ async def run_daily_recap_loop() -> None:
         await asyncio.sleep((target - now).total_seconds())
         try:
             await notification_service.send_daily_recap()
+            notification_service.purge_old()
         except Exception as exc:
             logger.warning("daily recap loop error: %s", exc)

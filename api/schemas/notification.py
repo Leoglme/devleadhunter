@@ -1,6 +1,9 @@
 """
-Web Push notification schemas — VAPID key, subscription payload, test result.
+Web Push notification schemas — VAPID key, subscription payload, test result,
+plus the persisted in-app notification history.
 """
+
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -52,3 +55,23 @@ class DemoEventIn(BaseModel):
     host: str | None = Field(default=None, max_length=255)
     seconds: int | None = None
     max_scroll: int | None = None
+
+
+class NotificationOut(BaseModel):
+    """One stored in-app notification, as returned to the settings history list."""
+
+    id: int
+    category: str
+    level: str
+    title: str
+    body: str
+    url: str
+    read: bool
+    created_at: datetime
+
+
+class NotificationListResponse(BaseModel):
+    """A page of the user's notification history plus the current unread count."""
+
+    items: list[NotificationOut]
+    unread_count: int

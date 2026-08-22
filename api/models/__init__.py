@@ -14,6 +14,7 @@ from models.email_signature import EmailSignature
 from models.email_template import EmailTemplate
 from models.email_unsubscribe import EmailUnsubscribe
 from models.health import HealthStatus
+from models.notification import Notification
 from models.order import Order
 from models.organization import Organization, OrganizationMember
 from models.presenter_video import PresenterVideo
@@ -44,6 +45,7 @@ __all__ = [
     "EmailTemplate",
     "EmailUnsubscribe",
     "HealthStatus",
+    "Notification",
     "Order",
     "Organization",
     "OrganizationMember",

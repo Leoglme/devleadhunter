@@ -26,6 +26,27 @@ export type TestNotificationResult = {
   detail: string | null
 }
 
+/** Visual level of a stored notification. */
+export type NotificationLevel = 'info' | 'success' | 'warning' | 'error'
+
+/** One persisted in-app notification (history log). */
+export type NotificationItem = {
+  id: number
+  category: string
+  level: NotificationLevel
+  title: string
+  body: string
+  url: string
+  read: boolean
+  created_at: string
+}
+
+/** A page of notification history plus the current unread count. */
+export type NotificationHistory = {
+  items: NotificationItem[]
+  unread_count: number
+}
+
 /** HTTP client for the /notifications API resource. */
 export class NotificationsService {
   /**
@@ -64,5 +85,35 @@ export class NotificationsService {
    */
   static async test(): Promise<TestNotificationResult> {
     return ApiClient.post<TestNotificationResult>('/api/v1/notifications/test', {})
+  }
+
+  /**
+   * Fetch a page of the current user's notification history (newest first).
+   *
+   * @param before - Return notifications with an id strictly below this (cursor for "load more").
+   * @param limit - Page size (1..50).
+   * @returns The page of notifications and the unread count.
+   */
+  static async getHistory(before?: number, limit: number = 20): Promise<NotificationHistory> {
+    return ApiClient.get<NotificationHistory>('/api/v1/notifications/history', { params: { before, limit } })
+  }
+
+  /**
+   * Mark a single notification as read.
+   *
+   * @param id - The notification id.
+   * @returns Nothing.
+   */
+  static async markRead(id: number): Promise<void> {
+    await ApiClient.patch(`/api/v1/notifications/${id}/read`, {})
+  }
+
+  /**
+   * Mark every unread notification of the current user as read.
+   *
+   * @returns Nothing.
+   */
+  static async markAllRead(): Promise<void> {
+    await ApiClient.post('/api/v1/notifications/read-all', {})
   }
 }

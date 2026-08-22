@@ -27,6 +27,8 @@
       </div>
     </section>
 
+    <UiNotificationList />
+
     <section v-if="supported && !standalone">
       <div class="app-card p-5">
         <h2 class="text-sm font-semibold text-[var(--app-ink)]">📱 Sur iPhone</h2>
