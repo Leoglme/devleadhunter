@@ -12,7 +12,7 @@ Prérequis côté Google Cloud (une fois pour la plateforme) :
 
 1. Activer l'API **Postmaster Tools**.
 2. Ajouter les scopes à l'écran de consentement OAuth :
-   - `https://www.googleapis.com/auth/postmaster.traffic.readonly`
+   - `https://www.googleapis.com/auth/postmaster.readonly` (stats v1 — obligatoire)
    - `openid`
    - `https://www.googleapis.com/auth/userinfo.email`
 3. Enregistrer l'URI de redirection Postmaster dans les identifiants OAuth :

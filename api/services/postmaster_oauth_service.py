@@ -15,7 +15,9 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-POSTMASTER_SCOPE: str = "https://www.googleapis.com/auth/postmaster.traffic.readonly"
+# v1 REST API (`gmailpostmastertools.googleapis.com/v1`) only accepts this scope.
+# `postmaster.traffic.readonly` is for the newer v2 client — using it yields 403 on v1.
+POSTMASTER_SCOPE: str = "https://www.googleapis.com/auth/postmaster.readonly"
 USERINFO_EMAIL_SCOPE: str = "https://www.googleapis.com/auth/userinfo.email"
 POSTMASTER_OAUTH_SCOPES: str = f"openid {USERINFO_EMAIL_SCOPE} {POSTMASTER_SCOPE}"
 
