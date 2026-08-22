@@ -186,6 +186,10 @@ jobs:
             R2_PUBLIC_BASE_URL_DEV=https://pub-8d8cdfbc7b25482cb36b13826e879fbc.r2.dev
             R2_PUBLIC_BASE_URL_PROD=https://pub-16f42d674fbd407c8f21b3f152645750.r2.dev
             GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
+            # Web Push (VAPID) — notifications PWA mobile. VAPID_SUBJECT n'est pas un secret.
+            VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }}
+            VAPID_PRIVATE_KEY_B64=${{ secrets.VAPID_PRIVATE_KEY_B64 }}
+            VAPID_SUBJECT=mailto:contact@dibodev.fr
             EOF
 
       - name: 🧬 Run database migrations (SSH)
