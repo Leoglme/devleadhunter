@@ -76,6 +76,27 @@ class CampaignQueueService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    def _purge_skipped_initial_items(self, campaign_id: int) -> int:
+        """Delete initial queue items a pause cancelled (pending → skipped) so a resume re-enqueues them.
+
+        A pause marks every pending send ``skipped`` (``cancel_campaign_queue``); those prospects were
+        never emailed, yet ``already_queued`` would treat the leftover row as handled and drop them
+        forever. Removing the stale rows lets the (re)launch rebuild a clean queue. Returns the count.
+        """
+        rows: list[EmailQueue] = list(
+            self.db.execute(
+                select(EmailQueue).where(
+                    EmailQueue.campaign_id == campaign_id,
+                    EmailQueue.queue_type == "initial",
+                    EmailQueue.status == _STATUS_SKIPPED,
+                )
+            ).scalars()
+        )
+        for row in rows:
+            self.db.delete(row)
+        self.db.flush()
+        return len(rows)
+
     def enqueue_campaign(
         self,
         campaign: Campaign,
@@ -126,7 +147,10 @@ class CampaignQueueService:
             )
         ).scalar()
 
-        # Prospects already in the initial queue are never re-added.
+        # Drop initial items a pause cancelled (pending → skipped) so this (re)launch re-enqueues them.
+        self._purge_skipped_initial_items(campaign.id)
+
+        # Prospects with a live or sent initial item are never re-added.
         already_queued: set[int] = {
             row[0]
             for row in self.db.execute(
