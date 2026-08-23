@@ -108,6 +108,38 @@ def test_occupied_slots_are_skipped() -> None:
     assert set(first).isdisjoint(second)
 
 
+class _FakeResult:
+    def __init__(self, rows: list[tuple[object, ...]]) -> None:
+        self._rows = rows
+
+    def all(self) -> list[tuple[object, ...]]:
+        return self._rows
+
+
+class _FakeDB:
+    """Session stand-in whose ``execute(...).all()`` returns fixed ``(scheduled_at, queue_type)`` rows."""
+
+    def __init__(self, rows: list[tuple[object, ...]]) -> None:
+        self._rows = rows
+
+    def execute(self, *args: object, **kwargs: object) -> _FakeResult:
+        return _FakeResult(self._rows)
+
+
+def test_follow_ups_do_not_consume_the_daily_cap() -> None:
+    """A follow-up reserves its exact instant but never counts toward a day's cap — only J1s do."""
+    rows: list[tuple[object, ...]] = [
+        (datetime(2026, 8, 28, 6, 0, 0), "initial"),
+        (datetime(2026, 8, 28, 7, 0, 0), "followup"),
+        (datetime(2026, 8, 28, 8, 0, 0), "followup"),
+    ]
+    counts, occupied = send_policy_service.pending_schedule(_FakeDB(rows), user_id=1)
+
+    day = _to_local(datetime(2026, 8, 28, 6, 0, 0)).date()
+    assert counts.get(day) == 1
+    assert len(occupied) == 3
+
+
 def test_two_campaigns_interleave_one_per_day() -> None:
     """Two 1/day campaigns launched together land one of each on the same days, at distinct instants."""
     policy = _policy()  # global cap 20
