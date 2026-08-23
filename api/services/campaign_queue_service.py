@@ -240,17 +240,22 @@ class CampaignQueueService:
 
         from services.send_policy_service import send_policy_service
 
+        # Take the policy path too when the campaign has its own daily cap (legacy path ignores it).
         policy_row = send_policy_service.get_policy(self.db, campaign.user_id)
-        if policy_row is not None:
+        if policy_row is not None or campaign.max_emails_per_day is not None:
             resolved = send_policy_service.resolve(self.db, campaign.user_id)
             start = (
                 latest + timedelta(minutes=resolved.spacing_minutes) if (latest is not None and latest > now) else now
             )
+            seed_counts, occupied = send_policy_service.pending_schedule(self.db, campaign.user_id)
             return send_policy_service.next_send_slots(
                 resolved,
                 count,
                 start_utc=start,
-                seed_counts=send_policy_service.pending_counts_by_day(self.db, campaign.user_id),
+                seed_counts=seed_counts,
+                occupied=occupied,
+                per_campaign_cap=campaign.max_emails_per_day,
+                campaign_seed_counts=send_policy_service.pending_campaign_counts_by_day(self.db, campaign.id),
             )
 
         delay = timedelta(minutes=max(campaign.send_delay_minutes, 1))

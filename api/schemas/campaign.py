@@ -54,6 +54,8 @@ class CampaignCreate(CampaignBase):
     template_id: int | None = None
     ab_template_id_b: int | None = None
     send_delay_minutes: int = Field(20, ge=1, le=1440)
+    # None = no per-campaign daily limit (global SendPolicy cap only).
+    max_emails_per_day: int | None = Field(None, ge=1, le=1000)
 
 
 class CampaignUpdate(BaseModel):
@@ -72,6 +74,9 @@ class CampaignSettingsUpdate(BaseModel):
     # Explicit flag to disable A/B (since None means "unchanged")
     disable_ab: bool = False
     send_delay_minutes: int | None = Field(None, ge=1, le=1440)
+    # Per-campaign daily cap. None = unchanged; use clear_max_emails_per_day to remove it.
+    max_emails_per_day: int | None = Field(None, ge=1, le=1000)
+    clear_max_emails_per_day: bool = False
     # Personalise follow-up bodies from demo behaviour (additive — falls back to template)
     behavior_personalized_followups: bool | None = None
     # When False, never attach the prospection video (combo templates degrade to the demo link)
@@ -152,6 +157,7 @@ class CampaignResponse(CampaignBase):
     follow_up_delay_days: int = 5
     behavior_personalized_followups: bool = False
     include_video: bool = True
+    max_emails_per_day: int | None = None
     started_at: datetime | None = None
     created_at: datetime
     updated_at: datetime | None = None

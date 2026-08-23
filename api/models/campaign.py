@@ -88,6 +88,9 @@ class Campaign(Base):
     # When False, the campaign never attaches the prospection video: {vignette_video}
     # renders empty and combo templates fall back to their demo link. Default on.
     include_video: Mapped[bool] = mapped_column(default=True, nullable=False)
+    # Per-campaign daily cap for J1 sends; None = no per-campaign limit (the global
+    # SendPolicy cap still applies). Set to 1 to send one métier per day.
+    max_emails_per_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)

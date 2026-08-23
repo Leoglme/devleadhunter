@@ -33,6 +33,7 @@ export type CampaignResponse = {
   follow_up_delay_days: number
   behavior_personalized_followups: boolean
   include_video: boolean
+  max_emails_per_day?: number | null
   started_at?: string | null
   created_at: string
   updated_at?: string | null
@@ -76,6 +77,7 @@ export type CampaignCreatePayload = {
   template_id?: number
   ab_template_id_b?: number
   send_delay_minutes?: number
+  max_emails_per_day?: number | null
 }
 
 export type CampaignUpdatePayload = {
@@ -89,6 +91,8 @@ export type CampaignSettingsPayload = {
   ab_template_id_b?: number | null
   disable_ab?: boolean
   send_delay_minutes?: number
+  max_emails_per_day?: number | null
+  clear_max_emails_per_day?: boolean
   behavior_personalized_followups?: boolean
   include_video?: boolean
   follow_ups?: Array<{ template_id: number; delay_days: number; position: number }>

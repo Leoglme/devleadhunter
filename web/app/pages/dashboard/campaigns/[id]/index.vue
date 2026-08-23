@@ -139,6 +139,53 @@
             </button>
           </div>
 
+          <div class="mt-4 rounded-lg border border-[var(--app-line)] bg-[var(--app-surface-2)] p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-[var(--app-ink)]">Limiter cette campagne par jour</p>
+                <p class="mt-0.5 text-xs leading-relaxed text-[var(--app-ink-soft)]">
+                  Nombre maximum d'envois par jour pour cette campagne, en plus du plafond global. Mettez 1 sur
+                  plusieurs campagnes (barbier, garage, food) pour envoyer 1 de chaque par jour.
+                </p>
+              </div>
+              <button
+                type="button"
+                class="mt-0.5 shrink-0"
+                :aria-pressed="settingsForm.max_emails_per_day !== null"
+                @click="toggleDailyCap"
+              >
+                <span
+                  :class="[
+                    'relative inline-block h-5 w-9 rounded-full transition-colors',
+                    settingsForm.max_emails_per_day !== null ? 'bg-[var(--app-green)]' : 'bg-[var(--app-surface)]',
+                  ]"
+                >
+                  <span
+                    :class="[
+                      'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all',
+                      settingsForm.max_emails_per_day !== null ? 'left-4' : 'left-0.5',
+                    ]"
+                  />
+                </span>
+              </button>
+            </div>
+            <div
+              v-if="settingsForm.max_emails_per_day !== null"
+              class="mt-3 flex items-center gap-2 text-sm text-[var(--app-ink)]"
+            >
+              <span>Maximum</span>
+              <input
+                v-model.number="settingsForm.max_emails_per_day"
+                type="number"
+                min="1"
+                max="1000"
+                class="input-field h-9 w-20 text-center"
+                placeholder="1"
+              />
+              <span>envoi(s) par jour</span>
+            </div>
+          </div>
+
           <UiCollapsibleCard icon="i-lucide-wrench" title="Espacement (avancé)" class="mt-4">
             <div class="space-y-2 px-4 py-4">
               <div class="flex items-center gap-2 text-sm text-[var(--app-ink)]">
@@ -675,6 +722,7 @@ const settingsForm: Ref<{
   template_id: number
   ab_template_id_b: number
   send_delay_minutes: number
+  max_emails_per_day: number | null
   enable_ab: boolean
   behavior_personalized_followups: boolean
   include_video: boolean
@@ -683,6 +731,7 @@ const settingsForm: Ref<{
   template_id: 0,
   ab_template_id_b: 0,
   send_delay_minutes: 20,
+  max_emails_per_day: null,
   enable_ab: false,
   behavior_personalized_followups: false,
   include_video: true,
@@ -780,6 +829,7 @@ const settingsDirty: ComputedRef<boolean> = computed((): boolean => {
     template_id: number
     ab_template_id_b: number
     send_delay_minutes: number
+    max_emails_per_day: number | null
     enable_ab: boolean
     behavior_personalized_followups: boolean
     include_video: boolean
@@ -787,6 +837,7 @@ const settingsDirty: ComputedRef<boolean> = computed((): boolean => {
   } = settingsForm.value
   if (f.template_id !== (c.template_id ?? 0)) return true
   if (f.send_delay_minutes !== c.send_delay_minutes) return true
+  if ((f.max_emails_per_day ?? null) !== (c.max_emails_per_day ?? null)) return true
   if (f.behavior_personalized_followups !== c.behavior_personalized_followups) return true
   if (f.include_video !== c.include_video) return true
   if (f.enable_ab !== !!c.ab_template_id_b) return true
@@ -864,6 +915,7 @@ function syncSettingsForm(c: CampaignDetailResponse): void {
     template_id: c.template_id ?? 0,
     ab_template_id_b: c.ab_template_id_b ?? 0,
     send_delay_minutes: c.send_delay_minutes,
+    max_emails_per_day: c.max_emails_per_day ?? null,
     enable_ab: !!c.ab_template_id_b,
     behavior_personalized_followups: c.behavior_personalized_followups,
     include_video: c.include_video,
@@ -924,6 +976,11 @@ function refreshOnTabVisible(): void {
   if (document.visibilityState === 'visible' && isCampaignActive.value) refreshLiveData()
 }
 
+/** Toggle the per-campaign daily cap: default to 1 send/day when enabling, clear it when disabling. */
+function toggleDailyCap(): void {
+  settingsForm.value.max_emails_per_day = settingsForm.value.max_emails_per_day === null ? 1 : null
+}
+
 /**
  * Persist the settings form to the backend.
  */
@@ -934,16 +991,20 @@ async function saveSettings(): Promise<void> {
       template_id: number
       ab_template_id_b: number
       send_delay_minutes: number
+      max_emails_per_day: number | null
       enable_ab: boolean
       behavior_personalized_followups: boolean
       include_video: boolean
       follow_ups: { template_id: number; delay_days: number }[]
     } = settingsForm.value
+    const hasDailyCap: boolean = f.max_emails_per_day !== null && f.max_emails_per_day > 0
     const updated: CampaignDetailResponse = await CampaignService.updateSettings(campaignId.value, {
       template_id: f.template_id > 0 ? f.template_id : undefined,
       ab_template_id_b: f.enable_ab && f.ab_template_id_b > 0 ? f.ab_template_id_b : undefined,
       disable_ab: !f.enable_ab,
       send_delay_minutes: f.send_delay_minutes,
+      max_emails_per_day: hasDailyCap ? f.max_emails_per_day : undefined,
+      clear_max_emails_per_day: !hasDailyCap,
       behavior_personalized_followups: f.behavior_personalized_followups,
       include_video: f.include_video,
       follow_ups: f.follow_ups

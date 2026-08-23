@@ -89,6 +89,7 @@ def _detail_response(db: Session, campaign) -> CampaignDetailResponse:
         follow_up_delay_days=campaign.follow_up_delay_days,
         behavior_personalized_followups=campaign.behavior_personalized_followups,
         include_video=campaign.include_video,
+        max_emails_per_day=campaign.max_emails_per_day,
         started_at=campaign.started_at,
         created_at=campaign.created_at,
         updated_at=campaign.updated_at,
@@ -168,6 +169,7 @@ async def list_campaigns(
                 follow_up_delay_days=c.follow_up_delay_days,
                 behavior_personalized_followups=c.behavior_personalized_followups,
                 include_video=c.include_video,
+                max_emails_per_day=c.max_emails_per_day,
                 started_at=c.started_at,
                 created_at=c.created_at,
                 updated_at=c.updated_at,
@@ -243,6 +245,10 @@ async def update_campaign_settings(
         campaign.ab_template_id_b = settings.ab_template_id_b
     if settings.send_delay_minutes is not None:
         campaign.send_delay_minutes = settings.send_delay_minutes
+    if settings.clear_max_emails_per_day:
+        campaign.max_emails_per_day = None
+    elif settings.max_emails_per_day is not None:
+        campaign.max_emails_per_day = settings.max_emails_per_day
     if settings.behavior_personalized_followups is not None:
         campaign.behavior_personalized_followups = settings.behavior_personalized_followups
     if settings.include_video is not None:

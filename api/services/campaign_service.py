@@ -41,6 +41,7 @@ class CampaignService:
             template_id=campaign_data.template_id,
             ab_template_id_b=campaign_data.ab_template_id_b,
             send_delay_minutes=campaign_data.send_delay_minutes,
+            max_emails_per_day=campaign_data.max_emails_per_day,
         )
 
         # Add prospects if provided

@@ -138,6 +138,9 @@ class SendPolicyService:
         *,
         start_utc: datetime | None = None,
         seed_counts: dict[date, int] | None = None,
+        occupied: set[datetime] | None = None,
+        per_campaign_cap: int | None = None,
+        campaign_seed_counts: dict[date, int] | None = None,
     ) -> list[datetime]:
         """
         Produce ``count`` naive-UTC send datetimes respecting the policy.
@@ -148,11 +151,20 @@ class SendPolicyService:
         per-day usage (e.g. emails already queued today) so a second launch the
         same day doesn't blow the cap.
 
+        ``per_campaign_cap`` additionally limits how many of these slots may land
+        on the same day — set it to 1 so one campaign spreads at one send/day.
+        ``occupied`` are slots already taken by the user's other pending emails;
+        a colliding instant is pushed to the next spaced slot so two campaigns
+        launched together don't stack on the exact same timestamp.
+
         Args:
             policy: The resolved policy.
             count: Number of slots to generate.
             start_utc: Earliest UTC instant (defaults to now).
-            seed_counts: Optional {local date: already-used count}.
+            seed_counts: Optional {local date: already-used count} across the user.
+            occupied: Optional naive-UTC instants already taken by the user.
+            per_campaign_cap: Optional max slots per day for this campaign.
+            campaign_seed_counts: Optional {local date: this campaign's used count}.
 
         Returns:
             A list of ``count`` naive-UTC datetimes, ascending.
@@ -162,6 +174,9 @@ class SendPolicyService:
 
         cur: datetime = _to_local(start_utc or _utcnow())
         per_day: dict[date, int] = dict(seed_counts or {})
+        per_day_campaign: dict[date, int] = dict(campaign_seed_counts or {})
+        taken: set[datetime] = set(occupied or ())
+        campaign_cap: int = per_campaign_cap if per_campaign_cap and per_campaign_cap > 0 else count
         slots: list[datetime] = []
 
         # Hard bound on iterations to avoid any pathological loop.
@@ -170,11 +185,17 @@ class SendPolicyService:
             guard += 1
             cur = self._advance_into_window(cur, policy)
             day: date = cur.date()
-            if per_day.get(day, 0) >= policy.daily_cap:
+            if per_day.get(day, 0) >= policy.daily_cap or per_day_campaign.get(day, 0) >= campaign_cap:
                 cur = self._next_day_window_start(cur, policy)
                 continue
-            slots.append(_to_utc(cur))
+            slot: datetime = _to_utc(cur)
+            if slot in taken:
+                cur = cur + timedelta(minutes=policy.spacing_minutes)
+                continue
+            slots.append(slot)
+            taken.add(slot)
             per_day[day] = per_day.get(day, 0) + 1
+            per_day_campaign[day] = per_day_campaign.get(day, 0) + 1
             cur = cur + timedelta(minutes=policy.spacing_minutes)
 
         return slots
@@ -245,6 +266,49 @@ class SendPolicyService:
         rows = db.execute(
             select(EmailQueue.scheduled_at).where(
                 EmailQueue.user_id == user_id,
+                EmailQueue.status == "pending",
+            )
+        ).all()
+        counts: dict[date, int] = {}
+        for (scheduled_at,) in rows:
+            if scheduled_at is None:
+                continue
+            day: date = _to_local(scheduled_at).date()
+            counts[day] = counts.get(day, 0) + 1
+        return counts
+
+    def pending_schedule(self, db: Session, user_id: int) -> tuple[dict[date, int], set[datetime]]:
+        """
+        Return the user's pending queue as ``(per-local-day counts, occupied instants)``.
+
+        Counts feed the global daily cap; the occupied set lets a new launch avoid
+        stacking on an exact timestamp already taken by another campaign.
+        """
+        from models.email_queue import EmailQueue
+
+        rows = db.execute(
+            select(EmailQueue.scheduled_at).where(
+                EmailQueue.user_id == user_id,
+                EmailQueue.status == "pending",
+            )
+        ).all()
+        counts: dict[date, int] = {}
+        occupied: set[datetime] = set()
+        for (scheduled_at,) in rows:
+            if scheduled_at is None:
+                continue
+            occupied.add(scheduled_at)
+            day: date = _to_local(scheduled_at).date()
+            counts[day] = counts.get(day, 0) + 1
+        return counts, occupied
+
+    def pending_campaign_counts_by_day(self, db: Session, campaign_id: int) -> dict[date, int]:
+        """Count a single campaign's already-pending queue items grouped by local send day."""
+        from models.email_queue import EmailQueue
+
+        rows = db.execute(
+            select(EmailQueue.scheduled_at).where(
+                EmailQueue.campaign_id == campaign_id,
                 EmailQueue.status == "pending",
             )
         ).all()
