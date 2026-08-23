@@ -303,13 +303,10 @@ class DemoSiteService:
                     demo_site.template_id,
                 )
             except Exception as exc:
-                logger.exception("Demo site content sync failed for slug=%s", demo_site.slug)
-                demo_site.status = DemoSiteStatus.FAILED.value
-                demo_site.error_message = str(exc)
-                demo_site.demo_url_live = False
-                db.commit()
-                db.refresh(demo_site)
-                return demo_site
+                # Sync CMS en échec : on garde le content_json rebâti, la vérification statue.
+                logger.warning(
+                    "Storyblok content sync failed for slug=%s; keeping content_json (%s)", demo_site.slug, exc
+                )
 
         verification: DemoSiteVerificationResult = await demo_site_verification_service.verify(db, demo_site)
         self._apply_verification(demo_site, verification)
@@ -582,15 +579,17 @@ class DemoSiteService:
             if provision.mock_mode and demo_site.status == DemoSiteStatus.ACTIVE.value:
                 demo_site.verification_message = f"{verification.message} Storyblok mock mode is enabled."
         except StoryblokProvisionError as exc:
-            logger.exception("Demo site provisioning failed for slug=%s after Storyblok space creation", slug)
+            # Échec Storyblok (ex. 401 fin d'essai) : le site se rend depuis content_json, on ne le condamne pas.
+            logger.warning("Storyblok provisioning failed for slug=%s; serving demo from content_json (%s)", slug, exc)
             demo_site.storyblok_space_id = exc.space_id
             demo_site.storyblok_editor_url = exc.editor_url
             demo_site.content_json = exc.content_json or self._build_content_for_site(db, demo_site)
             demo_site.demo_url = demo_site.demo_url or self.demo_url_for_slug(slug)
             demo_site.vercel_deployment_url = demo_site.demo_url
-            demo_site.status = DemoSiteStatus.FAILED.value
-            demo_site.error_message = str(exc)
-            demo_site.demo_url_live = False
+            db.commit()
+            db.refresh(demo_site)
+            verification = await demo_site_verification_service.verify(db, demo_site)
+            self._apply_verification(demo_site, verification)
         except Exception as exc:
             logger.exception("Demo site provisioning failed for slug=%s", slug)
             demo_site.content_json = demo_site.content_json or self._build_content_for_site(db, demo_site)
