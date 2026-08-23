@@ -485,12 +485,14 @@ async def resume_campaign(
     """
     Resume a paused campaign.
 
-    Re-enqueues prospects that haven't been sent a J1 yet.
-    Prospects who already have a sent/skipped item are not re-added.
+    Re-enqueues prospects that haven't been sent a J1 yet; those a pause cancelled are re-enqueued,
+    while a prospect already sent a J1 is never re-added.
     """
     campaign = _get_or_404(db, campaign_id, current_user.id)
 
-    if campaign.status not in (CampaignStatus.PAUSED.value, CampaignStatus.DRAFT.value):
+    # SQLEnum loads status as a CampaignStatus member, so compare on its value, not the member.
+    current_status = getattr(campaign.status, "value", campaign.status)
+    if current_status not in (CampaignStatus.PAUSED.value, CampaignStatus.DRAFT.value):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Seules les campagnes en pause ou brouillon peuvent être relancées",
