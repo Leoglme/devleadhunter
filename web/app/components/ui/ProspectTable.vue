@@ -18,6 +18,7 @@
         <BaseTableTh>Email</BaseTableTh>
         <BaseTableTh>Site web</BaseTableTh>
         <BaseTableTh>Contacté</BaseTableTh>
+        <BaseTableTh align="center">Température</BaseTableTh>
         <BaseTableTh>Source</BaseTableTh>
         <BaseTableTh v-if="showAbVariant" align="center">Variante</BaseTableTh>
         <BaseTableTh align="center" sr-only>Actions</BaseTableTh>
@@ -136,6 +137,11 @@
           <span v-else class="app-badge">Non</span>
         </BaseTableTd>
 
+        <BaseTableTd label="Température" align="center">
+          <UiTemperatureBadge v-if="temperatureOf(prospect)" :temperature="temperatureOf(prospect)" />
+          <span v-else class="text-sm text-[var(--app-faint)]">—</span>
+        </BaseTableTd>
+
         <BaseTableTd label="Source">
           <UiProspectSourceBadge :source="prospect.source" />
         </BaseTableTd>
@@ -221,6 +227,10 @@ const props: UiProspectTableProps = defineProps({
     type: Object as PropType<Record<number, string | null | undefined>>,
     default: () => ({}),
   },
+  temperatures: {
+    type: Object as PropType<Record<number, string>>,
+    default: () => ({}),
+  },
   rowAction: {
     type: String as PropType<'delete' | 'remove'>,
     default: 'delete',
@@ -277,6 +287,16 @@ const someSelected: ComputedRef<boolean> = computed((): boolean =>
  */
 function isSelected(prospect: Prospect): boolean {
   return selectedSet.value.has(String(prospect.id))
+}
+
+/**
+ * Return the prospect's badge-worthy temperature, or '' when there is no activity.
+ * @param prospect - The prospect to read the temperature for.
+ * @returns 'hot' | 'warm' | 'cold', or '' to hide the badge.
+ */
+function temperatureOf(prospect: Prospect): string {
+  const temperature: string | undefined = props.temperatures?.[prospect.id]
+  return temperature === 'hot' || temperature === 'warm' || temperature === 'cold' ? temperature : ''
 }
 
 /**

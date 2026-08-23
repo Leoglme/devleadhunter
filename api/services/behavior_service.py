@@ -264,24 +264,7 @@ class BehaviorService:
             prospect = prospect_by_id.get(pid)
             if not prospect:
                 continue
-            combined: dict[str, Any] = {
-                "pageviews": 0,
-                "visits": 0,
-                "phone_clicks": 0,
-                "contact_clicks": 0,
-                "cta_clicks": 0,
-                "last_seen": None,
-            }
-            for slug in slugs:
-                agg = aggregate.get(slug)
-                if not agg:
-                    continue
-                for key in ("pageviews", "visits", "phone_clicks", "contact_clicks", "cta_clicks"):
-                    combined[key] += int(agg.get(key, 0) or 0)
-                last = agg.get("last_seen")
-                if last and (combined["last_seen"] is None or str(last) > str(combined["last_seen"])):
-                    combined["last_seen"] = last
-
+            combined = self._combine_slug_aggregates(aggregate, slugs)
             signals = lead_scoring.build_signals_from_aggregate(combined, email_by_pid.get(pid))
             audit = prospect.lighthouse_json if isinstance(prospect.lighthouse_json, dict) else None
             score = lead_scoring.score_from_signals(
@@ -304,6 +287,82 @@ class BehaviorService:
 
         leads.sort(key=lambda lead: lead["score"], reverse=True)
         return leads[:limit]
+
+    @staticmethod
+    def _combine_slug_aggregates(aggregate: dict[str, Any], slugs: list[str]) -> dict[str, Any]:
+        """Sum a prospect's demo aggregate across all its slugs (keeping the latest last_seen)."""
+        combined: dict[str, Any] = {
+            "pageviews": 0,
+            "visits": 0,
+            "phone_clicks": 0,
+            "contact_clicks": 0,
+            "cta_clicks": 0,
+            "last_seen": None,
+        }
+        for slug in slugs:
+            agg = aggregate.get(slug)
+            if not agg:
+                continue
+            for key in ("pageviews", "visits", "phone_clicks", "contact_clicks", "cta_clicks"):
+                combined[key] += int(agg.get(key, 0) or 0)
+            last = agg.get("last_seen")
+            if last and (combined["last_seen"] is None or str(last) > str(combined["last_seen"])):
+                combined["last_seen"] = last
+        return combined
+
+    @staticmethod
+    def _improvable_by_prospect(db: Session, user_id: int, prospect_ids: list[int]) -> dict[int, bool]:
+        """Map each prospect id to its Lighthouse 'improvable website' verdict (False when unaudited)."""
+        prospects = db.query(ProspectDB).filter(ProspectDB.id.in_(prospect_ids), ProspectDB.user_id == user_id).all()
+        result: dict[int, bool] = {}
+        for prospect in prospects:
+            audit = prospect.lighthouse_json if isinstance(prospect.lighthouse_json, dict) else None
+            result[prospect.id] = bool(audit.get("is_improvable")) if audit else False
+        return result
+
+    async def get_temperatures(self, db: Session, user_id: int, prospect_ids: list[int]) -> dict[int, dict[str, Any]]:
+        """
+        Return the hot/warm/cold temperature + score for each given prospect (demo + email).
+
+        One grouped PostHog query + one grouped email query, whatever the number of
+        prospects. Prospects with no activity get temperature "unknown".
+
+        Args:
+            db: Active database session.
+            user_id: Owner of the prospects.
+            prospect_ids: Prospects to score.
+
+        Returns:
+            ``{prospect_id: {"temperature": str, "score": int}}``.
+        """
+        if not prospect_ids:
+            return {}
+        sites = (
+            db.query(DemoSite)
+            .filter(
+                DemoSite.user_id == user_id,
+                DemoSite.prospect_id.in_(prospect_ids),
+                DemoSite.status != DemoSiteStatus.DELETED.value,
+            )
+            .all()
+        )
+        pid_to_slugs: dict[int, list[str]] = defaultdict(list)
+        for site in sites:
+            if site.prospect_id and site.slug:
+                pid_to_slugs[site.prospect_id].append(site.slug)
+
+        all_slugs = [slug for slugs in pid_to_slugs.values() for slug in slugs]
+        aggregate = await posthog_service.get_aggregate_by_slugs(all_slugs) if all_slugs else {}
+        email_by_pid = self._email_engagement_bulk(db, user_id, prospect_ids)
+        improvable_by_pid = self._improvable_by_prospect(db, user_id, prospect_ids)
+
+        result: dict[int, dict[str, Any]] = {}
+        for pid in prospect_ids:
+            combined = self._combine_slug_aggregates(aggregate, pid_to_slugs.get(pid, []))
+            signals = lead_scoring.build_signals_from_aggregate(combined, email_by_pid.get(pid))
+            score = lead_scoring.score_from_signals(signals, site_improvable=improvable_by_pid.get(pid, False))
+            result[pid] = {"temperature": score["temperature"], "score": score["score"]}
+        return result
 
 
 behavior_service = BehaviorService()

@@ -93,6 +93,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     # Charset drift must be repaired before anything compares strings on those tables.
     ("fix_utf8mb4_collation", "migrations.fix_utf8mb4_collation"),
     ("add_email_log_open_tracking", "migrations.add_email_log_open_tracking"),
+    ("fix_machine_only_opens", "migrations.fix_machine_only_opens"),
     # Content rewrites run last, once every schema change is in place.
     ("strip_brands_from_subjects", "migrations.strip_brands_from_subjects"),
     ("reseed_email_template_library", "migrations.reseed_email_template_library"),

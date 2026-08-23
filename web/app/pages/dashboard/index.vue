@@ -98,12 +98,7 @@
               class="group flex w-full cursor-pointer items-center gap-3 py-2.5 text-left transition-colors first:pt-0 last:pb-0"
               @click="openProspect(lead.prospect_id)"
             >
-              <span
-                class="inline-flex w-14 shrink-0 items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                :style="temperatureStyle(lead.temperature)"
-              >
-                {{ temperatureLabel(lead.temperature) }}
-              </span>
+              <UiTemperatureBadge :temperature="lead.temperature" class="w-14 shrink-0" />
               <div class="min-w-0 flex-1">
                 <p class="truncate text-sm font-medium text-[var(--app-ink)] group-hover:underline">
                   {{ lead.name }}
@@ -437,27 +432,6 @@ const funnelConversionPercentLabel: ComputedRef<string> = computed((): string =>
   const pct: number = Math.round((s.sales_won / s.prospects_total) * 1000) / 10
   return `${pct.toLocaleString('fr-FR')}%`
 })
-
-/**
- * Badge colors for a lead temperature (semantic status colors).
- * @param temperature - Raw temperature value.
- * @returns Inline style with soft background + colored text.
- */
-function temperatureStyle(temperature: string): Record<string, string> {
-  if (temperature === 'hot') return { color: 'var(--app-red)', backgroundColor: 'var(--app-red-soft)' }
-  if (temperature === 'warm') return { color: 'var(--app-accent-ink)', backgroundColor: 'var(--app-accent-soft)' }
-  return { color: 'var(--app-blue)', backgroundColor: 'var(--app-blue-soft)' }
-}
-
-/**
- * Human label for a lead temperature.
- * @param temperature - Raw temperature value.
- * @returns Localized label.
- */
-function temperatureLabel(temperature: string): string {
-  const labels: Record<string, string> = { hot: 'Chaud', warm: 'Tiède', cold: 'Froid', unknown: 'Inconnu' }
-  return labels[temperature] ?? temperature
-}
 
 /**
  * Format an integer with French thousands separators.

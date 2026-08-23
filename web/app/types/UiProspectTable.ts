@@ -9,6 +9,7 @@ export type UiProspectTableProps = {
   /** When true, renders the A/B variant column (values keyed by prospect id). */
   showAbVariant?: boolean
   abVariants?: Record<number, string | null | undefined>
+  temperatures?: Record<number, string>
   /** Action button behavior in the last column (default: delete icon). */
   rowAction?: UiProspectTableRowAction
   /** Hide the selection checkbox column. */

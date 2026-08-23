@@ -16,6 +16,26 @@ class ProspectBehaviorResponse(BaseModel):
     tracking_configured: bool
 
 
+class ProspectTemperaturesRequest(BaseModel):
+    """Prospect ids to score in bulk."""
+
+    prospect_ids: list[int] = Field(default_factory=list)
+
+
+class ProspectTemperature(BaseModel):
+    """Temperature + score for one prospect."""
+
+    prospect_id: int
+    temperature: str
+    score: int
+
+
+class ProspectTemperaturesResponse(BaseModel):
+    """Bulk lead temperatures, one entry per prospect that has any activity."""
+
+    items: list[ProspectTemperature] = Field(default_factory=list)
+
+
 class BehaviorSummaryResponse(BaseModel):
     """AI (or rule-based) behaviour summary + relance advice."""
 

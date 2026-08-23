@@ -60,6 +60,17 @@ const BASE_URL: string = '/api/v1/prospects'
  
  */
 
+/** Lead temperature (hot/warm/cold) + score for one prospect. */
+export type ProspectTemperature = {
+  prospect_id: number
+  temperature: string
+  score: number
+}
+
+export type ProspectTemperaturesResponse = {
+  items: ProspectTemperature[]
+}
+
 export class ProspectsService {
   /**
    *
@@ -135,6 +146,15 @@ export class ProspectsService {
    */
   static async runLighthouseAudit(prospectId: number): Promise<Prospect> {
     return ApiClient.post<Prospect>(`${BASE_URL}/${prospectId}/lighthouse-audit`, {})
+  }
+
+  /**
+   * Fetch the hot/warm/cold temperature of several prospects in one call.
+   * @param prospectIds - Identifiants des prospects à évaluer.
+   * @returns La liste des températures (une entrée par prospect ayant de l'activité).
+   */
+  static async getProspectTemperatures(prospectIds: number[]): Promise<ProspectTemperaturesResponse> {
+    return ApiClient.post<ProspectTemperaturesResponse>(`${BASE_URL}/temperatures`, { prospect_ids: prospectIds })
   }
 
   /**

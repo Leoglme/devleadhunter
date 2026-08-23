@@ -111,7 +111,7 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-4 @4xl:grid-cols-4">
+      <div class="grid grid-cols-2 gap-4 @4xl:grid-cols-5">
         <div>
           <label class="app-label mb-1.5 block">Site web</label>
           <UiSelectField v-model="filterWebsite" :options="websiteFilterOptions" />
@@ -123,6 +123,10 @@
         <div>
           <label class="app-label mb-1.5 block">Catégorie</label>
           <input v-model="filterCategory" type="text" placeholder="Ex: restaurant" class="app-input" />
+        </div>
+        <div>
+          <label class="app-label mb-1.5 block">Température</label>
+          <UiSelectField v-model="filterTemperature" :options="temperatureFilterOptions" />
         </div>
         <div class="flex items-end">
           <button class="app-btn-secondary w-full" @click="clearFilters">Réinitialiser</button>
@@ -209,6 +213,7 @@
       <UiProspectTable
         :prospects="paginatedProspects"
         :selected-prospects="selectedProspects"
+        :temperatures="temperatureByPid"
         @view-prospect="openDrawer"
         @edit-prospect="openProspectEditDrawer"
         @delete-prospect="handleDeleteProspect"
@@ -394,6 +399,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import type { ComputedRef, Ref } from 'vue'
 import type { Prospect } from '~/types'
 import { ProspectsService } from '~/services/prospectsService'
+import type { ProspectTemperature, ProspectTemperaturesResponse } from '~/services/prospectsService'
 import { downloadProspectsJson, downloadProspectTemplateJson, parseProspectsJson } from '~/utils/prospectJson'
 import { ProspectWebsite } from '~/utils/prospectWebsite'
 import { EnrichmentService } from '~/services/enrichmentService'
@@ -419,6 +425,7 @@ const {
   filterCategory,
   filterCity,
   filterWebsite,
+  filterTemperature,
   activeTab,
   clearFilters: resetFilters,
 }: ReturnType<typeof useMyProspectsFilters> = useMyProspectsFilters()
@@ -430,6 +437,13 @@ const websiteFilterOptions: { value: string; label: string }[] = [
   { value: 'dead', label: 'Site mort / annuaire' },
   { value: 'improvable', label: 'Améliorable (audit)' },
 ]
+const temperatureFilterOptions: { value: string; label: string }[] = [
+  { value: 'all', label: 'Toutes' },
+  { value: 'hot', label: 'Chaud' },
+  { value: 'warm', label: 'Tiède' },
+  { value: 'cold', label: 'Froid' },
+]
+const temperatureByPid: Ref<Record<number, string>> = ref({})
 const currentPage: Ref<number> = ref(1)
 const pageSize: number = 50
 
@@ -518,6 +532,10 @@ const baseFiltered: ComputedRef<Prospect[]> = computed(() => {
     )
   }
 
+  if (filterTemperature.value !== 'all') {
+    filtered = filtered.filter((prospect: Prospect) => temperatureByPid.value[prospect.id] === filterTemperature.value)
+  }
+
   return filtered
 })
 
@@ -554,10 +572,33 @@ async function loadProspects(): Promise<void> {
     isLoading.value = true
     error.value = null
     prospects.value = await ProspectsService.listProspects()
+    loadTemperatures()
   } catch (err: unknown) {
     error.value = err instanceof Error ? err.message : 'Erreur lors du chargement des prospects'
   } finally {
     isLoading.value = false
+  }
+}
+
+/**
+ * Load the hot/warm/cold temperature of the current prospects (best-effort, non-blocking).
+ * @returns A promise resolved once the temperature map is populated.
+ */
+async function loadTemperatures(): Promise<void> {
+  const ids: number[] = prospects.value.map((prospect: Prospect) => prospect.id)
+  if (ids.length === 0) {
+    temperatureByPid.value = {}
+    return
+  }
+  try {
+    const response: ProspectTemperaturesResponse = await ProspectsService.getProspectTemperatures(ids)
+    const map: Record<number, string> = {}
+    response.items.forEach((item: ProspectTemperature): void => {
+      map[item.prospect_id] = item.temperature
+    })
+    temperatureByPid.value = map
+  } catch {
+    // Best-effort: the table stays usable even when scoring is unavailable.
   }
 }
 

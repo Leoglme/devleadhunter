@@ -10,6 +10,9 @@ from schemas.behavior import (
     BehaviorSummaryResponse,
     PersonalizedFollowupResponse,
     ProspectBehaviorResponse,
+    ProspectTemperature,
+    ProspectTemperaturesRequest,
+    ProspectTemperaturesResponse,
 )
 from services.auth_service import get_current_active_user
 from services.behavior_service import behavior_service
@@ -31,6 +34,21 @@ def _get_prospect(db: Session, user_id: int, prospect_id: int) -> ProspectDB:
     if not prospect:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect not found")
     return prospect
+
+
+@router.post("/temperatures", response_model=ProspectTemperaturesResponse)
+async def get_prospect_temperatures(
+    payload: ProspectTemperaturesRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> ProspectTemperaturesResponse:
+    """Return the hot/warm/cold temperature for a set of prospects (demo + email engagement)."""
+    temperatures = await behavior_service.get_temperatures(db, current_user.id, payload.prospect_ids)
+    items = [
+        ProspectTemperature(prospect_id=pid, temperature=data["temperature"], score=data["score"])
+        for pid, data in temperatures.items()
+    ]
+    return ProspectTemperaturesResponse(items=items)
 
 
 @router.get("/{prospect_id}/behavior", response_model=ProspectBehaviorResponse)

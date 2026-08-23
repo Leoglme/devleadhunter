@@ -7,12 +7,16 @@ const MY_PROSPECTS_FILTERS_STORAGE_KEY: string = 'dlh-my-prospects-filters'
 
 const WEBSITE_FILTER_VALUES: ProspectWebsiteFilter[] = ['all', 'yes', 'no', 'dead', 'improvable']
 
+export type TemperatureFilter = 'all' | 'hot' | 'warm' | 'cold'
+const TEMPERATURE_FILTER_VALUES: TemperatureFilter[] = ['all', 'hot', 'warm', 'cold']
+
 /** Persisted filter state for the my-prospects page. */
 export type MyProspectsFiltersState = {
   searchQuery: string
   filterCategory: string
   filterCity: string
   filterWebsite: ProspectWebsiteFilter
+  filterTemperature: TemperatureFilter
   activeTab: 'not_contacted' | 'contacted'
 }
 
@@ -26,6 +30,7 @@ function defaultFilters(): MyProspectsFiltersState {
     filterCategory: '',
     filterCity: '',
     filterWebsite: 'no',
+    filterTemperature: 'all',
     activeTab: 'not_contacted',
   }
 }
@@ -46,12 +51,18 @@ function parseStoredFilters(raw: string): MyProspectsFiltersState | null {
       : defaults.filterWebsite
     const activeTab: MyProspectsFiltersState['activeTab'] =
       parsed.activeTab === 'contacted' ? 'contacted' : 'not_contacted'
+    const filterTemperature: TemperatureFilter = TEMPERATURE_FILTER_VALUES.includes(
+      parsed.filterTemperature as TemperatureFilter,
+    )
+      ? (parsed.filterTemperature as TemperatureFilter)
+      : defaults.filterTemperature
 
     return {
       searchQuery: typeof parsed.searchQuery === 'string' ? parsed.searchQuery : defaults.searchQuery,
       filterCategory: typeof parsed.filterCategory === 'string' ? parsed.filterCategory : defaults.filterCategory,
       filterCity: typeof parsed.filterCity === 'string' ? parsed.filterCity : defaults.filterCity,
       filterWebsite,
+      filterTemperature,
       activeTab,
     }
   } catch {
@@ -68,6 +79,7 @@ export function useMyProspectsFilters(): {
   filterCategory: Ref<string>
   filterCity: Ref<string>
   filterWebsite: Ref<ProspectWebsiteFilter>
+  filterTemperature: Ref<TemperatureFilter>
   activeTab: Ref<'not_contacted' | 'contacted'>
   clearFilters: () => void
 } {
@@ -76,6 +88,7 @@ export function useMyProspectsFilters(): {
   const filterCategory: Ref<string> = ref(defaults.filterCategory)
   const filterCity: Ref<string> = ref(defaults.filterCity)
   const filterWebsite: Ref<ProspectWebsiteFilter> = ref(defaults.filterWebsite)
+  const filterTemperature: Ref<TemperatureFilter> = ref(defaults.filterTemperature)
   const activeTab: Ref<'not_contacted' | 'contacted'> = ref(defaults.activeTab)
 
   /**
@@ -91,6 +104,7 @@ export function useMyProspectsFilters(): {
     filterCategory.value = parsed.filterCategory
     filterCity.value = parsed.filterCity
     filterWebsite.value = parsed.filterWebsite
+    filterTemperature.value = parsed.filterTemperature
     activeTab.value = parsed.activeTab
   }
 
@@ -104,6 +118,7 @@ export function useMyProspectsFilters(): {
       filterCategory: filterCategory.value,
       filterCity: filterCity.value,
       filterWebsite: filterWebsite.value,
+      filterTemperature: filterTemperature.value,
       activeTab: activeTab.value,
     }
     localStorage.setItem(MY_PROSPECTS_FILTERS_STORAGE_KEY, JSON.stringify(snapshot))
@@ -118,15 +133,16 @@ export function useMyProspectsFilters(): {
     filterCategory.value = next.filterCategory
     filterCity.value = next.filterCity
     filterWebsite.value = next.filterWebsite
+    filterTemperature.value = next.filterTemperature
   }
 
   onMounted((): void => {
     loadFilters()
   })
 
-  watch([searchQuery, filterCategory, filterCity, filterWebsite, activeTab], (): void => {
+  watch([searchQuery, filterCategory, filterCity, filterWebsite, filterTemperature, activeTab], (): void => {
     saveFilters()
   })
 
-  return { searchQuery, filterCategory, filterCity, filterWebsite, activeTab, clearFilters }
+  return { searchQuery, filterCategory, filterCity, filterWebsite, filterTemperature, activeTab, clearFilters }
 }
