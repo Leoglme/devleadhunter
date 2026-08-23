@@ -155,7 +155,12 @@
               </td>
               <td data-label="Statut" class="px-3 py-2.5">
                 <div class="flex flex-wrap gap-1">
-                  <UiEmailStatusBadge v-for="s in getEmailBadges(log)" :key="s" :status="s" />
+                  <UiEmailStatusBadge
+                    v-for="s in getEmailBadges(log)"
+                    :key="s"
+                    :status="s"
+                    :count="s === 'opened' ? (log.open_count ?? 1) : 1"
+                  />
                 </div>
               </td>
               <td data-label="Activité" class="px-3 py-2.5">
@@ -368,7 +373,7 @@ function getEngagement(log: EmailLog): EngagementStep[] {
     },
     {
       key: 'opened',
-      label: 'Ouvert',
+      label: log.open_count && log.open_count > 1 ? `Ouvert ×${log.open_count}` : 'Ouvert',
       icon: 'i-lucide-mail-open',
       ts: log.opened_at,
       color: 'text-[var(--app-violet)]',

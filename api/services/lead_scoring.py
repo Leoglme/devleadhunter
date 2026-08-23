@@ -32,6 +32,7 @@ class BehaviorSignals(TypedDict):
     emails_sent: int
     emails_opened: int
     emails_clicked: int
+    email_reopens: int
     last_seen: str | None
 
 
@@ -68,6 +69,7 @@ def empty_signals() -> BehaviorSignals:
         "emails_sent": 0,
         "emails_opened": 0,
         "emails_clicked": 0,
+        "email_reopens": 0,
         "last_seen": None,
     }
 
@@ -90,6 +92,7 @@ def _has_any_activity(signals: BehaviorSignals) -> bool:
             signals["emails_sent"],
             signals["emails_opened"],
             signals["emails_clicked"],
+            signals["email_reopens"],
         )
     )
 
@@ -135,13 +138,21 @@ def score_from_signals(signals: BehaviorSignals, site_improvable: bool = False) 
     # Email engagement
     score += min(signals["emails_opened"], 5) * 4
     score += min(signals["emails_clicked"], 5) * 12  # clicked the demo link = strong intent
+    # Reopening the same email (machine prefetch already filtered out) = the prospect
+    # keeps coming back. Capped below a single click so a click always outweighs reopens.
+    score += min(signals["email_reopens"], 3) * 3
     # Redesign opportunity: an engaged prospect whose current site is weak is
     # easier to close (the pitch has proof) → flat bonus.
     if site_improvable:
         score += 10
     score = min(score, 100)
 
-    strong_intent = signals["phone_clicks"] > 0 or signals["contact_clicks"] > 0 or signals["emails_clicked"] > 0
+    strong_intent = (
+        signals["phone_clicks"] > 0
+        or signals["contact_clicks"] > 0
+        or signals["emails_clicked"] > 0
+        or signals["email_reopens"] >= 3  # kept coming back to the email = hot
+    )
     if strong_intent or score >= 60:
         temperature = "hot"
     elif score >= 25:
@@ -159,6 +170,7 @@ def _apply_email(signals: BehaviorSignals, email: dict[str, Any] | None) -> None
     signals["emails_sent"] = int(email.get("sent", 0) or 0)
     signals["emails_opened"] = int(email.get("opened", 0) or 0)
     signals["emails_clicked"] = int(email.get("clicked", 0) or 0)
+    signals["email_reopens"] = int(email.get("reopens", 0) or 0)
 
 
 def compute(

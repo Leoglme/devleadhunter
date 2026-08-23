@@ -88,7 +88,7 @@ class BehaviorService:
     def _email_engagement(self, db: Session, user_id: int, prospect_id: int) -> dict[str, Any]:
         """Return email engagement counts + timeline entries for a prospect."""
         logs = db.query(EmailLog).filter(EmailLog.user_id == user_id, EmailLog.prospect_id == prospect_id).all()
-        sent = opened = clicked = 0
+        sent = opened = clicked = reopens = 0
         timeline: list[dict[str, Any]] = []
         for log in logs:
             if log.sent_at:
@@ -96,11 +96,13 @@ class BehaviorService:
                 timeline.append(self._email_entry("email_sent", log.sent_at))
             if log.opened_at:
                 opened += 1
-                timeline.append(self._email_entry("email_opened", log.opened_at))
+                open_count = log.open_count or 1
+                reopens += max(open_count - 1, 0)
+                timeline.append(self._email_entry("email_opened", log.opened_at, count=open_count))
             if log.clicked_at:
                 clicked += 1
                 timeline.append(self._email_entry("email_clicked", log.clicked_at))
-        return {"sent": sent, "opened": opened, "clicked": clicked, "timeline": timeline}
+        return {"sent": sent, "opened": opened, "clicked": clicked, "reopens": reopens, "timeline": timeline}
 
     def _email_engagement_bulk(self, db: Session, user_id: int, prospect_ids: list[int]) -> dict[int, dict[str, int]]:
         """Return email engagement counts per prospect (one grouped query)."""
@@ -112,24 +114,36 @@ class BehaviorService:
                 func.count(EmailLog.sent_at),
                 func.count(EmailLog.opened_at),
                 func.count(EmailLog.clicked_at),
+                func.coalesce(func.sum(EmailLog.open_count), 0),
             )
             .where(EmailLog.user_id == user_id, EmailLog.prospect_id.in_(prospect_ids))
             .group_by(EmailLog.prospect_id)
         ).all()
         result: dict[int, dict[str, int]] = {}
-        for pid, sent, opened, clicked in rows:
+        for pid, sent, opened, clicked, total_opens in rows:
             if pid is None:
                 continue
-            result[int(pid)] = {"sent": int(sent or 0), "opened": int(opened or 0), "clicked": int(clicked or 0)}
+            opened_count = int(opened or 0)
+            # sum(open_count) - count(opened_at) = reopens (machine-only rows contribute 0 to both).
+            reopens = max(int(total_opens or 0) - opened_count, 0)
+            result[int(pid)] = {
+                "sent": int(sent or 0),
+                "opened": opened_count,
+                "clicked": int(clicked or 0),
+                "reopens": reopens,
+            }
         return result
 
     @staticmethod
-    def _email_entry(event_type: str, when: Any) -> dict[str, Any]:
-        """Build a timeline entry for an email event."""
+    def _email_entry(event_type: str, when: Any, count: int = 1) -> dict[str, Any]:
+        """Build a timeline entry for an email event (open count folds into the open label)."""
         ts = when.isoformat() if hasattr(when, "isoformat") else str(when)
+        label = _EVENT_LABELS.get(event_type, event_type)
+        if event_type == "email_opened" and count > 1:
+            label = f"{label} ({count}×)"
         return {
             "type": event_type,
-            "label": _EVENT_LABELS.get(event_type, event_type),
+            "label": label,
             "timestamp": ts,
             "properties": {},
         }

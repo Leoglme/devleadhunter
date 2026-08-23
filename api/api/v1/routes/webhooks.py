@@ -89,6 +89,11 @@ _STATUS_RANK: dict[str, int] = {
     EmailStatus.SUPPRESSED.value: 7,
 }
 
+# An ``email.opened`` landing within this many seconds of delivery is a machine
+# prefetch (Gmail image proxy / security scanner), not a human read. The open
+# payload carries no user-agent, so timing from delivery is the only discriminator.
+_MACHINE_OPEN_WINDOW_SECONDS: int = 60
+
 
 def _verify_signature(
     body: bytes,
@@ -163,6 +168,128 @@ def _read_tag(tags: object, name: str) -> str | None:
                 value = entry.get("value")
                 return str(value) if value is not None else None
     return None
+
+
+def _parse_event_time(payload: dict[str, Any], data: dict[str, Any]) -> datetime:
+    """
+    Return the event's own timestamp as naive UTC, falling back to now.
+
+    Reading the payload timestamp (not the receive time) keeps machine/human open
+    classification correct even when Resend retries a webhook long after the event.
+
+    Args:
+        payload: The full webhook body.
+        data:    The ``data`` object of the webhook body.
+
+    Returns:
+        The event time as a naive UTC ``datetime``.
+    """
+    raw = data.get("created_at") or payload.get("created_at")
+    if isinstance(raw, str):
+        normalized = raw.strip().replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            parsed = None
+        if parsed is not None:
+            if parsed.tzinfo is not None:
+                parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+            return parsed
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _is_machine_open(event_time: datetime, baseline: datetime | None) -> bool:
+    """
+    True when an open landed within the prefetch window of delivery — a machine open.
+
+    Gmail's image proxy and security scanners fetch the tracking pixel at delivery,
+    seconds after ``baseline`` (delivered_at, else sent_at). A human read lands
+    meaningfully later. With no baseline to compare against, err towards human so a
+    real open is never dropped.
+
+    Args:
+        event_time: The open event time (naive UTC).
+        baseline: Delivery (or send) time to measure the delay from (naive UTC).
+
+    Returns:
+        ``True`` when the open is a machine prefetch.
+    """
+    if baseline is None:
+        return False
+    return (event_time - baseline).total_seconds() <= _MACHINE_OPEN_WINDOW_SECONDS
+
+
+async def _handle_open_event(
+    db: Session,
+    email_log: EmailLog,
+    payload: dict[str, Any],
+    data: dict[str, Any],
+    resend_message_id: str,
+) -> None:
+    """
+    Record a Resend ``email.opened`` event, separating machine prefetch from human reads.
+
+    A pixel fetch within ``_MACHINE_OPEN_WINDOW_SECONDS`` of delivery is a
+    machine open (Gmail proxy / scanner): it is stored on ``machine_opened_at``
+    but never advances status, notifies or scores. Opens landing meaningfully
+    after delivery are human: they bump ``open_count`` and notify on every reopen
+    (a strong warm-lead signal). Only the first human open is mirrored to PostHog,
+    to keep the funnel step clean.
+
+    Args:
+        db: Active database session.
+        email_log: The row the event targets.
+        payload: The full webhook body (for the event timestamp).
+        data: The ``data`` object (for the event timestamp).
+        resend_message_id: Provider message id, backfilled when missing.
+    """
+    event_time: datetime = _parse_event_time(payload, data)
+    baseline: datetime | None = email_log.delivered_at or email_log.sent_at
+
+    if _is_machine_open(event_time, baseline):
+        if email_log.machine_opened_at is None:
+            email_log.machine_opened_at = event_time
+            db.commit()
+        return
+
+    email_log.open_count = (email_log.open_count or 0) + 1
+    email_log.last_open_at = event_time
+    first_human_open: bool = email_log.opened_at is None
+    if first_human_open:
+        email_log.opened_at = event_time
+    if _STATUS_RANK[EmailStatus.OPENED.value] > _STATUS_RANK.get(email_log.status, 0):
+        email_log.status = EmailStatus.OPENED.value
+    if resend_message_id and not email_log.provider_message_id:
+        email_log.provider_message_id = resend_message_id
+    db.commit()
+    logger.info("[Webhook] EmailLog %d: human open #%d", email_log.id, email_log.open_count)
+
+    if first_human_open:
+        demo_slug: str | None = resolve_demo_slug(db, email_log.user_id, email_log.prospect_id)
+        await posthog_service.capture(
+            distinct_id=posthog_distinct_id(demo_slug, email_log.prospect_id, email_log.recipient_email),
+            event="email_opened",
+            properties={
+                "demo_slug": demo_slug,
+                "prospect_id": email_log.prospect_id,
+                "campaign_id": email_log.campaign_id,
+                "ab_variant": email_log.ab_variant,
+                "email_log_id": email_log.id,
+                "$lib": "devleadhunter-api",
+            },
+            timestamp=event_time.isoformat(),
+        )
+
+    await notification_service.notify_email_event(
+        db,
+        user_id=email_log.user_id,
+        event_name="email_opened",
+        recipient_email=email_log.recipient_email,
+        prospect_id=email_log.prospect_id,
+        subject=email_log.subject,
+        email_log_id=email_log.id,
+        open_count=email_log.open_count,
+    )
 
 
 @router.post("/resend", status_code=status.HTTP_204_NO_CONTENT)
@@ -241,6 +368,12 @@ async def resend_webhook(
             resend_message_id,
         )
         return  # Acknowledge — nothing to update
+
+    # Opens need machine-vs-human classification and per-open counting, so they
+    # bypass the linear status ladder below.
+    if event_type == "email.opened":
+        await _handle_open_event(db, email_log, payload, data, resend_message_id)
+        return
 
     # --- Advance status (never downgrade) -----------------------------------
 

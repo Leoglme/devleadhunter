@@ -12,6 +12,7 @@ export type EmailDeliveryStage = {
   timestamp: string | null | undefined
   style: EmailStageIndicatorStyle
   alwaysShow: boolean
+  description?: string
 }
 
 /** Shape of a Nuxt UI timeline item with per-item style overrides. */

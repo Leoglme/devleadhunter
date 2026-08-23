@@ -491,6 +491,9 @@ export type EmailLog = {
   sent_at?: string | null
   delivered_at?: string | null
   opened_at?: string | null
+  machine_opened_at?: string | null
+  open_count?: number
+  last_open_at?: string | null
   clicked_at?: string | null
   bounced_at?: string | null
   complained_at?: string | null

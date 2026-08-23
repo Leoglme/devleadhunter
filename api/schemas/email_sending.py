@@ -79,6 +79,9 @@ class EmailLogResponse(BaseModel):
     sent_at: datetime | None = None
     delivered_at: datetime | None = None
     opened_at: datetime | None = None
+    machine_opened_at: datetime | None = None
+    open_count: int = 0
+    last_open_at: datetime | None = None
     clicked_at: datetime | None = None
     bounced_at: datetime | None = None
     complained_at: datetime | None = None

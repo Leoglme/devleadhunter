@@ -84,6 +84,7 @@ class NotificationService:
         prospect_id: int | None = None,
         subject: str | None = None,
         email_log_id: int | None = None,
+        open_count: int = 1,
     ) -> None:
         """
         Raise a notification for an email lifecycle event.
@@ -96,12 +97,15 @@ class NotificationService:
             prospect_id: Prospect id, when the email targets a saved prospect.
             subject: Email subject, appended to the body on opens/clicks.
             email_log_id: EmailLog id, tags the email's events so the push collapses.
+            open_count: Running count of human opens; >1 turns the open into a reopen cue.
         """
         mapping = _EMAIL_EVENT_NOTIFS.get(event_name)
         if mapping is None:
             return
         emoji, level, body = mapping
         prospect_name = self._resolve_prospect_name(db, prospect_id, recipient_email)
+        if event_name == "email_opened" and open_count > 1:
+            emoji, body = "🔁", f"A rouvert ton mail ({open_count}×)"
         if subject and event_name in ("email_opened", "email_clicked"):
             body = f"{body} : « {subject} »"
         tag = f"email-{email_log_id}" if email_log_id else None

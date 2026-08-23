@@ -40,7 +40,10 @@ class EmailLog(Base):
 
         sent_at: Timestamp when email was sent
         delivered_at: Timestamp when email was delivered
-        opened_at: Timestamp when email was opened
+        opened_at: Timestamp of the first HUMAN open (machine prefetch excluded)
+        machine_opened_at: Timestamp of the delivery-time pixel prefetch (Gmail/scanner), not a human read
+        open_count: Number of HUMAN opens (reopens included)
+        last_open_at: Timestamp of the most recent HUMAN open
         clicked_at: Timestamp when email links were clicked
         bounced_at: Timestamp when email bounced
         failed_at: Timestamp when email failed
@@ -76,7 +79,11 @@ class EmailLog(Base):
 
     sent_at: Mapped[datetime | None] = mapped_column(nullable=True)
     delivered_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    # opened_at = first HUMAN open; a delivery-time prefetch is recorded on machine_opened_at instead.
     opened_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    machine_opened_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    open_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_open_at: Mapped[datetime | None] = mapped_column(nullable=True)
     clicked_at: Mapped[datetime | None] = mapped_column(nullable=True)
     bounced_at: Mapped[datetime | None] = mapped_column(nullable=True)
     complained_at: Mapped[datetime | None] = mapped_column(nullable=True)

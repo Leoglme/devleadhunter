@@ -2,6 +2,7 @@ import type { EmailStatus } from '~/types'
 
 export type EmailStatusBadgeProps = {
   status: EmailStatus
+  count?: number
 }
 
 export type EmailStatusPresentation = {

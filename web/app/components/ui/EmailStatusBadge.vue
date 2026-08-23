@@ -1,7 +1,7 @@
 <template>
   <span :class="['app-badge', config.variant]">
     <UIcon :name="config.icon" :class="['h-3 w-3', config.spin && 'animate-spin']" />
-    {{ config.label }}
+    {{ label }}
   </span>
 </template>
 
@@ -15,6 +15,10 @@ const props: EmailStatusBadgeProps = defineProps({
   status: {
     type: String as PropType<EmailStatus>,
     required: true,
+  },
+  count: {
+    type: Number,
+    default: 1,
   },
 })
 
@@ -41,4 +45,9 @@ const STATUS_CONFIG: Record<EmailStatus, EmailStatusPresentation> = {
 const config: ComputedRef<EmailStatusPresentation> = computed(
   (): EmailStatusPresentation => STATUS_CONFIG[props.status] ?? STATUS_CONFIG.pending,
 )
+
+const label: ComputedRef<string> = computed((): string => {
+  const count: number = props.count ?? 1
+  return props.status === 'opened' && count > 1 ? `${config.value.label} ×${count}` : config.value.label
+})
 </script>
