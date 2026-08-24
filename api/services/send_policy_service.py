@@ -287,29 +287,33 @@ class SendPolicyService:
         from models.email_queue import EmailQueue
 
         rows = db.execute(
-            select(EmailQueue.scheduled_at).where(
+            select(EmailQueue.scheduled_at, EmailQueue.queue_type).where(
                 EmailQueue.user_id == user_id,
                 EmailQueue.status == "pending",
             )
         ).all()
         counts: dict[date, int] = {}
         occupied: set[datetime] = set()
-        for (scheduled_at,) in rows:
+        for scheduled_at, queue_type in rows:
             if scheduled_at is None:
                 continue
             occupied.add(scheduled_at)
+            # Follow-ups don't consume the daily cap — only J1s do — so they never push new sends to a later day.
+            if queue_type != "initial":
+                continue
             day: date = _to_local(scheduled_at).date()
             counts[day] = counts.get(day, 0) + 1
         return counts, occupied
 
     def pending_campaign_counts_by_day(self, db: Session, campaign_id: int) -> dict[date, int]:
-        """Count a single campaign's already-pending queue items grouped by local send day."""
+        """Count a single campaign's already-pending J1 items grouped by local send day (follow-ups excluded)."""
         from models.email_queue import EmailQueue
 
         rows = db.execute(
             select(EmailQueue.scheduled_at).where(
                 EmailQueue.campaign_id == campaign_id,
                 EmailQueue.status == "pending",
+                EmailQueue.queue_type == "initial",
             )
         ).all()
         counts: dict[date, int] = {}
