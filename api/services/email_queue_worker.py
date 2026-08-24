@@ -45,9 +45,14 @@ class EmailQueueWorker:
 
         db = SessionLocal()
         try:
-            from services.storyblok_preswap_service import storyblok_preswap_service
+            try:
+                from services.storyblok_preswap_service import storyblok_preswap_service
 
-            await storyblok_preswap_service.run_preswap_pass(db)
+                await storyblok_preswap_service.run_preswap_pass(db)
+            except Exception as exc:
+                # The pre-swap is best-effort: its failure must never block the send loop.
+                logger.error("[QueueWorker] Storyblok pre-swap pass failed, sending anyway: %s", exc, exc_info=True)
+                db.rollback()
             service = CampaignQueueService(db)
             sent_count: int = 0
             while sent_count < self.MAX_SENDS_PER_TICK:

@@ -5,13 +5,12 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 
-from enums.campaign_status import CampaignStatus
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from core.config import settings
 from enums.demo_site_status import DemoSiteStatus
-from models.campaign import Campaign
+from models.campaign import Campaign, CampaignStatus
 from models.demo_site import DemoSite
 from models.email_queue import EmailQueue
 from models.email_template import EmailTemplate

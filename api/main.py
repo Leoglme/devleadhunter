@@ -56,6 +56,7 @@ from services.notification_service import notification_service, run_daily_recap_
 from services.order_fulfillment_recovery_service import run_order_fulfillment_recovery_loop
 from services.order_payment_reconciliation_service import run_order_payment_reconciliation_loop
 from services.scraper_service import scraper_service
+from services.send_queue_watchdog_service import run_send_queue_watchdog_loop
 
 ensure_proactor_event_loop()
 
@@ -155,13 +156,20 @@ async def startup_event() -> None:
     brightdata_scraper = BrightDataScraper()
     await scraper_service.add_scraper(brightdata_scraper)
 
-    asyncio.create_task(run_demo_site_cleanup_loop())
-    asyncio.create_task(email_queue_worker.run_forever())
-    asyncio.create_task(run_order_fulfillment_recovery_loop())
-    asyncio.create_task(run_order_payment_reconciliation_loop())
-    asyncio.create_task(acquisition_orchestrator.run_forever())
-    asyncio.create_task(_warmup_maps_autocomplete())
-    asyncio.create_task(run_daily_recap_loop())
+    # Keep a strong reference to every long-lived loop, else asyncio may GC the task and it dies silently.
+    for coro in (
+        run_demo_site_cleanup_loop(),
+        email_queue_worker.run_forever(),
+        run_order_fulfillment_recovery_loop(),
+        run_order_payment_reconciliation_loop(),
+        acquisition_orchestrator.run_forever(),
+        _warmup_maps_autocomplete(),
+        run_daily_recap_loop(),
+        run_send_queue_watchdog_loop(),
+    ):
+        task = asyncio.create_task(coro)
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
 
 
 async def _warmup_maps_autocomplete() -> None:
