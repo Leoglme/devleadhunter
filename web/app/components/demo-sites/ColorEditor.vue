@@ -1,16 +1,6 @@
 <template>
   <div v-if="template">
-    <div class="mb-2.5 flex items-center justify-between">
-      <p class="app-label">Couleurs du site</p>
-      <button
-        v-if="isThemeCustomised"
-        type="button"
-        class="cursor-pointer text-[11px] font-medium text-[var(--app-ink-soft)] underline underline-offset-2 hover:text-[var(--app-ink)]"
-        @click="resetTheme"
-      >
-        Revenir aux couleurs du template
-      </button>
-    </div>
+    <p class="app-label mb-2.5">Couleurs du site</p>
     <div class="flex flex-wrap gap-3">
       <div v-for="color in editableColors" :key="color.key" class="min-w-[7rem] flex-1">
         <span class="mb-1 flex items-center gap-1 text-[10px] tracking-wide text-[var(--app-ink-soft)] uppercase">
@@ -35,7 +25,7 @@
               :title="`Choisir la couleur ${color.label.toLowerCase()}`"
               :aria-label="`Choisir la couleur ${color.label.toLowerCase()}`"
               class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-              @input="updateThemeColor(color.key, ($event.target as HTMLInputElement).value)"
+              @input="onEditColor(color.key, ($event.target as HTMLInputElement).value)"
             />
           </div>
           <input
@@ -44,7 +34,7 @@
             class="input-field h-8 min-w-0 text-xs"
             placeholder="#1d4ed8"
             maxlength="7"
-            @input="updateThemeColor(color.key, ($event.target as HTMLInputElement).value)"
+            @input="onEditColor(color.key, ($event.target as HTMLInputElement).value)"
           />
         </div>
         <div
@@ -173,20 +163,10 @@ const showBrandSourcePicker: ComputedRef<boolean> = computed(
   (): boolean => props.useBrandColor !== null && Boolean(props.brandColor),
 )
 
-/** Whether the current theme differs from the template's defaults. */
-const isThemeCustomised: ComputedRef<boolean> = computed((): boolean => {
-  const defaults: DemoSiteTheme | undefined = props.template?.default_theme
-  if (!defaults) return false
-  return colorKeys.some((key: TemplateThemeColorKey): boolean => defaults[key] !== props.theme[key])
-})
-
-/**
- * Reset the theme to the template's default colors.
- */
-function resetTheme(): void {
-  const defaults: DemoSiteTheme | undefined = props.template?.default_theme
-  if (defaults) emit('update:theme', { ...defaults })
-}
+/** The theme key that holds the action colour, or null for a template without role metadata. */
+const actionKey: ComputedRef<TemplateThemeColorKey | null> = computed(
+  (): TemplateThemeColorKey | null => props.template?.color_roles?.action ?? props.template?.brand_color_key ?? null,
+)
 
 /**
  * Update a single theme color when the hex value is valid.
@@ -196,6 +176,19 @@ function resetTheme(): void {
 function updateThemeColor(key: TemplateThemeColorKey, value: string): void {
   if (!/^#[0-9A-Fa-f]{6}$/.test(value)) return
   emit('update:theme', { ...props.theme, [key]: value })
+}
+
+/**
+ * Apply a hand-picked colour and, when it is the action colour, stop deriving it from the logo — a
+ * manual choice is an explicit override that must survive regeneration.
+ * @param key - Theme key being edited.
+ * @param value - Candidate hex color.
+ */
+function onEditColor(key: TemplateThemeColorKey, value: string): void {
+  updateThemeColor(key, value)
+  if (key === actionKey.value && props.useBrandColor === true) {
+    emit('update:useBrandColor', false)
+  }
 }
 
 /**
