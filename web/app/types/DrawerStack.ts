@@ -43,6 +43,12 @@ export type EmailLogDrawerEntry = {
   campaignName: string | undefined
 }
 
+/** Sub-page of a failed email log: re-send the same message to a corrected address. */
+export type EmailResendDrawerEntry = {
+  kind: 'email-resend'
+  log: EmailLog
+}
+
 export type EmailTemplateDrawerMode = 'create' | 'edit' | 'preview'
 
 export type EmailTemplateDrawerEntry = {
@@ -136,6 +142,7 @@ export type DrawerStackEntry =
   | ProspectDrawerEntry
   | SendEmailDrawerEntry
   | EmailLogDrawerEntry
+  | EmailResendDrawerEntry
   | EmailTemplateDrawerEntry
   | EmailSignaturesDrawerEntry
   | ProfileDrawerEntry

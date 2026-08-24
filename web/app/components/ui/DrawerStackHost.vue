@@ -37,6 +37,16 @@
       :show-back="hasPrevious"
       @close="drawerStack.closeAll()"
       @back="drawerStack.back()"
+      @resend="handleResendEmail"
+      @retry="handleOpenResend"
+    />
+
+    <UiEmailResendDrawer
+      :open="emailResendEntry !== null"
+      :log="emailResendEntry?.log ?? null"
+      :show-back="hasPrevious"
+      @close="drawerStack.closeAll()"
+      @back="drawerStack.back()"
       @resent="handleEmailResent"
     />
 
@@ -179,6 +189,7 @@ import type {
   CoverageProspectsDrawerEntry,
   CampaignFormDrawerEntry,
   EmailLogDrawerEntry,
+  EmailResendDrawerEntry,
   EmailSignaturesDrawerEntry,
   EmailTemplateDrawerEntry,
   FinalizeSaleDrawerEntry,
@@ -225,6 +236,11 @@ const sendEmailEntry: ComputedRef<SendEmailDrawerEntry | null> = computed((): Se
 /** Top entry narrowed to the email-log drawer. */
 const emailLogEntry: ComputedRef<EmailLogDrawerEntry | null> = computed((): EmailLogDrawerEntry | null => {
   return drawerStack.topEntry?.kind === 'email-log' ? drawerStack.topEntry : null
+})
+
+/** Top entry narrowed to the failed-email resend sub-drawer. */
+const emailResendEntry: ComputedRef<EmailResendDrawerEntry | null> = computed((): EmailResendDrawerEntry | null => {
+  return drawerStack.topEntry?.kind === 'email-resend' ? drawerStack.topEntry : null
 })
 
 /** Top entry narrowed to the email-template drawer. */
@@ -494,9 +510,46 @@ async function handleToggleContacted(prospect: Prospect): Promise<void> {
   }
 }
 
-/** Refresh the logs list after a resend from the email log drawer. */
+/**
+ * Convert an HTML email body to editable plain text (paragraph/line breaks
+ * preserved, tags stripped).
+ * @param html - HTML body from the email log (may be null).
+ * @returns Plain-text version, or an empty string.
+ */
+function htmlToPlainText(html: string | null | undefined): string {
+  if (!html) return ''
+  const withBreaks: string = html.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n\n')
+  const doc: Document = new DOMParser().parseFromString(withBreaks, 'text/html')
+  return (doc.body.textContent ?? '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+/** Stack the email composer prefilled from the log row (resend of a delivered email). */
+function handleResendEmail(): void {
+  const entry: EmailLogDrawerEntry | null = emailLogEntry.value
+  if (!entry) return
+  drawerStack.push({
+    kind: 'send-email',
+    prospect: null,
+    prefill: {
+      recipient_email: entry.log.recipient_email,
+      recipient_name: entry.log.recipient_name ?? '',
+      subject: entry.log.subject,
+      body: htmlToPlainText(entry.log.body_html),
+    },
+  })
+}
+
+/** Open the resend sub-page (email-only form) for a failed email. */
+function handleOpenResend(): void {
+  const entry: EmailLogDrawerEntry | null = emailLogEntry.value
+  if (!entry) return
+  drawerStack.push({ kind: 'email-resend', log: entry.log })
+}
+
+/** Refresh the logs list after a resend, then return to the log view. */
 function handleEmailResent(): void {
   drawerStack.bumpEmailLogsRefresh()
+  if (drawerStack.hasPrevious) drawerStack.back()
 }
 
 /** Refresh logs after send; back or close the stack. */
