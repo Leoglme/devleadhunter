@@ -672,9 +672,12 @@ FIELD_SCHEMAS: dict[str, dict[str, Any]] = {
     },
 }
 
-# Standard SiteContent field keys. Any OTHER key found on a section blok that carries an asset is a
-# per-template one-off image, surfaced under the generic ``images`` map (see from_storyblok_site_content).
-_KNOWN_FIELD_KEYS: frozenset[str] = frozenset(FIELD_SCHEMAS.keys()) | {"palette"}
+# Single-asset fields that map to their own named ``SiteContent`` key (never the generic ``images``
+# map). Any OTHER section field carrying an asset is a per-template one-off image, surfaced under
+# ``images`` (see from_storyblok_site_content). Excluding ONLY these — not every known key — mirrors
+# demo-host's ``StoryblokSiteContentBridge.NAMED_ASSET_KEYS``: a one-off image field that reuses a
+# reserved name (e.g. the mechanic template's FAQ photo, named ``faq``) must still reach ``images``.
+_NAMED_ASSET_KEYS: frozenset[str] = frozenset({"heroImage", "aboutImage", "logo"})
 
 # Ordered page sections: (component suffix, editor label, the flat ``SiteContent`` keys it owns).
 # This is the SINGLE source of truth — schema, ``to_storyblok`` split and the merge share it.
@@ -1222,11 +1225,14 @@ def from_storyblok_site_content(raw: dict[str, Any]) -> dict[str, Any] | None:
             if _clean_str(item.get("url"))
         ],
     }
-    # Per-template one-off image slots (barber's banner, food's collage…): a section field that is
-    # not a standard SiteContent key and holds an asset object is surfaced under the generic map.
+    # Per-template one-off image slots (barber's banner, food's collage, the mechanic FAQ photo…): any
+    # section field holding an asset object that isn't one of the named single-asset keys is surfaced
+    # under the generic map. Mirrors demo-host's ``StoryblokSiteContentBridge.collectImages`` — a one-off
+    # image reusing a reserved field name (mechanic's ``faq``) is an asset dict here, so it lands in images
+    # (the standard-key readers above already took the list/text fields, which are never asset dicts).
     images: dict[str, str] = {}
     for key, value in blok.items():
-        if key in _KNOWN_FIELD_KEYS or not isinstance(value, dict):
+        if key in _NAMED_ASSET_KEYS or not isinstance(value, dict):
             continue
         url = _asset_url(value)
         if url:
