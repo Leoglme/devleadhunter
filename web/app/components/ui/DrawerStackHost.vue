@@ -37,7 +37,7 @@
       :show-back="hasPrevious"
       @close="drawerStack.closeAll()"
       @back="drawerStack.back()"
-      @resend="handleResendEmail"
+      @resent="handleEmailResent"
     />
 
     <UiEmailTemplateDrawer
@@ -494,33 +494,9 @@ async function handleToggleContacted(prospect: Prospect): Promise<void> {
   }
 }
 
-/**
- * Convert an HTML email body to editable plain text (paragraph/line breaks
- * preserved, tags stripped).
- * @param html - HTML body from the email log (may be null).
- * @returns Plain-text version, or an empty string.
- */
-function htmlToPlainText(html: string | null | undefined): string {
-  if (!html) return ''
-  const withBreaks: string = html.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n\n')
-  const doc: Document = new DOMParser().parseFromString(withBreaks, 'text/html')
-  return (doc.body.textContent ?? '').replace(/\n{3,}/g, '\n\n').trim()
-}
-
-/** Stack email composer prefilled from the log row (resend). */
-function handleResendEmail(): void {
-  const entry: EmailLogDrawerEntry | null = emailLogEntry.value
-  if (!entry) return
-  drawerStack.push({
-    kind: 'send-email',
-    prospect: null,
-    prefill: {
-      recipient_email: entry.log.recipient_email,
-      recipient_name: entry.log.recipient_name ?? '',
-      subject: entry.log.subject,
-      body: htmlToPlainText(entry.log.body_html),
-    },
-  })
+/** Refresh the logs list after a resend from the email log drawer. */
+function handleEmailResent(): void {
+  drawerStack.bumpEmailLogsRefresh()
 }
 
 /** Refresh logs after send; back or close the stack. */

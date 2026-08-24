@@ -46,6 +46,32 @@
         </div>
 
         <div class="flex-1 overflow-y-auto">
+          <div v-if="log.failure" class="px-5 pt-4">
+            <div class="rounded-xl border border-[var(--app-red)]/30 bg-[var(--app-red)]/5 p-4">
+              <div class="flex items-start gap-2.5">
+                <UIcon name="i-lucide-triangle-alert" class="mt-0.5 h-4 w-4 shrink-0 text-[var(--app-red)]" />
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold text-[var(--app-red)]">E-mail non délivré</p>
+                  <p class="mt-1 text-xs leading-relaxed text-[var(--app-ink)]">{{ log.failure.reason }}</p>
+                </div>
+              </div>
+              <p
+                v-if="log.failure.is_expected === true"
+                class="mt-2.5 flex items-center gap-1.5 border-t border-[var(--app-red)]/15 pt-2.5 text-[11px] text-[var(--app-ink-soft)]"
+              >
+                <UIcon name="i-lucide-circle-check" class="h-3.5 w-3.5 shrink-0 text-[var(--app-green)]" />
+                C'est normal, pas un problème dans le code : il suffit de la bonne adresse.
+              </p>
+              <p
+                v-else-if="log.failure.is_expected === false"
+                class="mt-2.5 flex items-center gap-1.5 border-t border-[var(--app-red)]/15 pt-2.5 text-[11px] text-[var(--app-ink-soft)]"
+              >
+                <UIcon name="i-lucide-search" class="h-3.5 w-3.5 shrink-0 text-[var(--app-red)]" />
+                À vérifier côté envoi (configuration ou contenu du message).
+              </p>
+            </div>
+          </div>
+
           <div class="px-5 py-4">
             <div class="rounded-xl border border-[var(--app-line)] bg-[var(--app-surface-2)] p-4">
               <p class="mb-1 text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">Sujet</p>
@@ -143,12 +169,27 @@
         </div>
 
         <div class="border-t border-[var(--app-line)] px-5 py-4">
-          <button class="btn-primary w-full" @click="emit('resend')">
-            <UIcon name="i-lucide-send" class="mr-1.5 h-4 w-4" />
-            Renvoyer un email
-          </button>
-          <p class="text-muted mt-2 text-center text-[11px]">
-            Ouvre le composeur pré-rempli avec ce destinataire, ce sujet et ce contenu.
+          <label class="mb-1.5 block text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">
+            Renvoyer ce mail
+          </label>
+          <div class="flex gap-2">
+            <input
+              v-model="resendEmail"
+              type="email"
+              class="input-field flex-1"
+              placeholder="adresse@exemple.fr"
+              @keydown.enter="submitResend"
+            />
+            <button class="btn-primary shrink-0" :disabled="resending || !resendEmail.trim()" @click="submitResend">
+              <UIcon v-if="resending" name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
+              <template v-else>
+                <UIcon name="i-lucide-send" class="mr-1.5 h-4 w-4" />
+                Renvoyer
+              </template>
+            </button>
+          </div>
+          <p class="text-muted mt-2 text-[11px]">
+            Réenvoie le même e-mail (sujet et contenu). Une adresse différente est enregistrée sur le prospect.
           </p>
         </div>
       </div>
@@ -158,9 +199,13 @@
 
 <script lang="ts" setup>
 import type { EmailDeliveryStage, EmailTimelineEntry, UiEmailLogDrawerEmits } from '~/types/UiEmailLogDrawer'
-import type { ComputedRef, EmitFn, PropType } from 'vue'
-import type { EmailLog, EmailStatus } from '~/types'
+import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
+import type { EmailLog, EmailResendResult, EmailStatus, Prospect } from '~/types'
 import type { EmailLogDrawerProps } from '~/types/EmailLogDrawer'
+import type { UseToastReturn } from '~/types/Composables'
+import { EmailLogsService } from '~/services/emailLogsService'
+import { ProspectsService } from '~/services/prospectsService'
+import { useToast } from '~/composables/useToast'
 import { formatCompactDateTime } from '~/utils/date'
 
 /** Drawer showing email delivery timeline and events. */
@@ -184,6 +229,10 @@ const props: EmailLogDrawerProps = defineProps({
 })
 
 const emit: EmitFn<UiEmailLogDrawerEmits> = defineEmits<UiEmailLogDrawerEmits>()
+
+const toast: UseToastReturn = useToast()
+const resendEmail: Ref<string> = ref('')
+const resending: Ref<boolean> = ref(false)
 
 /**
  * Returns all status badges to display: best positive state + complaint if any.
@@ -338,6 +387,47 @@ const timelineItems: ComputedRef<EmailTimelineEntry[]> = computed((): EmailTimel
       }
     })
 })
+
+/**
+ * Re-send the current log's email to the address in the field, then refresh the list on success.
+ * @returns Promise resolved once the send attempt completes.
+ */
+async function submitResend(): Promise<void> {
+  if (!props.log || resending.value) return
+  const email: string = resendEmail.value.trim()
+  if (!email) return
+  resending.value = true
+  try {
+    const result: EmailResendResult = await EmailLogsService.resendEmailLog(props.log.id, email)
+    if (result.success) {
+      toast.success('E-mail renvoyé')
+      emit('resent')
+    } else {
+      toast.error(result.error ?? "Échec du renvoi de l'e-mail")
+    }
+  } catch {
+    toast.error("Échec du renvoi de l'e-mail")
+  } finally {
+    resending.value = false
+  }
+}
+
+watch(
+  (): [boolean, number | undefined] => [props.open, props.log?.id],
+  async ([isOpen]: [boolean, number | undefined]): Promise<void> => {
+    const log: EmailLog | null = props.log
+    if (!isOpen || !log) return
+    resendEmail.value = log.recipient_email
+    if (!log.prospect_id) return
+    try {
+      const prospect: Prospect = await ProspectsService.getProspect(Number(log.prospect_id))
+      resendEmail.value = prospect.email ?? log.recipient_email
+    } catch {
+      resendEmail.value = log.recipient_email
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>

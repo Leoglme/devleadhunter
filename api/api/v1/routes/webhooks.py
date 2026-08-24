@@ -73,6 +73,29 @@ _EVENT_TIMESTAMP_MAP: dict[str, str] = {
     # email.scheduled has no dedicated timestamp column.
 }
 
+# Events whose payload carries a human failure reason worth storing on the log.
+_FAILURE_EVENTS: frozenset[str] = frozenset({"email.bounced", "email.failed", "email.complained"})
+
+
+def _extract_failure_reason(data: dict[str, Any]) -> str | None:
+    """Pull the human failure reason from a Resend bounce/failed/complained payload, or None."""
+    bounce = data.get("bounce")
+    if isinstance(bounce, dict):
+        message = (bounce.get("message") or "").strip()
+        sub_type = (bounce.get("subType") or bounce.get("sub_type") or "").strip()
+        if message:
+            return f"{message} ({sub_type})" if sub_type else message
+        if sub_type:
+            return sub_type
+    failed = data.get("failed")
+    if isinstance(failed, dict):
+        reason = (failed.get("reason") or "").strip()
+        if reason:
+            return reason
+    reason = (data.get("reason") or "").strip()
+    return reason or None
+
+
 # Numeric rank used to prevent status from moving backwards on late/duplicate
 # webhook deliveries.  Equal-rank statuses do NOT overwrite each other
 # (strict ``>`` comparison).
@@ -463,6 +486,10 @@ async def resend_webhook(
             setattr(email_log, ts_col, now)
         if resend_message_id and not email_log.provider_message_id:
             email_log.provider_message_id = resend_message_id
+        if event_type in _FAILURE_EVENTS:
+            reason: str | None = _extract_failure_reason(data)
+            if reason:
+                email_log.error_message = reason
         db.commit()
         logger.info("[Webhook] EmailLog %d: %s → %s", email_log.id, email_log.status, new_status)
 

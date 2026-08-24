@@ -146,6 +146,12 @@ class UnsubscribeService:
 
         return link
 
+    # Opening tag of the generated footer — the anchor both the builder and the stripper rely on.
+    _FOOTER_MARKER: str = (
+        '<div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; '
+        'font-size: 12px; color: #999; text-align: center;">'
+    )
+
     def add_unsubscribe_footer(self, html_body: str, unsubscribe_link: str) -> str:
         """
         Add unsubscribe footer to email HTML body.
@@ -158,7 +164,7 @@ class UnsubscribeService:
             HTML body with unsubscribe footer
         """
         footer = f"""
-<div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #999; text-align: center;">
+{self._FOOTER_MARKER}
     <p>
         Vous recevez cet email car vous êtes dans notre liste de prospects.
     </p>
@@ -178,6 +184,32 @@ class UnsubscribeService:
             html_body += footer
 
         return html_body
+
+    def strip_unsubscribe_footer(self, html_body: str) -> str:
+        """
+        Remove a previously added unsubscribe footer so the body can be re-sent cleanly.
+
+        A resend to a corrected address needs a fresh per-recipient footer; reusing the stored body
+        (footer + the old recipient's link) would both duplicate the block and leak the wrong link.
+
+        Args:
+            html_body: A body that may already carry the generated footer.
+
+        Returns:
+            The body without the footer (``</body>`` and anything after it preserved), unchanged when
+            no footer is present.
+        """
+        marker_index: int = html_body.find(self._FOOTER_MARKER)
+        if marker_index == -1:
+            return html_body
+        after_marker: str = html_body[marker_index:]
+        body_close_index: int = after_marker.find("</body>")
+        suffix: str = after_marker[body_close_index:] if body_close_index != -1 else ""
+        # Drop the single newline the footer inserted ahead of its marker, restoring the original body.
+        prefix: str = html_body[:marker_index]
+        if prefix.endswith("\n"):
+            prefix = prefix[:-1]
+        return prefix + suffix
 
 
 # Singleton instance

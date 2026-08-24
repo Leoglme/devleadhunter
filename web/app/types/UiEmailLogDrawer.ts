@@ -32,5 +32,5 @@ export type EmailTimelineEntry = {
 export type UiEmailLogDrawerEmits = {
   close: []
   back: []
-  resend: []
+  resent: []
 }

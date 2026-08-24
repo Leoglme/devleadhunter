@@ -175,6 +175,12 @@ class QuickSendRequest(BaseModel):
     signature_id: int | None = None
 
 
+class ResendEmailLogRequest(BaseModel):
+    """Payload for POST /emails/logs/{log_id}/resend — optional address to send to instead."""
+
+    email: str | None = None
+
+
 @router.post("/quick-send", response_model=SendEmailResponse)
 async def quick_send_email(
     payload: QuickSendRequest,
@@ -274,6 +280,65 @@ async def get_email_log(log_id: int, current_user: User = Depends(get_current_us
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email log not found")
 
     return log
+
+
+@router.post("/logs/{log_id}/resend", response_model=SendEmailResponse)
+async def resend_email_log(
+    log_id: int,
+    payload: ResendEmailLogRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Re-send an existing email log's message, optionally to a corrected address.
+
+    The target defaults to the prospect's current primary address (falling back to the address the
+    log was sent to). A different address is folded into the prospect as its new primary, so the
+    prospect — and any pending follow-up that reads it at dispatch — reaches the working address.
+    """
+    from models.prospect_db import ProspectDB
+    from services.prospect_emails import sync_prospect_emails
+    from services.sending_identity import SendingNotConfiguredError, resolve_sending_identity
+    from services.unsubscribe_service import unsubscribe_service
+
+    log: EmailLog | None = db.execute(
+        select(EmailLog).where(EmailLog.id == log_id, EmailLog.user_id == current_user.id)
+    ).scalar_one_or_none()
+    if log is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email log not found")
+
+    prospect: ProspectDB | None = db.get(ProspectDB, log.prospect_id) if log.prospect_id else None
+    target_email: str = (payload.email or "").strip() or (prospect.email if prospect else None) or log.recipient_email
+    if not target_email:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Aucune adresse e-mail cible")
+
+    try:
+        resolve_sending_identity(db, current_user.id)
+    except SendingNotConfiguredError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    if unsubscribe_service.is_unsubscribed(db, target_email):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{target_email} s'est désabonné")
+
+    # A corrected address becomes the prospect's primary, so the pending follow-up reaches it too.
+    if prospect is not None and target_email.lower() != (prospect.email or "").lower():
+        sync_prospect_emails(prospect, primary=target_email)
+        db.add(prospect)
+        db.commit()
+
+    # The stored body already carries a footer for the old recipient — strip it so the shared send
+    # path adds a fresh, correct one for the target address.
+    body_html: str = unsubscribe_service.strip_unsubscribe_footer(log.body_html or "")
+
+    sending = EmailSendingService(db)
+    return await sending.send_via_user_identity(
+        user_id=current_user.id,
+        recipient_email=target_email,
+        subject=log.subject,
+        body_html=body_html,
+        recipient_name=log.recipient_name,
+        prospect_id=str(log.prospect_id) if log.prospect_id else None,
+        campaign_id=str(log.campaign_id) if log.campaign_id else None,
+    )
 
 
 @router.get("/stats", response_model=EmailStatsResponse)

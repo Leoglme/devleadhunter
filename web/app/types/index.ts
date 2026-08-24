@@ -480,6 +480,18 @@ export type CampaignVariantStats = {
   click_rate: number
 }
 
+export type EmailFailureInfo = {
+  category: string
+  reason: string
+  is_expected?: boolean | null
+}
+
+export type EmailResendResult = {
+  success: boolean
+  error?: string
+  email_log_id?: number
+}
+
 export type EmailLog = {
   id: number
   user_id: number
@@ -506,6 +518,7 @@ export type EmailLog = {
   failed_at?: string | null
   ab_variant?: string | null
   error_message?: string | null
+  failure?: EmailFailureInfo | null
   created_at: string
   updated_at?: string | null
 }

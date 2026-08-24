@@ -5,9 +5,18 @@ Pydantic schemas for email sending.
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field, field_validator
 
 from enums.email_status import EmailStatus
+from services.email_failure_explainer import EmailFailureExplainer
+
+
+class EmailFailureInfo(BaseModel):
+    """A send failure explained in French for the operator."""
+
+    category: str
+    reason: str
+    is_expected: bool | None = None
 
 
 class SendEmailRequest(BaseModel):
@@ -92,6 +101,19 @@ class EmailLogResponse(BaseModel):
 
     created_at: datetime
     updated_at: datetime | None = None
+
+    @computed_field
+    @property
+    def failure(self) -> EmailFailureInfo | None:
+        """French explanation of why the email did not go out, or None when it did not fail."""
+        explanation = EmailFailureExplainer.explain(self.status.value, self.error_message)
+        if explanation is None:
+            return None
+        return EmailFailureInfo(
+            category=explanation.category,
+            reason=explanation.reason,
+            is_expected=explanation.is_expected,
+        )
 
     @field_validator("prospect_id", "campaign_id", mode="before")
     @classmethod
