@@ -21,7 +21,7 @@ from schemas.payment_account import (
     QontoApiKeyRequest,
     QontoIbanRequest,
 )
-from services.auth_service import require_admin, require_auth
+from services.auth_service import require_auth, require_super_admin
 from services.payment_account_service import payment_account_service
 
 router = APIRouter(prefix="/payment-accounts", tags=["payment-accounts"])
@@ -82,7 +82,7 @@ async def disconnect(current_user: User = Depends(require_auth), db: Session = D
 
 
 @router.post("/qonto/authorize", response_model=ConnectUrlResponse)
-async def qonto_authorize(current_user: User = Depends(require_admin)) -> ConnectUrlResponse:
+async def qonto_authorize(current_user: User = Depends(require_super_admin)) -> ConnectUrlResponse:
     """Return the Qonto OAuth authorization URL to redirect the admin to."""
     return ConnectUrlResponse(url=payment_account_service.qonto_authorize_url(current_user.id))
 
@@ -121,7 +121,7 @@ async def qonto_callback(
 @router.post("/qonto/api-key", response_model=PaymentAccountStatus)
 async def set_qonto_api_key(
     body: QontoApiKeyRequest,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ) -> PaymentAccountStatus:
     """Admin-only fallback: connect Qonto with an API key instead of OAuth."""
@@ -132,7 +132,7 @@ async def set_qonto_api_key(
 @router.put("/qonto/iban", response_model=PaymentAccountStatus)
 async def set_qonto_iban(
     body: QontoIbanRequest,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ) -> PaymentAccountStatus:
     """Store the IBAN printed on Qonto invoices (captured manually, unread by API)."""

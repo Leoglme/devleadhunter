@@ -17,16 +17,29 @@ class UserBase(BaseModel):
         name: User's full name
         email: User's email address
         role: User role
+        company_name: Optional business name for outreach branding
     """
 
     name: str = Field(..., min_length=1, max_length=255, description="User's full name")
     email: EmailStr = Field(..., description="User's email address")
     role: UserRole = Field(default=UserRole.USER, description="User role")
+    company_name: str | None = Field(None, max_length=255, description="Optional business name")
+
+
+class UserSignup(BaseModel):
+    """
+    Public self-service signup — role is never accepted from the client.
+    """
+
+    name: str = Field(..., min_length=1, max_length=255, description="User's full name")
+    email: EmailStr = Field(..., description="User's email address")
+    password: str = Field(..., min_length=6, max_length=100, description="User's password")
+    company_name: str | None = Field(None, max_length=255, description="Optional business name")
 
 
 class UserCreate(UserBase):
     """
-    Schema for creating a new user.
+    Schema for creating a new user (super-admin only).
 
     Attributes:
         password: User's password
@@ -42,11 +55,22 @@ class UserUpdate(BaseModel):
     Attributes:
         name: User's full name
         email: User's email address
+        company_name: Optional business name
     """
 
     name: str | None = Field(None, min_length=1, max_length=255, description="User's full name")
     email: EmailStr | None = Field(None, description="User's email address")
     site_sale_price_cents: int | None = Field(None, ge=0, description="Website sale price in cents (default 500 €)")
+    company_name: str | None = Field(None, max_length=255, description="Optional business name")
+
+
+class AdminUserUpdate(UserUpdate):
+    """
+    Super-admin user management — can also change role and activation state.
+    """
+
+    role: UserRole | None = Field(None, description="User role (USER or ADMIN only)")
+    is_active: bool | None = Field(None, description="Whether the user account is active")
 
 
 class UserResponse(UserBase):

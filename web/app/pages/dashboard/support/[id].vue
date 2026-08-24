@@ -172,6 +172,7 @@ import { useUserStore } from '~/stores/user'
 import { useDashboardScroll } from '~/composables/useDashboardScroll'
 import { useToast } from '~/composables/useToast'
 import { SupportService } from '~/services/supportService'
+import { isPlatformAdmin } from '~/utils/userRoles'
 
 definePageMeta({ layout: 'dashboard', middleware: 'auth' })
 
@@ -303,7 +304,7 @@ function handleWebsocketEvent(event: SupportWebsocketEvent): void {
  */
 function handleGlobalWebsocketEvent(event: SupportWebsocketEvent): void {
   if (!event?.event) return
-  const isAdmin: boolean = userStore.user?.role === 'ADMIN'
+  const isAdmin: boolean = isPlatformAdmin(userStore.user?.role)
 
   if (event.event === 'ticket.message') {
     // Déjà sur ce ticket : la conversation se met à jour, pas besoin de toast.

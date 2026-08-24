@@ -339,12 +339,9 @@ async def email_health_template_scores(
     Grouped first-contact vs follow-up; results are cached 6 h per content
     hash so reloading the page does not re-hit the scoring engine.
     """
-    templates: list[EmailTemplate] = (
-        db.query(EmailTemplate)
-        .filter(EmailTemplate.user_id == current_user.id, EmailTemplate.is_active.is_(True))
-        .order_by(EmailTemplate.sort_order.desc(), EmailTemplate.id)
-        .all()
-    )
+    from services import email_template_service as template_service
+
+    templates: list[EmailTemplate] = [t for t in template_service.list_for_user(db, current_user) if t.is_active]
 
     # Score against the address the user really sends from — the spam engine
     # weighs the From domain, so a stale placeholder would skew every score.

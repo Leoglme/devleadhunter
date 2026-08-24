@@ -70,6 +70,7 @@ def init_db():
     from models.email_log import EmailLog  # noqa: F401
     from models.email_queue import EmailQueue  # noqa: F401
     from models.email_template import EmailTemplate  # noqa: F401
+    from models.email_template_library_hide import EmailTemplateLibraryHide  # noqa: F401
     from models.email_unsubscribe import EmailUnsubscribe  # noqa: F401
     from models.notification import Notification  # noqa: F401
     from models.order import Order  # noqa: F401

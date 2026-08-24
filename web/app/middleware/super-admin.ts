@@ -1,10 +1,10 @@
 /**
- * Admin middleware
- * Protects routes that require platform-operator role (ADMIN or SUPER_ADMIN).
- * @module middleware/admin
+ * Super-admin middleware
+ * Protects routes reserved to the platform owner (SUPER_ADMIN only).
+ * @module middleware/super-admin
  */
 
-import { isPlatformAdmin } from '~/utils/userRoles'
+import { isSuperAdmin } from '~/utils/userRoles'
 
 export default defineNuxtRouteMiddleware(async () => {
   const userStore: ReturnType<typeof useUserStore> = useUserStore()
@@ -19,7 +19,7 @@ export default defineNuxtRouteMiddleware(async () => {
       return navigateTo('/login')
     }
 
-    if (!isPlatformAdmin(userStore.user?.role)) {
+    if (!isSuperAdmin(userStore.user?.role)) {
       return navigateTo('/dashboard')
     }
   }

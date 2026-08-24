@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.database import get_db
-from enums.user_role import UserRole
+from enums.user_role import is_platform_admin, is_super_admin
 from models.user import User
 from schemas.user import TokenData
 
@@ -211,7 +211,28 @@ def require_auth(current_user: User = Depends(get_current_active_user)) -> User:
 
 def require_admin(current_user: User = Depends(get_current_active_user)) -> User:
     """
-    Guard a route behind the admin role.
+      Guard a route behind the platform-operator role (ADMIN or SUPER_ADMIN).
+
+      Used for monitoring, storage and other operator tooling that is not
+    owner-only.
+
+      Args:
+          current_user: Caller resolved from the token.
+
+      Returns:
+          The caller.
+
+      Raises:
+          HTTPException: 403 when the caller is not a platform operator.
+    """
+    if not is_platform_admin(current_user.role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+    return current_user
+
+
+def require_super_admin(current_user: User = Depends(get_current_active_user)) -> User:
+    """
+    Guard a route behind the platform-owner role (SUPER_ADMIN only).
 
     Args:
         current_user: Caller resolved from the token.
@@ -220,8 +241,8 @@ def require_admin(current_user: User = Depends(get_current_active_user)) -> User
         The caller.
 
     Raises:
-        HTTPException: 403 when the caller is not an admin.
+        HTTPException: 403 when the caller is not a super-admin.
     """
-    if current_user.role != UserRole.ADMIN.value:
+    if not is_super_admin(current_user.role):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
     return current_user

@@ -26,15 +26,16 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
     heading: 'Administration',
     adminOnly: true,
     entries: [
-      { to: '/dashboard/users', label: 'Utilisateurs', icon: 'i-lucide-users' },
+      { to: '/dashboard/users', label: 'Utilisateurs', icon: 'i-lucide-users', superAdminOnly: true },
       {
         to: '/dashboard/credit-settings',
         label: 'Crédits & commission',
         icon: 'i-lucide-sliders-horizontal',
+        superAdminOnly: true,
       },
       { to: '/dashboard/admin/monitoring', label: 'Monitoring', icon: 'i-lucide-activity' },
       { to: '/dashboard/admin/storage', label: 'Stockage', icon: 'i-lucide-hard-drive' },
-      { to: '/dashboard/accounting', label: 'Comptabilité', icon: 'i-lucide-calculator' },
+      { to: '/dashboard/accounting', label: 'Comptabilité', icon: 'i-lucide-calculator', superAdminOnly: true },
     ],
   },
 ]

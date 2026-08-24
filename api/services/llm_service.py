@@ -21,6 +21,13 @@ logger = logging.getLogger(__name__)
 _GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
+def _format_sender_identity(*, sender_name: str, company_name: str | None) -> str:
+    """Build the « Name (Company) » label injected into outreach prompts."""
+    name = (sender_name or "").strip() or "le commercial"
+    company = (company_name or "").strip()
+    return f"{name} ({company})" if company else name
+
+
 class LLMService:
     """Thin Groq client with rule-based fallbacks."""
 
@@ -52,10 +59,19 @@ class LLMService:
             logger.warning("Groq call failed: %s", exc)
             return None
 
-    async def summarize_behavior(self, *, business_name: str, temperature: str, signals: dict[str, Any]) -> str:
+    async def summarize_behavior(
+        self,
+        *,
+        sender_name: str,
+        company_name: str | None,
+        business_name: str,
+        temperature: str,
+        signals: dict[str, Any],
+    ) -> str:
         """Produce a short behavioural read + relance advice for a prospect."""
+        sender = _format_sender_identity(sender_name=sender_name, company_name=company_name)
         prompt = (
-            "Tu es l'assistant commercial de Léo (Dibodev), qui vend des sites web aux artisans. "
+            f"Tu es l'assistant commercial de {sender}, qui vend des sites web aux artisans. "
             "Voici le comportement d'un prospect : son activité sur la démo de site ET son engagement "
             "email (emails_sent/opened/clicked).\n"
             f"Entreprise : {business_name}\n"
@@ -70,6 +86,8 @@ class LLMService:
     async def draft_followup(
         self,
         *,
+        sender_name: str,
+        company_name: str | None,
         business_name: str,
         first_name: str,
         temperature: str,
@@ -78,8 +96,9 @@ class LLMService:
         base_body_html: str,
     ) -> dict[str, str]:
         """Draft a behaviour-personalised follow-up, falling back to the base template."""
+        sender = _format_sender_identity(sender_name=sender_name, company_name=company_name)
         prompt = (
-            "Tu écris un email de relance B2B court et naturel (français), de la part de Léo (Dibodev) "
+            f"Tu écris un email de relance B2B court et naturel (français), de la part de {sender} "
             "qui a envoyé une démo de site web à un artisan.\n"
             f"Prénom du contact : {first_name or 'le contact'}\n"
             f"Entreprise : {business_name}\n"
@@ -114,7 +133,6 @@ class LLMService:
             bits.append(f"est revenu {signals['visits']} fois sur la démo")
         if signals.get("total_seconds", 0) >= 60:
             bits.append("a passé du temps sur la page")
-        # Prospection video attention
         if signals.get("video_completes"):
             bits.append("a regardé la vidéo en entier")
         elif signals.get("video_max_progress", 0) >= 50:
@@ -151,7 +169,6 @@ class LLMService:
             except (IndexError, ValueError):
                 pass
         else:
-            # No structured markers — treat the whole text as the body.
             body = text.strip() or base_body_html
         return {"subject": subject, "body_html": body}
 

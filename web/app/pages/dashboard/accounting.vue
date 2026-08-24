@@ -423,7 +423,7 @@ import { AccountingService } from '~/services/accountingService'
 /** Dashboard accounting page — admin financial data (admin only). */
 definePageMeta({
   layout: 'dashboard',
-  middleware: ['auth', 'admin'],
+  middleware: ['auth', 'super-admin'],
 })
 
 type SortKey = 'date' | 'amount' | 'net' | 'fees' | 'credits' | 'country' | 'payment_method' | 'availability'

@@ -5,7 +5,7 @@ Credit service for managing user credits and transactions.
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from enums.user_role import UserRole
+from enums.user_role import has_unlimited_credits
 from models.credit_transaction import CreditTransaction, TransactionType
 from models.user import User
 
@@ -36,7 +36,7 @@ class CreditService:
             return 0
 
         # Admins have unlimited credits
-        if user.role == UserRole.ADMIN.value:
+        if has_unlimited_credits(user.role):
             return -1  # -1 indicates unlimited
 
         # Calculate balance from transactions
@@ -64,7 +64,7 @@ class CreditService:
             return 0
 
         # Admins have unlimited credits
-        if user.role == UserRole.ADMIN.value:
+        if has_unlimited_credits(user.role):
             return 0  # Admins don't consume credits
 
         # Calculate sum of negative transactions (usage)
@@ -171,7 +171,7 @@ class CreditService:
             return False
 
         # Admins have unlimited credits
-        if user.role == UserRole.ADMIN.value:
+        if has_unlimited_credits(user.role):
             return True
 
         # Check if user has enough credits

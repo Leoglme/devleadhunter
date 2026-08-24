@@ -31,13 +31,17 @@ def seed_admin_user() -> None:
         existing_admin = AuthService.get_user_by_email(db, settings.admin_email)
         if existing_admin:
             print(f"[OK] Admin user already exists: {settings.admin_email}")
+            if existing_admin.role != UserRole.SUPER_ADMIN.value:
+                existing_admin.role = UserRole.SUPER_ADMIN.value
+                db.commit()
+                print(f"[OK] Promoted existing admin to SUPER_ADMIN: {settings.admin_email}")
         else:
             # Create admin user
             admin_user = User(
                 name="Léo Guillaume",
                 email=settings.admin_email,
                 hashed_password=AuthService.hash_password(settings.admin_password),
-                role=UserRole.ADMIN.value,
+                role=UserRole.SUPER_ADMIN.value,
                 is_active=True,
             )
 

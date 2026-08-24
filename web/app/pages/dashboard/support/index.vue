@@ -110,8 +110,9 @@ import type { ComputedRef, Ref } from 'vue'
 import type { SupportTicketStatus, SupportTicketSummary } from '~/types'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useUserStore } from '~/stores/user'
-import { useToast } from '~/composables/useToast'
 import { SupportService } from '~/services/supportService'
+import { useToast } from '~/composables/useToast'
+import { isPlatformAdmin } from '~/utils/userRoles'
 
 definePageMeta({ layout: 'dashboard', middleware: 'auth' })
 
@@ -145,7 +146,7 @@ const tickets: Ref<SupportTicketSummary[]> = ref([])
 const isLoading: Ref<boolean> = ref(false)
 const websocketRef: Ref<WebSocket | null> = ref(null)
 
-const isAdmin: ComputedRef<boolean> = computed((): boolean => userStore.user?.role === 'ADMIN')
+const isAdmin: ComputedRef<boolean> = computed((): boolean => isPlatformAdmin(userStore.user?.role))
 const scope: ComputedRef<'all' | 'mine'> = computed((): 'all' | 'mine' => (isAdmin.value ? 'all' : 'mine'))
 
 // Les membres voient tous leurs tickets ; les admins arrivent sur la file ouverte.

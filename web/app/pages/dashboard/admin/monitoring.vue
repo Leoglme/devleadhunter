@@ -217,10 +217,11 @@ import { useUserStore } from '~/stores/user'
 import { useToast } from '~/composables/useToast'
 import type { MonitoringOverview, ScraperIncident, ScraperSourceHealth } from '~/services/adminMonitoringService'
 import { AdminMonitoringService } from '~/services/adminMonitoringService'
+import { isPlatformAdmin } from '~/utils/userRoles'
 
 definePageMeta({
   layout: 'dashboard',
-  middleware: ['auth'],
+  middleware: ['auth', 'admin'],
 })
 
 const userStore: ReturnType<typeof useUserStore> = useUserStore()
@@ -339,7 +340,7 @@ async function openHtml(incident: ScraperIncident): Promise<void> {
 
 onMounted((): void => {
   // Hidden admin page: only admins may view it.
-  if (userStore.user?.role !== 'ADMIN') {
+  if (!isPlatformAdmin(userStore.user?.role)) {
     toast.error('Accès réservé aux administrateurs')
     void router.replace('/dashboard')
     return

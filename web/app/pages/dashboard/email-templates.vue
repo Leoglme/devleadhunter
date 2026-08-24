@@ -81,6 +81,18 @@
               >
                 {{ templateNameWithoutStar(template.name) }}
               </h3>
+              <span
+                v-if="template.is_fork"
+                class="shrink-0 rounded-full border border-[var(--app-line)] bg-[var(--app-surface-2)] px-2 py-0.5 text-[10px] font-medium text-[var(--app-ink-soft)]"
+              >
+                Personnalisé
+              </span>
+              <span
+                v-else-if="template.is_library"
+                class="shrink-0 rounded-full border border-[var(--app-line)] bg-[var(--app-surface-2)] px-2 py-0.5 text-[10px] font-medium text-[var(--app-ink-soft)]"
+              >
+                Bibliothèque
+              </span>
             </div>
             <p class="text-muted mt-0.5 truncate text-xs">{{ template.subject }}</p>
             <p
@@ -329,8 +341,7 @@ async function toggleTemplateActive(template: EmailTemplate): Promise<void> {
     const updated: EmailTemplate = await EmailTemplatesService.updateEmailTemplate(template.id, {
       is_active: !template.is_active,
     })
-    const index: number = emailTemplates.value.findIndex((t: EmailTemplate): boolean => t.id === updated.id)
-    if (index !== -1) emailTemplates.value.splice(index, 1, updated)
+    await loadTemplates()
     toast.success(updated.is_active ? `« ${updated.name} » activé` : `« ${updated.name} » désactivé`)
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : 'Erreur lors de la mise à jour')

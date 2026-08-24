@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from enums.support_status import SupportTicketStatus
 from enums.support_topic import SupportTicketTopic
-from enums.user_role import UserRole
+from enums.user_role import is_platform_admin
 from models.support_attachment import SupportAttachment
 from models.support_message import SupportMessage
 from models.support_ticket import SupportTicket
@@ -122,7 +122,7 @@ class SupportService:
             selectinload(SupportTicket.messages).load_only(SupportMessage.id, SupportMessage.created_at),
         )
 
-        if scope != "all" or current_user.role != UserRole.ADMIN.value:
+        if scope != "all" or not is_platform_admin(current_user.role):
             query = query.filter(SupportTicket.user_id == current_user.id)
         elif scope == "all":
             query = query.options(joinedload(SupportTicket.assigned_admin))
@@ -167,7 +167,7 @@ class SupportService:
         if ticket is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found.")
 
-        if current_user.role != UserRole.ADMIN.value and ticket.user_id != current_user.id:
+        if not is_platform_admin(current_user.role) and ticket.user_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="You are not allowed to access this ticket."
             )
@@ -211,7 +211,7 @@ class SupportService:
         )
 
         ticket.last_message_at = now
-        if sender.role == UserRole.ADMIN.value:
+        if is_platform_admin(sender.role):
             if ticket.status != SupportTicketStatus.RESOLVED.value:
                 ticket.status = SupportTicketStatus.WAITING_USER.value
         else:

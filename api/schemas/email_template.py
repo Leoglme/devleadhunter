@@ -25,6 +25,10 @@ class EmailTemplateCreate(EmailTemplateBase):
     """Schema for creating an email template."""
 
     email_account_id: int | None = None
+    share_with_all: bool = Field(
+        default=False,
+        description="Super-admin only — publish this template to the shared library",
+    )
 
 
 class EmailTemplateUpdate(BaseModel):
@@ -61,6 +65,9 @@ class EmailTemplateResponse(BaseModel):
     category: EmailTemplateCategory = EmailTemplateCategory.FIRST_EMAIL
     # Exposed so the app can pin the recommended templates (higher = pinned higher).
     sort_order: int = 0
+    is_library: bool = False
+    is_fork: bool = False
+    library_source_id: int | None = None
     created_at: datetime
     updated_at: datetime | None = None
 

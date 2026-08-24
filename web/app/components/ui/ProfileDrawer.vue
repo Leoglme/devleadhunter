@@ -70,6 +70,21 @@
               >.
             </UiCallout>
           </div>
+          <div>
+            <label class="text-muted mb-1.5 block text-xs font-medium" for="profile-company">
+              Nom de l'entreprise <span class="text-[var(--app-ink-soft)]">(facultatif)</span>
+            </label>
+            <input
+              id="profile-company"
+              v-model="form.company_name"
+              type="text"
+              class="input-field"
+              placeholder="Ex : Dibodev"
+            />
+            <p class="text-muted mt-1.5 text-xs">
+              Utilisé dans les suggestions IA et comme nom affiché dans la configuration d'envoi.
+            </p>
+          </div>
         </form>
 
         <div class="flex gap-2 border-t border-[var(--app-line)] px-5 py-4">
@@ -122,7 +137,7 @@ const toast: UseToastReturn = useToast()
 const isSaving: Ref<boolean> = ref(false)
 
 /** Editable profile form state. */
-const form: Ref<ProfileForm> = ref({ name: '', email: '' })
+const form: Ref<ProfileForm> = ref({ name: '', email: '', company_name: '' })
 
 /** Initials shown in the header avatar. */
 const userInitials: ComputedRef<string> = computed((): string => {
@@ -142,7 +157,11 @@ const userInitials: ComputedRef<string> = computed((): string => {
 async function handleSave(): Promise<void> {
   isSaving.value = true
   try {
-    await userStore.updateProfile({ name: form.value.name, email: form.value.email })
+    await userStore.updateProfile({
+      name: form.value.name,
+      email: form.value.email,
+      company_name: form.value.company_name.trim() || null,
+    })
     toast.success('Profil mis à jour')
     emit('close')
   } catch {
@@ -159,6 +178,7 @@ watch(
       form.value = {
         name: userStore.user?.name ?? '',
         email: userStore.user?.email ?? '',
+        company_name: userStore.user?.company_name ?? '',
       }
     }
   },

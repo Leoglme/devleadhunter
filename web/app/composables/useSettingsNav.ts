@@ -1,9 +1,11 @@
 import type { ComputedRef, Ref } from 'vue'
 import { SETTINGS_NAV_GROUPS } from '~/constants/settingsNav'
 import type { SettingsNavGroup, SettingsNavLink } from '~/types/SettingsNav'
+import { isPlatformAdmin, isSuperAdmin } from '~/utils/userRoles'
 
 export type SettingsNav = {
   isAdmin: ComputedRef<boolean>
+  isSuperAdmin: ComputedRef<boolean>
   showSettingsPanel: Ref<boolean>
   settingsGroups: ComputedRef<SettingsNavGroup[]>
   openSettingsPanel: () => void
@@ -19,7 +21,8 @@ export function useSettingsNav(): SettingsNav {
   const route: ReturnType<typeof useRoute> = useRoute()
   const userStore: ReturnType<typeof useUserStore> = useUserStore()
 
-  const isAdmin: ComputedRef<boolean> = computed((): boolean => userStore.user?.role === 'ADMIN')
+  const isAdmin: ComputedRef<boolean> = computed((): boolean => isPlatformAdmin(userStore.user?.role))
+  const isSuperAdminUser: ComputedRef<boolean> = computed((): boolean => isSuperAdmin(userStore.user?.role))
   const showSettingsPanel: Ref<boolean> = useState('settings-nav-open', (): boolean => false)
 
   const settingsGroups: ComputedRef<SettingsNavGroup[]> = computed((): SettingsNavGroup[] =>
@@ -27,7 +30,11 @@ export function useSettingsNav(): SettingsNav {
       .map(
         (group: SettingsNavGroup): SettingsNavGroup => ({
           ...group,
-          entries: group.entries.filter((entry: SettingsNavLink): boolean => !entry.adminOnly || isAdmin.value),
+          entries: group.entries.filter((entry: SettingsNavLink): boolean => {
+            if (entry.superAdminOnly) return isSuperAdminUser.value
+            if (entry.adminOnly) return isAdmin.value
+            return true
+          }),
         }),
       )
       .filter((group: SettingsNavGroup): boolean => group.entries.length > 0),
@@ -79,5 +86,13 @@ export function useSettingsNav(): SettingsNav {
     return matchesPath(path)
   }
 
-  return { isAdmin, showSettingsPanel, settingsGroups, openSettingsPanel, closeSettingsPanel, isLinkActive }
+  return {
+    isAdmin,
+    isSuperAdmin: isSuperAdminUser,
+    showSettingsPanel,
+    settingsGroups,
+    openSettingsPanel,
+    closeSettingsPanel,
+    isLinkActive,
+  }
 }

@@ -261,6 +261,7 @@ def seed_email_templates() -> None:
                     is_active=True,
                     category=str(tpl["category"]),
                     sort_order=int(tpl["sort_order"]),  # type: ignore[arg-type]
+                    is_library=True,
                 )
             )
             created += 1

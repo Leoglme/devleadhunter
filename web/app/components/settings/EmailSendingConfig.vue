@@ -75,7 +75,7 @@
 
         <div>
           <label class="text-muted mb-1.5 block text-xs font-medium">Nom affiché</label>
-          <input v-model="resendForm.from_name" type="text" class="input-field" placeholder="Ex : Léo de Dibodev" />
+          <input v-model="resendForm.from_name" type="text" class="input-field" :placeholder="fromNamePlaceholder" />
         </div>
 
         <details class="group rounded-lg border border-[var(--app-line)] bg-[var(--app-bg)]">
@@ -199,8 +199,10 @@ import { ref, computed, onMounted } from 'vue'
 import { SettingsService } from '~/services/settingsService'
 import { EmailAccountsService } from '~/services/emailAccountsService'
 import { useToast } from '~/composables/useToast'
+import { useUserStore } from '~/stores/user'
 
 const toast: UseToastReturn = useToast()
+const userStore: ReturnType<typeof useUserStore> = useUserStore()
 const route: ReturnType<typeof useRoute> = useRoute()
 const router: ReturnType<typeof useRouter> = useRouter()
 
@@ -233,6 +235,14 @@ const activeProvider: ComputedRef<SendingProvider> = computed(
 
 /** Whether the Resend method is ready to send. */
 const isResendConfigured: ComputedRef<boolean> = computed((): boolean => Boolean(identity.value?.resend_configured))
+
+const fromNamePlaceholder: ComputedRef<string> = computed((): string => {
+  const name: string = userStore.user?.name?.trim() ?? ''
+  const company: string = userStore.user?.company_name?.trim() ?? ''
+  if (name && company) return `Ex : ${name} — ${company}`
+  if (name) return `Ex : ${name}`
+  return 'Ex : Jean Dupont — Mon Entreprise'
+})
 
 /**
  * Whether a given provider is configured and usable.

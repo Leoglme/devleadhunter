@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.database import SessionLocal
 from enums.demo_site_status import DemoSiteStatus
-from enums.user_role import UserRole
+from enums.user_role import is_platform_admin
 from models.demo_site import DemoSite
 from models.email_log import EmailLog
 from models.notification import Notification
@@ -212,8 +212,8 @@ class NotificationService:
         """
         db = SessionLocal()
         try:
-            admins = db.query(User).filter(User.role == UserRole.ADMIN.value, User.is_active.is_(True)).all()
-            admin_ids = [admin.id for admin in admins]
+            admins = db.query(User).filter(User.is_active.is_(True)).all()
+            admin_ids = [admin.id for admin in admins if is_platform_admin(admin.role)]
         except Exception as exc:
             logger.warning("notify_error admin lookup failed (context=%s): %s", context, exc)
             admin_ids = []

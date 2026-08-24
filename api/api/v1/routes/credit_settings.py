@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from models.credit_settings import CreditSettings
 from schemas.credit_settings import CreditSettingsResponse, CreditSettingsUpdate, PlatformCommissionResponse
-from services.auth_service import require_admin
+from services.auth_service import require_super_admin
 
 router = APIRouter(prefix="/credit-settings", tags=["credit-settings"])
 
@@ -40,7 +40,7 @@ async def get_credit_settings(db: Session = Depends(get_db)) -> CreditSettingsRe
 
 @router.get("/platform-commission", response_model=PlatformCommissionResponse)
 async def get_platform_commission(
-    current_user: Any = Depends(require_admin), db: Session = Depends(get_db)
+    current_user: Any = Depends(require_super_admin), db: Session = Depends(get_db)
 ) -> PlatformCommissionResponse:
     """
     Read the platform's commission on Stripe Connect sales (admin only).
@@ -63,7 +63,7 @@ async def get_platform_commission(
 
 @router.put("", response_model=CreditSettingsResponse)
 async def update_credit_settings(
-    settings_data: CreditSettingsUpdate, current_user: Any = Depends(require_admin), db: Session = Depends(get_db)
+    settings_data: CreditSettingsUpdate, current_user: Any = Depends(require_super_admin), db: Session = Depends(get_db)
 ) -> CreditSettingsResponse:
     """
     Update credit settings (admin only).

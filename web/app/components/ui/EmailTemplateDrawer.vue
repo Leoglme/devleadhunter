@@ -84,6 +84,24 @@
               </p>
             </div>
 
+            <div
+              v-if="mode === 'create' && isSuperAdminUser"
+              class="rounded-xl border border-[var(--app-line)] bg-[var(--app-surface-2)] px-4 py-3"
+            >
+              <label class="flex cursor-pointer items-start gap-3">
+                <input v-model="shareWithAll" type="checkbox" class="mt-0.5" />
+                <span>
+                  <span class="block text-sm font-medium text-[var(--app-ink)]"
+                    >Partager avec tous les utilisateurs</span
+                  >
+                  <span class="text-muted mt-0.5 block text-xs leading-relaxed">
+                    Ajoute ce modèle à la bibliothèque commune. Les autres pourront le personnaliser sans modifier votre
+                    version.
+                  </span>
+                </span>
+              </label>
+            </div>
+
             <div>
               <label class="mb-2 block text-sm font-medium text-[var(--app-ink)]">
                 Objet <span class="text-[var(--app-red)]">*</span>
@@ -275,6 +293,8 @@ import { EmailVariables } from '~/utils/emailVariables'
 import { EMAIL_TEMPLATE_CATEGORIES, EMAIL_TEMPLATE_CATEGORY_LABELS } from '~/utils/emailTemplate'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import { useToast } from '~/composables/useToast'
+import { useUserStore } from '~/stores/user'
+import { isSuperAdmin } from '~/utils/userRoles'
 
 /** Drawer to create or edit an email template. */
 const props: UiEmailTemplateDrawerProps = defineProps({
@@ -314,6 +334,10 @@ const toast: UseToastReturn = useToast()
 
 /** Persistent drawer stack (used to stack the signatures manager on top). */
 const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
+const userStore: ReturnType<typeof useUserStore> = useUserStore()
+
+const isSuperAdminUser: ComputedRef<boolean> = computed((): boolean => isSuperAdmin(userStore.user?.role))
+const shareWithAll: Ref<boolean> = ref(false)
 
 /** Whether a save request is in flight. */
 const isSaving: Ref<boolean> = ref(false)
@@ -489,6 +513,7 @@ async function handleSave(): Promise<void> {
         body_html: form.value.body_html,
         signature_id: signatureId,
         category: form.value.category,
+        share_with_all: shareWithAll.value,
       })
       toast.success('Modèle créé')
       emit('saved', created)
@@ -569,6 +594,7 @@ watch(
     const key: string = `${mode}:${props.template?.id ?? 'new'}`
     if (key === lastInitKey.value) return
     lastInitKey.value = key
+    shareWithAll.value = false
     includeSignature.value = props.template?.signature_id != null
     form.value = {
       name: props.template?.name ?? '',

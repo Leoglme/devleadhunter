@@ -221,7 +221,7 @@ import { useToast } from '~/composables/useToast'
  */
 definePageMeta({
   layout: 'dashboard',
-  middleware: ['auth', 'admin'],
+  middleware: ['auth', 'super-admin'],
 })
 
 /**

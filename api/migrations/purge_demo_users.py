@@ -151,7 +151,7 @@ def run_migration() -> None:
         target_ids = [
             row[0]
             for row in conn.execute(
-                text("SELECT id FROM users WHERE role <> 'ADMIN' AND email <> :admin_email"),
+                text("SELECT id FROM users WHERE role NOT IN ('ADMIN', 'SUPER_ADMIN') AND email <> :admin_email"),
                 {"admin_email": settings.admin_email},
             ).all()
         ]

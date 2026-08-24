@@ -90,8 +90,8 @@
           }}</BaseTableTd>
 
           <BaseTableTd label="Rôle" align="center">
-            <span :class="['app-badge', user.role === 'ADMIN' ? 'app-badge--info' : '']">
-              {{ user.role === 'ADMIN' ? 'Administrateur' : 'Utilisateur' }}
+            <span :class="['app-badge', user.role === 'ADMIN' || user.role === 'SUPER_ADMIN' ? 'app-badge--info' : '']">
+              {{ roleLabel(user.role) }}
             </span>
           </BaseTableTd>
 
@@ -151,13 +151,14 @@ import type { User } from '~/types'
 import type { UserFormDrawerMode } from '~/types/DrawerStack'
 import type { ComputedRef, Ref } from 'vue'
 import { ref, computed, onMounted, watch } from 'vue'
+import { roleLabel, isPlatformAdmin } from '~/utils/userRoles'
 import { UsersService } from '~/services/usersService'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import { useToast } from '~/composables/useToast'
 
 definePageMeta({
   layout: 'dashboard',
-  middleware: ['auth', 'admin'],
+  middleware: ['auth', 'super-admin'],
 })
 
 const toast: UseToastReturn = useToast()
@@ -178,7 +179,7 @@ const filteredUsers: ComputedRef<User[]> = computed((): User[] => {
 })
 
 const adminCount: ComputedRef<number> = computed(
-  (): number => users.value.filter((user: User): boolean => user.role === 'ADMIN').length,
+  (): number => users.value.filter((user: User): boolean => isPlatformAdmin(user.role)).length,
 )
 
 const totalCreditsConsumed: ComputedRef<number> = computed((): number =>

@@ -198,8 +198,13 @@ class BehaviorService:
 
     async def get_summary(self, db: Session, user_id: int, prospect: ProspectDB) -> str:
         """Return an AI (or rule-based) summary + relance advice for a prospect."""
+        from models.user import User
+
+        user = db.get(User, user_id)
         behavior = await self.get_behavior(db, user_id, prospect.id)
         return await llm_service.summarize_behavior(
+            sender_name=user.name if user else "",
+            company_name=user.company_name if user else None,
             business_name=prospect.name,
             temperature=behavior["temperature"],
             signals=behavior["signals"],
@@ -215,11 +220,15 @@ class BehaviorService:
         base_body_html: str,
     ) -> dict[str, str]:
         """Draft a behaviour-personalised follow-up email for a prospect."""
+        from models.user import User
         from services.email_variables import EmailVariables
 
+        user = db.get(User, user_id)
         behavior = await self.get_behavior(db, user_id, prospect.id)
         first_name, _last, _gender = EmailVariables.resolved_contact(db, prospect.id)
         return await llm_service.draft_followup(
+            sender_name=user.name if user else "",
+            company_name=user.company_name if user else None,
             business_name=prospect.name,
             first_name=first_name or "",
             temperature=behavior["temperature"],

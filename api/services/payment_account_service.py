@@ -95,9 +95,9 @@ class PaymentAccountService:
         Returns:
             A secret-free :class:`PaymentAccountStatus`.
         """
-        from enums.user_role import UserRole
+        from enums.user_role import is_super_admin
 
-        qonto_available = user.role == UserRole.ADMIN.value
+        qonto_available = is_super_admin(user.role)
         account = self.get_for_user(db, user.id)
         if account is None:
             return PaymentAccountStatus(qonto_available=qonto_available)

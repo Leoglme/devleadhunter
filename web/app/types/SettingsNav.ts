@@ -3,6 +3,7 @@ export type SettingsNavLink = {
   label: string
   icon: string
   adminOnly?: boolean
+  superAdminOnly?: boolean
 }
 
 export type SettingsNavGroup = {

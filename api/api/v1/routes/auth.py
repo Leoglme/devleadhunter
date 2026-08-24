@@ -11,10 +11,12 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.database import get_db
 from core.rate_limiter import limiter
+from enums.user_role import UserRole
+from models.credit_settings import CreditSettings
 from models.user import User
-from schemas.user import Token, UserCreate, UserLogin, UserResponse, UserUpdate
+from schemas.user import Token, UserLogin, UserResponse, UserSignup, UserUpdate
 from services.auth_service import AuthService, get_current_active_user
-from services.credit_service import credit_service
+from services.credit_service import TransactionType, credit_service
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -39,6 +41,7 @@ def _build_user_response(db: Session, user: User) -> UserResponse:
         name=user.name,
         email=user.email,
         role=user.role,
+        company_name=user.company_name,
         is_active=user.is_active,
         created_at=user.created_at,
         updated_at=user.updated_at,
@@ -52,7 +55,7 @@ def _build_user_response(db: Session, user: User) -> UserResponse:
 
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")  # Limit signup attempts to prevent abuse
-async def signup(request: Request, user_data: UserCreate, db: Session = Depends(get_db)) -> Any:
+async def signup(request: Request, user_data: UserSignup, db: Session = Depends(get_db)) -> Any:
     """
     Create a new user account.
 
@@ -71,18 +74,29 @@ async def signup(request: Request, user_data: UserCreate, db: Session = Depends(
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
-    # Create new user
+    # Create new user — role is always USER on public signup.
     hashed_password = AuthService.hash_password(user_data.password)
     db_user = User(
         name=user_data.name,
         email=user_data.email,
         hashed_password=hashed_password,
-        role=user_data.role.value if hasattr(user_data.role, "value") else user_data.role,
+        role=UserRole.USER.value,
+        company_name=user_data.company_name.strip() if user_data.company_name else None,
     )
 
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+
+    credit_settings = db.query(CreditSettings).filter(CreditSettings.id == 1).first()
+    if credit_settings and credit_settings.free_credits_on_signup > 0:
+        credit_service.add_credits(
+            db=db,
+            user_id=db_user.id,
+            amount=credit_settings.free_credits_on_signup,
+            description=f"Free credits on signup ({credit_settings.free_credits_on_signup} credits)",
+            transaction_type=TransactionType.FREE_GIFT,
+        )
 
     return _build_user_response(db, db_user)
 
@@ -168,6 +182,8 @@ async def update_current_user_info(
         current_user.email = user_data.email
     if user_data.site_sale_price_cents is not None:
         current_user.site_sale_price_cents = user_data.site_sale_price_cents
+    if user_data.company_name is not None:
+        current_user.company_name = user_data.company_name.strip() or None
 
     db.commit()
     db.refresh(current_user)

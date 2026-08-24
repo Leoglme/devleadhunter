@@ -153,13 +153,14 @@ export type ProspectSearchFilters = {
   maxResults?: number
 }
 
-export type UserRole = 'USER' | 'ADMIN'
+export type UserRole = 'USER' | 'ADMIN' | 'SUPER_ADMIN'
 
 export type User = {
   id: number
   name: string
   email: string
   role: UserRole
+  company_name?: string | null
   is_active: boolean
   created_at: string
   updated_at: string | null
@@ -188,6 +189,7 @@ export type SignupPayload = {
 export type ProfileUpdate = {
   name?: string
   email?: string
+  company_name?: string | null
   site_sale_price_cents?: number
 }
 
@@ -405,6 +407,9 @@ export type EmailTemplate = {
   category: EmailTemplateCategory
   /** Higher = pinned higher; the seeded « ★ Recommandé » templates use a high value. */
   sort_order: number
+  is_library?: boolean
+  is_fork?: boolean
+  library_source_id?: number | null
   created_at: string
   updated_at?: string | null
 }
@@ -530,6 +535,7 @@ export type EmailTemplateCreate = {
   variables?: string[]
   signature_id?: number | null
   category?: EmailTemplateCategory
+  share_with_all?: boolean
 }
 
 export type EmailTemplateUpdate = {

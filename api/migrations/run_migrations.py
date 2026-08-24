@@ -98,6 +98,8 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     # Content rewrites run last, once every schema change is in place.
     ("strip_brands_from_subjects", "migrations.strip_brands_from_subjects"),
     ("reseed_email_template_library", "migrations.reseed_email_template_library"),
+    ("add_super_admin_and_shared_templates", "migrations.add_super_admin_and_shared_templates"),
+    ("add_email_template_forks", "migrations.add_email_template_forks"),
 ]
 
 # Modules of this package that are not migrations and must not be registered.

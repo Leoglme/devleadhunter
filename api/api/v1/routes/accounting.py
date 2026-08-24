@@ -9,7 +9,7 @@ from core.database import get_db
 from models.user import User
 from schemas.accounting import AccountingResponse
 from services.accounting_service import accounting_service
-from services.auth_service import require_admin
+from services.auth_service import require_super_admin
 
 router = APIRouter(prefix="/accounting", tags=["accounting"])
 
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/accounting", tags=["accounting"])
 async def get_accounting_data(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ) -> AccountingResponse:
     """

@@ -35,7 +35,8 @@ class User(Base):
         name: User's full name
         email: User's email address (unique)
         hashed_password: Hashed password
-        role: User role (USER or ADMIN)
+        role: User role (USER, ADMIN or SUPER_ADMIN)
+        company_name: Optional business name shown in outreach / AI prompts
         is_active: Whether the user is active
         sending_provider: Active email-sending transport (resend | gmail)
         onboarding_completed: Whether the setup wizard has been completed
@@ -60,6 +61,7 @@ class User(Base):
     # Website sale price in cents (default 500 €): per-user default for {prix},
     # new orders, and the sale drawer.
     site_sale_price_cents: Mapped[int] = mapped_column(default=50000, nullable=False)
+    company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Gmail Postmaster Tools OAuth — per-user read access to Gmail-side reputation.
     postmaster_google_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     postmaster_oauth_refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)

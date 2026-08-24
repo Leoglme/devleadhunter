@@ -98,11 +98,11 @@
               </div>
             </div>
 
-            <div v-if="!isEditing">
+            <div v-if="!isEditing || canEditRole">
               <label class="app-label mb-1.5 block">Rôle</label>
-              <UiSelectField v-model="roleValue" :options="ROLE_OPTIONS" />
+              <UiSelectField v-model="roleValue" :options="ROLE_OPTIONS" :disabled="!canEditRole" />
               <p class="mt-1.5 text-xs leading-relaxed text-[var(--app-ink-soft)]">
-                Un administrateur accède aux crédits, à la comptabilité et à la gestion des utilisateurs.
+                Un administrateur bénéficie de crédits illimités et accède au monitoring et au stockage.
               </p>
             </div>
 
@@ -134,6 +134,7 @@ import type { UiUserFormDrawerEmits, UiUserFormDrawerProps, UserForm } from '~/t
 import type { ComputedRef, EmitFn, PropType, Ref, WritableComputedRef } from 'vue'
 import { computed, ref, watch } from 'vue'
 import type { User, UserRole } from '~/types'
+import { isSuperAdmin } from '~/utils/userRoles'
 import type { UserFormDrawerMode } from '~/types/DrawerStack'
 import type { SelectFieldOption } from '~/types/SelectField'
 import { UsersService } from '~/services/usersService'
@@ -170,7 +171,15 @@ const isPasswordVisible: Ref<boolean> = ref(false)
 const isSaving: Ref<boolean> = ref(false)
 const errorMessage: Ref<string | null> = ref(null)
 
+const userStore: ReturnType<typeof useUserStore> = useUserStore()
+
 const isEditing: ComputedRef<boolean> = computed((): boolean => props.mode === 'edit')
+
+const canEditRole: ComputedRef<boolean> = computed(
+  (): boolean =>
+    isSuperAdmin(userStore.user?.role) &&
+    (!isEditing.value || (props.user?.role !== 'SUPER_ADMIN' && props.user?.id !== userStore.user?.id)),
+)
 
 /** The select binds a plain string while the form holds the narrowed role union. */
 const roleValue: WritableComputedRef<string> = computed({
@@ -213,7 +222,10 @@ async function submit(): Promise<void> {
     }
     const saved: User =
       isEditing.value && props.user
-        ? await UsersService.updateUser(props.user.id, identity)
+        ? await UsersService.updateUser(props.user.id, {
+            ...identity,
+            ...(canEditRole.value ? { role: form.value.role } : {}),
+          })
         : await UsersService.createUser({ ...identity, password: form.value.password, role: form.value.role })
     emit('saved', saved)
   } catch (err: unknown) {

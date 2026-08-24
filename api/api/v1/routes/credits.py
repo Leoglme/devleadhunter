@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from models.user import User
 from schemas.credit_transaction import CreditBalanceResponse, CreditTransactionResponse
-from services.auth_service import require_admin, require_auth
+from services.auth_service import require_auth, require_super_admin
 from services.credit_service import TransactionType, credit_service
 
 router = APIRouter(prefix="/credits", tags=["credits"])
@@ -40,7 +40,7 @@ async def get_my_balance(
 
 @router.get("/balance/{user_id}", response_model=CreditBalanceResponse)
 async def get_user_balance(
-    user_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)
+    user_id: int, current_user: User = Depends(require_super_admin), db: Session = Depends(get_db)
 ) -> CreditBalanceResponse:
     """
     Get a user's credit balance (admin only).
@@ -91,7 +91,7 @@ async def add_credits(
     user_id: int,
     amount: int,
     description: str = "Credit purchase",
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ) -> CreditTransactionResponse:
     """

@@ -61,6 +61,12 @@ class EmailTemplate(Base):
     )
     # Higher = pinned higher in the app's template list (recommended templates use a high value).
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    # Shared library templates (site-web module) are visible to every user but owned by the platform.
+    is_library: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
+    # When set, this row is a per-user fork/customisation of the library template with this id.
+    library_source_id: Mapped[int | None] = mapped_column(
+        ForeignKey("email_templates.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(onupdate=func.now(), nullable=True)
 

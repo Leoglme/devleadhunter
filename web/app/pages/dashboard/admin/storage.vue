@@ -267,7 +267,7 @@ import { computed, onMounted, ref } from 'vue'
 import { AdminStorageService } from '~/services/adminStorageService'
 import { useToast } from '~/composables/useToast'
 
-definePageMeta({ layout: 'dashboard', middleware: ['auth'] })
+definePageMeta({ layout: 'dashboard', middleware: ['auth', 'admin'] })
 
 /** Demo deliverables TTL, mirrored from the API. */
 const TTL_DAYS: number = 14
