@@ -83,6 +83,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("demote_platform_websites", "migrations.demote_platform_websites"),
     ("add_demo_site_use_brand_color", "migrations.add_demo_site_use_brand_color"),
     ("add_demo_site_image_order", "migrations.add_demo_site_image_order"),
+    ("add_demo_site_image_pool_snapshot", "migrations.add_demo_site_image_pool_snapshot"),
     ("add_demo_site_storyblok_collaborator_status", "migrations.add_demo_site_storyblok_collaborator_status"),
     ("add_demo_site_demo_link_sent_at", "migrations.add_demo_site_demo_link_sent_at"),
     ("add_demo_site_storyblok_space_created_at", "migrations.add_demo_site_storyblok_space_created_at"),

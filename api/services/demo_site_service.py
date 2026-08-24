@@ -169,9 +169,14 @@ class DemoSiteService:
         """Build Storyblok content JSON from the demo site record (with enrichment)."""
         enrichment = self._enrichment_dict_for_site(db, demo_site)
         # A user-curated photo placement overrides the scraped order: fold it into the photo pool so
-        # the shared mapping ([0]→hero, [1]→about, [2:]→gallery) produces the arrangement they chose.
+        # the shared mapping ([0]→hero, [1]→about, [2:]→gallery) produces the arrangement they chose,
+        # with photos added to the prospect since the last save appended to the gallery.
         if isinstance(enrichment, dict) and isinstance(demo_site.image_order, list) and demo_site.image_order:
-            enrichment = {**enrichment, "photos": demo_site.image_order}
+            pool: list[str] = usable_site_photos(enrichment)
+            enrichment = {
+                **enrichment,
+                "photos": self._effective_photos(pool, demo_site.image_order, demo_site.image_pool_snapshot),
+            }
         palette = (
             theme
             or self._theme_from_content(demo_site.content_json)
@@ -364,6 +369,8 @@ class DemoSiteService:
             pool: list[str] = usable_site_photos(self._enrichment_dict_for_site(db, demo_site))
             cleaned: list[str] = self._clean_image_order(image_order, pool)
             demo_site.image_order = cleaned if cleaned and cleaned != pool else None
+            # Record the pool seen at save time so photos added later are detected as new, not re-shown.
+            demo_site.image_pool_snapshot = list(pool)
         if business_name is not None:
             demo_site.business_name = business_name
         if template_id is not None:
@@ -396,8 +403,8 @@ class DemoSiteService:
         unused. Empty pool means the site has no editable photos (no prospect, or none usable).
         """
         pool: list[str] = usable_site_photos(self._enrichment_dict_for_site(db, demo_site))
-        saved: list[str] = self._clean_image_order(demo_site.image_order, pool)
-        return {"pool": pool, "order": saved or list(pool)}
+        order: list[str] = self._effective_photos(pool, demo_site.image_order, demo_site.image_pool_snapshot)
+        return {"pool": pool, "order": order}
 
     async def set_site_images(self, db: Session, demo_site: DemoSite, order: list[str]) -> DemoSite:
         """Persist a user-curated photo order and regenerate the site so the new placement goes live.
@@ -408,6 +415,8 @@ class DemoSiteService:
         pool: list[str] = usable_site_photos(self._enrichment_dict_for_site(db, demo_site))
         cleaned: list[str] = self._clean_image_order(order, pool)
         demo_site.image_order = cleaned if cleaned and cleaned != pool else None
+        # Record the pool seen at save time so photos added later are detected as new, not re-shown.
+        demo_site.image_pool_snapshot = list(pool)
         return await self.regenerate_demo_site(db, demo_site)
 
     @staticmethod
@@ -423,6 +432,33 @@ class DemoSiteService:
                 seen.add(url)
                 cleaned.append(url)
         return cleaned
+
+    @classmethod
+    def _effective_photos(cls, pool: list[str], image_order: object, snapshot: object) -> list[str]:
+        """The site's ordered photos: curated placement kept, genuinely-new photos appended.
+
+        ``image_order`` is the operator's placement; ``snapshot`` is the pool known when they last saved
+        it. A pool photo absent from both is **new** → appended to the gallery so photos added to the
+        prospect show up; one present in ``snapshot`` but dropped from the order was **removed on
+        purpose** → stays hidden. No curation (empty order) means the default full pool. A legacy site
+        with no snapshot keeps its exact order until the next save records one (so nothing reappears).
+
+        Args:
+            pool: Every usable prospect photo, current.
+            image_order: The saved placement (list of URLs), or None.
+            snapshot: The pool known at the last save (list of URLs), or None (legacy).
+
+        Returns:
+            The ordered photo list to render.
+        """
+        order: list[str] = cls._clean_image_order(image_order, pool)
+        if not order:
+            return list(pool)
+        if not isinstance(snapshot, list):
+            return order
+        decided: set[str] = set(snapshot) | set(order)
+        extras: list[str] = [url for url in pool if url not in decided]
+        return order + extras
 
     async def invite_client_to_cms(self, db: Session, demo_site: DemoSite) -> DemoSite:
         """Send a Storyblok CMS invitation to the demo site client email."""

@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import hashlib
 import logging
 import random
 import re
@@ -314,11 +315,15 @@ class StoryblokService:
             return None
         return int(stories[0]["id"])
 
-    async def _upload_asset(self, client: httpx.AsyncClient, space_id: int, source_url: str) -> dict[str, Any] | None:
+    async def _upload_asset(
+        self, client: httpx.AsyncClient, space_id: int, source_url: str, key: str
+    ) -> dict[str, Any] | None:
         """Upload one external image into the space's asset library (sign → S3 → finish).
 
-        Returns ``{id, filename}`` (the real Storyblok CDN asset) or None on any failure, so the caller
-        can fall back to the external URL.
+        The stored filename is ``{key}.{ext}`` — a deterministic digest of the source URL — so the same
+        photo re-uploaded later is recognisable in the library and never duplicated (see
+        ``_upload_external_assets``). Returns ``{id, filename}`` (the real Storyblok CDN asset) or None
+        on any failure, so the caller can fall back to the external URL.
         """
         try:
             if source_url.startswith("data:"):
@@ -334,7 +339,7 @@ class StoryblokService:
                 content = image.content
                 content_type = image.headers.get("content-type", "image/jpeg").split(";")[0].strip()
             extension: str = {"image/png": "png", "image/webp": "webp", "image/gif": "gif"}.get(content_type, "jpg")
-            filename: str = f"{secrets.token_hex(8)}.{extension}"
+            filename: str = f"{key}.{extension}"
             sign = await self._storyblok_request(
                 client, "POST", f"{self._base_url}/spaces/{space_id}/assets/", json={"filename": filename}
             )
@@ -399,19 +404,59 @@ class StoryblokService:
         if not external_urls:
             return
 
+        existing: dict[str, dict[str, Any]] = await self._list_space_assets(client, space_id)
         semaphore = asyncio.Semaphore(4)
 
-        async def _upload_one(url: str) -> tuple[str, dict[str, Any] | None]:
+        async def _resolve_one(url: str) -> tuple[str, dict[str, Any] | None]:
+            key: str = self._asset_key(url)
+            already: dict[str, Any] | None = existing.get(key)
+            if already is not None:
+                # Same photo already in the library → reuse it, never re-upload (no duplicate asset).
+                return url, already
             async with semaphore:
-                return url, await self._upload_asset(client, space_id, url)
+                return url, await self._upload_asset(client, space_id, url, key)
 
-        results = await asyncio.gather(*(_upload_one(url) for url in external_urls))
+        results = await asyncio.gather(*(_resolve_one(url) for url in external_urls))
         uploaded: dict[str, dict[str, Any]] = {url: asset for url, asset in results if asset is not None}
         for node in asset_nodes:
             replacement = uploaded.get(node["filename"])
             if replacement is not None:
                 node["id"] = replacement["id"]
                 node["filename"] = replacement["filename"]
+
+    @staticmethod
+    def _asset_key(source_url: str) -> str:
+        """Deterministic short digest of a source URL, used as the uploaded asset's filename stem."""
+        return hashlib.sha1(source_url.encode("utf-8")).hexdigest()[:20]
+
+    async def _list_space_assets(self, client: httpx.AsyncClient, space_id: int) -> dict[str, dict[str, Any]]:
+        """Map each already-uploaded asset's filename stem to ``{id, filename}`` so a re-publish reuses it.
+
+        Without this, every regeneration re-uploaded all photos and the asset store filled with duplicates.
+        Best-effort — an unreachable listing just yields no reuse (a fresh upload), never an error.
+        """
+        assets_by_key: dict[str, dict[str, Any]] = {}
+        for page in range(1, 6):  # up to 500 assets, far beyond a demo site's photo count
+            try:
+                response = await self._storyblok_request(
+                    client, "GET", f"{self._base_url}/spaces/{space_id}/assets/?per_page=100&page={page}"
+                )
+            except httpx.HTTPError:
+                break
+            if response.status_code != 200:
+                break
+            assets: list[dict[str, Any]] = response.json().get("assets", [])
+            for asset in assets:
+                filename = asset.get("filename")
+                asset_id = asset.get("id")
+                if not isinstance(filename, str) or asset_id is None:
+                    continue
+                stem: str = filename.split("?")[0].rstrip("/").split("/")[-1].split(".")[0]
+                if stem:
+                    assets_by_key.setdefault(stem, {"id": asset_id, "filename": filename})
+            if len(assets) < 100:
+                break
+        return assets_by_key
 
     async def _publish_home_story(
         self,

@@ -58,6 +58,10 @@ class DemoSite(Base):
     # User-curated photo order for the site (list of URLs). NULL = default scraped order.
     # When set, it overrides the prospect photos at generation: [0]→hero, [1]→about, [2:]→gallery.
     image_order: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # The photo pool known when image_order was last saved. A pool photo missing from BOTH the order
+    # and this snapshot is genuinely new (auto-appended); one in the snapshot but not the order was
+    # removed on purpose (kept hidden). NULL until the first save after this column shipped.
+    image_pool_snapshot: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Whether the action colour is pulled from the prospect's logo (True) or kept as the template
     # default (False). Default True — the logo colour is used when a usable one exists.
     use_brand_color: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
