@@ -310,6 +310,10 @@ class CampaignQueueService:
             if log is not None:
                 item.status = _STATUS_SENT
                 item.email_log_id = log.id
+                # The email went out, so the post-send bookkeeping the dead process skipped applies too.
+                prospect: ProspectDB | None = self.db.get(ProspectDB, item.prospect_id)
+                if prospect is not None and not prospect.contacted:
+                    prospect.contacted = True
                 self.db.commit()
                 if item.queue_type == "initial" and not self._has_follow_ups(item.campaign_id, item.prospect_id):
                     self._schedule_follow_ups(item)
@@ -956,6 +960,7 @@ class CampaignQueueService:
                     EmailQueue.scheduled_at < end,
                     or_(
                         EmailQueue.status == _STATUS_PENDING,
+                        EmailQueue.status == _STATUS_SENT,
                         and_(EmailQueue.status == _STATUS_SKIPPED, EmailQueue.skip_reason.isnot(None)),
                     ),
                 )

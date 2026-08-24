@@ -234,8 +234,17 @@
               </a>
               <span v-else class="font-label text-xs text-[var(--app-faint)]">Pas de site</span>
 
+              <span
+                v-if="item.isSent"
+                class="font-label inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--app-green)]"
+                title="Cet e-mail est déjà parti"
+              >
+                <UIcon name="i-lucide-circle-check" class="h-3.5 w-3.5" />
+                Envoyé
+              </span>
+
               <button
-                v-if="item.demo_site_id"
+                v-else-if="item.demo_site_id"
                 type="button"
                 :aria-pressed="item.reviewed"
                 :disabled="pendingReviewIds.has(item.demo_site_id)"
@@ -280,6 +289,7 @@ type ForecastRow = CampaignForecastItem & {
   timeLabel: string
   metaLine: string
   isWarning: boolean
+  isSent: boolean
   reviewed: boolean
 }
 
@@ -311,7 +321,7 @@ const isCurrentWeek: ComputedRef<boolean> = computed(
   (): boolean => weekStart.value.getTime() === startOfWeek(new Date()).getTime(),
 )
 
-/** `Semaine du 25 – 31 août` (or spanning two months when needed). */
+/** `Semaine 35 · 25 – 31 août` (or spanning two months when needed). */
 const weekLabel: ComputedRef<string> = computed((): string => {
   const end: Date = addDays(weekStart.value, 6)
   const startDay: string = weekStart.value.toLocaleDateString(LOCALE, { day: 'numeric' })
@@ -320,7 +330,7 @@ const weekLabel: ComputedRef<string> = computed((): string => {
     ? startDay
     : weekStart.value.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })
   const endPart: string = end.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })
-  return `Semaine du ${startPart} – ${endPart}`
+  return `Semaine ${isoWeekNumber(weekStart.value)} · ${startPart} – ${endPart}`
 })
 
 /** The seven day buckets, each filled with the items scheduled on that local day. */
@@ -393,6 +403,20 @@ function addDays(date: Date, count: number): Date {
 }
 
 /**
+ * ISO 8601 week number (weeks start Monday; week 1 holds the year's first Thursday).
+ * @param date - Any date in the target week.
+ * @returns The week number, 1 to 53.
+ */
+function isoWeekNumber(date: Date): number {
+  const thursday: Date = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  thursday.setUTCDate(thursday.getUTCDate() - ((thursday.getUTCDay() + 6) % 7) + 3)
+  const firstThursday: Date = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 4))
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - ((firstThursday.getUTCDay() + 6) % 7) + 3)
+  const msPerWeek: number = 7 * 24 * 3600 * 1000
+  return 1 + Math.round((thursday.getTime() - firstThursday.getTime()) / msPerWeek)
+}
+
+/**
  * Local `YYYY-MM-DD` key used to bucket items by day.
  * @param date - Date to key.
  * @returns The zero-padded local date key.
@@ -418,6 +442,7 @@ function toRow(item: CampaignForecastItem): ForecastRow {
     timeLabel: parseApiDate(item.scheduled_at).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' }),
     metaLine: metaParts.join(' · '),
     isWarning: item.status === 'skipped',
+    isSent: item.status === 'sent',
     reviewed: item.site_reviewed_at !== null && item.site_reviewed_at !== undefined,
   }
 }
@@ -430,7 +455,8 @@ function toRow(item: CampaignForecastItem): ForecastRow {
 function reviewStats(rows: ForecastRow[]): { reviewed: number; total: number } {
   const reviewedById: Map<number, boolean> = new Map<number, boolean>()
   for (const row of rows) {
-    if (row.isWarning || row.demo_site_id === null || row.demo_site_id === undefined) continue
+    // Sent rows can no longer be reviewed before sending, so they leave the review tally.
+    if (row.isWarning || row.isSent || row.demo_site_id === null || row.demo_site_id === undefined) continue
     // A site counts as reviewed if any of its rows carries the sign-off (they share one state).
     reviewedById.set(row.demo_site_id, (reviewedById.get(row.demo_site_id) ?? false) || row.reviewed)
   }

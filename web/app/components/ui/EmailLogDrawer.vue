@@ -75,6 +75,19 @@
             >
               <p class="text-xs text-[var(--app-faint)]">Contenu non disponible</p>
             </div>
+
+            <a
+              v-if="sentDemoLink"
+              :href="sentDemoLink"
+              target="_blank"
+              rel="noopener"
+              class="font-label mt-3 inline-flex items-center gap-2 rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] px-2.5 py-1.5 text-xs text-[var(--app-ink)] transition-colors hover:border-[var(--app-accent)] hover:bg-[var(--app-accent-soft)] hover:text-[var(--app-accent-ink)]"
+              title="Ouvre le lien démo exact reçu par le prospect — votre visite est exclue du suivi"
+            >
+              <UIcon name="i-lucide-globe" class="h-3.5 w-3.5 shrink-0" />
+              Ouvrir le lien envoyé
+              <UIcon name="i-lucide-arrow-up-right" class="h-3 w-3 shrink-0 opacity-70" />
+            </a>
           </div>
 
           <div class="mx-5 border-t border-[var(--app-surface-2)]"></div>
@@ -184,6 +197,7 @@ import type { EmailDeliveryStage, EmailTimelineEntry, UiEmailLogDrawerEmits } fr
 import type { ComputedRef, EmitFn, PropType } from 'vue'
 import type { EmailLog, EmailStatus } from '~/types'
 import type { EmailLogDrawerProps } from '~/types/EmailLogDrawer'
+import { DemoSiteService } from '~/services/demoSiteService'
 import { formatCompactDateTime } from '~/utils/date'
 
 /** Drawer showing email delivery timeline and events. */
@@ -236,6 +250,19 @@ const sanitizedBodyHtml: ComputedRef<string | null> = computed((): string | null
   const html: string | null | undefined = props.log?.body_html
   if (!html) return null
   return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+})
+
+/**
+ * The exact demo-site link the email carried, flagged as an internal visit so opening it to verify
+ * does not pollute the prospect's behaviour tracking. Excludes the video player link (``/v/``).
+ * @returns The demo URL to open, or ``null`` when the body carries none.
+ */
+const sentDemoLink: ComputedRef<string | null> = computed((): string | null => {
+  const html: string | null | undefined = props.log?.body_html
+  if (!html) return null
+  const match: RegExpMatchArray | null = html.match(/https?:\/\/demo\.dibodev\.fr\/(?!v\/)[^"'\s<>]+/i)
+  if (!match) return null
+  return DemoSiteService.withInternalFlag(match[0]) ?? match[0]
 })
 
 /** Muted indicator style applied to stages that haven't occurred yet. */

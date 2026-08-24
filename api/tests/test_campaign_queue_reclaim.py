@@ -34,9 +34,13 @@ class _FakeDB:
     def __init__(self, results: list[_Result]) -> None:
         self._results = list(results)
         self.commits = 0
+        self.prospect = SimpleNamespace(contacted=False)
 
     def execute(self, *args: object, **kwargs: object) -> _Result:
         return self._results.pop(0)
+
+    def get(self, model: object, primary_key: object) -> object:
+        return self.prospect
 
     def commit(self) -> None:
         self.commits += 1
@@ -71,6 +75,7 @@ def test_reclaim_marks_item_sent_and_arms_follow_ups_when_the_email_went_out() -
     assert reconciled == 1
     assert item.status == "sent"
     assert item.email_log_id == 24
+    assert db.prospect.contacted is True
     assert scheduled == [item]
 
 
