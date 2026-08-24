@@ -68,12 +68,40 @@ def test_resolve_resend_identity(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_resolve_resend_missing_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Resend selected but not configured raises SendingNotConfiguredError."""
+    """Resend selected but not configured anywhere raises SendingNotConfiguredError."""
     monkeypatch.setattr(si, "get_active_provider", lambda db, uid: SendingProvider.RESEND.value)
     monkeypatch.setattr(si, "_resend_config", lambda db, uid: None)
+    monkeypatch.setattr(si, "_allows_env_resend_fallback", lambda db, uid: False)
 
     with pytest.raises(SendingNotConfiguredError):
         resolve_sending_identity(None, 1)
+
+
+def test_resolve_resend_env_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Platform operator without per-user config inherits ``.env`` credentials."""
+    monkeypatch.setattr(si, "get_active_provider", lambda db, uid: SendingProvider.RESEND.value)
+    monkeypatch.setattr(si, "_resend_config", lambda db, uid: None)
+    monkeypatch.setattr(si, "_allows_env_resend_fallback", lambda db, uid: True)
+    monkeypatch.setattr(si, "_env_resend_api_key", lambda: "re_env")
+    monkeypatch.setattr(si, "_env_resend_from_email", lambda: "ops@example.com")
+    monkeypatch.setattr(si, "_env_resend_from_name", lambda: "Ops")
+
+    identity = resolve_sending_identity(None, 1)
+
+    assert identity.resend_api_key == "re_env"
+    assert identity.from_email == "ops@example.com"
+    assert identity.from_name == "Ops"
+
+
+def test_resolve_resend_env_fallback_blocked_for_regular_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A standard user cannot send through the platform ``.env`` Resend account."""
+    monkeypatch.setattr(si, "get_active_provider", lambda db, uid: SendingProvider.RESEND.value)
+    monkeypatch.setattr(si, "_resend_config", lambda db, uid: None)
+    monkeypatch.setattr(si, "_allows_env_resend_fallback", lambda db, uid: False)
+    monkeypatch.setattr(si, "_env_resend_api_key", lambda: "re_env")
+
+    with pytest.raises(SendingNotConfiguredError):
+        resolve_sending_identity(None, 2)
 
 
 def test_resolve_gmail_identity(monkeypatch: pytest.MonkeyPatch) -> None:

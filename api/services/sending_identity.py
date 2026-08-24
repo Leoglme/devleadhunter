@@ -14,13 +14,16 @@ follow-ups, orders, quick-send) routes through the same provider decision.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from enums.email_account_type import EmailAccountType
 from enums.sending_provider import SendingProvider
+from enums.user_role import is_platform_admin
 from models.email_account import EmailAccount
 from models.resend_config import ResendConfig
 from models.user import User
@@ -124,14 +127,62 @@ def _resend_config(db: Session, user_id: int) -> ResendConfig | None:
     return db.execute(select(ResendConfig).where(ResendConfig.user_id == user_id)).scalar_one_or_none()
 
 
+def _env_resend_api_key() -> str:
+    """Platform-wide Resend API key from ``RESEND_API_KEY`` (legacy / operator fallback)."""
+    return getattr(settings, "resend_api_key", "") or ""
+
+
+def _env_resend_from_email() -> str:
+    """Default sender address from ``RESEND_FROM_EMAIL`` when the user row has none."""
+    return os.environ.get("RESEND_FROM_EMAIL", "") or ""
+
+
+def _env_resend_from_name() -> str:
+    """Default sender name from ``RESEND_FROM_NAME`` when the user row has none."""
+    return os.environ.get("RESEND_FROM_NAME", "") or ""
+
+
+def _allows_env_resend_fallback(db: Session, user_id: int) -> bool:
+    """Return ``True`` when the platform ``.env`` Resend credentials may be used for *user_id*.
+
+    Only the platform operator (super-admin / admin, or the configured ``ADMIN_EMAIL``)
+    may inherit server-level keys. Regular users must configure their own Resend account.
+    """
+    user = db.get(User, user_id)
+    if user is None:
+        return False
+    if is_platform_admin(user.role):
+        return True
+    admin_email: str = getattr(settings, "admin_email", "") or ""
+    return bool(admin_email) and user.email == admin_email
+
+
+def get_resend_api_key(db: Session, user_id: int) -> str | None:
+    """Return the Resend API key for *user_id*, with a platform ``.env`` fallback for the operator."""
+    config = _resend_config(db, user_id)
+    if config is not None and config.api_key:
+        return encryption_service.decrypt(config.api_key)
+    if not _allows_env_resend_fallback(db, user_id):
+        return None
+    env_key = _env_resend_api_key()
+    return env_key or None
+
+
+def resend_is_configured(db: Session, user_id: int) -> bool:
+    """Return ``True`` when Resend can send for *user_id*."""
+    config = _resend_config(db, user_id)
+    if config is not None and config.api_key:
+        return True
+    return _allows_env_resend_fallback(db, user_id) and bool(_env_resend_api_key())
+
+
 def _assert_provider_configured(db: Session, user_id: int, provider: str) -> None:
     """Raise :class:`SendingNotConfiguredError` if *provider* is not usable."""
     if provider == SendingProvider.GMAIL.value:
         if _default_gmail_account(db, user_id) is None:
             raise SendingNotConfiguredError("Aucun compte Gmail connecté — Paramètres → Configuration d'envoi")
         return
-    config = _resend_config(db, user_id)
-    if config is None or not config.api_key:
+    if not resend_is_configured(db, user_id):
         raise SendingNotConfiguredError("Resend non configuré — Paramètres → Configuration d'envoi")
 
 
@@ -160,14 +211,27 @@ def resolve_sending_identity(db: Session, user_id: int) -> SendingIdentity:
         )
 
     # Default: Resend (covers plain Resend and custom-domain-on-Resend).
-    config = _resend_config(db, user_id)
-    if config is None or not config.api_key:
+    api_key = get_resend_api_key(db, user_id)
+    if not api_key:
         raise SendingNotConfiguredError("Resend non configuré — Paramètres → Configuration d'envoi")
+
+    config = _resend_config(db, user_id)
+    from_email: str = (config.from_email if config and config.from_email else None) or (
+        _env_resend_from_email() if _allows_env_resend_fallback(db, user_id) else ""
+    )
+    from_name: str = (
+        (config.from_name if config and config.from_name else None)
+        or (_env_resend_from_name() if _allows_env_resend_fallback(db, user_id) else "")
+        or ""
+    )
+    if not from_email:
+        raise SendingNotConfiguredError("Resend : adresse d'envoi non configurée — Paramètres → Configuration d'envoi")
+
     return SendingIdentity(
         provider=SendingProvider.RESEND.value,
-        from_email=config.from_email,
-        from_name=config.from_name or "",
-        resend_api_key=encryption_service.decrypt(config.api_key),
+        from_email=from_email,
+        from_name=from_name,
+        resend_api_key=api_key,
     )
 
 
@@ -183,10 +247,13 @@ def describe_sending_config(db: Session, user_id: int) -> dict[str, object]:
     """
     config = _resend_config(db, user_id)
     gmail = _default_gmail_account(db, user_id)
+    from_email: str | None = config.from_email if config and config.from_email else None
+    if not from_email and resend_is_configured(db, user_id) and _allows_env_resend_fallback(db, user_id):
+        from_email = _env_resend_from_email() or None
     return {
         "provider": get_active_provider(db, user_id),
-        "resend_configured": config is not None and bool(config.api_key),
-        "resend_from_email": config.from_email if config else None,
+        "resend_configured": resend_is_configured(db, user_id),
+        "resend_from_email": from_email,
         "gmail_configured": gmail is not None,
         "gmail_email": gmail.email if gmail else None,
     }

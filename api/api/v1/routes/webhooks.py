@@ -30,8 +30,10 @@ from enums.demo_site_status import DemoSiteStatus
 from enums.email_status import EmailStatus
 from models.demo_site import DemoSite
 from models.email_log import EmailLog
+from models.resend_config import ResendConfig
 from services.bounce_fallback_service import bounce_fallback_service
 from services.demo_identity import posthog_distinct_id, resolve_demo_slug
+from services.encryption_service import encryption_service
 from services.notification_service import notification_service
 from services.posthog_service import posthog_service
 from services.storyblok_service import storyblok_service
@@ -95,35 +97,28 @@ _STATUS_RANK: dict[str, int] = {
 _MACHINE_OPEN_WINDOW_SECONDS: int = 60
 
 
-def _verify_signature(
+def _signature_matches(
     body: bytes,
     svix_id: str,
     svix_timestamp: str,
     svix_signature: str,
+    secret: str,
 ) -> bool:
     """
-    Verify the Svix webhook signature used by Resend.
-
-    The signed content is ``{svix_id}.{svix_timestamp}.{body}``.
-    The secret may be prefixed with ``whsec_`` which is stripped before
-    base64-decoding.
-
-    Returns ``True`` when the signature is valid.  Also returns ``True`` when
-    no secret is configured so that local development works without a webhook
-    secret (never do this in production).
+    Return ``True`` when *svix_signature* is valid for *body* under *secret*.
 
     Args:
-        body:           Raw request body bytes (already buffered).
+        body:           Raw request body bytes.
         svix_id:        Value of the ``svix-id`` request header.
         svix_timestamp: Value of the ``svix-timestamp`` request header.
         svix_signature: Value of the ``svix-signature`` request header.
+        secret:         Resend webhook signing secret (``whsec_…``).
 
     Returns:
-        ``True`` if the signature is valid or no secret is configured.
+        ``True`` when the signature matches.
     """
-    secret: str = getattr(settings, "resend_webhook_secret", "")
     if not secret:
-        return True  # Dev mode — no secret configured
+        return False
 
     signed_content: bytes = f"{svix_id}.{svix_timestamp}.".encode() + body
 
@@ -136,12 +131,104 @@ def _verify_signature(
     expected_digest: bytes = hmac.new(key, signed_content, hashlib.sha256).digest()
     expected_b64: str = base64.b64encode(expected_digest).decode()
 
-    # Svix may send several space-separated signatures; accept any valid one.
     for sig in svix_signature.split(" "):
-        clean = sig.split(",", 1)[-1]  # strip "v1," version prefix
+        clean = sig.split(",", 1)[-1]
         if hmac.compare_digest(clean, expected_b64):
             return True
     return False
+
+
+def _find_email_log_for_payload(db: Session, data: dict[str, Any]) -> EmailLog | None:
+    """
+    Locate the ``EmailLog`` row targeted by a Resend webhook payload.
+
+    Args:
+        db:   Active database session.
+        data: The ``data`` object from the webhook body.
+
+    Returns:
+        The matching row, or ``None`` when not found.
+    """
+    email_log: EmailLog | None = None
+    resend_message_id: str = data.get("email_id", "")
+
+    raw_id: str | None = _read_tag(data.get("tags"), "email_log_id")
+    if raw_id:
+        try:
+            email_log = db.execute(select(EmailLog).where(EmailLog.id == int(raw_id))).scalar_one_or_none()
+        except (ValueError, TypeError):
+            logger.warning("[Webhook] Non-integer email_log_id tag value: %r", raw_id)
+
+    if email_log is None and resend_message_id:
+        email_log = db.execute(
+            select(EmailLog).where(EmailLog.provider_message_id == resend_message_id)
+        ).scalar_one_or_none()
+
+    return email_log
+
+
+def _webhook_secrets_for_payload(db: Session, data: dict[str, Any]) -> list[str]:
+    """
+    Collect webhook signing secrets that may have signed this event.
+
+    Per-user secrets are tried first (multi-tenant Resend accounts), then the
+    platform ``RESEND_WEBHOOK_SECRET`` from ``.env`` as a legacy fallback.
+
+    Args:
+        db:   Active database session.
+        data: The ``data`` object from the webhook body.
+
+    Returns:
+        De-duplicated list of raw signing secrets to try.
+    """
+    secrets: list[str] = []
+    seen: set[str] = set()
+
+    def _add(secret: str | None) -> None:
+        if secret and secret not in seen:
+            seen.add(secret)
+            secrets.append(secret)
+
+    email_log = _find_email_log_for_payload(db, data)
+    if email_log is not None:
+        config: ResendConfig | None = db.execute(
+            select(ResendConfig).where(ResendConfig.user_id == email_log.user_id)
+        ).scalar_one_or_none()
+        if config is not None and config.webhook_secret:
+            _add(encryption_service.decrypt(config.webhook_secret))
+
+    _add(getattr(settings, "resend_webhook_secret", "") or None)
+    return secrets
+
+
+def _verify_signature(
+    body: bytes,
+    svix_id: str,
+    svix_timestamp: str,
+    svix_signature: str,
+    secrets: list[str],
+) -> bool:
+    """
+    Verify the Svix webhook signature used by Resend.
+
+    Returns ``True`` when the signature is valid for any candidate secret.
+    Also returns ``True`` when no secret is configured anywhere so that local
+    development works without a webhook secret (never do this in production).
+
+    Args:
+        body:           Raw request body bytes (already buffered).
+        svix_id:        Value of the ``svix-id`` request header.
+        svix_timestamp: Value of the ``svix-timestamp`` request header.
+        svix_signature: Value of the ``svix-signature`` request header.
+        secrets:        Signing secrets to try (per-user, then platform fallback).
+
+    Returns:
+        ``True`` if the signature is valid or no secret is configured.
+    """
+    if not secrets:
+        return True  # Dev mode — no secret configured
+
+    return any(_signature_matches(body, svix_id, svix_timestamp, svix_signature, secret) for secret in secrets)
 
 
 def _read_tag(tags: object, name: str) -> str | None:
@@ -311,15 +398,6 @@ async def resend_webhook(
     """
     body: bytes = await request.body()
 
-    if not _verify_signature(body, svix_id, svix_timestamp, svix_signature):
-        logger.warning("[Webhook] Invalid Resend signature — request rejected")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid webhook signature",
-        )
-
-    # Parse body directly from the already-buffered bytes to avoid a second
-    # async read and to log the exact error on malformed JSON.
     try:
         payload: dict[str, Any] = json.loads(body)
     except json.JSONDecodeError as exc:
@@ -329,8 +407,17 @@ async def resend_webhook(
             detail="Invalid JSON body",
         ) from exc
 
-    event_type: str = payload.get("type", "")
     data: dict[str, Any] = payload.get("data", {})
+    secrets: list[str] = _webhook_secrets_for_payload(db, data)
+
+    if not _verify_signature(body, svix_id, svix_timestamp, svix_signature, secrets):
+        logger.warning("[Webhook] Invalid Resend signature — request rejected")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid webhook signature",
+        )
+
+    event_type: str = payload.get("type", "")
 
     logger.info("[Webhook] Resend event=%s message_id=%s", event_type, data.get("email_id"))
 
@@ -343,23 +430,7 @@ async def resend_webhook(
 
     # --- Locate the matching EmailLog row -----------------------------------
 
-    email_log: EmailLog | None = None
-
-    # Primary lookup: the ``email_log_id`` tag we attach at send time. Tags are sent
-    # as [{name, value}] but echoed back as a flat {name: value} object, so both
-    # shapes are accepted — reading only one of them 500s on every campaign email.
-    raw_id: str | None = _read_tag(data.get("tags"), "email_log_id")
-    if raw_id:
-        try:
-            email_log = db.execute(select(EmailLog).where(EmailLog.id == int(raw_id))).scalar_one_or_none()
-        except (ValueError, TypeError):
-            logger.warning("[Webhook] Non-integer email_log_id tag value: %r", raw_id)
-
-    # Fallback: match by the provider-assigned message ID.
-    if email_log is None and resend_message_id:
-        email_log = db.execute(
-            select(EmailLog).where(EmailLog.provider_message_id == resend_message_id)
-        ).scalar_one_or_none()
+    email_log: EmailLog | None = _find_email_log_for_payload(db, data)
 
     if email_log is None:
         logger.warning(

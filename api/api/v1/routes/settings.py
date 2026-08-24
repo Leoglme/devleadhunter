@@ -62,6 +62,7 @@ class ResendConfigResponse(BaseModel):
 
     has_api_key: bool
     has_webhook_secret: bool
+    show_webhook_secret_warning: bool
     from_email: str | None
     from_name: str | None
 
@@ -85,9 +86,12 @@ async def get_resend_config(
     whether the values are configured without leaking them.
     """
     config: ResendConfig | None = _get_or_none(db, current_user.id)
+    has_api_key = config is not None and bool(config.api_key)
+    has_webhook_secret = config is not None and bool(config.webhook_secret)
     return {
-        "has_api_key": config is not None and bool(config.api_key),
-        "has_webhook_secret": config is not None and bool(config.webhook_secret),
+        "has_api_key": has_api_key,
+        "has_webhook_secret": has_webhook_secret,
+        "show_webhook_secret_warning": has_api_key and not has_webhook_secret,
         "from_email": config.from_email if config else None,
         "from_name": config.from_name if config else None,
     }
@@ -126,6 +130,7 @@ async def upsert_resend_config(
     return {
         "has_api_key": True,
         "has_webhook_secret": encrypted_secret is not None,
+        "show_webhook_secret_warning": encrypted_secret is None,
         "from_email": config.from_email,
         "from_name": config.from_name,
     }

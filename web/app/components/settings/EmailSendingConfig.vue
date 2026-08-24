@@ -25,6 +25,20 @@
       </div>
 
       <form class="space-y-5" @submit.prevent="saveResend">
+        <div
+          v-if="showWebhookSecretWarning"
+          class="flex gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-900 dark:text-amber-100"
+          role="status"
+        >
+          <UIcon name="i-lucide-triangle-alert" class="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <p class="leading-relaxed">
+            <span class="font-medium">Suivi temps réel incomplet.</span>
+            Sans secret webhook Resend, les ouvertures, clics et bounces ne seront pas mis à jour automatiquement dans
+            DevLeadHunter. Ajoutez-le dans les options avancées ci-dessous et créez le webhook dans votre dashboard
+            Resend.
+          </p>
+        </div>
+
         <div>
           <label class="text-muted mb-1.5 block text-xs font-medium">
             Clé API Resend <span class="text-[var(--app-red)]">*</span>
@@ -212,6 +226,7 @@ const TABS: UiTab[] = [
 ]
 
 const identity: Ref<SendingIdentityResponse | null> = ref(null)
+const resendConfig: Ref<ResendConfigResponse | null> = ref(null)
 const gmailAccounts: Ref<EmailAccount[]> = ref([])
 const accountToDisconnect: Ref<EmailAccount | null> = ref(null)
 const disconnectModalRef: Ref<{ open: () => void } | null> = ref(null)
@@ -235,6 +250,11 @@ const activeProvider: ComputedRef<SendingProvider> = computed(
 
 /** Whether the Resend method is ready to send. */
 const isResendConfigured: ComputedRef<boolean> = computed((): boolean => Boolean(identity.value?.resend_configured))
+
+/** Whether the user should be warned about missing webhook secret for tracking. */
+const showWebhookSecretWarning: ComputedRef<boolean> = computed((): boolean =>
+  Boolean(resendConfig.value?.show_webhook_secret_warning),
+)
 
 const fromNamePlaceholder: ComputedRef<string> = computed((): string => {
   const name: string = userStore.user?.name?.trim() ?? ''
@@ -269,6 +289,7 @@ async function loadAll(): Promise<void> {
     gmailAccounts.value = accounts.filter((a: EmailAccount): boolean => a.account_type === 'gmail_oauth')
     // Pre-fill the display name from the existing Resend config, if any.
     const resend: ResendConfigResponse | null = await SettingsService.getResendConfig().catch(() => null)
+    resendConfig.value = resend
     resendForm.value.from_name = resend?.from_name ?? ''
   } catch {
     toast.error('Échec du chargement de la configuration d’envoi')
@@ -319,6 +340,7 @@ async function saveResend(): Promise<void> {
     })
     resendForm.value.api_key = ''
     resendForm.value.webhook_secret = ''
+    resendConfig.value = await SettingsService.getResendConfig()
     identity.value = await SettingsService.getSendingIdentity()
     await maybeAutoActivate('resend')
     toast.success('Configuration enregistrée')

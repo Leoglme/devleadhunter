@@ -516,13 +516,10 @@ class AcquisitionOrchestrator:
     # Small helpers
 
     def _resend_has_key(self, db: Session, user_id: int) -> bool:
-        """Return True when the user's ResendConfig actually carries an API key."""
-        from models.resend_config import ResendConfig
+        """Return True when Resend can send for this user (profile or platform ``.env``)."""
+        from services.sending_identity import resend_is_configured
 
-        cfg: ResendConfig | None = db.execute(
-            select(ResendConfig).where(ResendConfig.user_id == user_id)
-        ).scalar_one_or_none()
-        return cfg is not None and bool(cfg.api_key)
+        return resend_is_configured(db, user_id)
 
     def _enrichment_has_signal(self, enrichment) -> bool:
         """

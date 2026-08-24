@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from enums.email_status import EmailStatus
 from models.email_log import EmailLog
-from models.resend_config import ResendConfig
 from models.user import User
 from schemas.email_sending import (
     EmailLogListResponse,
@@ -26,7 +25,6 @@ from schemas.email_sending import (
 from services.auth_service import get_current_user
 from services.email_log_stats import aggregate_email_log_counts, compute_engagement_rates
 from services.email_sending_service import EmailSendingService
-from services.encryption_service import encryption_service
 
 router = APIRouter(prefix="/emails", tags=["emails"])
 
@@ -90,17 +88,14 @@ async def sync_resend_status(
 
     import aiohttp
 
-    config: ResendConfig | None = db.execute(
-        select(ResendConfig).where(ResendConfig.user_id == current_user.id)
-    ).scalar_one_or_none()
+    from services.sending_identity import get_resend_api_key
 
-    if config is None or not config.api_key:
+    api_key: str | None = get_resend_api_key(db, current_user.id)
+    if not api_key:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Resend non configuré",
         )
-
-    api_key: str = encryption_service.decrypt(config.api_key)
 
     # Fetch all unresolved logs that have a Resend message ID
     logs: list[EmailLog] = (

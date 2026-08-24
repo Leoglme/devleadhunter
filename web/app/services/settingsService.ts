@@ -12,6 +12,7 @@ import { ApiClient } from './api'
 export type ResendConfigResponse = {
   has_api_key: boolean
   has_webhook_secret: boolean
+  show_webhook_secret_warning: boolean
   from_email: string | null
   from_name: string | null
 }
