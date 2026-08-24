@@ -4,7 +4,7 @@ Campaign routes for API v1.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -23,6 +23,7 @@ from schemas.campaign import (
     CampaignFollowUpCreate,
     CampaignFollowUpResponse,
     CampaignFollowUpUpdate,
+    CampaignForecastResponse,
     CampaignListResponse,
     CampaignProspectAdd,
     CampaignProspectResponse,
@@ -53,6 +54,32 @@ class SendNowRequest(BaseModel):
 
     prospect_id: int
     template_id: int
+
+
+def _parse_forecast_start(start: str | None) -> datetime:
+    """Parse the forecast window start into a naive-UTC datetime.
+
+    Accepts an ISO datetime (zoned or not); a zoned value is converted to UTC. Defaults to
+    today 00:00 UTC when omitted.
+
+    Args:
+        start: ISO datetime string, or None.
+
+    Returns:
+        The window start as a naive-UTC datetime.
+
+    Raises:
+        HTTPException: 422 when ``start`` is not a valid ISO datetime.
+    """
+    if not start:
+        return datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    try:
+        parsed: datetime = datetime.fromisoformat(start.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid start datetime") from exc
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+    return parsed
 
 
 def _has_resend_config(db: Session, user_id: int) -> bool:
@@ -180,6 +207,30 @@ async def list_campaigns(
         ],
         total=total,
         upcoming_sends_7d=queue_service.count_upcoming_sends(current_user.id),
+    )
+
+
+@router.get("/forecast", response_model=CampaignForecastResponse)
+async def get_campaign_forecast(
+    start: str | None = Query(None, description="Window start as ISO datetime (UTC); defaults to today 00:00 UTC"),
+    days: int = Query(7, ge=1, le=31),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> CampaignForecastResponse:
+    """
+    Return the week-ahead send forecast across all of the user's campaigns.
+
+    Declared before ``/{campaign_id}`` so the literal path is not captured by the id param.
+    The caller passes ``start`` as the exact UTC instant of the local week start, so day grouping
+    on the client lands each send on the right local day.
+    """
+    window_start: datetime = _parse_forecast_start(start)
+    queue_service = CampaignQueueService(db)
+    items = queue_service.build_forecast(current_user.id, window_start, days)
+    return CampaignForecastResponse(
+        items=items,
+        range_start=window_start,
+        range_end=window_start + timedelta(days=days),
     )
 
 

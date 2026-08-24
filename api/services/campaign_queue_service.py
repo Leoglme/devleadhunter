@@ -18,8 +18,8 @@ import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import Session, joinedload
 
 from enums.demo_site_status import DemoSiteStatus
 from enums.email_status import EmailStatus
@@ -823,3 +823,111 @@ class CampaignQueueService:
         if status is not None:
             stmt = stmt.where(EmailQueue.status == status)
         return self.db.execute(stmt.order_by(EmailQueue.scheduled_at.asc()).limit(limit).offset(offset)).scalars().all()
+
+    def _active_demos_by_prospect(self, prospect_ids: list[int], user_id: int) -> dict[int, DemoSite]:
+        """
+        Map each prospect to its latest ACTIVE demo site in a single query (no N+1).
+
+        Args:
+            prospect_ids: Prospects to resolve a site for.
+            user_id:      Owner of the demo sites.
+
+        Returns:
+            ``prospect_id → DemoSite`` for prospects that have an active site.
+        """
+        unique_ids: list[int] = list({pid for pid in prospect_ids if pid is not None})
+        if not unique_ids:
+            return {}
+        rows: list[DemoSite] = (
+            self.db.execute(
+                select(DemoSite)
+                .where(
+                    DemoSite.prospect_id.in_(unique_ids),
+                    DemoSite.user_id == user_id,
+                    DemoSite.status == DemoSiteStatus.ACTIVE.value,
+                )
+                .order_by(DemoSite.created_at.desc())
+            )
+            .scalars()
+            .all()
+        )
+        by_prospect: dict[int, DemoSite] = {}
+        for site in rows:
+            # Rows come newest-first, so the first seen per prospect is the latest active site.
+            if site.prospect_id is not None and site.prospect_id not in by_prospect:
+                by_prospect[site.prospect_id] = site
+        return by_prospect
+
+    def build_forecast(self, user_id: int, start: datetime, days: int) -> list[dict[str, object]]:
+        """
+        Build the week-ahead send forecast across all of a user's campaigns.
+
+        Returns every queue item scheduled in ``[start, start + days)`` that is still pending,
+        plus items that were skipped for a stated reason (e.g. a demo site that expired before a
+        follow-up) so the operator sees why a send will not go out. Each item carries the link the
+        email will contain — today the prospect's active demo URL, with the A/B variant appended
+        for tracking, exactly as the prospect receives it — and the demo site's review sign-off.
+
+        Args:
+            user_id: Owner of the queue.
+            start:   Window start (naive UTC).
+            days:    Window width in days.
+
+        Returns:
+            Forecast rows ordered by ``scheduled_at``, one dict per queue item.
+        """
+        end: datetime = start + timedelta(days=days)
+        items: list[EmailQueue] = (
+            self.db.execute(
+                select(EmailQueue)
+                .options(joinedload(EmailQueue.prospect), joinedload(EmailQueue.campaign))
+                .where(
+                    EmailQueue.user_id == user_id,
+                    EmailQueue.scheduled_at >= start,
+                    EmailQueue.scheduled_at < end,
+                    or_(
+                        EmailQueue.status == _STATUS_PENDING,
+                        and_(EmailQueue.status == _STATUS_SKIPPED, EmailQueue.skip_reason.isnot(None)),
+                    ),
+                )
+                .order_by(EmailQueue.scheduled_at.asc())
+            )
+            .scalars()
+            .all()
+        )
+
+        demos: dict[int, DemoSite] = self._active_demos_by_prospect([i.prospect_id for i in items], user_id)
+
+        forecast: list[dict[str, object]] = []
+        for item in items:
+            site: DemoSite | None = demos.get(item.prospect_id)
+            link: str = ""
+            if site and site.demo_url:
+                link = site.demo_url
+                if item.ab_variant:
+                    link = f"{link}{'&' if '?' in link else '?'}v={item.ab_variant}"
+            prospect = item.prospect
+            campaign = item.campaign
+            forecast.append(
+                {
+                    "queue_id": item.id,
+                    "scheduled_at": item.scheduled_at.isoformat(),
+                    "campaign_id": item.campaign_id,
+                    "campaign_name": campaign.name if campaign else "",
+                    "prospect_id": item.prospect_id,
+                    "prospect_name": prospect.name if prospect else None,
+                    "prospect_email": prospect.email if prospect else None,
+                    "prospect_city": prospect.city if prospect else None,
+                    "prospect_category": prospect.category if prospect else "",
+                    "queue_type": item.queue_type,
+                    "follow_up_index": item.follow_up_index,
+                    "ab_variant": item.ab_variant,
+                    "status": item.status,
+                    "skip_reason": item.skip_reason,
+                    "link": link or None,
+                    "link_kind": "website" if link else None,
+                    "demo_site_id": site.id if site else None,
+                    "site_reviewed_at": site.site_reviewed_at.isoformat() if site and site.site_reviewed_at else None,
+                }
+            )
+        return forecast

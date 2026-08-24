@@ -103,6 +103,8 @@ export type DemoSite = {
   storyblok_joined_at?: string | null
   /** When the demo link was first emailed — null until then (TTL not started). */
   demo_link_sent_at?: string | null
+  /** Operator's manual "good to send" sign-off from the campaign forecast (null until reviewed). */
+  site_reviewed_at?: string | null
   expires_at: string
   created_at: string
   error_message?: string | null
@@ -203,6 +205,19 @@ export class DemoSiteService {
    */
   static async verifyDemoSite(demoSiteId: number): Promise<DemoSite> {
     return ApiClient.post<DemoSite>(`${BASE_URL}/${demoSiteId}/verify`, {})
+  }
+
+  /**
+   * Record (or clear) the operator's manual "good to send" sign-off for a site.
+   *
+   * Distinct from {@link verifyDemoSite} (the automated live-URL check): this is the review
+   * ticked from the campaign forecast after eyeballing the site, ahead of the automatic send.
+   * @param demoSiteId - Id of the demo site.
+   * @param reviewed - True to sign off, false to reset.
+   * @returns The updated demo site (carrying ``site_reviewed_at``).
+   */
+  static async setSiteReviewed(demoSiteId: number, reviewed: boolean): Promise<DemoSite> {
+    return ApiClient.post<DemoSite>(`${BASE_URL}/${demoSiteId}/review`, { reviewed })
   }
 
   /**

@@ -186,3 +186,38 @@ class CampaignListResponse(BaseModel):
     upcoming_sends_7d: int = 0
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CampaignForecastItem(BaseModel):
+    """One scheduled send in the week-ahead forecast, across all campaigns."""
+
+    queue_id: int
+    scheduled_at: datetime
+    campaign_id: int
+    campaign_name: str
+    prospect_id: int
+    prospect_name: str | None = None
+    prospect_email: str | None = None
+    prospect_city: str | None = None
+    prospect_category: str = ""
+    # "initial" (J1) or "followup".
+    queue_type: str
+    follow_up_index: int = 0
+    ab_variant: str | None = None
+    # "pending" for an upcoming send; "skipped" (with skip_reason) for one that will not go out.
+    status: str
+    skip_reason: str | None = None
+    # The link the email will carry (today the prospect's active demo URL, with the A/B variant),
+    # its kind ("website"), and the reviewable site — all None when no active demo is attached.
+    link: str | None = None
+    link_kind: str | None = None
+    demo_site_id: int | None = None
+    site_reviewed_at: datetime | None = None
+
+
+class CampaignForecastResponse(BaseModel):
+    """Week-ahead send forecast for the authenticated user."""
+
+    items: list[CampaignForecastItem]
+    range_start: datetime
+    range_end: datetime

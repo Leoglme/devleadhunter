@@ -278,6 +278,25 @@ class DemoSiteService:
         db.refresh(demo_site)
         return demo_site
 
+    def set_reviewed(self, db: Session, demo_site: DemoSite, reviewed: bool) -> DemoSite:
+        """Record (or clear) the operator's manual "good to send" sign-off for a site.
+
+        This is the review surfaced in the campaign forecast, kept separate from the automated
+        live-URL check. ``reviewed=True`` stamps the current UTC instant; ``False`` clears it.
+
+        Args:
+            db: Active database session.
+            demo_site: The site to mark.
+            reviewed: True to sign off, False to reset.
+
+        Returns:
+            The refreshed demo site.
+        """
+        demo_site.site_reviewed_at = datetime.now(UTC).replace(tzinfo=None) if reviewed else None
+        db.commit()
+        db.refresh(demo_site)
+        return demo_site
+
     async def regenerate_demo_site(self, db: Session, demo_site: DemoSite) -> DemoSite:
         """
         Rebuild demo site content from stored fields and sync to Storyblok.
@@ -290,6 +309,9 @@ class DemoSiteService:
         demo_site.demo_url = demo_site.demo_url or self.demo_url_for_slug(demo_site.slug)
         demo_site.vercel_deployment_url = demo_site.demo_url
         demo_site.error_message = None
+        # A rebuilt site is no longer the one the operator reviewed: clear the sign-off so the
+        # campaign forecast asks for a fresh look before the next send.
+        demo_site.site_reviewed_at = None
 
         if demo_site.storyblok_space_id:
             try:

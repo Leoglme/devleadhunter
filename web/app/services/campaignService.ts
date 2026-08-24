@@ -132,6 +132,39 @@ export type CampaignQueueResponse = {
   items: CampaignQueueItem[]
 }
 
+/** Kind of link an email carries — only the website (demo) link exists today. */
+export type ForecastLinkKind = 'website'
+
+/** One scheduled send in the week-ahead forecast, across all campaigns. */
+export type CampaignForecastItem = {
+  queue_id: number
+  scheduled_at: string
+  campaign_id: number
+  campaign_name: string
+  prospect_id: number
+  prospect_name?: string | null
+  prospect_email?: string | null
+  prospect_city?: string | null
+  prospect_category: string
+  queue_type: 'initial' | 'followup'
+  follow_up_index: number
+  ab_variant?: string | null
+  /** 'pending' for an upcoming send; 'skipped' (with skip_reason) for one that will not go out. */
+  status: QueueItemStatus
+  skip_reason?: string | null
+  /** The link the email will carry, its kind, and the reviewable site — null when no active demo. */
+  link?: string | null
+  link_kind?: ForecastLinkKind | null
+  demo_site_id?: number | null
+  site_reviewed_at?: string | null
+}
+
+export type CampaignForecastResponse = {
+  items: CampaignForecastItem[]
+  range_start: string
+  range_end: string
+}
+
 export class CampaignService {
   /**
    * Create a new campaign.
@@ -274,5 +307,15 @@ export class CampaignService {
     if (params?.limit !== undefined) qs.set('limit', String(params.limit))
     if (params?.offset !== undefined) qs.set('offset', String(params.offset))
     return ApiClient.get<CampaignQueueResponse>(`/api/v1/campaigns/${campaignId}/queue?${qs.toString()}`)
+  }
+
+  /**
+   * Fetch the week-ahead send forecast across all of the user's campaigns.
+   * @param startIso - Window start as an ISO datetime (the exact UTC instant of the local week start).
+   * @param days     - Window width in days (default 7).
+   */
+  static async getForecast(startIso: string, days: number = 7): Promise<CampaignForecastResponse> {
+    const qs: URLSearchParams = new URLSearchParams({ start: startIso, days: String(days) })
+    return ApiClient.get<CampaignForecastResponse>(`/api/v1/campaigns/forecast?${qs.toString()}`)
   }
 }
