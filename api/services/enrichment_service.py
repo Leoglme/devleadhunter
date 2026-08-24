@@ -640,6 +640,16 @@ class EnrichmentService:
             return record
         return await self.enrich(db, user_id, prospect)
 
+    @staticmethod
+    def has_unrehostable_photos(record: ProspectEnrichment) -> bool:
+        """True when a photo or the logo is still a Facebook-CDN URL the site can't render (needs R2 rehost)."""
+        from services.templates.site_content import _is_unrehostable_photo
+
+        candidates: list[object] = list(record.photos or [])
+        if record.logo_url:
+            candidates.append(record.logo_url)
+        return any(isinstance(url, str) and _is_unrehostable_photo(url) for url in candidates)
+
     async def rehost_existing_photos(self, db: Session, record: ProspectEnrichment) -> ProspectEnrichment:
         """Move a record's already-collected photos to permanent R2 storage, in place, without scraping.
 

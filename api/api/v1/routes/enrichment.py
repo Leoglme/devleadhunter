@@ -197,4 +197,8 @@ async def update_prospect_enrichment(
 
     record = enrichment_service.get_or_create(db, current_user.id, prospect_id)
     record = enrichment_service.update(db, record, updates)
+    # Facebook photos are saved as fbcdn URLs the site can't render; rehost them to R2 on save so newly
+    # added FB photos show up on the site instead of being silently dropped.
+    if ("photos" in updates or "logo_url" in updates) and enrichment_service.has_unrehostable_photos(record):
+        record = await enrichment_service.rehost_existing_photos(db, record)
     return ProspectEnrichmentResponse.model_validate(record)
