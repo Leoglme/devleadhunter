@@ -286,6 +286,75 @@ class CampaignQueueService:
         start = latest + delay if (latest is not None and latest > now) else now
         return [start + delay * i for i in range(count)]
 
+    def reclaim_orphaned_sending(self) -> int:
+        """
+        Reconcile queue items a dying process left stuck in ``sending``.
+
+        An item only holds ``sending`` while ``_dispatch`` runs, so on a fresh worker start any such
+        row is orphaned — a previous process died mid-dispatch (typically a deploy restart). If the
+        email actually went out, an ``EmailLog`` exists for the same campaign/prospect at or after the
+        item's slot: we settle the row as ``sent`` and arm its follow-ups, the step the dead process
+        never reached. Otherwise the send never happened and we requeue the row as ``pending`` to
+        retry. The ``EmailLog`` check is what keeps this safe — a claimed row is never re-sent once its
+        email already left. Call once at startup, before any dispatch, so no in-flight row is touched.
+
+        Returns:
+            The number of orphaned rows reconciled.
+        """
+        orphans: list[EmailQueue] = list(
+            self.db.execute(select(EmailQueue).where(EmailQueue.status == _STATUS_SENDING)).scalars()
+        )
+        reconciled: int = 0
+        for item in orphans:
+            log: EmailLog | None = self._sent_log_for_item(item)
+            if log is not None:
+                item.status = _STATUS_SENT
+                item.email_log_id = log.id
+                self.db.commit()
+                if item.queue_type == "initial" and not self._has_follow_ups(item.campaign_id, item.prospect_id):
+                    self._schedule_follow_ups(item)
+                logger.info("[Queue] Reclaimed orphaned item %d as sent (email_log %d)", item.id, log.id)
+            else:
+                item.status = _STATUS_PENDING
+                self.db.commit()
+                logger.info("[Queue] Reclaimed orphaned item %d back to pending (no email went out)", item.id)
+            reconciled += 1
+        if reconciled:
+            logger.info("[Queue] Reclaimed %d orphaned 'sending' item(s)", reconciled)
+        return reconciled
+
+    def _sent_log_for_item(self, item: EmailQueue) -> EmailLog | None:
+        """Return the EmailLog proving this queue item's email actually left, or None.
+
+        Matches the item's campaign, prospect and A/B variant, and only a log sent at or after the
+        item's slot so an earlier send to the same prospect is never mistaken for this one.
+        """
+        conditions = [
+            EmailLog.campaign_id == item.campaign_id,
+            EmailLog.prospect_id == item.prospect_id,
+            EmailLog.sent_at.isnot(None),
+            EmailLog.sent_at >= item.scheduled_at,
+        ]
+        if item.ab_variant:
+            conditions.append(EmailLog.ab_variant == item.ab_variant)
+        return self.db.execute(
+            select(EmailLog).where(*conditions).order_by(EmailLog.sent_at.desc()).limit(1)
+        ).scalar_one_or_none()
+
+    def _has_follow_ups(self, campaign_id: int, prospect_id: int) -> bool:
+        """Return True when a follow-up queue row already exists for this campaign/prospect."""
+        count: int = (
+            self.db.execute(
+                select(func.count()).where(
+                    EmailQueue.campaign_id == campaign_id,
+                    EmailQueue.prospect_id == prospect_id,
+                    EmailQueue.queue_type == "followup",
+                )
+            ).scalar()
+            or 0
+        )
+        return count > 0
+
     async def process_next(self) -> bool:
         """
         Dispatch the next due queue item across all active campaigns.
