@@ -16,8 +16,14 @@ def test_build_demo_link_html_wraps_url_in_anchor() -> None:
     html = EmailVariables.build_demo_link_html("https://demo.dibodev.fr/tacos-maru?v=A")
     assert html.startswith("<a ")
     assert 'href="https://demo.dibodev.fr/tacos-maru?v=A"' in html
-    assert "voir votre site" in html
     assert html.endswith("</a>")
+
+
+def test_build_demo_link_html_shows_trimmed_url_as_default_text() -> None:
+    """By default the visible text is the host/slug — no scheme, no A/B query."""
+    html = EmailVariables.build_demo_link_html("https://demo.dibodev.fr/tacos-maru?v=A")
+    assert ">demo.dibodev.fr/tacos-maru</a>" in html
+    assert "?v=A</a>" not in html
 
 
 def test_build_demo_link_html_accepts_custom_text() -> None:

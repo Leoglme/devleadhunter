@@ -62,7 +62,7 @@ class EmailVariables:
         )
 
     @staticmethod
-    def build_demo_link_html(demo_link: str, text: str = "voir votre site") -> str:
+    def build_demo_link_html(demo_link: str, text: str | None = None) -> str:
         """
         Render `{lien_demo}` as a real ``<a>`` anchor so the click is trackable.
 
@@ -70,13 +70,14 @@ class EmailVariables:
         as plain text in the body is never wrapped, so every demo-link click went
         untracked (no ``email.clicked`` webhook → no ``clicked_at`` → no PostHog
         ``email_clicked`` → no push). Wrapping the URL in an anchor closes that gap.
-        The visible text stays a worded CTA, so there is no visible/href mismatch once
-        Resend rewrites the target.
+        By default the visible text is the demo URL itself, trimmed to ``host/slug``
+        (no scheme, no ``?v=`` variant): the prospect recognises their own name in the
+        link, which reads far more trustworthy than a worded "voir votre site" CTA.
 
         Args:
             demo_link: The prospect's demo URL, already carrying the ``?v=A/B`` variant.
-            text: Visible call-to-action. Kept generic so it reads naturally after the
-                  shared "… : " lead-in every template uses before ``{lien_demo}``.
+            text: Explicit visible label. When ``None`` (the default), the trimmed demo
+                  URL is shown instead.
 
         Returns:
             The inline anchor HTML, or "" when there is no demo link — unchanged from the
@@ -84,10 +85,26 @@ class EmailVariables:
         """
         if not demo_link:
             return ""
+        label: str = text if text is not None else EmailVariables._demo_link_label(demo_link)
         return (
             f'<a href="{demo_link}" target="_blank" rel="noopener noreferrer" '
-            f'style="color:#111;text-decoration:underline;">{text}</a>'
+            f'style="color:#111;text-decoration:underline;">{label}</a>'
         )
+
+    @staticmethod
+    def _demo_link_label(demo_link: str) -> str:
+        """Trim a demo URL to the recognisable ``host/slug`` shown to the prospect.
+
+        Drops the scheme and the ``?v=A/B`` tracking query so the link reads as the
+        prospect's own site, while the anchor ``href`` keeps the full URL for A/B tracking.
+        """
+        cleaned: str = demo_link.strip()
+        for scheme in ("https://", "http://"):
+            if cleaned.startswith(scheme):
+                cleaned = cleaned[len(scheme) :]
+                break
+        cleaned = cleaned.split("?", 1)[0].split("#", 1)[0]
+        return cleaned.rstrip("/")
 
     @staticmethod
     def display_website(url: str | None) -> str:
