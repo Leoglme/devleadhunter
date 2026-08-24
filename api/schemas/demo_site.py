@@ -131,6 +131,8 @@ class DemoSiteResponse(BaseModel):
     storyblok_collaborator_status: str | None = None
     storyblok_joined_at: datetime | None = None
     demo_link_sent_at: datetime | None = None
+    # Operator's manual "good to send" sign-off from the campaign forecast (NULL until reviewed).
+    site_reviewed_at: datetime | None = None
     expires_at: datetime
     created_at: datetime
     error_message: str | None = None

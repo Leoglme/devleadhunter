@@ -56,6 +56,12 @@ class BulkDemoSiteCreateRequest(BaseModel):
     invite_client_to_cms: bool = Field(default=False)
 
 
+class DemoSiteReviewRequest(BaseModel):
+    """Payload for the operator's manual "good to send" sign-off toggle."""
+
+    reviewed: bool = Field(default=True)
+
+
 def _serialize_demo_site(site, *, include_brand_color: bool = False) -> DemoSiteResponse:
     """Build API response including theme extracted from content JSON.
 
@@ -304,6 +310,26 @@ async def verify_demo_site(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Demo site can no longer be verified")
 
     site = await demo_site_service.verify_and_update(db, site)
+    return _serialize_demo_site(site)
+
+
+@router.post("/{demo_site_id}/review", response_model=DemoSiteResponse)
+async def review_demo_site(
+    demo_site_id: int,
+    payload: DemoSiteReviewRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> DemoSiteResponse:
+    """Record (or clear) the operator's manual "good to send" sign-off for a site.
+
+    Surfaced in the campaign forecast so the operator can tick a site off after checking it,
+    ahead of the automatic send. Independent from ``/verify`` (the automated live-URL check).
+    """
+    site = demo_site_service.get_for_user(db, current_user.id, demo_site_id)
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo site not found")
+
+    site = demo_site_service.set_reviewed(db, site, payload.reviewed)
     return _serialize_demo_site(site)
 
 

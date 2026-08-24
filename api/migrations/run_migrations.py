@@ -86,6 +86,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_demo_site_storyblok_collaborator_status", "migrations.add_demo_site_storyblok_collaborator_status"),
     ("add_demo_site_demo_link_sent_at", "migrations.add_demo_site_demo_link_sent_at"),
     ("add_demo_site_storyblok_space_created_at", "migrations.add_demo_site_storyblok_space_created_at"),
+    ("add_demo_site_reviewed_at", "migrations.add_demo_site_reviewed_at"),
     ("widen_enrichment_logo_url_to_text", "migrations.widen_enrichment_logo_url_to_text"),
     ("add_push_subscriptions", "migrations.add_push_subscriptions"),
     ("add_notifications_table", "migrations.add_notifications_table"),

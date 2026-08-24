@@ -76,6 +76,10 @@ class DemoSite(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     # When the demo link was first emailed to the prospect — NULL until then (TTL not started).
     demo_link_sent_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    # When the operator manually reviewed this site as good-to-send from the campaign forecast
+    # (distinct from ``verification_message``, which is the automated live-URL check). NULL = not
+    # yet reviewed; cleared whenever the site content is rebuilt so a stale review never lingers.
+    site_reviewed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     expires_at: Mapped[datetime] = mapped_column(nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(onupdate=func.now(), nullable=True)
