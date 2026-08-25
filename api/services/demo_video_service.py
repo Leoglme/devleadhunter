@@ -587,7 +587,8 @@ class DemoVideoService:
         """
         from PIL import Image, ImageDraw, ImageEnhance
 
-        thumb_w, thumb_h = 640, 360
+        # 1280x720 (= the video canvas) so the poster stays sharp full-screen on the player.
+        thumb_w, thumb_h = 1280, 720
         image = Image.open(screenshot_path).convert("RGB").resize((thumb_w, thumb_h))
         image = ImageEnhance.Brightness(image).enhance(0.82)
 
@@ -595,26 +596,26 @@ class DemoVideoService:
         draw = ImageDraw.Draw(overlay)
 
         # Bouton play central (cercle blanc, triangle sombre).
-        radius = 46
+        radius = 92
         cx, cy = thumb_w // 2, thumb_h // 2
         draw.ellipse(
             (cx - radius, cy - radius, cx + radius, cy + radius),
             fill=(255, 255, 255, 235),
         )
-        tri = 20
+        tri = 40
         draw.polygon(
-            [(cx - tri // 2 + 3, cy - tri), (cx - tri // 2 + 3, cy + tri), (cx + tri + 3 - tri // 2, cy)],
+            [(cx - tri // 2 + 6, cy - tri), (cx - tri // 2 + 6, cy + tri), (cx + tri + 6 - tri // 2, cy)],
             fill=(17, 17, 17, 255),
         )
 
         # Pill de salutation en haut à gauche.
         text = f"Bonjour {first_name} — votre site en vidéo" if first_name else "Votre site en vidéo"
-        font = self._load_font(22)
+        font = self._load_font(44)
         text_box = draw.textbbox((0, 0), text, font=font)
         text_w = text_box[2] - text_box[0]
         text_h = text_box[3] - text_box[1]
-        pad_x, pad_y = 16, 10
-        x0, y0 = 16, 16
+        pad_x, pad_y = 32, 20
+        x0, y0 = 32, 32
         draw.rounded_rectangle(
             (x0, y0, x0 + text_w + pad_x * 2, y0 + text_h + pad_y * 2),
             radius=(text_h + pad_y * 2) // 2,

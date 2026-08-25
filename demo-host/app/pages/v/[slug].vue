@@ -28,8 +28,9 @@
 
       <video
         ref="playerRef"
-        class="mt-6 aspect-video w-full rounded-2xl border border-neutral-800 bg-black shadow-2xl"
+        class="video-player mt-6 aspect-video w-full rounded-2xl border border-neutral-800 bg-black shadow-2xl"
         :src="videoSrc"
+        :poster="posterSrc"
         controls
         playsinline
         preload="metadata"
@@ -92,6 +93,12 @@ const videoSrc: ComputedRef<string> = computed(
   (): string => site.value?.video_url || `${config.public.apiBase}/api/v1/demo-sites/public/${slug.value}/video.mp4`,
 )
 
+const posterSrc: ComputedRef<string> = computed(
+  (): string =>
+    site.value?.video_thumbnail_url ||
+    `${config.public.apiBase}/api/v1/demo-sites/public/${slug.value}/video-thumbnail.jpg`,
+)
+
 /** Demo link keeping the A/B variant so PostHog attributes the visit (full reload on purpose). */
 const demoHref: ComputedRef<string> = computed((): string => {
   return abVariant.value ? `/${slug.value}?v=${encodeURIComponent(abVariant.value)}` : `/${slug.value}`
@@ -128,3 +135,11 @@ onMounted(async (): Promise<void> => {
   }
 })
 </script>
+
+<style scoped>
+/* Hide the browser's big central play overlay so only the poster's own play icon
+   shows before playback (the controls bar still carries a play/pause). */
+.video-player::-webkit-media-controls-overlay-play-button {
+  display: none;
+}
+</style>
