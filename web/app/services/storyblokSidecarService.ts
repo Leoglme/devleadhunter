@@ -1,0 +1,108 @@
+/**
+ * Desktop-only orchestration of the Storyblok editor video background.
+ *
+ * The video *background* (linear site scroll + real Storyblok editor edit) can only
+ * be produced on the user's machine, where their Storyblok session lives, so it runs
+ * in the bundled sidecar. This service drives it: read the session state, open the
+ * one-time login window, and produce + upload a site's background before the montage.
+ *
+ * Every call is a no-op (returns a neutral value) outside the desktop shell, so the
+ * web build simply falls back to the site-only video.
+ *
+ * @module services/storyblokSidecarService
+ */
+import { DemoSiteService } from '~/services/demoSiteService'
+import { getScraperSidecarInfo } from '~/services/scraperSidecarService'
+
+/** Connection state of the Storyblok owner session used for the editor sequence. */
+export type StoryblokSessionState = 'ready' | 'needs_login' | 'busy' | 'unknown'
+
+/** Session state as reported by the sidecar. */
+export type StoryblokSessionInfo = {
+  state: StoryblokSessionState
+  source: string | null
+  loginWindowOpen: boolean
+}
+
+/** Outcome of preparing a site's video background before generation. */
+export type BackgroundPreparation = 'uploaded' | 'skipped' | 'unavailable'
+
+const UNKNOWN_SESSION: StoryblokSessionInfo = { state: 'unknown', source: null, loginWindowOpen: false }
+
+export class StoryblokSidecarService {
+  /**
+   * Read the Storyblok session state from the sidecar.
+   * @returns The state, or `unknown` outside the desktop app / when unreachable.
+   */
+  static async getSessionState(): Promise<StoryblokSessionInfo> {
+    const info: Awaited<ReturnType<typeof getScraperSidecarInfo>> = await getScraperSidecarInfo()
+    if (!info) return UNKNOWN_SESSION
+    try {
+      const response: Response = await fetch(`http://127.0.0.1:${info.port}/storyblok/session`, {
+        headers: { 'X-Sidecar-Token': info.token },
+      })
+      if (!response.ok) return UNKNOWN_SESSION
+      const body: { state?: StoryblokSessionState; source?: string | null; login_window_open?: boolean } =
+        await response.json()
+      return {
+        state: body.state ?? 'unknown',
+        source: body.source ?? null,
+        loginWindowOpen: Boolean(body.login_window_open),
+      }
+    } catch {
+      return UNKNOWN_SESSION
+    }
+  }
+
+  /**
+   * Open the one-time Storyblok sign-in window (dedicated profile fallback).
+   * @returns True when a window was opened.
+   */
+  static async openLogin(): Promise<boolean> {
+    const info: Awaited<ReturnType<typeof getScraperSidecarInfo>> = await getScraperSidecarInfo()
+    if (!info) return false
+    try {
+      const response: Response = await fetch(`http://127.0.0.1:${info.port}/storyblok/open-login`, {
+        method: 'POST',
+        headers: { 'X-Sidecar-Token': info.token },
+      })
+      return response.ok
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Produce a site's video background on the sidecar and upload it to the API.
+   *
+   * Best-effort: returns `skipped` when there is no Storyblok session (the montage
+   * then composes without the editor sequence) and `unavailable` outside the desktop
+   * shell. Runs the browser capture, so it takes a minute or two.
+   *
+   * @param demoSiteId - The demo site to prepare.
+   * @returns What happened, for the caller to message the user.
+   */
+  static async prepareVideoBackground(demoSiteId: number): Promise<BackgroundPreparation> {
+    const info: Awaited<ReturnType<typeof getScraperSidecarInfo>> = await getScraperSidecarInfo()
+    if (!info) return 'unavailable'
+
+    const context: Record<string, unknown> = await DemoSiteService.getVideoBackgroundContext(demoSiteId)
+
+    let response: Response
+    try {
+      response = await fetch(`http://127.0.0.1:${info.port}/storyblok/background-clip`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Sidecar-Token': info.token },
+        body: JSON.stringify(context),
+      })
+    } catch {
+      return 'skipped'
+    }
+
+    if (!response.ok) return 'skipped'
+
+    const clip: Blob = await response.blob()
+    await DemoSiteService.uploadVideoBackground(demoSiteId, clip)
+    return 'uploaded'
+  }
+}

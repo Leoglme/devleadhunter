@@ -294,6 +294,17 @@ class StoryblokService:
             return f"Storyblok API error ({exc.response.status_code}): {detail}"
         return f"Storyblok API error ({exc.response.status_code}) for {exc.request.method} {exc.request.url}"
 
+    async def get_home_story_id(self, space_id: int) -> int | None:
+        """Public: resolve a space's home story id (used to open its Visual Editor).
+
+        Returns ``None`` when Storyblok is unconfigured (mock mode) or the story is
+        missing.
+        """
+        if not self.is_configured:
+            return None
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            return await self._find_home_story_id(client, space_id)
+
     async def _find_home_story_id(
         self,
         client: httpx.AsyncClient,

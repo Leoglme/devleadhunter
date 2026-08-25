@@ -65,6 +65,7 @@ class StoryblokBackgroundClipRequest(BaseModel):
     story_id: str
     site_seconds: float = 14.0
     hold_seconds: float = 1.0
+    total_seconds: float | None = None
     out_width: int = 1280
     out_height: int = 720
     fps: int = 30
@@ -284,7 +285,7 @@ async def storyblok_open_login() -> dict[str, object]:
     """Open a visible window for a one-time Storyblok sign-in (dedicated profile)."""
     from services.storyblok_login_helper import storyblok_login_helper
 
-    return await storyblok_login_helper.open_login()
+    return await storyblok_login_helper.open_login(executable_path=_chrome_path or find_installed_chrome())
 
 
 @app.post("/storyblok/close-login", dependencies=[Depends(require_sidecar_token)])
@@ -334,8 +335,10 @@ async def storyblok_background_clip(request: StoryblokBackgroundClipRequest) -> 
             output_path=output_path,
             seed=seed,
             user_data_dir=user_data_dir,
+            executable_path=_chrome_path or find_installed_chrome(),
             site_seconds=request.site_seconds,
             hold_seconds=request.hold_seconds,
+            total_seconds=request.total_seconds,
             out_width=request.out_width,
             out_height=request.out_height,
             fps=request.fps,

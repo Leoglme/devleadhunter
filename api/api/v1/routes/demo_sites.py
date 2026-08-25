@@ -1,9 +1,12 @@
 """Demo site routes for the website builder tunnel."""
 
 import logging
+import shutil
+import tempfile
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -37,9 +40,17 @@ from services.demo_video_service import (
     public_video_file_url,
     video_page_url,
 )
+from services.presenter_video_service import presenter_video_service
+from services.r2_storage_service import r2_storage
 from services.site_export_service import site_export_service
+from services.storyblok_service import storyblok_service
 
 logger = logging.getLogger(__name__)
+
+# Fixed budget for the Storyblok editor sequence; the rest of the timeline is the
+# site scroll. The sidecar pads/trims the background to the exact total anyway.
+_EDITOR_SEQUENCE_BUDGET_SECONDS = 17.0
+_MIN_SITE_SCROLL_SECONDS = 6.0
 
 router = APIRouter(prefix="/demo-sites", tags=["demo-sites"])
 
@@ -470,6 +481,75 @@ async def generate_demo_site_video(
         site = demo_video_service.request_generation(db, site, current_user.id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _serialize_demo_site(site)
+
+
+@router.get("/{demo_site_id}/video-background-context")
+async def get_demo_site_video_background_context(
+    demo_site_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Everything the desktop sidecar needs to render this site's video *background*
+    (linear site scroll + Storyblok editor edit), sized to the presenter clip.
+
+    The background is produced on the desktop because it needs the owner's Storyblok
+    session; the sidecar posts it back via ``POST /{id}/video-background``.
+    """
+    site = demo_site_service.get_for_user(db, current_user.id, demo_site_id)
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo site not found")
+    if not site.demo_url:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ce site démo n'a pas d'URL publique.")
+    if not site.storyblok_space_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ce site n'a pas d'espace Storyblok (séquence éditeur impossible).",
+        )
+    presenter = presenter_video_service.get_for_user(db, current_user.id)
+    if presenter is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Aucun clip de présentation enregistré.")
+
+    total_seconds = presenter.duration_seconds - presenter.intro_seconds - presenter.outro_seconds
+    story_id = await storyblok_service.get_home_story_id(site.storyblok_space_id)
+    if story_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Home story Storyblok introuvable.")
+
+    site_seconds = max(_MIN_SITE_SCROLL_SECONDS, total_seconds - _EDITOR_SEQUENCE_BUDGET_SECONDS)
+    return {
+        "slug": site.slug,
+        "demo_url": site.demo_url,
+        "space_id": str(site.storyblok_space_id),
+        "story_id": str(story_id),
+        "site_seconds": round(site_seconds, 2),
+        "hold_seconds": 1.0,
+        "total_seconds": round(total_seconds, 2),
+        "out_width": 1280,
+        "out_height": 720,
+        "fps": 30,
+    }
+
+
+@router.post("/{demo_site_id}/video-background", response_model=DemoSiteResponse)
+async def upload_demo_site_video_background(
+    demo_site_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> DemoSiteResponse:
+    """Store a desktop-produced video background on R2 for the montage to pick up."""
+    site = demo_site_service.get_for_user(db, current_user.id, demo_site_id)
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo site not found")
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        temp_path = Path(buffer.name)
+    try:
+        await r2_storage.upload_file_async(temp_path, r2_storage.website_background_key(site.slug), "video/mp4")
+    finally:
+        temp_path.unlink(missing_ok=True)
     return _serialize_demo_site(site)
 
 

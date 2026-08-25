@@ -110,7 +110,9 @@ def has_ready_video(site: DemoSite) -> bool:
 def delete_files_for_slug(slug: str) -> None:
     """Remove the generated video + thumbnail from R2 (best effort)."""
     try:
-        r2_storage.delete_many([video_object_key(slug), thumbnail_object_key(slug)])
+        r2_storage.delete_many(
+            [video_object_key(slug), thumbnail_object_key(slug), r2_storage.website_background_key(slug)]
+        )
     except Exception:
         logger.warning("[Video] R2 cleanup failed for slug=%s", slug, exc_info=True)
 
@@ -317,9 +319,15 @@ class DemoVideoService:
         scroll_seconds = presenter.duration_seconds - presenter.intro_seconds - presenter.outro_seconds
         work_dir = Path(tempfile.mkdtemp(prefix=f"demo-video-{site.slug}-"))
         try:
-            capture_path, scroll_offset, screenshot_path = await self._capture_site(
-                site.demo_url or "", scroll_seconds, work_dir
-            )
+            # Prefer the desktop-produced background (site scroll + Storyblok editor,
+            # sized to scroll_seconds); fall back to a plain site capture otherwise.
+            background = await self._resolve_background(site, work_dir)
+            if background is not None:
+                capture_path, scroll_offset, screenshot_path = background
+            else:
+                capture_path, scroll_offset, screenshot_path = await self._capture_site(
+                    site.demo_url or "", scroll_seconds, work_dir
+                )
             greeting_path = self._build_greeting_overlay(first_name, work_dir)
             mask_path = self._build_circle_mask(work_dir)
 
@@ -360,6 +368,51 @@ class DemoVideoService:
             DemoVideoGenerationError: when the page cannot be captured.
         """
         return await asyncio.to_thread(self._capture_site_sync, url, scroll_seconds, work_dir)
+
+    async def _resolve_background(self, site: DemoSite, work_dir: Path) -> tuple[Path, float, Path] | None:
+        """
+        Use the desktop-produced video background if one is stored on R2.
+
+        The background (site scroll + Storyblok editor) is rendered on the sidecar
+        because it needs the owner's Storyblok session; here we just materialise it.
+
+        Returns:
+            ``(capture_path, scroll_offset=0, screenshot_path)`` or ``None`` to fall
+            back to a plain site capture.
+        """
+        key = r2_storage.website_background_key(site.slug)
+        try:
+            if not r2_storage.exists(key):
+                return None
+            capture_path = await r2_storage.download_to_path_async(key, work_dir / "background.mp4")
+        except Exception:
+            logger.warning("[Video] background fetch failed for slug=%s", site.slug, exc_info=True)
+            return None
+        screenshot_path = work_dir / "top.png"
+        self._extract_first_frame(capture_path, screenshot_path)
+        return capture_path, 0.0, screenshot_path
+
+    @staticmethod
+    def _extract_first_frame(video_path: Path, output_path: Path) -> None:
+        """Grab the first frame of a video (top of the site) for the email thumbnail."""
+        subprocess.run(
+            [
+                settings.ffmpeg_path,
+                "-y",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                str(video_path),
+                "-frames:v",
+                "1",
+                str(output_path),
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=60,
+            check=False,
+        )
 
     @staticmethod
     def _as_internal_url(url: str) -> str:

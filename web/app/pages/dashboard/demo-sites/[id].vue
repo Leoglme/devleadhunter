@@ -414,6 +414,7 @@ import type {
   StoryblokCollaboratorStatus,
 } from '~/services/demoSiteService'
 import { DEFAULT_DEMO_SITE_THEME, DemoSiteService } from '~/services/demoSiteService'
+import { StoryblokSidecarService } from '~/services/storyblokSidecarService'
 import { useToast } from '~/composables/useToast'
 
 definePageMeta({ layout: 'dashboard', middleware: 'auth' })
@@ -797,9 +798,25 @@ function startVideoPolling(): void {
 async function handleGenerateVideo(): Promise<void> {
   generatingVideo.value = true
   try {
+    // On the desktop, first render the background with the Storyblok editor
+    // sequence (needs the local session); best-effort — the montage falls back
+    // to a site-only capture when it is skipped or unavailable.
+    try {
+      const prepared: Awaited<ReturnType<typeof StoryblokSidecarService.prepareVideoBackground>> =
+        await StoryblokSidecarService.prepareVideoBackground(demoSiteId)
+      if (prepared === 'uploaded') {
+        toast.success('Séquence Storyblok prête, montage en cours…')
+      }
+    } catch (backgroundError) {
+      toast.error(
+        backgroundError instanceof Error
+          ? `Séquence Storyblok ignorée : ${backgroundError.message}`
+          : 'Séquence Storyblok ignorée.',
+      )
+    }
     site.value = await DemoSiteService.generateDemoSiteVideo(demoSiteId)
     startVideoPolling()
-    toast.success('Génération de la vidéo lancée (capture + montage en tâche de fond)')
+    toast.success('Génération de la vidéo lancée (montage en tâche de fond)')
   } catch (error) {
     toast.error(error instanceof Error ? error.message : 'Échec du lancement de la génération')
   } finally {

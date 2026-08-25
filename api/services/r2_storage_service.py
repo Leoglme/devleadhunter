@@ -131,6 +131,22 @@ class R2StorageService:
         return f"{cls.VIDEOS_WEBSITES_PREFIX}/{slug}.mp4"
 
     @classmethod
+    def website_background_key(cls, slug: str) -> str:
+        """
+        Build the key of a demo's video *background* (site scroll + Storyblok editor).
+
+        Produced on the desktop sidecar (it needs the owner's Storyblok session) and
+        consumed by the VPS montage, which overlays the webcam PiP on top.
+
+        Args:
+            slug: Demo slug.
+
+        Returns:
+            The object key.
+        """
+        return f"{cls.VIDEOS_WEBSITES_PREFIX}/{slug}-background.mp4"
+
+    @classmethod
     def website_thumbnail_key(cls, slug: str) -> str:
         """
         Build the key of a demo's email thumbnail.

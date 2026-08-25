@@ -92,8 +92,10 @@ class StoryblokEditorClipService:
         output_path: Path,
         seed: StoryblokSessionSeed | None = None,
         user_data_dir: str | None = None,
+        executable_path: str | None = None,
         site_seconds: float = 14.0,
         hold_seconds: float = 1.0,
+        total_seconds: float | None = None,
         out_width: int = 1280,
         out_height: int = 720,
         fps: int = 30,
@@ -114,16 +116,24 @@ class StoryblokEditorClipService:
 
         work_dir = Path(tempfile.mkdtemp(prefix="sb-editor-clip-"))
         try:
-            site_clip = self._render_site_segment(demo_url, site_seconds, hold_seconds, fps, work_dir)
-            editor_clip = self._record_editor_segment(space_id, story_id, seed, user_data_dir, fps, work_dir)
-            return self._concat(site_clip, editor_clip, output_path, out_width, out_height, fps)
+            site_clip = self._render_site_segment(demo_url, site_seconds, hold_seconds, fps, work_dir, executable_path)
+            editor_clip = self._record_editor_segment(
+                space_id, story_id, seed, user_data_dir, fps, work_dir, executable_path
+            )
+            return self._concat(site_clip, editor_clip, output_path, out_width, out_height, fps, total_seconds)
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
     # ── Site scroll: frame sequence → constant velocity ──────────────────────
 
     def _render_site_segment(
-        self, demo_url: str, site_seconds: float, hold_seconds: float, fps: int, work_dir: Path
+        self,
+        demo_url: str,
+        site_seconds: float,
+        hold_seconds: float,
+        fps: int,
+        work_dir: Path,
+        executable_path: str | None = None,
     ) -> Path:
         """Capture the site as an equal-step frame sequence and assemble it."""
         from playwright.sync_api import sync_playwright
@@ -132,7 +142,7 @@ class StoryblokEditorClipService:
         frames_dir.mkdir(parents=True, exist_ok=True)
         try:
             with sync_playwright() as playwright:
-                browser = playwright.chromium.launch(headless=True)
+                browser = playwright.chromium.launch(headless=True, executable_path=executable_path)
                 context = browser.new_context(viewport={"width": _EDIT_W, "height": _EDIT_H})
                 page = context.new_page()
                 # ?internal=1 flags this as the owner's own visit → no prospect
@@ -192,6 +202,7 @@ class StoryblokEditorClipService:
         user_data_dir: str | None,
         fps: int,
         work_dir: Path,
+        executable_path: str | None = None,
     ) -> Path:
         """Record the authenticated editor edit, then trim the loading screen out."""
         from playwright.sync_api import sync_playwright
@@ -211,12 +222,12 @@ class StoryblokEditorClipService:
                     # Dedicated persistent profile (GoupixDex fallback): localStorage
                     # already holds the session, nothing to inject.
                     context = playwright.chromium.launch_persistent_context(
-                        user_data_dir, headless=False, **record_kwargs
+                        user_data_dir, headless=False, executable_path=executable_path, **record_kwargs
                     )
                     browser = None
                     page = context.pages[0] if context.pages else context.new_page()
                 else:
-                    browser = playwright.chromium.launch(headless=False)
+                    browser = playwright.chromium.launch(headless=False, executable_path=executable_path)
                     context = browser.new_context(**record_kwargs)
                     if seed is not None:
                         if seed.cookies:
@@ -344,18 +355,49 @@ class StoryblokEditorClipService:
         )
 
     def _concat(
-        self, site_clip: Path, editor_clip: Path, output_path: Path, out_width: int, out_height: int, fps: int
+        self,
+        site_clip: Path,
+        editor_clip: Path,
+        output_path: Path,
+        out_width: int,
+        out_height: int,
+        fps: int,
+        total_seconds: float | None,
     ) -> Path:
-        """Concatenate the site and editor segments, scaled to the pipeline size."""
+        """Concatenate the segments, fit to ``total_seconds`` if given, scale to output.
+
+        When a total is requested the background is trimmed (if longer) or its last
+        frame is frozen (if shorter) so it matches the webcam clip's timeline exactly.
+        """
         work_dir = site_clip.parent
         listing = work_dir / "concat.txt"
         listing.write_text(f"file '{site_clip}'\nfile '{editor_clip}'\n", encoding="utf-8")
         merged = work_dir / "merged.mp4"
         self._run_ffmpeg(["-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy", str(merged)])
-        self._run_ffmpeg(
-            ["-i", str(merged), *self._enc(fps), "-vf", f"scale={out_width}:{out_height}", str(output_path)]
-        )
+
+        video_filter = f"scale={out_width}:{out_height}"
+        fit_args: list[str] = []
+        if total_seconds and total_seconds > 0:
+            duration = self._probe_duration(merged)
+            if duration > total_seconds + 0.05:
+                fit_args = ["-t", f"{total_seconds:.2f}"]
+            elif duration + 0.05 < total_seconds:
+                video_filter = f"tpad=stop_mode=clone:stop_duration={total_seconds - duration:.2f},{video_filter}"
+        self._run_ffmpeg(["-i", str(merged), *fit_args, *self._enc(fps), "-vf", video_filter, str(output_path)])
         return output_path
+
+    def _probe_duration(self, path: Path) -> float:
+        """Return the media duration in seconds (0.0 when it cannot be read)."""
+        probe = self._ffmpeg.replace("ffmpeg.exe", "ffprobe.exe").replace("ffmpeg", "ffprobe")
+        result = subprocess.run(
+            [probe, "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(path)],
+            capture_output=True,
+            text=True,
+        )
+        try:
+            return float(result.stdout.strip())
+        except (TypeError, ValueError):
+            return 0.0
 
     @staticmethod
     def _enc(fps: int) -> list[str]:

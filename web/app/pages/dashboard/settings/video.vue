@@ -13,6 +13,7 @@
     </div>
 
     <PresenterVideoConfig />
+    <StoryblokConnectionCard />
   </div>
 </template>
 

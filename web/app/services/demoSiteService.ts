@@ -2,6 +2,20 @@ import { ApiClient } from '~/services/api'
 
 const BASE_URL: string = '/api/v1/demo-sites'
 
+/** Context the desktop sidecar needs to render a site's video background. */
+export type DemoSiteVideoBackgroundContext = {
+  slug: string
+  demo_url: string
+  space_id: string
+  story_id: string
+  site_seconds: number
+  hold_seconds: number
+  total_seconds: number
+  out_width: number
+  out_height: number
+  fps: number
+}
+
 export type DemoSiteTheme = {
   primary: string
   secondary: string
@@ -281,6 +295,48 @@ export class DemoSiteService {
    */
   static async generateDemoSiteVideo(demoSiteId: number): Promise<DemoSite> {
     return ApiClient.post<DemoSite>(`${BASE_URL}/${demoSiteId}/video`, {})
+  }
+
+  /**
+   * Fetch the context the desktop sidecar needs to render the video background.
+   * @param demoSiteId - Id of the demo site.
+   * @returns The demo url, Storyblok space/story ids and target durations.
+   */
+  static async getVideoBackgroundContext(demoSiteId: number): Promise<DemoSiteVideoBackgroundContext> {
+    return ApiClient.get<DemoSiteVideoBackgroundContext>(`${BASE_URL}/${demoSiteId}/video-background-context`)
+  }
+
+  /**
+   * Upload a desktop-produced video background (site scroll + Storyblok editor).
+   *
+   * The shared api client only handles JSON, so this posts the multipart body
+   * directly with the auth token.
+   * @param demoSiteId - Id of the demo site.
+   * @param clip - The rendered background mp4.
+   * @throws When the upload fails (message from the API when available).
+   */
+  static async uploadVideoBackground(demoSiteId: number, clip: Blob): Promise<void> {
+    const userStore: ReturnType<typeof useUserStore> = useUserStore()
+    const config: ReturnType<typeof useRuntimeConfig> = useRuntimeConfig()
+    const formData: FormData = new FormData()
+    formData.append('file', clip, `${demoSiteId}-background.mp4`)
+    const response: Response = await fetch(`${config.public.apiBase}${BASE_URL}/${demoSiteId}/video-background`, {
+      method: 'POST',
+      headers: userStore.token ? { Authorization: `Bearer ${userStore.token}` } : {},
+      body: formData,
+    })
+    if (!response.ok) {
+      const errorText: string = await response.text().catch(() => '')
+      let errorMessage: string = `Envoi du fond vidéo échoué : ${response.statusText}`
+      if (errorText) {
+        try {
+          errorMessage = (JSON.parse(errorText).detail as string) || errorMessage
+        } catch {
+          errorMessage = errorText
+        }
+      }
+      throw new Error(errorMessage)
+    }
   }
 
   /**

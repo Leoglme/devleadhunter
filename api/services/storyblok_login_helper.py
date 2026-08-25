@@ -38,7 +38,7 @@ class StoryblokLoginHelper:
     def _is_open(self) -> bool:
         return self._context is not None
 
-    async def open_login(self) -> dict[str, Any]:
+    async def open_login(self, executable_path: str | None = None) -> dict[str, Any]:
         """Open a visible Chromium on the Storyblok login, ready for the user to sign in.
 
         A background task then watches the window; as soon as it is authenticated it
@@ -55,6 +55,7 @@ class StoryblokLoginHelper:
             self._context = await self._playwright.chromium.launch_persistent_context(
                 str(profile_dir),
                 headless=False,
+                executable_path=executable_path,
                 args=["--start-maximized", "--no-first-run", "--no-default-browser-check"],
             )
             page = self._context.pages[0] if self._context.pages else await self._context.new_page()
