@@ -5,14 +5,17 @@
 export class DemoBeaconUtils {
   /**
    * Whether the current visit is the owner's own — excluded from tracking and beacons.
-   * @returns True when the URL carries ?internal=1 or ?_edit=1.
+   * Covers the owner's tagged visits (?internal=1 / ?_edit=1) and the Storyblok
+   * Visual Editor preview (?_storyblok=…): editing or video-capturing a site is
+   * never a prospect visit, so it must not notify.
+   * @returns True when the visit is internal (owner tag or CMS editor preview).
    */
   static isInternalVisit(): boolean {
     if (!import.meta.client) {
       return false
     }
     const params: URLSearchParams = new URLSearchParams(window.location.search)
-    return params.get('internal') === '1' || params.get('_edit') === '1'
+    return params.get('internal') === '1' || params.get('_edit') === '1' || params.has('_storyblok')
   }
 
   /**

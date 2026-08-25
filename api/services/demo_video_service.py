@@ -34,6 +34,7 @@ import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from sqlalchemy.orm import Session
 
@@ -360,6 +361,14 @@ class DemoVideoService:
         """
         return await asyncio.to_thread(self._capture_site_sync, url, scroll_seconds, work_dir)
 
+    @staticmethod
+    def _as_internal_url(url: str) -> str:
+        """Add ``internal=1`` so a capture visit is excluded from tracking/notifications."""
+        parts = urlparse(url)
+        query = dict(parse_qsl(parts.query))
+        query["internal"] = "1"
+        return urlunparse(parts._replace(query=urlencode(query)))
+
     def _capture_site_sync(self, url: str, scroll_seconds: float, work_dir: Path) -> tuple[Path, float, Path]:
         """Blocking Playwright capture (see ``_capture_site``)."""
         try:
@@ -370,6 +379,9 @@ class DemoVideoService:
             ) from exc
 
         screenshot_path = work_dir / "top.png"
+        # ?internal=1 tags this as the owner's own visit so the capture never fires
+        # prospect notifications / tracking events (guarded by DemoBeaconUtils).
+        internal_url = self._as_internal_url(url)
         try:
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch(headless=True)
@@ -382,9 +394,9 @@ class DemoVideoService:
                 recording_start = time.monotonic()
 
                 try:
-                    page.goto(url, wait_until="networkidle", timeout=45000)
+                    page.goto(internal_url, wait_until="networkidle", timeout=45000)
                 except Exception:
-                    page.goto(url, wait_until="load", timeout=45000)
+                    page.goto(internal_url, wait_until="load", timeout=45000)
                 page.wait_for_timeout(1200)
 
                 # Pré-scroll : déclenche les animations d'entrée + lazy-load,
