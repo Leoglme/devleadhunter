@@ -20,6 +20,7 @@ import asyncio
 import logging
 import multiprocessing
 import os
+import shutil
 import sys
 
 import uvicorn
@@ -53,6 +54,20 @@ class SidecarEnrichmentRequest(BaseModel):
     google_maps_url: str | None = None
     # Facebook page URL — enrichment anchor used when there is no Google listing.
     facebook_url: str | None = None
+
+
+class StoryblokBackgroundClipRequest(BaseModel):
+    """Everything the sidecar needs to render a prospect's video background."""
+
+    slug: str
+    demo_url: str
+    space_id: str
+    story_id: str
+    site_seconds: float = 14.0
+    hold_seconds: float = 1.0
+    out_width: int = 1280
+    out_height: int = 720
+    fps: int = 30
 
 
 async def close_transient_browsers() -> None:
@@ -254,6 +269,87 @@ async def enrichment(request: SidecarEnrichmentRequest) -> EnrichmentData:
     finally:
         await close_transient_browsers()
         await close_autocomplete_session()
+
+
+@app.get("/storyblok/session", dependencies=[Depends(require_sidecar_token)])
+async def storyblok_session() -> dict[str, object]:
+    """Current Storyblok connection state for the config card (ready/needs_login/busy)."""
+    from services.storyblok_login_helper import storyblok_login_helper
+
+    return await storyblok_login_helper.state()
+
+
+@app.post("/storyblok/open-login", dependencies=[Depends(require_sidecar_token)])
+async def storyblok_open_login() -> dict[str, object]:
+    """Open a visible window for a one-time Storyblok sign-in (dedicated profile)."""
+    from services.storyblok_login_helper import storyblok_login_helper
+
+    return await storyblok_login_helper.open_login()
+
+
+@app.post("/storyblok/close-login", dependencies=[Depends(require_sidecar_token)])
+async def storyblok_close_login() -> dict[str, bool]:
+    """Close the login window if the user opened it and is done."""
+    from services.storyblok_login_helper import storyblok_login_helper
+
+    await storyblok_login_helper.close()
+    return {"closed": True}
+
+
+@app.post("/storyblok/background-clip", dependencies=[Depends(require_sidecar_token)])
+async def storyblok_background_clip(request: StoryblokBackgroundClipRequest) -> object:
+    """
+    Render the video background (linear site scroll + Storyblok editor edit).
+
+    Resolves the session cascade (machine browser → dedicated profile). Returns the
+    mp4 file; when no session is available, returns ``{"skipped": true}`` so the
+    caller composes the video without the editor sequence.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse, JSONResponse
+    from starlette.background import BackgroundTask
+
+    from services.storyblok_editor_clip_service import StoryblokEditorClipError, storyblok_editor_clip_service
+    from services.storyblok_session_service import storyblok_session_service
+
+    seed = storyblok_session_service.resolve_machine_seed()
+    user_data_dir: str | None = None
+    if seed is None:
+        persisted = storyblok_session_service.read_persisted_state()
+        if persisted and persisted.get("logged_in"):
+            user_data_dir = str(storyblok_session_service.dedicated_profile_dir)
+        else:
+            return JSONResponse({"skipped": True, "reason": "needs_login"}, status_code=status.HTTP_409_CONFLICT)
+
+    work_dir = Path(tempfile.mkdtemp(prefix=f"sb-bg-{request.slug}-"))
+    output_path = work_dir / "background.mp4"
+    try:
+        await asyncio.to_thread(
+            storyblok_editor_clip_service.build_background,
+            demo_url=request.demo_url,
+            space_id=request.space_id,
+            story_id=request.story_id,
+            output_path=output_path,
+            seed=seed,
+            user_data_dir=user_data_dir,
+            site_seconds=request.site_seconds,
+            hold_seconds=request.hold_seconds,
+            out_width=request.out_width,
+            out_height=request.out_height,
+            fps=request.fps,
+        )
+    except StoryblokEditorClipError as exc:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    return FileResponse(
+        output_path,
+        media_type="video/mp4",
+        filename=f"{request.slug}-background.mp4",
+        background=BackgroundTask(shutil.rmtree, work_dir, ignore_errors=True),
+    )
 
 
 def main() -> None:
