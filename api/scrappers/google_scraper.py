@@ -402,7 +402,9 @@ class GoogleScraper(NodriverScraperMixin, BaseScraper):
 
         email: str | None = None
         try:
-            email = await email_scraper.find_email(name, city)
+            email = await email_scraper.find_email(
+                name, city, website=website if website_status is WebsiteStatus.LIVE else None
+            )
         except Exception as exc:
             logger.debug("Could not find email for %s: %s", name, exc)
 
@@ -816,7 +818,9 @@ class GoogleScraper(NodriverScraperMixin, BaseScraper):
 
                     email: str | None = None
                     try:
-                        email = await email_scraper.find_email(name, city_name)
+                        email = await email_scraper.find_email(
+                            name, city_name, website=website if website_status is WebsiteStatus.LIVE else None
+                        )
                     except Exception as exc:
                         logger.debug("Could not find email: %s", exc)
 

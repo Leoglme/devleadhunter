@@ -9,6 +9,7 @@ import logging
 import re
 from urllib.parse import quote_plus
 
+from scrappers.email_candidate_scoring import email_candidate_scorer
 from scrappers.nodriver_browser import NODRIVER_AVAILABLE, NodriverBrowser
 from scrappers.nodriver_dom import NodriverDom
 from scrappers.nodriver_executor import run_nodriver_task
@@ -28,6 +29,8 @@ class EmailScraper:
         # Ephemeral profile: avoids locking the main scraper's Chrome profile.
         self._browser = NodriverBrowser(ephemeral=True)
         self.email_pattern = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
+        # Ranks page emails and rejects town-hall / directory false positives.
+        self._scorer = email_candidate_scorer
 
     @property
     def browser(self) -> object | None:
@@ -91,17 +94,33 @@ class EmailScraper:
         except Exception as exc:
             logger.debug("Could not handle Google cookie consent: %s", exc)
 
-    async def search_google_page(self, tab: object, query: str, page_number: int = 0) -> str | None:
+    async def search_google_page(
+        self,
+        tab: object,
+        query: str,
+        page_number: int = 0,
+        *,
+        name: str,
+        city: str,
+        website: str | None = None,
+    ) -> str | None:
         """
-        Search Google on a specific results page and extract the first valid email.
+        Search Google on a results page and return the email most likely the prospect's.
+
+        Every email on the page is collected, then ``EmailCandidateScorer`` drops
+        town-hall / directory false positives and ranks the rest — instead of
+        keeping the first address found (which was often the mairie shown on top).
 
         Args:
             tab: nodriver Tab instance.
             query: Search query.
             page_number: Zero-based page index.
+            name: Business name (drives disqualification + ranking).
+            city: City name (used by the domain-equals-city reject rule).
+            website: Prospect website URL when live — strongest ownership signal.
 
         Returns:
-            First valid email found, or None.
+            Best-scored email found, or None.
         """
         try:
             if page_number == 0:
@@ -117,105 +136,52 @@ class EmailScraper:
                 await asyncio.sleep(0.5)
 
             page_text = await tab.get_content()
-            emails = self.extract_emails_from_text(page_text)
-
-            if emails:
-                spam_domains = [
-                    # Generic / placeholder
-                    "example.com",
-                    "test.com",
-                    "domain.com",
-                    "yoursite.com",
-                    # Big platforms
-                    "google.com",
-                    "gstatic.com",
-                    "facebook.com",
-                    "instagram.com",
-                    "twitter.com",
-                    "linkedin.com",
-                    "youtube.com",
-                    "tiktok.com",
-                    # Review / aggregator sites
-                    "eldo.com",
-                    "avis-verifies.com",
-                    "trustpilot.com",
-                    "tripadvisor.com",
-                    "tripadvisor.fr",
-                    "yelp.com",
-                    "yelp.fr",
-                    # Generic artisan / professional directories
-                    "plombiers.com",
-                    "electriciens.com",
-                    "artisans.com",
-                    "pagesjaunes.fr",
-                    "pages-jaunes.fr",
-                    "annuaire.com",
-                    "annuaires.com",
-                    "kompass.com",
-                    "societe.com",
-                    "verif.com",
-                    "infogreffe.fr",
-                    # Genealogy / off-topic sites that appear in broad searches
-                    "geneafrance.com",
-                    "geneanet.org",
-                    "filae.com",
-                ]
-                # Reject HTML-encoding artifacts (e.g. "u003e" = ">") and
-                # generic role addresses from directories that are never the
-                # actual business contact
-                spam_prefixes = (
-                    "u003",
-                    "u0022",  # HTML entity remnants
-                    "noreply",
-                    "no-reply",
-                    "donotreply",
-                    "service-avis",
-                    "avis@",
-                    "mairie",  # city-hall addresses (mairie@ville.fr etc.)
+            email = self._scorer.best_email(page_text, name=name, city=city, website=website)
+            if email:
+                logger.info(
+                    "Best email for query '%s' page %s: %s",
+                    query,
+                    page_number + 1,
+                    email,
                 )
-
-                def _is_valid(addr: str) -> bool:
-                    low = addr.lower()
-                    if any(sp in low for sp in spam_domains):
-                        return False
-                    local = low.split("@")[0]
-                    return not any(local.startswith(pfx) for pfx in spam_prefixes)
-
-                filtered = [e for e in emails if _is_valid(e)]
-                if filtered:
-                    logger.info(
-                        "Found email(s) for query '%s' page %s: %s",
-                        query,
-                        page_number + 1,
-                        filtered,
-                    )
-                    return filtered[0]
-            return None
+            return email
         except Exception as exc:
             logger.debug("Error searching Google page %s for '%s': %s", page_number + 1, query, exc)
             return None
 
-    async def search_google_multiple_pages(self, tab: object, query: str, max_pages: int = 3) -> str | None:
+    async def search_google_multiple_pages(
+        self,
+        tab: object,
+        query: str,
+        max_pages: int = 3,
+        *,
+        name: str,
+        city: str,
+        website: str | None = None,
+    ) -> str | None:
         """
-        Search Google across multiple pages until an email is found.
+        Search Google across multiple pages until a scored email is found.
 
         Args:
             tab: nodriver Tab instance.
             query: Search query.
             max_pages: Maximum number of result pages to scan.
+            name: Business name forwarded to the scorer.
+            city: City name forwarded to the scorer.
+            website: Prospect website URL when live.
 
         Returns:
-            First email found, or None.
+            First page's best email, or None.
         """
         for page_num in range(max_pages):
-            email = await self.search_google_page(tab, query, page_num)
+            email = await self.search_google_page(tab, query, page_num, name=name, city=city, website=website)
             if email:
                 return email
             if page_num < max_pages - 1:
                 await asyncio.sleep(0.5)
         return None
 
-    async def _find_email_nodriver(self, name: str, city: str) -> str | None:
+    async def _find_email_nodriver(self, name: str, city: str, website: str | None = None) -> str | None:
         """Internal nodriver implementation for email lookup."""
         if not NODRIVER_AVAILABLE:
             return None
@@ -225,13 +191,17 @@ class EmailScraper:
         try:
             query1 = f"{name} {city} email"
             logger.info("Searching for email with query: %s (3 pages)", query1)
-            email = await self.search_google_multiple_pages(tab, query1, max_pages=3)
+            email = await self.search_google_multiple_pages(
+                tab, query1, max_pages=3, name=name, city=city, website=website
+            )
             if email:
                 return email
 
             query2 = f"{name} {city} contact"
             logger.info("Trying contact query: %s (3 pages)", query2)
-            return await self.search_google_multiple_pages(tab, query2, max_pages=3)
+            return await self.search_google_multiple_pages(
+                tab, query2, max_pages=3, name=name, city=city, website=website
+            )
         finally:
             pass
 
@@ -241,6 +211,7 @@ class EmailScraper:
         city: str,
         phone: str | None = None,
         social_url: str | None = None,
+        website: str | None = None,
     ) -> str | None:
         """
         Smart email lookup with tiered query strategy (always enabled).
@@ -272,7 +243,7 @@ class EmailScraper:
             # Priority 0: direct social profile — skip the Google search entirely
             if social_url:
                 logger.info("Smart email P0 (direct social URL): %s", social_url)
-                found = await self._scrape_social_profile_nodriver(tab, social_url, name)
+                found = await self._scrape_social_profile_nodriver(tab, social_url, name, city)
                 if found:
                     return found
 
@@ -290,14 +261,18 @@ class EmailScraper:
                     phone_formatted = phone.strip()
                 query1 = f'"{name}" "{phone_formatted}"'
                 logger.info("Smart email P1 (name+phone): %s", query1)
-                email = await self.search_google_multiple_pages(tab, query1, max_pages=2)
+                email = await self.search_google_multiple_pages(
+                    tab, query1, max_pages=2, name=name, city=city, website=website
+                )
                 if email:
                     return email
 
             # Priority 2: name + city + email keyword (page 1 only — page 2 mixes unrelated results)
             query2 = f'"{name}" "{city}" email'
             logger.info("Smart email P2 (name+city): %s", query2)
-            email = await self.search_google_multiple_pages(tab, query2, max_pages=1)
+            email = await self.search_google_multiple_pages(
+                tab, query2, max_pages=1, name=name, city=city, website=website
+            )
             if email:
                 return email
 
@@ -305,7 +280,9 @@ class EmailScraper:
             # (unquoted searches return city-wide listings where a neighbour's email leaks in)
             query3 = f'"{name}" {city} contact email'
             logger.info("Smart email P3 (broad): %s", query3)
-            email = await self.search_google_multiple_pages(tab, query3, max_pages=1)
+            email = await self.search_google_multiple_pages(
+                tab, query3, max_pages=1, name=name, city=city, website=website
+            )
             if email:
                 return email
 
@@ -316,67 +293,30 @@ class EmailScraper:
         finally:
             pass
 
-    # Spam domains that are never a real business contact email
-    _SOCIAL_SPAM_DOMAINS: tuple[str, ...] = (
-        "example.com",
-        "test.com",
-        "google.com",
-        "gstatic.com",
-        "facebook.com",
-        "instagram.com",
-        "twitter.com",
-        "linkedin.com",
-        "pagesjaunes.fr",
-        "yelp.com",
-        "tripadvisor.com",
-        "geneafrance.com",
-        "geneanet.org",
-    )
-    _SOCIAL_SPAM_PREFIXES: tuple[str, ...] = (
-        "u003",
-        "u0022",
-        "noreply",
-        "no-reply",
-        "donotreply",
-        "service-avis",
-        "mairie",
-    )
-
-    def _is_valid_social_email(self, addr: str) -> bool:
-        """
-        Return True when *addr* passes the social-profile spam filter.
-
-        Args:
-            addr: Email address candidate to validate.
-
-        Returns:
-            True if the address is not on the social spam blocklist.
-        """
-        low = addr.lower()
-        if any(sp in low for sp in self._SOCIAL_SPAM_DOMAINS):
-            return False
-        return not any(low.split("@")[0].startswith(pfx) for pfx in self._SOCIAL_SPAM_PREFIXES)
-
     async def _scrape_social_profile_nodriver(
         self,
         tab: object,
         social_url: str,
         name: str,
+        city: str = "",
     ) -> str | None:
         """
         Navigate directly to a Facebook or Instagram profile and extract an email.
 
         For Facebook the ``/about`` sub-page is used because it surfaces the
         contact section.  For Instagram the root profile URL is scraped directly.
+        The page is passed through the shared scorer so a stray directory address
+        embedded in the profile never wins over the business's own contact.
 
         Args:
             tab: Active nodriver :class:`Tab` instance.
             social_url: Direct profile URL (must contain ``facebook.com/`` or
                 ``instagram.com/``).
-            name: Business name (used only for logging).
+            name: Business name (drives disqualification + ranking).
+            city: City name (used by the domain-equals-city reject rule).
 
         Returns:
-            First valid email found on the profile page, or ``None``.
+            Best-scored email found on the profile page, or ``None``.
         """
         # Facebook /about exposes the contact section; Instagram root is sufficient
         if "facebook.com/" in social_url.lower() and "/about" not in social_url.lower():
@@ -387,16 +327,15 @@ class EmailScraper:
         try:
             await NodriverDom.navigate(tab, target, sleep_s=1.5)
             page_text = await tab.get_content()
-            emails = self.extract_emails_from_text(page_text)
-            filtered = [e for e in emails if self._is_valid_social_email(e)]
-            if filtered:
+            email = self._scorer.best_email(page_text, name=name, city=city)
+            if email:
                 logger.info(
                     "Social email for '%s' at %s: %s",
                     name,
                     social_url,
-                    filtered[0],
+                    email,
                 )
-                return filtered[0]
+                return email
         except Exception as exc:
             logger.debug(
                 "Could not scrape social profile %s for '%s': %s",
@@ -486,7 +425,7 @@ class EmailScraper:
         profile_urls = [link for link in raw_links if re.search(r"(facebook\.com|instagram\.com)/[^/?#]{3,}", link)]
 
         for profile_url in profile_urls[:2]:
-            found = await self._scrape_social_profile_nodriver(tab, profile_url, name)
+            found = await self._scrape_social_profile_nodriver(tab, profile_url, name, city)
             if found:
                 return found
 
@@ -498,6 +437,7 @@ class EmailScraper:
         city: str,
         phone: str | None = None,
         social_url: str | None = None,
+        website: str | None = None,
     ) -> str | None:
         """
         Find email with smart query prioritisation.
@@ -513,6 +453,8 @@ class EmailScraper:
             social_url: Direct Facebook / Instagram profile URL already known.
                 When provided, the scraper navigates there first (P0) before
                 falling through to the Google-search tiers.
+            website: Prospect website URL when live — strongest ownership signal
+                for the candidate scorer.
 
         Returns:
             Email address if found, otherwise None.
@@ -523,19 +465,25 @@ class EmailScraper:
 
         try:
             return await run_nodriver_task(
-                lambda: self._find_email_smart_nodriver(name, city, phone, social_url),
+                lambda: self._find_email_smart_nodriver(name, city, phone, social_url, website),
                 timeout=120,
             )
         except Exception as exc:
             logger.error("Error in smart email scraper: %s", exc)
             return None
 
-    async def find_email(self, name: str, city: str) -> str | None:
+    async def find_email(self, name: str, city: str, website: str | None = None) -> str | None:
         """
         Find an email address for a business via Google search.
 
         Always attempts the lookup when a browser engine is available — we
         recover the contact email whenever it is publicly discoverable.
+
+        Args:
+            name: Business name.
+            city: City name.
+            website: Prospect website URL when live — strongest ownership signal
+                for the candidate scorer.
         """
         if not NODRIVER_AVAILABLE:
             logger.warning("nodriver not available, skipping email search")
@@ -543,7 +491,7 @@ class EmailScraper:
 
         try:
             return await run_nodriver_task(
-                lambda: self._find_email_nodriver(name, city),
+                lambda: self._find_email_nodriver(name, city, website),
                 timeout=120,
             )
         except Exception as exc:

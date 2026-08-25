@@ -122,6 +122,7 @@ class AutoScraper(BaseScraper):
                 prospect.city or "",
                 phone=prospect.phone,
                 social_url=prospect.social_url,
+                website=prospect.website if prospect.website_status is WebsiteStatus.LIVE else None,
             )
             if found:
                 data = prospect.model_dump()

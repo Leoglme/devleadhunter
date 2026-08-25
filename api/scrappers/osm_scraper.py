@@ -322,7 +322,9 @@ class OSMScraper(BaseScraper):
             email = tags.get("email") or tags.get("contact:email")
             if not email:
                 try:
-                    email = await email_scraper.find_email(name, city)
+                    email = await email_scraper.find_email(
+                        name, city, website=website if website_status is WebsiteStatus.LIVE else None
+                    )
                     if email:
                         logger.info(f"Found email for {name}: {email}")
                 except Exception as e:

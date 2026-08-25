@@ -1,0 +1,135 @@
+"""
+Unit tests for EmailCandidateScorer — the town-hall / directory false-positive
+rejection that replaced the old "first non-blacklisted email wins" behaviour.
+
+All offline: the scorer only reads page text, never the network.
+
+Léo's philosophy under test:
+  - hard-reject ONLY provable non-prospects (state / mairie / directory / socials
+    / domain-equals-city);
+  - never reject on name↔domain incoherence (a footballer-named gmail is valid);
+  - floor rule: as long as one candidate survives, return the best, even low-scored.
+"""
+
+from scrappers.email_candidate_scoring import EmailCandidateScorer
+
+scorer = EmailCandidateScorer()
+
+
+def _only(email: str, *, name: str = "Garage Test", city: str = "Villeurbanne") -> str | None:
+    """Best email of a page holding a single address (isolates disqualification)."""
+    return scorer.best_email(f"Un resultat quelconque {email} fin de page", name=name, city=city)
+
+
+# ── The ticket's real bug: mairie on top, real garage email below ────────────
+
+
+def test_town_hall_email_never_beats_the_real_garage_email() -> None:
+    """The Saint-Germain-Lembron case: mairie domain == city → dropped."""
+    page = (
+        "Mairie de Saint-Germain-Lembron — contact@saint-germain-lembron.fr — "
+        "horaires d'ouverture. "
+        "Garage Debiolle Patrick, 47 Rte d'Issoire — garage.debiolle@orange.fr"
+    )
+    best = scorer.best_email(page, name="Debiolle Patrick", city="Saint-Germain-Lembron")
+    assert best == "garage.debiolle@orange.fr"
+
+
+def test_domain_equal_to_city_is_rejected() -> None:
+    """A vanity domain that IS the commune name is a town hall / office."""
+    assert _only("contact@saint-germain-lembron.fr", city="Saint-Germain-Lembron") is None
+
+
+def test_city_in_gmail_local_part_is_kept() -> None:
+    """Léo's point: `leo.rennes@gmail.com` is legitimate — city in the LOCAL part."""
+    assert _only("leo.rennes@gmail.com", name="Coiffure X", city="Rennes") == "leo.rennes@gmail.com"
+
+
+# ── Hard-reject families (Temps 1) ───────────────────────────────────────────
+
+
+def test_state_and_collectivity_domains_are_rejected() -> None:
+    """gouv.fr, service-public.fr, mairie-*, ville-*, cc-*, ccas-* never a prospect."""
+    assert _only("contact@ville-lyon.gouv.fr") is None
+    assert _only("accueil@service-public.fr") is None
+    assert _only("mairie@mairie-lembron.fr") is None
+    assert _only("contact@ville-clermont.fr") is None
+    assert _only("secretariat@cc-pays-de-lembron.fr") is None
+
+
+def test_tourist_office_domains_are_rejected() -> None:
+    """Office de tourisme shapes: ot-*, *-tourisme.fr."""
+    assert _only("contact@ot-paysdelembron.com") is None
+    assert _only("info@lembron-tourisme.fr") is None
+
+
+def test_known_directories_and_socials_are_rejected() -> None:
+    """Directory / aggregator / social domains are never the business contact."""
+    for email in (
+        "pro@pagesjaunes.fr",
+        "garage@vroomly.com",
+        "contact@allogarage.fr",
+        "x@118000.fr",
+        "page@facebook.com",
+    ):
+        assert _only(email) is None, email
+
+
+def test_noreply_and_html_artifacts_are_rejected() -> None:
+    """Role-noise local parts and HTML entity remnants are dropped."""
+    assert _only("noreply@brevo.com") is None
+    assert _only("u003e-garbage@example.com") is None
+
+
+# ── Floor rule: never lose a prospect over a low score ───────────────────────
+
+
+def test_unrelated_generic_email_survives_the_floor() -> None:
+    """An email with zero link to name/city (footballer inbox) is STILL returned."""
+    best = scorer.best_email(
+        "Garage Dupont a Lyon — zizou.madrid@gmail.com",
+        name="Garage Dupont",
+        city="Lyon",
+    )
+    assert best == "zizou.madrid@gmail.com"
+
+
+def test_returns_none_only_when_everything_is_disqualified() -> None:
+    """No survivor → None (a clean 'no email', which existing guards filter out)."""
+    page = "contact@mairie-lyon.fr et aussi info@pagesjaunes.fr"
+    assert scorer.best_email(page, name="Garage Dupont", city="Lyon") is None
+
+
+def test_empty_page_returns_none() -> None:
+    """No email at all → None."""
+    assert scorer.best_email("aucune adresse ici", name="X", city="Y") is None
+
+
+# ── Ranking signals (Temps 2) ────────────────────────────────────────────────
+
+
+def test_website_domain_match_wins() -> None:
+    """The prospect's own website domain is the strongest ownership signal."""
+    page = "voisin-random@gmail.com puis Plomberie Sud contact@plomberie-sud.fr"
+    best = scorer.best_email(
+        page,
+        name="Plomberie Sud",
+        city="Aix",
+        website="https://www.plomberie-sud.fr",
+    )
+    assert best == "contact@plomberie-sud.fr"
+
+
+def test_name_in_local_part_beats_an_unrelated_generic() -> None:
+    """`garage.debiolle@orange.fr` outranks a neighbour's generic gmail."""
+    page = "voisin.random@gmail.com et garage.debiolle@orange.fr"
+    best = scorer.best_email(page, name="Garage Debiolle", city="Issoire")
+    assert best == "garage.debiolle@orange.fr"
+
+
+def test_proximity_breaks_ties_between_bare_generics() -> None:
+    """With no domain/local signal, the email nearest the business name wins."""
+    filler = " lorem ipsum dolor " * 120  # ~2000 chars, no name token inside
+    page = f"loin@example-mail.fr{filler}Boulangerie Martin proche@contact-mail.fr"
+    best = scorer.best_email(page, name="Boulangerie Martin", city="Nantes")
+    assert best == "proche@contact-mail.fr"
