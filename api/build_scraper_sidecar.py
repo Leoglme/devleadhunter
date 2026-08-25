@@ -67,6 +67,10 @@ def main() -> None:
         "uvicorn.lifespan.on",
         "--collect-all",
         "nodriver",
+        # Playwright renders the Storyblok editor video background; its node driver
+        # must be bundled (the browser itself is the sidecar's provisioned Chrome).
+        "--collect-all",
+        "playwright",
         "--distpath",
         str(API_DIR / "dist"),
         "--workpath",
