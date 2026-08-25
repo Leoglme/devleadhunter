@@ -99,10 +99,28 @@ export class StoryblokSidecarService {
       return 'skipped'
     }
 
-    if (!response.ok) return 'skipped'
+    // 409 = no Storyblok session yet: compose the video without the editor sequence.
+    if (response.status === 409) return 'skipped'
+    // Any other failure is surfaced so the cause (session, capture, upload) is visible.
+    if (!response.ok) throw new Error(await StoryblokSidecarService.readSidecarError(response))
 
     const clip: Blob = await response.blob()
     await DemoSiteService.uploadVideoBackground(demoSiteId, clip)
     return 'uploaded'
+  }
+
+  /**
+   * Extract the most precise message a failed sidecar response offers.
+   * @param response - The failed response.
+   * @returns The sidecar `detail` field, or the raw body / status text.
+   */
+  private static async readSidecarError(response: Response): Promise<string> {
+    const raw: string = await response.text().catch((): string => '')
+    if (!raw) return `Séquence Storyblok : erreur ${response.status}`
+    try {
+      return (JSON.parse(raw).detail as string) || raw
+    } catch {
+      return raw
+    }
   }
 }

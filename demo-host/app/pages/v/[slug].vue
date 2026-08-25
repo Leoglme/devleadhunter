@@ -30,7 +30,6 @@
         ref="playerRef"
         class="mt-6 aspect-video w-full rounded-2xl border border-neutral-800 bg-black shadow-2xl"
         :src="videoSrc"
-        :poster="posterSrc"
         controls
         playsinline
         preload="metadata"
@@ -91,12 +90,6 @@ const {
 // Les médias sont servis par Cloudflare R2 ; les routes API ne sont qu'une redirection de repli.
 const videoSrc: ComputedRef<string> = computed(
   (): string => site.value?.video_url || `${config.public.apiBase}/api/v1/demo-sites/public/${slug.value}/video.mp4`,
-)
-
-const posterSrc: ComputedRef<string> = computed(
-  (): string =>
-    site.value?.video_thumbnail_url ||
-    `${config.public.apiBase}/api/v1/demo-sites/public/${slug.value}/video-thumbnail.jpg`,
 )
 
 /** Demo link keeping the A/B variant so PostHog attributes the visit (full reload on purpose). */

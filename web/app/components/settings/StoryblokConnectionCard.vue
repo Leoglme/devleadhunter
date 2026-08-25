@@ -5,7 +5,7 @@
         <h2 class="text-sm font-bold">Connexion Storyblok</h2>
         <p class="text-muted mt-1 text-xs leading-relaxed">
           Permet d'ajouter la séquence « édition du site » (CMS Storyblok) au fond de la vidéo. Réutilise votre session
-          navigateur ; sinon, connectez-vous une fois ici.
+          navigateur, sinon connectez-vous une fois ici.
         </p>
       </div>
       <span :class="['rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase', badgeClass]">{{ badgeLabel }}</span>

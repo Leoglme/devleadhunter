@@ -198,7 +198,7 @@
                   />
                 </button>
                 <div class="mt-2 space-y-2">
-                  <button type="button" class="btn-secondary w-full text-xs" @click="copyDemoUrl(site.video_page_url)">
+                  <button type="button" class="btn-secondary w-full text-xs" @click="copyVideoUrl(site.video_page_url)">
                     {{ copied ? 'Lien copié !' : 'Copier le lien vidéo' }}
                   </button>
                   <button
@@ -230,6 +230,10 @@
                 <UIcon name="i-lucide-clapperboard" class="mr-1.5 h-3.5 w-3.5" />
                 {{ generatingVideo ? 'Lancement…' : site.video_status === 'failed' ? 'Réessayer' : 'Générer la vidéo' }}
               </button>
+
+              <p v-if="videoPrepStatus" class="text-muted mt-3 text-center text-[11px] leading-relaxed">
+                {{ videoPrepStatus }}
+              </p>
 
               <NuxtLink
                 to="/dashboard/settings/video"
@@ -452,6 +456,7 @@ const inviting: Ref<boolean> = ref(false)
 const refreshingCms: Ref<boolean> = ref(false)
 const exporting: Ref<boolean> = ref(false)
 const generatingVideo: Ref<boolean> = ref(false)
+const videoPrepStatus: Ref<string> = ref('')
 const deletingVideo: Ref<boolean> = ref(false)
 const deleteVideoModalRef: Ref<{ open: () => void } | null> = ref(null)
 const deleteSiteModalRef: Ref<{ open: () => void } | null> = ref(null)
@@ -801,6 +806,7 @@ async function handleGenerateVideo(): Promise<void> {
     // On the desktop, first render the background with the Storyblok editor
     // sequence (needs the local session); best-effort — the montage falls back
     // to a site-only capture when it is skipped or unavailable.
+    videoPrepStatus.value = 'Enregistrement du site + de la séquence Storyblok (~1-2 min, une fenêtre peut s’ouvrir)…'
     try {
       const prepared: Awaited<ReturnType<typeof StoryblokSidecarService.prepareVideoBackground>> =
         await StoryblokSidecarService.prepareVideoBackground(demoSiteId)
@@ -813,6 +819,8 @@ async function handleGenerateVideo(): Promise<void> {
           ? `Séquence Storyblok ignorée : ${backgroundError.message}`
           : 'Séquence Storyblok ignorée.',
       )
+    } finally {
+      videoPrepStatus.value = ''
     }
     site.value = await DemoSiteService.generateDemoSiteVideo(demoSiteId)
     startVideoPolling()
@@ -847,11 +855,19 @@ async function handleDeleteVideoConfirmed(): Promise<void> {
 }
 
 /**
- * Open the tracked player page with the in-app marker (adds a close button).
+ * Open the tracked player page as the owner (close button + no tracking/notification).
  * @param url - Player page URL of the site's prospection video.
  */
 async function openVideoPage(url: string): Promise<void> {
-  await openExternalUrl(`${url}${url.includes('?') ? '&' : '?'}from=app`)
+  await openExternalUrl(`${url}${url.includes('?') ? '&' : '?'}from=app&internal=1`)
+}
+
+/**
+ * Copy the player page URL as an owner-preview link (excluded from tracking).
+ * @param url - Player page URL of the site's prospection video.
+ */
+async function copyVideoUrl(url: string): Promise<void> {
+  await copy(`${url}${url.includes('?') ? '&' : '?'}internal=1`)
 }
 
 watch(selectedTemplateId, (templateId: string, previous: string): void => {

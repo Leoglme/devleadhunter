@@ -24,7 +24,6 @@ import os
 import shutil
 import subprocess
 import tempfile
-import time
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -55,26 +54,57 @@ class StoryblokEditorClipError(Exception):
     """Raised when the background clip cannot be produced."""
 
 
+class _FrameCapturer:
+    """Screenshot the editor into a numbered sequence — our own recorder.
+
+    Playwright's ``record_video`` needs Playwright's bundled ffmpeg, which the
+    packaged sidecar has no copy of; grabbing frames + assembling them with the
+    system ffmpeg keeps the editor sequence working in the frozen binary.
+    """
+
+    def __init__(self, page, frames_dir: Path, fps: int) -> None:
+        self._page = page
+        self._dir = frames_dir
+        self._fps = fps
+        self._index = 0
+
+    def shot(self) -> None:
+        """Capture one frame of the current editor state."""
+        self._page.screenshot(path=str(self._dir / f"f{self._index:05d}.png"))
+        self._index += 1
+
+    def hold(self, milliseconds: int) -> None:
+        """Capture frames for ``milliseconds`` at the target fps (replaces a wait)."""
+        frames = max(1, round(milliseconds / 1000 * self._fps))
+        interval = max(1, round(milliseconds / frames))
+        for _ in range(frames):
+            self.shot()
+            self._page.wait_for_timeout(interval)
+
+
 class _Cursor:
     """A self-positioned on-screen cursor that also moves the real Playwright mouse."""
 
-    def __init__(self, page) -> None:
-        self.page, self.x, self.y = page, 800, 460
+    def __init__(self, page, capturer: _FrameCapturer) -> None:
+        self._page = page
+        self._cap = capturer
+        self.x, self.y = 800, 460
 
     def move(self, x: float, y: float, steps: int = 6, delay: int = 15) -> None:
-        """Glide the cursor (and the mouse) to (x, y) in a few interpolated steps."""
+        """Glide the cursor (and the mouse) to (x, y), capturing frames as it goes."""
         for i in range(1, steps + 1):
             ix, iy = self.x + (x - self.x) * i / steps, self.y + (y - self.y) * i / steps
-            self.page.evaluate("([x,y]) => window.__moveCur && window.__moveCur(x,y)", [ix, iy])
-            self.page.mouse.move(ix, iy)
-            self.page.wait_for_timeout(delay)
+            self._page.evaluate("([x,y]) => window.__moveCur && window.__moveCur(x,y)", [ix, iy])
+            self._page.mouse.move(ix, iy)
+            self._cap.hold(delay)
         self.x, self.y = x, y
 
     def click(self, x: float, y: float, settle: int = 150) -> None:
         """Glide to (x, y), pause so the move reads on screen, then click."""
         self.move(x, y)
-        self.page.wait_for_timeout(settle)
-        self.page.mouse.click(x, y)
+        self._cap.hold(settle)
+        self._page.mouse.click(x, y)
+        self._cap.shot()
 
 
 class StoryblokEditorClipService:
@@ -204,31 +234,26 @@ class StoryblokEditorClipService:
         work_dir: Path,
         executable_path: str | None = None,
     ) -> Path:
-        """Record the authenticated editor edit, then trim the loading screen out."""
+        """Capture the authenticated editor edit as a frame sequence (no Playwright video)."""
         from playwright.sync_api import sync_playwright
 
-        video_dir = work_dir / "editor_raw"
-        video_dir.mkdir(parents=True, exist_ok=True)
+        frames_dir = work_dir / "editor_frames"
+        frames_dir.mkdir(parents=True, exist_ok=True)
         editor_url = f"https://app.storyblok.com/#/me/spaces/{space_id}/stories/0/0/{story_id}"
-
-        record_kwargs = {
-            "viewport": {"width": _EDIT_W, "height": _EDIT_H},
-            "record_video_dir": str(video_dir),
-            "record_video_size": {"width": _EDIT_W, "height": _EDIT_H},
-        }
+        context_kwargs = {"viewport": {"width": _EDIT_W, "height": _EDIT_H}}
         try:
             with sync_playwright() as playwright:
                 if seed is None and user_data_dir:
                     # Dedicated persistent profile (GoupixDex fallback): localStorage
                     # already holds the session, nothing to inject.
                     context = playwright.chromium.launch_persistent_context(
-                        user_data_dir, headless=False, executable_path=executable_path, **record_kwargs
+                        user_data_dir, headless=False, executable_path=executable_path, **context_kwargs
                     )
                     browser = None
                     page = context.pages[0] if context.pages else context.new_page()
                 else:
                     browser = playwright.chromium.launch(headless=False, executable_path=executable_path)
-                    context = browser.new_context(**record_kwargs)
+                    context = browser.new_context(**context_kwargs)
                     if seed is not None:
                         if seed.cookies:
                             context.add_cookies(seed.cookies)
@@ -236,36 +261,42 @@ class StoryblokEditorClipService:
                     page = context.new_page()
                 context.add_init_script(script=_CURSOR_INIT)
 
-                t_start = time.time()
                 if not self._open_editor(page, editor_url):
                     raise StoryblokEditorClipError("Éditeur Storyblok inaccessible (session invalide ?).")
                 page.evaluate(_CURSOR_INIT)
-                trim = max(0.0, (time.time() - t_start) + 0.4)
+                # Capture starts only now → the loading screen is never in the clip.
+                capturer = _FrameCapturer(page, frames_dir, fps)
+                self._drive_edit_and_revert(page, capturer)
 
-                self._drive_edit_and_revert(page)
-
-                video = page.video
                 context.close()
                 if browser is not None:
                     browser.close()
-                raw = Path(video.path()) if video else None
         except StoryblokEditorClipError:
             raise
         except Exception as exc:
             raise StoryblokEditorClipError(f"Capture de l'éditeur échouée : {exc}") from exc
 
-        if not raw or not raw.is_file():
-            raise StoryblokEditorClipError("Aucun enregistrement d'éditeur produit.")
+        if not any(frames_dir.iterdir()):
+            raise StoryblokEditorClipError("Aucune image d'éditeur capturée.")
         out = work_dir / "editor.mp4"
         self._run_ffmpeg(
-            ["-i", str(raw), "-ss", f"{trim:.2f}", *self._enc(fps), "-vf", f"scale={_EDIT_W}:{_EDIT_H}", str(out)]
+            [
+                "-framerate",
+                str(fps),
+                "-i",
+                str(frames_dir / "f%05d.png"),
+                *self._enc(fps),
+                "-vf",
+                f"scale={_EDIT_W}:{_EDIT_H}",
+                str(out),
+            ]
         )
         return out
 
-    def _drive_edit_and_revert(self, page) -> None:
-        """Click-to-edit the hero text + photo (with a visible cursor), then revert."""
-        cursor = _Cursor(page)
-        page.wait_for_timeout(700)
+    def _drive_edit_and_revert(self, page, capturer: _FrameCapturer) -> None:
+        """Click-to-edit the hero text + photo (with a visible cursor), capturing frames, then revert."""
+        cursor = _Cursor(page, capturer)
+        capturer.hold(700)
         frame = self._preview_frame(page)
         if frame is None:
             raise StoryblokEditorClipError("Preview du site introuvable dans l'éditeur.")
@@ -273,31 +304,32 @@ class StoryblokEditorClipService:
         # 1) hero title -> En-tête opens -> edit the hero line
         heading = frame.locator("h1, h2").first.bounding_box()
         cursor.click(heading["x"] + heading["width"] / 2, heading["y"] + heading["height"] / 2)
-        page.wait_for_timeout(1300)
+        capturer.hold(1300)
         accroche = page.get_by_text("Phrase d'accroche").locator("xpath=following::textarea[1]")
         original_accroche = accroche.input_value()
         box = accroche.bounding_box()
         cursor.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-        page.wait_for_timeout(250)
+        capturer.hold(250)
         accroche.press("Control+a")
-        page.wait_for_timeout(150)
         accroche.press("Delete")
-        page.wait_for_timeout(200)
-        for char in _DEMO_ACCROCHE:
+        capturer.shot()
+        for index, char in enumerate(_DEMO_ACCROCHE):
             accroche.type(char, delay=3)
+            if index % 3 == 0:
+                capturer.shot()
         accroche.press("Tab")
-        page.wait_for_timeout(700)
+        capturer.hold(800)
 
         # 2) hero photo -> replace via the asset library
         thumb = self._panel_top_asset(page)
         if thumb:
             cursor.move(thumb["cx"], thumb["cy"])
-            page.wait_for_timeout(250)
+            capturer.hold(300)
             cursor.click(thumb["cx"] + 146, thumb["cy"] - 25)  # Replace asset icon
-            page.wait_for_timeout(1900)
+            capturer.hold(1900)
             cursor.click(456, 324)  # a different photo from the library grid
-            page.wait_for_timeout(1700)
-        page.wait_for_timeout(1300)
+            capturer.hold(1700)
+        capturer.hold(1300)
 
         # Revert (never published, so the LIVE site is untouched; this keeps the
         # client's editor draft clean): undo the photo, restore the text verbatim.
@@ -305,7 +337,6 @@ class StoryblokEditorClipService:
             page.keyboard.press("Control+z")
             page.wait_for_timeout(500)
             accroche.fill(original_accroche)
-            page.wait_for_timeout(400)
         except Exception as exc:
             logger.debug("editor revert best-effort failed: %s", exc)
 
@@ -388,7 +419,8 @@ class StoryblokEditorClipService:
 
     def _probe_duration(self, path: Path) -> float:
         """Return the media duration in seconds (0.0 when it cannot be read)."""
-        probe = self._ffmpeg.replace("ffmpeg.exe", "ffprobe.exe").replace("ffmpeg", "ffprobe")
+        ffmpeg = Path(self._ffmpeg)
+        probe = str(ffmpeg.with_name(ffmpeg.name.replace("ffmpeg", "ffprobe"))) if ffmpeg.name else "ffprobe"
         result = subprocess.run(
             [probe, "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(path)],
             capture_output=True,
