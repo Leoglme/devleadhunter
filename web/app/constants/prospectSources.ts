@@ -33,6 +33,11 @@ const PROSPECT_SOURCE_OPTIONS: ProspectSourceOption[] = [
     label: 'BrightData',
     description: 'API BrightData Web Unlocker + SERP (sans navigateur)',
   },
+  {
+    value: 'facebook',
+    label: 'Facebook',
+    description: 'Commerces présents uniquement sur Facebook (recherche site:facebook.com)',
+  },
 ]
 
 /** Options of the search-job form, where the empty value lets the server pick the sources. */

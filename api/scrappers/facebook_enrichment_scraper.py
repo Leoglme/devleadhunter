@@ -30,7 +30,7 @@ import json
 import logging
 import re
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 import httpx
 
@@ -38,6 +38,7 @@ from scrappers.enrichment_scraper import EnrichmentData, _dedupe_reviews
 from scrappers.nodriver_browser import NODRIVER_AVAILABLE, NodriverBrowser
 from scrappers.nodriver_dom import NodriverDom
 from scrappers.nodriver_executor import run_nodriver_task
+from services.decision_maker.normalize import company_tokens, fold
 
 logger = logging.getLogger(__name__)
 
@@ -450,16 +451,159 @@ def _is_review_chrome(text: str) -> bool:
 
 
 def _clean_social_url(url: str) -> str:
-    """Strip tracking query params from a social profile URL."""
-    parsed = urlparse(url.strip())
+    """Normalise a social profile URL: unwrap FB login/redirect wrappers, drop tracking.
+
+    Facebook sometimes exposes a link behind a redirect wrapper — ``l.facebook.com/
+    l.php?u=…`` or ``/login/?next=…`` — whose real destination lives in the ``u`` /
+    ``next`` query param. A bare login wrapper with no recoverable target is not a
+    usable profile and is dropped (the caller then omits that network).
+
+    Args:
+        url: Raw social URL found in the page's anchors.
+
+    Returns:
+        A clean profile URL, or ``""`` when only an unusable login redirect was found.
+    """
+    candidate = url.strip()
+    parsed = urlparse(candidate)
+    host = parsed.netloc.lower()
+    path = parsed.path.lower()
+
+    if host.endswith("facebook.com") and (
+        path.endswith("l.php") or path.startswith("/login") or path.startswith("/flx")
+    ):
+        params = parse_qs(parsed.query)
+        target = (params.get("u") or params.get("next") or [""])[0]
+        target = unquote(target) if target else ""
+        if not target.lower().startswith("http"):
+            return ""  # login wrapper without a destination — not a profile
+        candidate = target
+        parsed = urlparse(candidate)
+
     if not parsed.scheme or not parsed.netloc:
-        return url.strip()
+        return candidate
     query = [
         (key, value)
         for key, value in parse_qsl(parsed.query, keep_blank_values=True)
         if key not in _TRACKING_QUERY_KEYS
     ]
     return urlunparse(parsed._replace(query=urlencode(query), fragment=""))
+
+
+def _website_belongs_to_business(website: str, place_title: str | None) -> bool:
+    """Whether *website*'s domain plausibly belongs to the business (not a third-party link).
+
+    Facebook pages often carry a partner / supplier link in a post or the description
+    (a food truck citing ``agriethique.fr``, for instance), which the DOM scan can pick
+    up as the "website". We keep a website only when its registrable label shares a
+    significant token with the business name; when the name is unknown we cannot judge,
+    so we keep it. Trade-off: a real site whose domain shares no word with the name is
+    dropped — acceptable, since a wrong embedded site is worse than a missing one and
+    this path targets businesses that usually have no site at all.
+
+    Args:
+        website: Candidate website URL scraped from the page.
+        place_title: The business name, when known.
+
+    Returns:
+        ``True`` to keep the website, ``False`` to treat the prospect as site-less.
+    """
+    if not place_title:
+        return True
+    host = urlparse(website if "://" in website else f"http://{website}").netloc.lower().split(":")[0]
+    if host.startswith("www."):
+        host = host[4:]
+    domain_label = fold(host.split(".")[0]) if host else ""
+    tokens = {tok for tok in company_tokens(place_title) if len(tok) >= 4}
+    if not domain_label or not tokens:
+        return True
+    return any(tok in domain_label or domain_label in tok for tok in tokens)
+
+
+# FB "Coordonnées" writes « City, France, 75011 »; a street address writes « 75011 Paris » — read both orders.
+_CITY_FRANCE_POSTAL_RE: re.Pattern[str] = re.compile(
+    r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’.\- ]{1,58}?),\s*France,?\s*(\d{5})\b", re.IGNORECASE
+)
+_POSTAL_CITY_RE: re.Pattern[str] = re.compile(r"\b(\d{5})\b[ ,]+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’.\- ]{1,58})")
+
+# Facebook caption / UI words a naive match could mistake for a city.
+_NON_CITY_WORDS: frozenset[str] = frozenset(
+    {
+        "adresse",
+        "coordonnees",
+        "mobile",
+        "whatsapp",
+        "email",
+        "e-mail",
+        "telephone",
+        "france",
+        "site",
+        "web",
+        "fourchette",
+        "prix",
+        "avis",
+        "page",
+        "intro",
+        "about",
+        "a propos",
+        "horaires",
+        "ouvert",
+        "ferme",
+    }
+)
+
+
+def _clean_city_fragment(raw: str) -> str:
+    """Trim a captured city fragment to its first clause (strip country, separators).
+
+    Args:
+        raw: The raw city capture.
+
+    Returns:
+        The cleaned city string (possibly empty).
+    """
+    city = re.split(r"[,\n·•|]", raw)[0].strip(" ,.-\t")
+    return re.sub(r"\b(France|Frankreich)\b.*$", "", city, flags=re.IGNORECASE).strip(" ,.-")
+
+
+def _is_plausible_city(city: str) -> bool:
+    """Whether *city* looks like a real city name rather than a UI caption or number.
+
+    Args:
+        city: A cleaned city candidate.
+
+    Returns:
+        ``True`` when it has letters, a sane length and is not a Facebook caption word.
+    """
+    return bool(1 < len(city) <= 58 and re.search(r"[A-Za-zÀ-ÿ]", city) and fold(city) not in _NON_CITY_WORDS)
+
+
+def _parse_city_postal(*texts: str) -> tuple[str | None, str | None]:
+    """Best-effort French ``(city, postal_code)`` from a Facebook page's text.
+
+    Anchored on the 5-digit postal code — the only address shape reliable enough on a
+    Facebook page (a lone city line is too ambiguous). Reads both the "Coordonnées"
+    order (``City, France, 75011``) and a street-address order (``75011 Paris``). Scans
+    blocks most-specific first and returns the first plausible match.
+
+    Args:
+        *texts: Text blocks to scan (intro first, then description, then page body).
+
+    Returns:
+        ``(city, postal_code)`` — either element may be ``None``.
+    """
+    for text in texts:
+        if not text:
+            continue
+        for match in _CITY_FRANCE_POSTAL_RE.finditer(text):
+            city = _clean_city_fragment(match.group(1))
+            if _is_plausible_city(city):
+                return city, match.group(2)
+        for match in _POSTAL_CITY_RE.finditer(text):
+            city = _clean_city_fragment(match.group(2))
+            if _is_plausible_city(city):
+                return city, match.group(1)
+    return None, None
 
 
 def _is_review_noise(line: str) -> bool:
@@ -945,16 +1089,23 @@ class FacebookEnrichmentScraper:
         page_embedded_raw = dom.get("embedded_texts") or []
         page_embedded = [str(item).strip() for item in page_embedded_raw if isinstance(item, str) and item.strip()]
         rating_pct, reviews_count = _parse_about_stats(f"{about_text}\n{intro_text}\n{reviews_text}")
-        social = {
-            str(network): _clean_social_url(str(url))
-            for network, url in (dom.get("social") or {}).items()
-            if isinstance(url, str) and url.strip()
-        }
+        # Clean each social URL (unwraps login redirects) then keep only the usable ones.
+        social: dict[str, str] = {}
+        for network, url in (dom.get("social") or {}).items():
+            if not (isinstance(url, str) and url.strip()):
+                continue
+            cleaned = _clean_social_url(url)
+            if cleaned:
+                social[str(network)] = cleaned
         photo_urls = _dedupe_photos(
             list(photos or []) or [str(url) for url in dom.get("photos", []) if isinstance(url, str) and url.strip()]
         )
-        website = str(dom["website"]).strip() if dom.get("website") else None
         place_title = str(dom["place_title"]).strip() if dom.get("place_title") else None
+        website = str(dom["website"]).strip() if dom.get("website") else None
+        if website and not _website_belongs_to_business(website, place_title):
+            logger.debug("[Facebook] Dropping third-party website '%s' (no name match with '%s')", website, place_title)
+            website = None
+        place_city, place_postal_code = _parse_city_postal(intro_text, str(og_description or ""), about_text[:4000])
         description = _pick_description(
             intro_text=intro_text,
             about_text=about_text,
@@ -978,6 +1129,8 @@ class FacebookEnrichmentScraper:
             social_links=social,
             emails=emails,
             place_title=place_title or None,
+            place_city=place_city,
+            place_postal_code=place_postal_code,
             logo_url=logo_url,
         )
 

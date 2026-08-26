@@ -72,6 +72,13 @@ const SOURCE_CONFIG: Record<string, ProspectSourcePresentation> = {
     bg: 'bg-[#12395F]',
     text: 'text-[#9BD3FF]',
   },
+  facebook: {
+    label: 'Facebook',
+    logoUrl: null,
+    icon: 'i-lucide-facebook',
+    bg: 'bg-[#1877F2]',
+    text: 'text-white',
+  },
   auto: {
     label: 'Auto',
     logoUrl: null,

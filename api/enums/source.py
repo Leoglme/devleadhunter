@@ -14,11 +14,15 @@ class Source(str, Enum):
         PAGESJAUNES: Pages Jaunes (French directory)
         YELP: Yelp platform (deprecated — scraper removed; kept for historical prospects)
         OSM: OpenStreetMap
+        FACEBOOK: Facebook pages discovered via a search engine (site:facebook.com) —
+            targets businesses whose only web presence is their Facebook page.
         ALL: All sources
     """
 
     GOOGLE = "google"
     PAGESJAUNES = "pagesjaunes"
+    # Facebook-only businesses found via a search engine; read later by V1 enrichment.
+    FACEBOOK = "facebook"
     # Deprecated: the Yelp scraper was removed. Kept so existing prospects with
     # source="yelp" still deserialize; not offered in the UI or scraper registry.
     YELP = "yelp"

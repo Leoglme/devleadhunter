@@ -25,7 +25,6 @@ import unicodedata
 from collections.abc import Callable
 from urllib.parse import quote_plus, urljoin
 
-import aiohttp
 from bs4 import BeautifulSoup
 
 from enums.source import Source
@@ -36,11 +35,9 @@ from services.validation_service import validation_service
 from services.website_liveness_service import website_liveness_service
 
 from .base_scraper import BaseScraper
+from .brightdata_client import BrightDataClient
 
 logger = logging.getLogger(__name__)
-
-# BrightData Web Unlocker API endpoint
-_BRIGHTDATA_REQUEST_URL: str = "https://api.brightdata.com/request"
 
 # PagesJaunes category slug mapping
 _PJ_CATEGORY_MAP: dict[str, str] = {
@@ -187,79 +184,9 @@ class BrightDataScraper(BaseScraper):
     """
 
     def __init__(self) -> None:
-        """Initialize the scraper and load BrightData credentials from settings."""
+        """Initialize the scraper with a shared Bright Data client."""
         super().__init__(source=Source.BRIGHTDATA)
-        self._token: str = self._load_token()
-        self._zone: str = self._load_zone()
-
-    @staticmethod
-    def _load_token() -> str:
-        """
-        Load the BrightData API token from application settings or environment.
-
-        Returns:
-            API token string, or empty string when not configured.
-        """
-        try:
-            from core.config import settings  # local import — avoids circular deps
-
-            return settings.brightdata_api_token or ""
-        except Exception:
-            import os
-
-            return os.environ.get("BRIGHTDATA_API_TOKEN", "")
-
-    @staticmethod
-    def _load_zone() -> str:
-        """
-        Load the BrightData zone name from application settings or environment.
-
-        Returns:
-            Zone name string, defaulting to ``"mcp_unlocker"``.
-        """
-        try:
-            from core.config import settings
-
-            return settings.brightdata_zone or "mcp_unlocker"
-        except Exception:
-            import os
-
-            return os.environ.get("BRIGHTDATA_ZONE", "mcp_unlocker")
-
-    async def _fetch(self, url: str, *, zone: str | None = None) -> str:
-        """
-        Fetch *url* via the BrightData Web Unlocker API and return raw HTML.
-
-        Args:
-            url: Target URL to retrieve.
-            zone: BrightData zone name override (defaults to ``self._zone``).
-
-        Returns:
-            Raw HTML content of the response.
-
-        Raises:
-            aiohttp.ClientResponseError: When the API returns a non-2xx status.
-            aiohttp.ClientConnectorError: On network-level failures.
-        """
-        payload = {
-            "zone": zone or self._zone,
-            "url": url,
-            "format": "raw",
-        }
-        async with (
-            aiohttp.ClientSession() as session,
-            session.post(
-                _BRIGHTDATA_REQUEST_URL,
-                json=payload,
-                headers={
-                    "Authorization": f"Bearer {self._token}",
-                    "Content-Type": "application/json",
-                },
-                timeout=aiohttp.ClientTimeout(total=90),
-            ) as resp,
-        ):
-            resp.raise_for_status()
-            return await resp.text()
+        self._client = BrightDataClient()
 
     async def _scrape_pj_listing(
         self,
@@ -284,7 +211,7 @@ class BrightDataScraper(BaseScraper):
 
         logger.info("[BrightData] Fetching PJ listing: %s", listing_url)
         try:
-            html = await self._fetch(listing_url)
+            html = await self._client.fetch(listing_url)
         except Exception as exc:
             logger.error("[BrightData] PJ listing fetch failed: %s", exc)
             return []
@@ -350,7 +277,7 @@ class BrightDataScraper(BaseScraper):
             the page could not be parsed (missing name).
         """
         try:
-            html = await self._fetch(url)
+            html = await self._client.fetch(url)
         except Exception as exc:
             logger.debug("[BrightData] Detail fetch failed (%s): %s", url, exc)
             return None
@@ -503,7 +430,7 @@ class BrightDataScraper(BaseScraper):
             target = social_url
 
         try:
-            html = await self._fetch(target)
+            html = await self._client.fetch(target)
             emails = _extract_valid_emails(html)
             if emails:
                 logger.info(
@@ -571,7 +498,7 @@ class BrightDataScraper(BaseScraper):
         for query in queries:
             try:
                 search_url = f"https://www.google.com/search?q={quote_plus(query)}&gl=fr&hl=fr&num=10"
-                html = await self._fetch(search_url)
+                html = await self._client.fetch(search_url)
                 emails = _extract_valid_emails(html)
                 if emails:
                     logger.info(
@@ -623,10 +550,9 @@ class BrightDataScraper(BaseScraper):
 
         try:
             # Reload credentials in case they changed since __init__
-            self._token = self._load_token()
-            self._zone = self._load_zone()
+            self._client.reload_credentials()
 
-            if not self._token:
+            if not self._client.is_configured:
                 logger.warning(
                     "[BrightData] No API token configured — set BRIGHTDATA_API_TOKEN in .env to enable this scraper"
                 )

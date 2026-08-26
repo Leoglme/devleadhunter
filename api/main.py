@@ -46,6 +46,7 @@ from core.rate_limiter import limiter
 from core.win32_asyncio import ensure_proactor_event_loop
 from scrappers.auto_scraper import AutoScraper
 from scrappers.brightdata_scraper import BrightDataScraper
+from scrappers.facebook_search_scraper import FacebookSearchScraper
 from scrappers.google_scraper import GoogleScraper
 from scrappers.osm_scraper import OSMScraper
 from scrappers.pagesjaunes_scraper import PagesJaunesScraper
@@ -155,6 +156,10 @@ async def startup_event() -> None:
 
     brightdata_scraper = BrightDataScraper()
     await scraper_service.add_scraper(brightdata_scraper)
+
+    # Explicit-only source: kept out of _FAILOVER_ORDER so a generic search never cascades into Facebook.
+    facebook_scraper = FacebookSearchScraper()
+    await scraper_service.add_scraper(facebook_scraper)
 
     # Keep a strong reference to every long-lived loop, else asyncio may GC the task and it dies silently.
     for coro in (

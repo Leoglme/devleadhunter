@@ -1,7 +1,16 @@
 export type BusinessCategory = 'restaurant' | 'plombier' | 'electricien' | 'coiffeur' | 'garage' | 'all'
 
 /** Mirrors the backend ``Source`` enum ; ``all`` is a filter-only sentinel, never stored. */
-export type ProspectSource = 'google' | 'pagesjaunes' | 'yelp' | 'osm' | 'auto' | 'brightdata' | 'manual' | 'all'
+export type ProspectSource =
+  | 'google'
+  | 'pagesjaunes'
+  | 'yelp'
+  | 'osm'
+  | 'auto'
+  | 'brightdata'
+  | 'facebook'
+  | 'manual'
+  | 'all'
 
 /** Mirrors the backend ``WebsiteStatus`` enum ; absent/null = no website or never checked. */
 export type ProspectWebsiteStatus = 'live' | 'dead' | 'placeholder'

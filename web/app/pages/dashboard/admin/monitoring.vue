@@ -293,6 +293,7 @@ function sourceLabel(source: string): string {
     pagesjaunes: 'Pages Jaunes',
     osm: 'OpenStreetMap',
     brightdata: 'Bright Data',
+    facebook: 'Facebook',
     auto: 'Recherche auto',
     yelp: 'Yelp',
     enrichment: 'Enrichissement',
