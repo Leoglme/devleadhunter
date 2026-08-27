@@ -130,19 +130,33 @@
         <div v-if="store.autoEnrich" class="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] p-4">
           <p v-if="store.autoEnrich.running" class="flex items-center gap-2 text-sm text-[var(--app-ink)]">
             <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-            Vérification des pages Facebook — {{ store.autoEnrich.completed }}/{{ store.autoEnrich.total }}
-            <span class="text-[var(--app-ink-soft)]">
-              (retenus : {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }})
-            </span>
+            Recherche de {{ store.autoEnrich.needed }} prospect(s) utilisable(s) — round {{ store.autoEnrich.round }}/{{
+              FACEBOOK_MAX_ROUNDS
+            }}
+            : {{ store.autoEnrich.tested }} page(s) testée(s), {{ store.autoEnrich.kept }} retenu(s)…
           </p>
           <p v-else-if="store.autoEnrich.error" class="text-sm text-[var(--app-red)]">
-            Vérification non lancée : {{ store.autoEnrich.error }}
+            Vérification interrompue : {{ store.autoEnrich.error }}
+          </p>
+          <p v-else-if="store.autoEnrich.exhausted" class="text-sm text-[var(--app-ink)]">
+            Source épuisée : {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }} prospect(s) utilisable(s) après
+            {{ store.autoEnrich.tested }} page(s) testée(s)
+            <span class="text-[var(--app-ink-soft)]">
+              ({{ store.autoEnrich.rejectedNoEmail }} sans email, {{ store.autoEnrich.rejectedWebsite }} avec site web —
+              essayez une autre ville ou catégorie)
+            </span>
           </p>
           <p v-else class="text-sm text-[var(--app-ink)]">
             <span class="font-medium text-[var(--app-green)]">✓</span>
-            {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }} prospect(s) retenu(s)
-            <span v-if="store.autoEnrich.rejected > 0" class="text-[var(--app-ink-soft)]">
-              — {{ store.autoEnrich.rejected }} ignoré(s) (sans email ou avec site web)
+            {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }} prospect(s) utilisable(s) trouvé(s)
+            <span
+              v-if="store.autoEnrich.rejectedNoEmail + store.autoEnrich.rejectedWebsite > 0"
+              class="text-[var(--app-ink-soft)]"
+            >
+              — {{ store.autoEnrich.rejectedNoEmail + store.autoEnrich.rejectedWebsite }} page(s) écartée(s) ({{
+                store.autoEnrich.rejectedNoEmail
+              }}
+              sans email, {{ store.autoEnrich.rejectedWebsite }} avec site)
             </span>
             <span v-if="store.autoEnrich.failed > 0" class="text-[var(--app-red)]">
               — {{ store.autoEnrich.failed }} échec(s) d'enrichissement
@@ -253,12 +267,12 @@
 </template>
 
 <script lang="ts" setup>
-import type { ScrapingJob } from '~/stores/prospectSearch'
+import type { FacebookAutoEnrichState, ScrapingJob } from '~/stores/prospectSearch'
 import type { CompletedStat } from '~/types/SearchProspectsPage'
 import type { Prospect } from '~/types'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, onMounted, ref } from 'vue'
-import { useProspectSearchStore } from '~/stores/prospectSearch'
+import { FACEBOOK_MAX_ROUNDS, useProspectSearchStore } from '~/stores/prospectSearch'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import { ProspectsService } from '~/services/prospectsService'
 
@@ -270,10 +284,36 @@ definePageMeta({
 const store: ReturnType<typeof useProspectSearchStore> = useProspectSearchStore()
 const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 
-/** Stat tiles for a completed job. */
+/** Stat tiles for a completed job — a Facebook match loop shows its own counters. */
 const completedStats: ComputedRef<CompletedStat[]> = computed((): CompletedStat[] => {
   const job: ScrapingJob | null = store.currentJob
   if (job === null) return []
+  const match: FacebookAutoEnrichState | null = store.autoEnrich
+  if (job.source === 'facebook' && match) {
+    return [
+      {
+        label: 'Prospects retenus',
+        value: match.kept,
+        icon: 'i-lucide-user-check',
+        iconBg: 'bg-[var(--app-green-soft)]',
+        iconColor: 'text-[var(--app-green)]',
+      },
+      {
+        label: 'Pages testées',
+        value: match.tested,
+        icon: 'i-lucide-search',
+        iconBg: 'bg-[var(--app-blue-soft)]',
+        iconColor: 'text-[var(--app-blue)]',
+      },
+      {
+        label: 'Pages écartées',
+        value: match.rejectedNoEmail + match.rejectedWebsite,
+        icon: 'i-lucide-copy-x',
+        iconBg: 'bg-[var(--app-surface-2)]',
+        iconColor: 'text-[var(--app-ink-soft)]',
+      },
+    ]
+  }
   return [
     {
       label: 'Prospects ajoutés',

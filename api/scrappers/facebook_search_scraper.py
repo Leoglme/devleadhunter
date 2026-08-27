@@ -324,22 +324,29 @@ class FacebookSearchScraper(BaseScraper):
             f"site:facebook.com {category} {city}",
         ]
 
-    async def _fetch_serp(self, engine: str, query: str) -> str | None:
+    # SERP pages fetched per engine × query (20 results each). Deeper pages are only
+    # paid for while shallower ones still yield unseen Facebook pages.
+    _PAGES_PER_QUERY: int = 3
+
+    async def _fetch_serp(self, engine: str, query: str, page: int) -> str | None:
         """Fetch one SERP page from *engine*, returning ``None`` on failure.
 
         Args:
             engine: ``"google"`` or ``"bing"``.
             query: The search query.
+            page: 0-based SERP page (20 results per page).
 
         Returns:
             Raw SERP HTML, or ``None`` when the fetch failed.
         """
         try:
-            return await (self._client.google(query) if engine == "google" else self._client.bing(query))
+            if engine == "google":
+                return await self._client.google(query, start=page * 20)
+            return await self._client.bing(query, first=page * 20 + 1)
         except Exception as exc:
             # Warning, not debug: with a bad token / Bright Data outage EVERY fetch lands
             # here and the run would otherwise look like a plain "0 results".
-            logger.warning("[Facebook] %s SERP failed for '%s': %s", engine, query, exc)
+            logger.warning("[Facebook] %s SERP failed for '%s' (page %d): %s", engine, query, page, exc)
             return None
 
     async def scrape(
@@ -352,24 +359,29 @@ class FacebookSearchScraper(BaseScraper):
         progress: ScrapeProgressReporter | None = None,
         should_stop: Callable[[], bool] | None = None,
     ) -> list[ProspectCreate]:
-        """Discover Facebook pages for *category* + *city* and emit prospects.
+        """Discover Facebook pages for *category* + *city*, streaming candidates.
+
+        Candidates are emitted through *progress* AS they are found, page after SERP
+        page: the job filters each one (already-excluded pages, duplicates) without
+        counting the filtered ones, so ``should_stop`` staying ``False`` makes this
+        scraper dig into DEEPER result pages until the job has the candidates it
+        needs or every engine × query × page combination is exhausted.
 
         ``only_without_website`` is accepted for interface parity but not applied
         here: discovery does not fetch each Facebook page, so the site is unknown at
-        this stage — and this source is by construction the "no website" segment. The
-        website (if any) is resolved later by the V1 enrichment. De-duplication against
-        already-stored prospects also happens downstream, at prospect creation.
+        this stage. The website (if any) is resolved by the enrichment that follows,
+        and the match filter runs there.
 
         Args:
             category: Business category to search for (e.g. ``"food truck"``).
             city: City to search in.
-            max_results: Maximum number of prospects to return.
+            max_results: Emission cap when no *should_stop* drives the run.
             only_without_website: Ignored here (see above).
             progress: Optional SSE reporter for streaming progress events.
             should_stop: Optional callable; when it returns ``True`` the scrape aborts.
 
         Returns:
-            List of :class:`ProspectCreate` carrying ``facebook_url``, capped at *max_results*.
+            List of :class:`ProspectCreate` carrying ``facebook_url``, in discovery order.
         """
         logger.info("[Facebook] Starting discovery category=%s city=%s max=%s", category, city, max_results)
         await self.start()
@@ -385,58 +397,70 @@ class FacebookSearchScraper(BaseScraper):
                 await progress.log(f"Facebook — recherche de pages ({category} / {city})…")
 
             queries = self._queries(category, city)
-            found: dict[str, str] = {}  # canonical url -> best name
+            emitted: set[str] = set()  # canonical urls already emitted to the caller
+            prospects: list[ProspectCreate] = []
             attempts = failures = 0
+
+            def enough() -> bool:
+                """Whether to stop digging — the caller said stop, or the cap is hit."""
+                if should_stop is not None:
+                    return should_stop()
+                return len(prospects) >= max_results
 
             for engine in ("google", "bing"):
                 for query in queries:
-                    if (should_stop and should_stop()) or len(found) >= max_results:
+                    for page in range(self._PAGES_PER_QUERY):
+                        if enough():
+                            break
+                        attempts += 1
+                        html = await self._fetch_serp(engine, query, page)
+                        if html is None:
+                            failures += 1
+                            break  # deeper pages of a failing engine/query would fail too
+                        new_on_page = 0
+                        for page_url, raw_title in extract_facebook_results(html):
+                            if page_url in emitted:
+                                continue
+                            emitted.add(page_url)
+                            new_on_page += 1
+                            name = (clean_serp_title(raw_title) or humanize_facebook_slug(page_url))[:200]
+                            prospect = ProspectCreate(
+                                name=name or "Page Facebook",
+                                city=city,
+                                phone=None,
+                                email=None,
+                                website=None,
+                                website_status=None,
+                                facebook_url=page_url,
+                                category=category,
+                                source=Source.FACEBOOK,
+                                # Discovery-only: name/contact are unverified until enrichment runs.
+                                confidence=1,
+                                social_url=page_url,
+                            )
+                            prospects.append(prospect)
+                            if progress:
+                                await progress.prospect(prospect)
+                            if enough():
+                                break
+                        await asyncio.sleep(0.3)
+                        # A page with nothing new means this query is exhausted —
+                        # don't pay for its deeper pages.
+                        if new_on_page == 0:
+                            break
+                    if enough():
                         break
-                    attempts += 1
-                    html = await self._fetch_serp(engine, query)
-                    if html is None:
-                        failures += 1
-                        continue
-                    for page_url, raw_title in extract_facebook_results(html):
-                        if page_url in found:
-                            continue
-                        name = clean_serp_title(raw_title) or humanize_facebook_slug(page_url)
-                        found[page_url] = name[:200]
-                    await asyncio.sleep(0.3)
-                # Google alone covered the ask — skip Bing to save a paid request.
-                if len(found) >= max_results:
+                if enough():
                     break
 
             if progress:
-                if not found and attempts and failures == attempts:
+                if not emitted and attempts and failures == attempts:
                     # Every SERP fetch failed — surface it as an outage, not a thin market.
                     await progress.log("Facebook — recherche moteur en échec (Bright Data), voir les logs serveur.")
                 else:
-                    await progress.log(f"Facebook — {len(found)} page(s) trouvée(s).")
+                    await progress.log(f"Facebook — {len(emitted)} page(s) candidate(s) trouvée(s).")
 
-            prospects: list[ProspectCreate] = []
-            for page_url, name in list(found.items())[:max_results]:
-                if should_stop and should_stop():
-                    break
-                prospect = ProspectCreate(
-                    name=name or "Page Facebook",
-                    city=city,
-                    phone=None,
-                    email=None,
-                    website=None,
-                    website_status=None,
-                    facebook_url=page_url,
-                    category=category,
-                    source=Source.FACEBOOK,
-                    # Discovery-only: name/contact are unverified until V1 enrichment runs.
-                    confidence=1,
-                    social_url=page_url,
-                )
-                prospects.append(prospect)
-                if progress:
-                    await progress.prospect(prospect)
-
-            logger.info("[Facebook] Final: %d prospect(s) returned", len(prospects))
+            logger.info("[Facebook] Final: %d candidate(s) emitted", len(prospects))
             return prospects
 
         except Exception as exc:

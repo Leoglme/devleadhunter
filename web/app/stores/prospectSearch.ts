@@ -46,23 +46,30 @@ export type ProspectSearchParams = {
   onlyWithoutWebsite: boolean
 }
 
-/** Progress of the enrich-and-match pass chained after a Facebook search. */
+/** Progress of the enrich-and-match loop chained after a Facebook search. */
 export type FacebookAutoEnrichState = {
   running: boolean
-  /** Candidates processed so far (enriched, rejected or removed as surplus). */
-  completed: number
-  /** Candidates the search discovered (the job overshoots on purpose). */
-  total: number
+  /** Search round in progress (each round is one discovery job digging deeper). */
+  round: number
+  /** Candidate pages enriched so far, across every round. */
+  tested: number
   /** Usable prospects kept — email present, website per the checkbox. */
   kept: number
   /** Matches asked by the user (the search form's max results). */
   needed: number
-  /** Candidates rejected and excluded from future searches (no email / has a website). */
-  rejected: number
+  /** Pages rejected and excluded because they expose no contact email. */
+  rejectedNoEmail: number
+  /** Pages rejected and excluded because the business has a real website. */
+  rejectedWebsite: number
   /** Candidates whose enrichment failed — kept unfiltered, retryable later. */
   failed: number
+  /** The source dried up (or the round cap was hit) before reaching `needed`. */
+  exhausted: boolean
   error: string | null
 }
+
+/** Search rounds the Facebook match loop launches before giving up. */
+export const FACEBOOK_MAX_ROUNDS: number = 4
 
 // Pinia ne fournit pas de type nommé pour un store : TypeScript l'élide, il est inécrivable.
 // eslint-disable-next-line @typescript-eslint/typedef
@@ -80,6 +87,8 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
   const autoEnrich: Ref<FacebookAutoEnrichState | null> = ref(null)
   /** Jobs whose chained enrichment already ran — completion is signalled twice (stream + poll). */
   const autoEnrichedJobIds: Set<string> = new Set()
+  /** Jobs launched BY the match loop as extra rounds — they continue the running state. */
+  const facebookRoundJobIds: Set<string> = new Set()
 
   let pollInterval: ReturnType<typeof setInterval> | null = null
 
@@ -160,38 +169,54 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
   }
 
   /**
-   * Chain the local V1 enrichment + match filter right after a Facebook search.
+   * Chain the local enrich-and-match LOOP right after a Facebook search completes.
    *
    * Facebook discovery only yields name + city + page URL (the SERP carries no
-   * contact data) — the base fields the other sources deliver at discovery time
-   * (email, phone, website or not) live on the Facebook page itself, which only
-   * the desktop sidecar can read (logged-out, residential IP). The job therefore
-   * overshoots (3× the asked count) and this pass enriches candidates one by one,
-   * keeping only usable matches — email present, and no website when the search
-   * asked for site-less prospects — until the asked count is reached. Rejected
-   * pages are deleted AND excluded server-side so no later search re-tests them;
-   * surplus untested candidates are deleted without exclusion (rediscoverable).
-   * @param job - The job that just completed.
-   * @returns A promise resolved once the match pass is done.
+   * contact data) — the base fields live on the Facebook page itself, which only
+   * the desktop sidecar can read (logged-out, residential IP). Each round enriches
+   * the round's candidates one by one and keeps only usable matches — email
+   * present, and no website when the search asked for site-less prospects. A
+   * rejected page is deleted AND excluded server-side, so when the round ends
+   * short of the asked count, the loop relaunches the same search: discovery then
+   * skips every tested page and digs into deeper SERP pages for new candidates.
+   * The loop ends when the asked count is reached, a round finds no new candidate
+   * (source dry), or the round cap is hit.
+   * @param job - The job that just completed (a user search or a loop round).
+   * @returns A promise resolved once this round is processed.
    */
   async function maybeAutoEnrichFacebook(job: ScrapingJob): Promise<void> {
     if (job.source !== 'facebook' || autoEnrichedJobIds.has(job.id)) return
+    autoEnrichedJobIds.add(job.id)
+
+    let state: FacebookAutoEnrichState
+    if (facebookRoundJobIds.has(job.id) && autoEnrich.value) {
+      state = autoEnrich.value
+      state.round += 1
+    } else {
+      state = {
+        running: true,
+        round: 1,
+        tested: 0,
+        kept: 0,
+        needed: job.max_results,
+        rejectedNoEmail: 0,
+        rejectedWebsite: 0,
+        failed: 0,
+        exhausted: false,
+        error: null,
+      }
+      autoEnrich.value = state
+    }
+
     const candidates: Prospect[] = (job.live_prospects ?? []).filter((prospect: Prospect): boolean =>
       Boolean(prospect.facebook_url),
     )
-    if (candidates.length === 0) return
-    autoEnrichedJobIds.add(job.id)
-    const state: FacebookAutoEnrichState = {
-      running: true,
-      completed: 0,
-      total: candidates.length,
-      kept: 0,
-      needed: job.max_results,
-      rejected: 0,
-      failed: 0,
-      error: null,
+    if (candidates.length === 0) {
+      // Discovery dug as deep as it could and surfaced nothing new — the source is dry.
+      state.exhausted = state.kept < state.needed
+      state.running = false
+      return
     }
-    autoEnrich.value = state
 
     const sidecar: ScraperSidecarInfo | null = await getScraperSidecarInfo()
     if (!sidecar) {
@@ -209,7 +234,6 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
         } catch {
           // Non-critical: an extra empty prospect is annoying but harmless.
         }
-        state.completed += 1
         continue
       }
       try {
@@ -220,10 +244,10 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
           candidate.google_maps_url ?? '',
           candidate.facebook_url ?? '',
         )
+        state.tested += 1
         if (record.status !== 'completed') {
           // Scrape failed — keep the prospect unfiltered so a manual retry stays possible.
           state.failed += 1
-          state.completed += 1
           continue
         }
         const fresh: Prospect = await ProspectsService.getProspect(candidate.id)
@@ -231,7 +255,11 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
         if (usable) {
           state.kept += 1
         } else {
-          state.rejected += 1
+          if (fresh.email) {
+            state.rejectedWebsite += 1
+          } else {
+            state.rejectedNoEmail += 1
+          }
           await ProspectsService.deleteProspect(candidate.id)
           await ProspectsService.excludeFacebookPage(
             candidate.facebook_url ?? '',
@@ -241,9 +269,32 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
       } catch {
         state.failed += 1
       }
-      state.completed += 1
     }
-    state.running = false
+
+    if (state.kept >= state.needed) {
+      state.running = false
+      return
+    }
+    if (state.round >= FACEBOOK_MAX_ROUNDS) {
+      state.exhausted = true
+      state.running = false
+      return
+    }
+    // Every tested page is now excluded server-side — the next round digs deeper.
+    try {
+      const next: ScrapingJob = await launchJob({
+        category: job.category,
+        city: job.city,
+        max_results: state.needed - state.kept,
+        source: 'facebook',
+        skip_duplicates: job.skip_duplicates,
+        only_without_website: job.only_without_website,
+      })
+      facebookRoundJobIds.add(next.id)
+    } catch (err: unknown) {
+      state.running = false
+      state.error = err instanceof Error ? err.message : 'Relance de la recherche impossible.'
+    }
   }
 
   /**
@@ -277,6 +328,24 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
   }
 
   /**
+   * Create and stream a scraping job — shared by user searches and match-loop rounds.
+   * @param body - The job creation payload (snake_case, as the API expects).
+   * @returns The created job.
+   */
+  async function launchJob(body: Record<string, unknown>): Promise<ScrapingJob> {
+    const response: ScrapingJob = await $fetch<ScrapingJob>(`${config.public.apiBase}/api/v1/scraping-jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body,
+    })
+    currentJob.value = response
+    stream.reset()
+    attachStream(response)
+    startPolling()
+    return response
+  }
+
+  /**
    * Start a new search.
    * @param params - The search parameters.
    * @returns A promise resolved once the job is created.
@@ -284,23 +353,15 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
   async function startSearch(params: ProspectSearchParams): Promise<void> {
     isStarting.value = true
     try {
-      const response: ScrapingJob = await $fetch<ScrapingJob>(`${config.public.apiBase}/api/v1/scraping-jobs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: {
-          category: params.category || null,
-          city: params.city || null,
-          max_results: params.maxResults,
-          source: params.source || null,
-          skip_duplicates: params.skipDuplicates,
-          only_without_website: params.onlyWithoutWebsite,
-        },
-      })
-      currentJob.value = response
       autoEnrich.value = null
-      stream.reset()
-      attachStream(response)
-      startPolling()
+      await launchJob({
+        category: params.category || null,
+        city: params.city || null,
+        max_results: params.maxResults,
+        source: params.source || null,
+        skip_duplicates: params.skipDuplicates,
+        only_without_website: params.onlyWithoutWebsite,
+      })
     } finally {
       isStarting.value = false
     }
