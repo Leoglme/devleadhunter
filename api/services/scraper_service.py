@@ -32,6 +32,13 @@ logger = logging.getLogger(__name__)
 # try individually, so including it would double-scrape those two.
 _FAILOVER_ORDER: tuple[str, ...] = ("google", "pagesjaunes", "brightdata", "osm")
 
+# Sources that are a market segment of their own, not an interchangeable provider —
+# e.g. ``facebook`` targets businesses whose only web presence is their Facebook page.
+# They never run in the generic chain (absent from _FAILOVER_ORDER), and an explicit
+# request for one must NOT cascade into the generic chain either: falling back to
+# Google / Pages Jaunes would return prospects outside the requested segment.
+_ISOLATED_SOURCES: frozenset[str] = frozenset({"facebook"})
+
 
 class ScraperService:
     """Service for coordinating web scraping operations."""
@@ -52,7 +59,8 @@ class ScraperService:
         """Build the ordered list of scrapers to try, plus whether a source was requested.
 
         A specific request runs first, then the rest of the failover chain (so a blocked
-        primary still cascades). ``all``/unset runs the whole failover chain.
+        primary still cascades) — except for :data:`_ISOLATED_SOURCES`, which run alone.
+        ``all``/unset runs the whole failover chain.
 
         Returns:
             ``(candidates, is_specific)``.
@@ -64,7 +72,10 @@ class ScraperService:
         is_specific = bool(source_filter and source_filter.lower() != "all")
         if is_specific:
             requested = source_filter.lower()  # type: ignore[union-attr]
-            ordered_names = [requested] + [n for n in _FAILOVER_ORDER if n != requested]
+            if requested in _ISOLATED_SOURCES:
+                ordered_names = [requested]
+            else:
+                ordered_names = [requested] + [n for n in _FAILOVER_ORDER if n != requested]
         else:
             ordered_names = list(_FAILOVER_ORDER)
 

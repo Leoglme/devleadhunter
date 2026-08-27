@@ -23,7 +23,7 @@ import logging
 import re
 import unicodedata
 from collections.abc import Callable
-from urllib.parse import quote_plus, urljoin
+from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
@@ -497,8 +497,7 @@ class BrightDataScraper(BaseScraper):
 
         for query in queries:
             try:
-                search_url = f"https://www.google.com/search?q={quote_plus(query)}&gl=fr&hl=fr&num=10"
-                html = await self._client.fetch(search_url)
+                html = await self._client.google(query, num=10)
                 emails = _extract_valid_emails(html)
                 if emails:
                     logger.info(

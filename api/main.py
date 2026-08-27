@@ -157,7 +157,8 @@ async def startup_event() -> None:
     brightdata_scraper = BrightDataScraper()
     await scraper_service.add_scraper(brightdata_scraper)
 
-    # Explicit-only source: kept out of _FAILOVER_ORDER so a generic search never cascades into Facebook.
+    # Explicit-only source (_ISOLATED_SOURCES): a generic search never cascades into
+    # Facebook, and an explicit Facebook search never falls back to the generic chain.
     facebook_scraper = FacebookSearchScraper()
     await scraper_service.add_scraper(facebook_scraper)
 

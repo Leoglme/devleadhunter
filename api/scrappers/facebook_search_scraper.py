@@ -22,6 +22,7 @@ desktop, exactly like :mod:`scrappers.brightdata_scraper`.
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 import re
 from collections.abc import Callable
@@ -122,8 +123,6 @@ def _decode_bing_redirect(href: str) -> str | None:
     Returns:
         The decoded target URL, or ``None`` when it cannot be decoded.
     """
-    import base64
-
     encoded = parse_qs(urlparse(href).query).get("u", [""])[0]
     if not encoded.startswith("a1"):
         return None
@@ -325,21 +324,23 @@ class FacebookSearchScraper(BaseScraper):
             f"site:facebook.com {category} {city}",
         ]
 
-    async def _fetch_serp(self, engine: str, query: str) -> str:
-        """Fetch one SERP page from *engine*, returning ``""`` on failure.
+    async def _fetch_serp(self, engine: str, query: str) -> str | None:
+        """Fetch one SERP page from *engine*, returning ``None`` on failure.
 
         Args:
             engine: ``"google"`` or ``"bing"``.
             query: The search query.
 
         Returns:
-            Raw SERP HTML, or an empty string when the fetch failed.
+            Raw SERP HTML, or ``None`` when the fetch failed.
         """
         try:
             return await (self._client.google(query) if engine == "google" else self._client.bing(query))
         except Exception as exc:
-            logger.debug("[Facebook] %s SERP failed for '%s': %s", engine, query, exc)
-            return ""
+            # Warning, not debug: with a bad token / Bright Data outage EVERY fetch lands
+            # here and the run would otherwise look like a plain "0 results".
+            logger.warning("[Facebook] %s SERP failed for '%s': %s", engine, query, exc)
+            return None
 
     async def scrape(
         self,
@@ -385,12 +386,17 @@ class FacebookSearchScraper(BaseScraper):
 
             queries = self._queries(category, city)
             found: dict[str, str] = {}  # canonical url -> best name
+            attempts = failures = 0
 
             for engine in ("google", "bing"):
                 for query in queries:
                     if (should_stop and should_stop()) or len(found) >= max_results:
                         break
+                    attempts += 1
                     html = await self._fetch_serp(engine, query)
+                    if html is None:
+                        failures += 1
+                        continue
                     for page_url, raw_title in extract_facebook_results(html):
                         if page_url in found:
                             continue
@@ -402,7 +408,11 @@ class FacebookSearchScraper(BaseScraper):
                     break
 
             if progress:
-                await progress.log(f"Facebook — {len(found)} page(s) trouvée(s).")
+                if not found and attempts and failures == attempts:
+                    # Every SERP fetch failed — surface it as an outage, not a thin market.
+                    await progress.log("Facebook — recherche moteur en échec (Bright Data), voir les logs serveur.")
+                else:
+                    await progress.log(f"Facebook — {len(found)} page(s) trouvée(s).")
 
             prospects: list[ProspectCreate] = []
             for page_url, name in list(found.items())[:max_results]:
