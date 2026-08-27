@@ -36,7 +36,8 @@ const PROSPECT_SOURCE_OPTIONS: ProspectSourceOption[] = [
   {
     value: 'facebook',
     label: 'Facebook',
-    description: 'Commerces présents uniquement sur Facebook — pages enrichies automatiquement après la recherche',
+    description:
+      'Commerces présents uniquement sur Facebook — pages vérifiées et filtrées après la recherche (email requis)',
   },
 ]
 

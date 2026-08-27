@@ -13,6 +13,7 @@ from models.email_log import EmailLog
 from models.email_signature import EmailSignature
 from models.email_template import EmailTemplate
 from models.email_unsubscribe import EmailUnsubscribe
+from models.facebook_exclusion import FacebookPageExclusion
 from models.health import HealthStatus
 from models.notification import Notification
 from models.order import Order

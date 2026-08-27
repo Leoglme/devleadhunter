@@ -15,6 +15,7 @@ from core.database import SessionLocal
 from models.prospect import Prospect, ProspectCreate
 from models.scraping_job import JobStatus, ScrapingJob, ScrapingJobCreate
 from services.enrichment_service import enrichment_service
+from services.facebook_exclusion_service import facebook_exclusion_service
 from services.organization_service import organization_service
 from services.prospect_service import prospect_service
 from services.scrape_progress import ScrapeProgressReporter
@@ -97,6 +98,11 @@ class ScrapingJobService:
         # Cooperative cancellation: cancel_job() sets this event; the scraper
         # stops gracefully at the next should_stop() check.
         cancel_event = self._cancel_events.setdefault(job_id, threading.Event())
+        # Facebook overshoot: the match filter (email present, website per the checkbox)
+        # only runs AFTER the desktop enrichment reads each page, so the job gathers more
+        # candidates than asked — the desktop keeps the first max_results matches and
+        # removes the rest.
+        save_cap = job.max_results * 3 if (job.source or "").lower() == "facebook" else job.max_results
 
         async def on_log(message: str) -> None:
             await self._append_log(job, message)
@@ -104,7 +110,7 @@ class ScrapingJobService:
         async def on_prospect(prospect_data: ProspectCreate) -> None:
             nonlocal saved_count, skipped_count, stop_scraping
             with state_lock:
-                if stop_scraping or cancel_event.is_set() or saved_count >= job.max_results:
+                if stop_scraping or cancel_event.is_set() or saved_count >= save_cap:
                     stop_scraping = True
                     return
 
@@ -112,6 +118,25 @@ class ScrapingJobService:
             if key in seen_keys:
                 return
             seen_keys.add(key)
+
+            fb_url = (prospect_data.facebook_url or "").strip()
+            if fb_url:
+                # Pages already rejected by the match filter are never re-tested —
+                # each test costs a full desktop enrichment of the page.
+                if facebook_exclusion_service.is_excluded(db, job.user_id, fb_url):
+                    await self._append_log(job, f"Page ignorée (déjà testée, inutilisable) : {prospect_data.name}")
+                    return
+                # Page-URL duplicate check — sharper than name+city for Facebook, whose
+                # names come from SERP titles and vary from one search to the next.
+                if job.skip_duplicates and await prospect_service.facebook_url_exists(db, fb_url, job.user_id):
+                    skipped_count += 1
+                    job.skipped_duplicates = skipped_count
+                    await self._append_log(job, f"Doublon ignoré (page déjà enregistrée) : {prospect_data.name}")
+                    await scraping_job_stream_hub.broadcast(
+                        job.id,
+                        {"type": "duplicate_skipped", "name": prospect_data.name},
+                    )
+                    return
 
             job.progress.current_prospect = prospect_data.name
             await self._emit_progress(job)
@@ -150,13 +175,13 @@ class ScrapingJobService:
             enrichment_service.schedule_contact_resolution([created.id])
             job.results.append(created.id)
             job.progress.current = saved_count
-            job.progress.total = max(job.progress.total, job.max_results)
-            job.progress.percentage = min(100.0, (saved_count / job.max_results) * 100)
+            job.progress.total = max(job.progress.total, save_cap)
+            job.progress.percentage = min(100.0, (saved_count / save_cap) * 100)
 
             elapsed = time.time() - start_time
             if saved_count > 0:
                 avg = elapsed / saved_count
-                job.progress.estimated_time_remaining = int(avg * max(job.max_results - saved_count, 0))
+                job.progress.estimated_time_remaining = int(avg * max(save_cap - saved_count, 0))
 
             prospect_payload = Prospect.model_validate(created).model_dump(mode="json")
             job.live_prospects.append(prospect_payload)
@@ -168,7 +193,7 @@ class ScrapingJobService:
             await self._append_log(job, f"Prospect ajouté : {created.name} ({created.city or '—'})")
             await self._emit_progress(job)
 
-            if saved_count >= job.max_results:
+            if saved_count >= save_cap:
                 with state_lock:
                     stop_scraping = True
 
@@ -181,7 +206,7 @@ class ScrapingJobService:
         try:
             job.status = JobStatus.RUNNING
             job.started_at = datetime.utcnow()
-            job.progress.total = job.max_results
+            job.progress.total = save_cap
             await self._append_log(
                 job,
                 f"Démarrage — {job.category or '?'} à {job.city or '?'} "
@@ -195,12 +220,12 @@ class ScrapingJobService:
                 if cancel_event.is_set():
                     return True
                 with state_lock:
-                    return stop_scraping or saved_count >= job.max_results
+                    return stop_scraping or saved_count >= save_cap
 
             await scraper_service.scrape_all(
                 category=job.category or "",
                 city=job.city or "",
-                max_results=job.max_results,
+                max_results=save_cap,
                 source_filter=job.source,
                 only_without_website=job.only_without_website,
                 progress=progress,

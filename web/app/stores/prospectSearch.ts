@@ -9,7 +9,10 @@ import { useScrapingJobStream } from '~/composables/useScrapingJobStream'
 import type { ScrapingJobProgressState } from '~/composables/useScrapingJobStream'
 import type { Prospect } from '~/types'
 import { EnrichmentService } from '~/services/enrichmentService'
-import type { BulkEnrichResult, BulkEnrichTarget } from '~/services/enrichmentService'
+import type { ProspectEnrichment } from '~/services/enrichmentService'
+import { ProspectsService } from '~/services/prospectsService'
+import { getScraperSidecarInfo } from '~/services/scraperSidecarService'
+import type { ScraperSidecarInfo } from '~/services/scraperSidecarService'
 
 /** A scraping job as returned by the API. */
 export type ScrapingJob = {
@@ -21,6 +24,7 @@ export type ScrapingJob = {
   max_results: number
   source: string | null
   skip_duplicates: boolean
+  only_without_website: boolean
   progress: ScrapingJobProgressState
   logs?: string[]
   live_prospects?: Prospect[]
@@ -42,12 +46,20 @@ export type ProspectSearchParams = {
   onlyWithoutWebsite: boolean
 }
 
-/** Progress of the enrichment chained after a Facebook search. */
+/** Progress of the enrich-and-match pass chained after a Facebook search. */
 export type FacebookAutoEnrichState = {
   running: boolean
+  /** Candidates processed so far (enriched, rejected or removed as surplus). */
   completed: number
+  /** Candidates the search discovered (the job overshoots on purpose). */
   total: number
-  succeeded: number
+  /** Usable prospects kept — email present, website per the checkbox. */
+  kept: number
+  /** Matches asked by the user (the search form's max results). */
+  needed: number
+  /** Candidates rejected and excluded from future searches (no email / has a website). */
+  rejected: number
+  /** Candidates whose enrichment failed — kept unfiltered, retryable later. */
   failed: number
   error: string | null
 }
@@ -148,61 +160,90 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
   }
 
   /**
-   * Chain the local V1 enrichment right after a Facebook search completes.
+   * Chain the local V1 enrichment + match filter right after a Facebook search.
    *
    * Facebook discovery only yields name + city + page URL (the SERP carries no
    * contact data) — the base fields the other sources deliver at discovery time
    * (email, phone, website or not) live on the Facebook page itself, which only
-   * the desktop sidecar can read (logged-out, residential IP). So on the desktop
-   * the enrichment runs automatically as soon as the job completes; on the web
-   * build the prospects stay discovery-only and the error invites to use the app.
+   * the desktop sidecar can read (logged-out, residential IP). The job therefore
+   * overshoots (3× the asked count) and this pass enriches candidates one by one,
+   * keeping only usable matches — email present, and no website when the search
+   * asked for site-less prospects — until the asked count is reached. Rejected
+   * pages are deleted AND excluded server-side so no later search re-tests them;
+   * surplus untested candidates are deleted without exclusion (rediscoverable).
    * @param job - The job that just completed.
-   * @returns A promise resolved once the chained enrichment is done.
+   * @returns A promise resolved once the match pass is done.
    */
   async function maybeAutoEnrichFacebook(job: ScrapingJob): Promise<void> {
     if (job.source !== 'facebook' || autoEnrichedJobIds.has(job.id)) return
-    const targets: BulkEnrichTarget[] = (job.live_prospects ?? [])
-      .filter((prospect: Prospect): boolean => Boolean(prospect.facebook_url))
-      .map(
-        (prospect: Prospect): BulkEnrichTarget => ({
-          id: prospect.id,
-          name: prospect.name,
-          city: prospect.city ?? null,
-          googleMapsUrl: prospect.google_maps_url ?? null,
-          facebookUrl: prospect.facebook_url ?? null,
-        }),
-      )
-    if (targets.length === 0) return
+    const candidates: Prospect[] = (job.live_prospects ?? []).filter((prospect: Prospect): boolean =>
+      Boolean(prospect.facebook_url),
+    )
+    if (candidates.length === 0) return
     autoEnrichedJobIds.add(job.id)
-    autoEnrich.value = { running: true, completed: 0, total: targets.length, succeeded: 0, failed: 0, error: null }
-    try {
-      const result: BulkEnrichResult = await EnrichmentService.runBulkEnrichment(
-        targets,
-        (completed: number, total: number): void => {
-          if (autoEnrich.value) {
-            autoEnrich.value.completed = completed
-            autoEnrich.value.total = total
-          }
-        },
-      )
-      autoEnrich.value = {
-        running: false,
-        completed: result.total,
-        total: result.total,
-        succeeded: result.succeeded,
-        failed: result.failed,
-        error: null,
-      }
-    } catch (err: unknown) {
-      autoEnrich.value = {
-        running: false,
-        completed: 0,
-        total: targets.length,
-        succeeded: 0,
-        failed: 0,
-        error: err instanceof Error ? err.message : 'Enrichissement local indisponible.',
-      }
+    const state: FacebookAutoEnrichState = {
+      running: true,
+      completed: 0,
+      total: candidates.length,
+      kept: 0,
+      needed: job.max_results,
+      rejected: 0,
+      failed: 0,
+      error: null,
     }
+    autoEnrich.value = state
+
+    const sidecar: ScraperSidecarInfo | null = await getScraperSidecarInfo()
+    if (!sidecar) {
+      state.running = false
+      state.error =
+        "La lecture des pages Facebook s'exécute en local — relancez la recherche depuis l'application desktop."
+      return
+    }
+
+    for (const candidate of candidates) {
+      if (state.kept >= state.needed) {
+        // Surplus candidate, never tested — removed; a future search can rediscover it.
+        try {
+          await ProspectsService.deleteProspect(candidate.id)
+        } catch {
+          // Non-critical: an extra empty prospect is annoying but harmless.
+        }
+        state.completed += 1
+        continue
+      }
+      try {
+        const record: ProspectEnrichment = await EnrichmentService.runProspectEnrichment(
+          candidate.id,
+          candidate.name,
+          candidate.city ?? '',
+          candidate.google_maps_url ?? '',
+          candidate.facebook_url ?? '',
+        )
+        if (record.status !== 'completed') {
+          // Scrape failed — keep the prospect unfiltered so a manual retry stays possible.
+          state.failed += 1
+          state.completed += 1
+          continue
+        }
+        const fresh: Prospect = await ProspectsService.getProspect(candidate.id)
+        const usable: boolean = Boolean(fresh.email) && (!job.only_without_website || !fresh.website)
+        if (usable) {
+          state.kept += 1
+        } else {
+          state.rejected += 1
+          await ProspectsService.deleteProspect(candidate.id)
+          await ProspectsService.excludeFacebookPage(
+            candidate.facebook_url ?? '',
+            fresh.email ? 'has_website' : 'no_email',
+          )
+        }
+      } catch {
+        state.failed += 1
+      }
+      state.completed += 1
+    }
+    state.running = false
   }
 
   /**

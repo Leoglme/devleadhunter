@@ -256,6 +256,27 @@ class ProspectService:
 
         return query.first() is not None
 
+    async def facebook_url_exists(self, db: Session, facebook_url: str, user_id: int) -> bool:
+        """Whether the user already has a prospect carrying this Facebook page URL.
+
+        Sharper duplicate key than name+city for Facebook-discovered prospects,
+        whose names come from SERP titles and vary from one search to the next.
+
+        Args:
+            db: Database session
+            facebook_url: Canonical Facebook page URL
+            user_id: User ID
+
+        Returns:
+            True if a prospect with this page URL exists, False otherwise
+        """
+        return (
+            db.query(ProspectDB.id)
+            .filter(and_(ProspectDB.user_id == user_id, ProspectDB.facebook_url == facebook_url))
+            .first()
+            is not None
+        )
+
     async def bulk_create_prospects(
         self, db: Session, prospects: list[ProspectCreate], user_id: int, skip_duplicates: bool = True
     ) -> tuple[list[Prospect], int]:

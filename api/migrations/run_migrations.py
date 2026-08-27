@@ -97,6 +97,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_email_log_open_tracking", "migrations.add_email_log_open_tracking"),
     ("fix_machine_only_opens", "migrations.fix_machine_only_opens"),
     ("add_campaign_max_emails_per_day", "migrations.add_campaign_max_emails_per_day"),
+    ("add_facebook_page_exclusions", "migrations.add_facebook_page_exclusions"),
     # Content rewrites run last, once every schema change is in place.
     ("strip_brands_from_subjects", "migrations.strip_brands_from_subjects"),
     ("reseed_email_template_library", "migrations.reseed_email_template_library"),

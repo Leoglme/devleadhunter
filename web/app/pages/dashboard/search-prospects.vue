@@ -130,16 +130,22 @@
         <div v-if="store.autoEnrich" class="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] p-4">
           <p v-if="store.autoEnrich.running" class="flex items-center gap-2 text-sm text-[var(--app-ink)]">
             <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-            Enrichissement des pages Facebook — {{ store.autoEnrich.completed }}/{{ store.autoEnrich.total }}…
+            Vérification des pages Facebook — {{ store.autoEnrich.completed }}/{{ store.autoEnrich.total }}
+            <span class="text-[var(--app-ink-soft)]">
+              (retenus : {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }})
+            </span>
           </p>
           <p v-else-if="store.autoEnrich.error" class="text-sm text-[var(--app-red)]">
-            Enrichissement non lancé : {{ store.autoEnrich.error }}
+            Vérification non lancée : {{ store.autoEnrich.error }}
           </p>
           <p v-else class="text-sm text-[var(--app-ink)]">
             <span class="font-medium text-[var(--app-green)]">✓</span>
-            {{ store.autoEnrich.succeeded }}/{{ store.autoEnrich.total }} page(s) Facebook enrichie(s)
+            {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }} prospect(s) retenu(s)
+            <span v-if="store.autoEnrich.rejected > 0" class="text-[var(--app-ink-soft)]">
+              — {{ store.autoEnrich.rejected }} ignoré(s) (sans email ou avec site web)
+            </span>
             <span v-if="store.autoEnrich.failed > 0" class="text-[var(--app-red)]">
-              — {{ store.autoEnrich.failed }} échec(s)
+              — {{ store.autoEnrich.failed }} échec(s) d'enrichissement
             </span>
           </p>
         </div>
@@ -199,7 +205,7 @@
               Chargement des prospects…
             </p>
             <p v-else-if="expandedProspects.length === 0" class="text-xs text-[var(--app-ink-soft)]">
-              Aucun prospect à afficher pour cette recherche.
+              Aucun prospect conservé pour cette recherche (ignorés par le filtre ou supprimés depuis).
             </p>
             <template v-else>
               <div
@@ -326,11 +332,11 @@ async function toggleRecentJob(job: ScrapingJob): Promise<void> {
     const order: Map<number, number> = new Map(
       job.results.map((id: number, index: number): [number, number] => [id, index]),
     )
-    const fresh: Prospect[] = all
+    // Prospects rejected by the match filter or deleted since are gone from this list — on
+    // purpose: the row must reflect what the user actually kept, not the raw snapshot.
+    expandedProspects.value = all
       .filter((prospect: Prospect): boolean => order.has(prospect.id))
       .sort((a: Prospect, b: Prospect): number => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
-    // A prospect deleted since the search is no longer listed — fall back to the job's snapshot.
-    expandedProspects.value = fresh.length > 0 ? fresh : (job.live_prospects ?? [])
   } catch {
     expandedProspects.value = job.live_prospects ?? []
   } finally {

@@ -3,8 +3,10 @@ Prospect management routes.
 """
 
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from core.database import get_db
@@ -25,6 +27,7 @@ from models.user import User
 from services.auth_service import require_auth
 from services.credit_service import credit_service
 from services.enrichment_service import enrichment_service
+from services.facebook_exclusion_service import facebook_exclusion_service
 from services.lighthouse_service import LighthouseAuditError, lighthouse_service
 from services.organization_service import OrganizationError, organization_service
 from services.prospect_emails import set_prospect_emails
@@ -285,6 +288,40 @@ async def enrich_prospect(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Enrichment failed: {exc}",
         ) from exc
+
+
+class FacebookExclusionRequest(BaseModel):
+    """Payload for POST /prospects/facebook-exclusions."""
+
+    page_url: str = Field(..., min_length=1, max_length=2048, description="Canonical Facebook page URL")
+    reason: Literal["no_email", "has_website"] = Field(..., description="Why the page is unusable")
+
+
+@router.post(
+    "/facebook-exclusions",
+    summary="Exclude a Facebook page from future discoveries",
+    description=(
+        "Record a Facebook page rejected by the search match filter (no email / has a website) "
+        "so later Facebook searches skip it instead of re-enriching the same page."
+    ),
+)
+async def exclude_facebook_page(
+    request: FacebookExclusionRequest,
+    current_user: User = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """Store a per-user Facebook page exclusion (idempotent).
+
+    Args:
+        request: The page URL and rejection reason
+        current_user: Current authenticated user
+        db: Database session
+
+    Returns:
+        A minimal acknowledgement payload
+    """
+    facebook_exclusion_service.add(db, current_user.id, request.page_url, request.reason)
+    return {"status": "ok"}
 
 
 @router.get(
