@@ -3,6 +3,7 @@
 from scrappers.facebook_enrichment_scraper import (
     _clean_social_url,
     _parse_city_postal,
+    _parse_phone,
     _website_belongs_to_business,
 )
 
@@ -68,3 +69,24 @@ class TestParseCityPostal:
 
     def test_no_address_returns_none(self) -> None:
         assert _parse_city_postal("Aucune adresse ici", "") == (None, None)
+
+
+class TestParsePhone:
+    def test_coordonnees_block(self) -> None:
+        assert _parse_phone(_ABOUT_TEXT) == "06 29 34 58 99"
+
+    def test_compact_digits_normalised(self) -> None:
+        assert _parse_phone("Contact : 0629345899") == "06 29 34 58 99"
+
+    def test_international_prefix_converted(self) -> None:
+        assert _parse_phone("Tél : +33 6 29 34 58 99") == "06 29 34 58 99"
+
+    def test_dotted_format(self) -> None:
+        assert _parse_phone("06.29.34.58.99") == "06 29 34 58 99"
+
+    def test_number_inside_longer_digit_run_rejected(self) -> None:
+        # A SIRET or order id must not be mistaken for a phone number.
+        assert _parse_phone("SIRET 06293458990001") is None
+
+    def test_no_phone_returns_none(self) -> None:
+        assert _parse_phone("Aucun numéro ici", "") is None

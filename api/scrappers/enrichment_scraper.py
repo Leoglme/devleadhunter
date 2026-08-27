@@ -56,6 +56,9 @@ class EnrichmentData:
     place_title: str | None = None
     place_city: str | None = None
     place_postal_code: str | None = None
+    # Phone found on the page (Facebook « Coordonnées ») — backfills the prospect when it
+    # has none. Transport-only: not persisted on the enrichment record (no column).
+    phone: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dict (matches the ProspectEnrichment columns)."""

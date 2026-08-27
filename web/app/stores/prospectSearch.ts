@@ -8,6 +8,8 @@ import { useUserStore } from '~/stores/user'
 import { useScrapingJobStream } from '~/composables/useScrapingJobStream'
 import type { ScrapingJobProgressState } from '~/composables/useScrapingJobStream'
 import type { Prospect } from '~/types'
+import { EnrichmentService } from '~/services/enrichmentService'
+import type { BulkEnrichResult, BulkEnrichTarget } from '~/services/enrichmentService'
 
 /** A scraping job as returned by the API. */
 export type ScrapingJob = {
@@ -40,6 +42,16 @@ export type ProspectSearchParams = {
   onlyWithoutWebsite: boolean
 }
 
+/** Progress of the enrichment chained after a Facebook search. */
+export type FacebookAutoEnrichState = {
+  running: boolean
+  completed: number
+  total: number
+  succeeded: number
+  failed: number
+  error: string | null
+}
+
 // Pinia ne fournit pas de type nommé pour un store : TypeScript l'élide, il est inécrivable.
 // eslint-disable-next-line @typescript-eslint/typedef
 export const useProspectSearchStore = defineStore('prospectSearch', () => {
@@ -53,6 +65,9 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
   const isCancelling: Ref<boolean> = ref(false)
   const isRefreshing: Ref<boolean> = ref(false)
   const completedSignal: Ref<number> = ref(0)
+  const autoEnrich: Ref<FacebookAutoEnrichState | null> = ref(null)
+  /** Jobs whose chained enrichment already ran — completion is signalled twice (stream + poll). */
+  const autoEnrichedJobIds: Set<string> = new Set()
 
   let pollInterval: ReturnType<typeof setInterval> | null = null
 
@@ -115,6 +130,7 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
           currentJob.value.skipped_duplicates = summary.skipped_duplicates
         }
         completedSignal.value += 1
+        if (currentJob.value) void maybeAutoEnrichFacebook(currentJob.value)
       },
       onCancelled: async (): Promise<void> => {
         stopPolling()
@@ -129,6 +145,64 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
         isCancelling.value = false
       },
     })
+  }
+
+  /**
+   * Chain the local V1 enrichment right after a Facebook search completes.
+   *
+   * Facebook discovery only yields name + city + page URL (the SERP carries no
+   * contact data) — the base fields the other sources deliver at discovery time
+   * (email, phone, website or not) live on the Facebook page itself, which only
+   * the desktop sidecar can read (logged-out, residential IP). So on the desktop
+   * the enrichment runs automatically as soon as the job completes; on the web
+   * build the prospects stay discovery-only and the error invites to use the app.
+   * @param job - The job that just completed.
+   * @returns A promise resolved once the chained enrichment is done.
+   */
+  async function maybeAutoEnrichFacebook(job: ScrapingJob): Promise<void> {
+    if (job.source !== 'facebook' || autoEnrichedJobIds.has(job.id)) return
+    const targets: BulkEnrichTarget[] = (job.live_prospects ?? [])
+      .filter((prospect: Prospect): boolean => Boolean(prospect.facebook_url))
+      .map(
+        (prospect: Prospect): BulkEnrichTarget => ({
+          id: prospect.id,
+          name: prospect.name,
+          city: prospect.city ?? null,
+          googleMapsUrl: prospect.google_maps_url ?? null,
+          facebookUrl: prospect.facebook_url ?? null,
+        }),
+      )
+    if (targets.length === 0) return
+    autoEnrichedJobIds.add(job.id)
+    autoEnrich.value = { running: true, completed: 0, total: targets.length, succeeded: 0, failed: 0, error: null }
+    try {
+      const result: BulkEnrichResult = await EnrichmentService.runBulkEnrichment(
+        targets,
+        (completed: number, total: number): void => {
+          if (autoEnrich.value) {
+            autoEnrich.value.completed = completed
+            autoEnrich.value.total = total
+          }
+        },
+      )
+      autoEnrich.value = {
+        running: false,
+        completed: result.total,
+        total: result.total,
+        succeeded: result.succeeded,
+        failed: result.failed,
+        error: null,
+      }
+    } catch (err: unknown) {
+      autoEnrich.value = {
+        running: false,
+        completed: 0,
+        total: targets.length,
+        succeeded: 0,
+        failed: 0,
+        error: err instanceof Error ? err.message : 'Enrichissement local indisponible.',
+      }
+    }
   }
 
   /**
@@ -149,7 +223,10 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
         stopPolling()
         isCancelling.value = false
         await loadRecent()
-        if (response.status === 'completed' && !wasDone) completedSignal.value += 1
+        if (response.status === 'completed' && !wasDone) {
+          completedSignal.value += 1
+          void maybeAutoEnrichFacebook(response)
+        }
       }
     } catch {
       // Ignore transient refresh errors.
@@ -179,6 +256,7 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
         },
       })
       currentJob.value = response
+      autoEnrich.value = null
       stream.reset()
       attachStream(response)
       startPolling()
@@ -258,6 +336,7 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
   /** Clear the current job and disconnect the stream. */
   function reset(): void {
     currentJob.value = null
+    autoEnrich.value = null
     stream.disconnect()
     stream.reset()
     stopPolling()
@@ -270,6 +349,7 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
     isCancelling,
     isRefreshing,
     completedSignal,
+    autoEnrich,
     liveProgress,
     streamLogs,
     streamProspects,

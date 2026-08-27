@@ -578,6 +578,33 @@ def _is_plausible_city(city: str) -> bool:
     return bool(1 < len(city) <= 58 and re.search(r"[A-Za-zÀ-ÿ]", city) and fold(city) not in _NON_CITY_WORDS)
 
 
+# French phone in the « Coordonnées » block — 06 29 34 58 99, 0629345899, +33 6 29 34 58 99…
+_FR_PHONE_RE: re.Pattern[str] = re.compile(r"(?<!\d)(?:\+33[\s.\-]?[1-9]|0[1-9])(?:[\s.\-]?\d{2}){4}(?!\d)")
+
+
+def _parse_phone(*texts: str) -> str | None:
+    """Best-effort French phone number from a Facebook page's text.
+
+    Args:
+        *texts: Text blocks to scan (intro first, then the about panel).
+
+    Returns:
+        The number normalised to ``0X XX XX XX XX``, or ``None`` when absent.
+    """
+    for text in texts:
+        if not text:
+            continue
+        match = _FR_PHONE_RE.search(text)
+        if not match:
+            continue
+        digits = re.sub(r"\D", "", match.group(0))
+        if digits.startswith("33"):
+            digits = "0" + digits[2:]
+        if len(digits) == 10:
+            return " ".join(digits[i : i + 2] for i in range(0, 10, 2))
+    return None
+
+
 def _parse_city_postal(*texts: str) -> tuple[str | None, str | None]:
     """Best-effort French ``(city, postal_code)`` from a Facebook page's text.
 
@@ -1106,6 +1133,7 @@ class FacebookEnrichmentScraper:
             logger.debug("[Facebook] Dropping third-party website '%s' (no name match with '%s')", website, place_title)
             website = None
         place_city, place_postal_code = _parse_city_postal(intro_text, str(og_description or ""), about_text[:4000])
+        phone = _parse_phone(intro_text, about_text[:4000])
         description = _pick_description(
             intro_text=intro_text,
             about_text=about_text,
@@ -1131,6 +1159,7 @@ class FacebookEnrichmentScraper:
             place_title=place_title or None,
             place_city=place_city,
             place_postal_code=place_postal_code,
+            phone=phone,
             logo_url=logo_url,
         )
 

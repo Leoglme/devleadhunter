@@ -279,6 +279,13 @@ class EnrichmentService:
                     prospect.website = website
                     db.add(prospect)
                     logger.info("Enrichment found a website for prospect_id=%s: %s", prospect.id, website)
+                # Phone from the page (Facebook « Coordonnées ») — Facebook-discovered prospects
+                # start with no contact data at all, so the enrichment fills the gap.
+                phone = (getattr(data, "phone", None) or "").strip()
+                if phone and not (prospect.phone or "").strip():
+                    prospect.phone = phone
+                    db.add(prospect)
+                    logger.info("Enrichment found a phone for prospect_id=%s", prospect.id)
                 record.status = EnrichmentStatus.COMPLETED.value
                 record.enriched_at = datetime.now(UTC)
                 self._record_diagnostic(prospect, data, error=None)

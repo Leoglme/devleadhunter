@@ -127,6 +127,22 @@
             </div>
           </div>
         </div>
+        <div v-if="store.autoEnrich" class="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] p-4">
+          <p v-if="store.autoEnrich.running" class="flex items-center gap-2 text-sm text-[var(--app-ink)]">
+            <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
+            Enrichissement des pages Facebook — {{ store.autoEnrich.completed }}/{{ store.autoEnrich.total }}…
+          </p>
+          <p v-else-if="store.autoEnrich.error" class="text-sm text-[var(--app-red)]">
+            Enrichissement non lancé : {{ store.autoEnrich.error }}
+          </p>
+          <p v-else class="text-sm text-[var(--app-ink)]">
+            <span class="font-medium text-[var(--app-green)]">✓</span>
+            {{ store.autoEnrich.succeeded }}/{{ store.autoEnrich.total }} page(s) Facebook enrichie(s)
+            <span v-if="store.autoEnrich.failed > 0" class="text-[var(--app-red)]">
+              — {{ store.autoEnrich.failed }} échec(s)
+            </span>
+          </p>
+        </div>
         <ScrapingJobLivePanel
           v-if="store.streamLogs.length > 0"
           :logs="store.streamLogs"
@@ -152,29 +168,79 @@
     <div v-if="store.recentJobs.length > 0" class="app-card p-5 md:p-6">
       <h2 class="mb-4 text-sm font-semibold text-[var(--app-ink)]">Recherches récentes</h2>
       <div class="divide-y divide-[var(--app-line-soft)]">
-        <button
-          v-for="job in store.recentJobs"
-          :key="job.id"
-          type="button"
-          class="group flex w-full cursor-pointer items-center justify-between gap-3 py-3 text-left transition-colors first:pt-0 last:pb-0"
-          @click="store.loadJob(job.id)"
-        >
-          <div class="min-w-0 flex-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <p class="truncate text-sm font-medium text-[var(--app-ink)] capitalize">
-                {{ job.category }} · {{ job.city }}
+        <div v-for="job in store.recentJobs" :key="job.id" class="py-3 first:pt-0 last:pb-0">
+          <button
+            type="button"
+            class="group flex w-full cursor-pointer items-center justify-between gap-3 text-left transition-colors"
+            @click="toggleRecentJob(job)"
+          >
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="truncate text-sm font-medium text-[var(--app-ink)] capitalize">
+                  {{ job.category }} · {{ job.city }}
+                </p>
+                <span :class="['app-badge', jobStatusVariant(job.status)]">{{ formatStatus(job.status) }}</span>
+              </div>
+              <p class="mt-0.5 text-xs text-[var(--app-ink-soft)]">
+                {{ new Date(job.created_at).toLocaleString('fr-FR') }}
+                <span v-if="job.status === 'completed' || job.status === 'cancelled'">
+                  · {{ job.results.length }} prospects ajoutés
+                </span>
               </p>
-              <span :class="['app-badge', jobStatusVariant(job.status)]">{{ formatStatus(job.status) }}</span>
             </div>
-            <p class="mt-0.5 text-xs text-[var(--app-ink-soft)]">
-              {{ new Date(job.created_at).toLocaleString('fr-FR') }}
-              <span v-if="job.status === 'completed' || job.status === 'cancelled'">
-                · {{ job.results.length }} prospects ajoutés
-              </span>
+            <UIcon
+              :name="expandedJobId === job.id ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+              class="h-4 w-4 shrink-0 text-[var(--app-ink-soft)]"
+            />
+          </button>
+          <div v-if="expandedJobId === job.id" class="mt-3 space-y-2">
+            <p v-if="isLoadingExpanded" class="flex items-center gap-2 text-xs text-[var(--app-ink-soft)]">
+              <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+              Chargement des prospects…
             </p>
+            <p v-else-if="expandedProspects.length === 0" class="text-xs text-[var(--app-ink-soft)]">
+              Aucun prospect à afficher pour cette recherche.
+            </p>
+            <template v-else>
+              <div
+                v-for="prospect in expandedProspects"
+                :key="prospect.id"
+                class="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] px-3 py-2"
+              >
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span class="text-sm font-medium text-[var(--app-ink)]">{{ prospect.name }}</span>
+                  <span class="text-xs text-[var(--app-ink-soft)]">{{ prospect.city || 'Ville inconnue' }}</span>
+                  <a
+                    v-if="prospect.website"
+                    :href="prospect.website"
+                    target="_blank"
+                    rel="noopener"
+                    class="app-badge app-badge--info"
+                  >
+                    Site web
+                  </a>
+                  <span v-else class="app-badge">Sans site</span>
+                </div>
+                <div class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--app-ink-soft)]">
+                  <span class="inline-flex items-center gap-1">
+                    <UIcon name="i-lucide-mail" class="h-3 w-3" />
+                    {{ prospect.email || '—' }}
+                  </span>
+                  <span class="inline-flex items-center gap-1">
+                    <UIcon name="i-lucide-phone" class="h-3 w-3" />
+                    {{ prospect.phone || '—' }}
+                  </span>
+                </div>
+              </div>
+              <NuxtLink
+                to="/dashboard/my-prospects"
+                class="inline-flex items-center gap-1 text-xs font-medium text-[var(--app-ink)] underline underline-offset-2"
+              >
+                Voir dans Mes prospects
+              </NuxtLink>
+            </template>
           </div>
-          <UIcon name="i-lucide-chevron-right" class="h-4 w-4 shrink-0 text-[var(--app-ink-soft)]" />
-        </button>
+        </div>
       </div>
     </div>
   </div>
@@ -183,10 +249,12 @@
 <script lang="ts" setup>
 import type { ScrapingJob } from '~/stores/prospectSearch'
 import type { CompletedStat } from '~/types/SearchProspectsPage'
-import type { ComputedRef } from 'vue'
-import { computed, onMounted } from 'vue'
+import type { Prospect } from '~/types'
+import type { ComputedRef, Ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useProspectSearchStore } from '~/stores/prospectSearch'
 import { useDrawerStackStore } from '~/stores/drawerStack'
+import { ProspectsService } from '~/services/prospectsService'
 
 definePageMeta({
   layout: 'dashboard',
@@ -228,6 +296,46 @@ const completedStats: ComputedRef<CompletedStat[]> = computed((): CompletedStat[
 /** Open the search form drawer. */
 function openSearchDrawer(): void {
   drawerStack.push({ kind: 'search-prospects' })
+}
+
+const expandedJobId: Ref<string | null> = ref(null)
+const expandedProspects: Ref<Prospect[]> = ref([])
+const isLoadingExpanded: Ref<boolean> = ref(false)
+
+/**
+ * Toggle the inline summary of a recent search — base info of each prospect found
+ * (name, city, website or not, email, phone). A running search keeps the previous
+ * behaviour and is loaded into the live card above instead.
+ * @param job - The recent job row that was clicked.
+ * @returns A promise resolved once the summary is loaded.
+ */
+async function toggleRecentJob(job: ScrapingJob): Promise<void> {
+  if (job.status === 'running' || job.status === 'pending') {
+    await store.loadJob(job.id)
+    return
+  }
+  if (expandedJobId.value === job.id) {
+    expandedJobId.value = null
+    return
+  }
+  expandedJobId.value = job.id
+  isLoadingExpanded.value = true
+  expandedProspects.value = []
+  try {
+    const all: Prospect[] = await ProspectsService.listProspects()
+    const order: Map<number, number> = new Map(
+      job.results.map((id: number, index: number): [number, number] => [id, index]),
+    )
+    const fresh: Prospect[] = all
+      .filter((prospect: Prospect): boolean => order.has(prospect.id))
+      .sort((a: Prospect, b: Prospect): number => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+    // A prospect deleted since the search is no longer listed — fall back to the job's snapshot.
+    expandedProspects.value = fresh.length > 0 ? fresh : (job.live_prospects ?? [])
+  } catch {
+    expandedProspects.value = job.live_prospects ?? []
+  } finally {
+    isLoadingExpanded.value = false
+  }
 }
 
 /**
