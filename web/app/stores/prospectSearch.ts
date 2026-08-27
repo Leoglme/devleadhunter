@@ -61,7 +61,7 @@ export type FacebookAutoEnrichState = {
   rejectedNoEmail: number
   /** Pages rejected and excluded because the business has a real website. */
   rejectedWebsite: number
-  /** Candidates whose enrichment failed — kept unfiltered, retryable later. */
+  /** Candidates whose enrichment failed — removed but NOT excluded (retryable later). */
   failed: number
   /** The source dried up (or the round cap was hit) before reaching `needed`. */
   exhausted: boolean
@@ -226,6 +226,8 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
       return
     }
 
+    const testedBefore: number = state.tested
+    const failedBefore: number = state.failed
     for (const candidate of candidates) {
       if (state.kept >= state.needed) {
         // Surplus candidate, never tested — removed; a future search can rediscover it.
@@ -246,8 +248,14 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
         )
         state.tested += 1
         if (record.status !== 'completed') {
-          // Scrape failed — keep the prospect unfiltered so a manual retry stays possible.
+          // Scrape failed — no data to judge, so the empty candidate is removed rather
+          // than left as an unusable prospect. NOT excluded: a later round can retry it.
           state.failed += 1
+          try {
+            await ProspectsService.deleteProspect(candidate.id)
+          } catch {
+            // Non-critical.
+          }
           continue
         }
         const fresh: Prospect = await ProspectsService.getProspect(candidate.id)
@@ -268,11 +276,25 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
         }
       } catch {
         state.failed += 1
+        try {
+          await ProspectsService.deleteProspect(candidate.id)
+        } catch {
+          // Non-critical.
+        }
       }
     }
 
     if (state.kept >= state.needed) {
       state.running = false
+      return
+    }
+    const roundTested: number = state.tested - testedBefore
+    const roundFailed: number = state.failed - failedBefore
+    if (roundTested > 0 && roundFailed >= roundTested) {
+      // The whole round failed to enrich — relaunching would rediscover and re-fail the
+      // same pages (failures are not excluded). Stop and surface the breakage instead.
+      state.running = false
+      state.error = 'Tous les enrichissements du round ont échoué — vérifiez Chrome et relancez la recherche.'
       return
     }
     if (state.round >= FACEBOOK_MAX_ROUNDS) {
