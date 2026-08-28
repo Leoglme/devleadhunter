@@ -139,7 +139,7 @@
               — {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }} prospect(s) utilisable(s) trouvé(s)…
             </template>
             <template v-else>
-              Vérification en cours — {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }} prospect(s)
+              Préparation du navigateur — {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }} prospect(s)
               utilisable(s) trouvé(s)…
             </template>
           </p>

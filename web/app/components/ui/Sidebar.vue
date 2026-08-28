@@ -259,6 +259,9 @@
         <span class="min-w-0 flex-1">
           <span class="block truncate text-sm font-medium text-[var(--app-ink)]">{{ userName }}</span>
           <span class="block truncate text-xs text-[var(--app-ink-soft)]">{{ userEmail }}</span>
+          <span v-if="appVersion" class="block truncate text-[10px] text-[var(--app-ink-soft)] opacity-70">
+            v{{ appVersion }}
+          </span>
         </span>
         <UIcon name="i-lucide-chevrons-up-down" class="h-3.5 w-3.5 shrink-0 text-[var(--app-ink-soft)]" />
       </button>
@@ -277,7 +280,7 @@ import type { UseAuthReturn, UseDesktopRuntimeReturn, UseToastReturn } from '~/t
 import type { ComputedRef, Ref } from 'vue'
 import type { AppTheme } from '~/types/AppTheme'
 import type { DlhModuleEntry, UiSidebarGroup, UiSidebarLink, UiSidebarProps } from '~/types/UiSidebar'
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '~/stores/user'
 import { useAuth } from '~/composables/useAuth'
 import { useAppTheme } from '~/composables/useAppTheme'
@@ -323,6 +326,19 @@ const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore(
 
 /** Tauri desktop detection → hide the "download the app" link when already in the desktop app. */
 const { isDesktopApp }: UseDesktopRuntimeReturn = useDesktopRuntime()
+
+/** Desktop build version — shown under the account so anyone can tell which build runs. */
+const appVersion: Ref<string> = ref('')
+
+onMounted(async (): Promise<void> => {
+  if (!isDesktopApp.value) return
+  try {
+    const { getVersion }: { getVersion: () => Promise<string> } = await import('@tauri-apps/api/app')
+    appVersion.value = await getVersion()
+  } catch {
+    // Version display is best-effort.
+  }
+})
 
 const {
   showSettingsPanel,

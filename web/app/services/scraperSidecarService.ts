@@ -114,12 +114,17 @@ export async function postToScraperSidecar<T>(
 export async function getScraperChromeState(): Promise<ScraperChromeState> {
   const info: ScraperSidecarInfo | null = await getScraperSidecarInfo()
   if (!info) return 'unknown'
+  const controller: AbortController = new AbortController()
+  // A health probe must never hang the caller — 5s is generous for loopback.
+  const timer: ReturnType<typeof setTimeout> = setTimeout((): void => controller.abort(), 5_000)
   try {
-    const response: Response = await fetch(`http://127.0.0.1:${info.port}/health`)
+    const response: Response = await fetch(`http://127.0.0.1:${info.port}/health`, { signal: controller.signal })
     if (!response.ok) return 'unknown'
     const body: { chrome?: ScraperChromeState } = await response.json()
     return body.chrome ?? 'unknown'
   } catch {
     return 'unknown'
+  } finally {
+    clearTimeout(timer)
   }
 }
