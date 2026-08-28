@@ -242,7 +242,7 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
       state = autoEnrich.value
       state.round += 1
     } else {
-      state = {
+      autoEnrich.value = {
         running: true,
         round: 1,
         tested: 0,
@@ -259,7 +259,9 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
         exhausted: false,
         error: null,
       }
-      autoEnrich.value = state
+      // Mutate the REACTIVE proxy, never the raw literal: raw mutations update the
+      // data without triggering a re-render, freezing the banner mid-verification.
+      state = autoEnrich.value
       facebookKeptProspects.value = []
     }
     state.knownSkipped += job.known_pages_skipped ?? 0
