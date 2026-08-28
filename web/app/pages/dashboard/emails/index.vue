@@ -279,6 +279,7 @@ const statusOptions: { value: string; label: string }[] = [
   { value: 'delivery_delayed', label: 'Retardé' },
   { value: 'opened', label: 'Ouvert' },
   { value: 'clicked', label: 'Cliqué' },
+  { value: 'replied', label: 'Répondu' },
   { value: 'bounced', label: 'Bounced' },
   { value: 'failed', label: 'Échoué' },
   { value: 'complained', label: 'Spam' },
@@ -344,7 +345,8 @@ function getEmailBadges(log: EmailLog): EmailStatus[] {
   const badges: EmailStatus[] = []
 
   // Primary badge: highest positive event reached (timestamp-based)
-  if (log.clicked_at) badges.push('clicked')
+  if (log.replied_at) badges.push('replied')
+  else if (log.clicked_at) badges.push('clicked')
   else if (log.opened_at) badges.push('opened')
   else if (log.delivered_at) badges.push('delivered')
   else badges.push(log.status)
@@ -399,6 +401,7 @@ function lastActivityAt(log: EmailLog): string | null {
     log.delivered_at,
     log.opened_at,
     log.clicked_at,
+    log.replied_at,
     log.bounced_at,
     log.complained_at,
     log.failed_at,

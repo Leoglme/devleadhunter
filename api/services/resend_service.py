@@ -43,6 +43,7 @@ class ResendService:
         tags: list[dict[str, str]] | None = None,
         api_key_override: str | None = None,
         extra_headers: dict[str, str] | None = None,
+        reply_to: str | None = None,
         bcc: list[str] | None = None,
         attachments: list[EmailAttachment] | None = None,
     ) -> dict[str, Any]:
@@ -67,6 +68,8 @@ class ResendService:
                               Useful when a per-user key is stored in ``resend_config``.
             extra_headers:    Custom SMTP headers forwarded to Resend (e.g.
                               ``List-Unsubscribe`` / ``List-Unsubscribe-Post``).
+            reply_to:         Reply-To address (the signed reply-capture address
+                              for outreach — see ``reply_capture_service``).
 
         Returns:
             Dict with keys ``message_id`` (str) and ``provider`` (str).
@@ -90,6 +93,8 @@ class ResendService:
         }
         if text_body:
             payload["text"] = text_body
+        if reply_to:
+            payload["reply_to"] = reply_to
         if extra_headers:
             payload["headers"] = extra_headers
         if bcc:

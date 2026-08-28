@@ -12,6 +12,7 @@ from enums.email_status import EmailStatus
 from enums.sending_provider import SendingProvider
 from models.email_account import EmailAccount
 from models.email_log import EmailLog
+from services import reply_capture_service
 from services.demo_identity import posthog_distinct_id, resolve_demo_slug
 from services.email_attachment import EmailAttachment
 from services.encryption_service import encryption_service
@@ -292,6 +293,9 @@ class EmailSendingService:
                     html_body=body_html,
                     custom_id=str(email_log.id),
                     api_key_override=identity.resend_api_key,
+                    # Outreach replies are captured on the inbound domain; transactional
+                    # emails (invoices) keep replying to the real sender address.
+                    reply_to=None if is_transactional else reply_capture_service.reply_address_for_log(email_log.id),
                     # RFC 8058 one-click unsubscribe — required by Gmail/Yahoo for bulk
                     # senders; the POST route exists on /api/v1/unsubscribe.
                     extra_headers=self._unsubscribe_headers(unsubscribe_link) if unsubscribe_link else None,

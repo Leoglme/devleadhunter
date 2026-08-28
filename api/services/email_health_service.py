@@ -30,6 +30,7 @@ _POST_SEND_STATUSES: tuple[str, ...] = (
     EmailStatus.DELIVERY_DELAYED.value,
     EmailStatus.OPENED.value,
     EmailStatus.CLICKED.value,
+    EmailStatus.REPLIED.value,
     EmailStatus.BOUNCED.value,
     EmailStatus.COMPLAINED.value,
 )
@@ -234,11 +235,18 @@ class EmailHealthService:
         sent_marker = or_(EmailLog.sent_at.isnot(None), EmailLog.status.in_(_POST_SEND_STATUSES))
         delivered_marker = or_(
             EmailLog.delivered_at.isnot(None),
-            EmailLog.status.in_((EmailStatus.DELIVERED.value, EmailStatus.OPENED.value, EmailStatus.CLICKED.value)),
+            EmailLog.status.in_(
+                (
+                    EmailStatus.DELIVERED.value,
+                    EmailStatus.OPENED.value,
+                    EmailStatus.CLICKED.value,
+                    EmailStatus.REPLIED.value,
+                )
+            ),
         )
         opened_marker = or_(
             EmailLog.opened_at.isnot(None),
-            EmailLog.status.in_((EmailStatus.OPENED.value, EmailStatus.CLICKED.value)),
+            EmailLog.status.in_((EmailStatus.OPENED.value, EmailStatus.CLICKED.value, EmailStatus.REPLIED.value)),
         )
         clicked_marker = or_(EmailLog.clicked_at.isnot(None), EmailLog.status == EmailStatus.CLICKED.value)
         bounced_marker = or_(EmailLog.bounced_at.isnot(None), EmailLog.status == EmailStatus.BOUNCED.value)
@@ -318,6 +326,7 @@ class EmailHealthService:
                                         EmailStatus.DELIVERED.value,
                                         EmailStatus.OPENED.value,
                                         EmailStatus.CLICKED.value,
+                                        EmailStatus.REPLIED.value,
                                     )
                                 ),
                             ),
@@ -331,7 +340,9 @@ class EmailHealthService:
                         (
                             or_(
                                 EmailLog.opened_at.isnot(None),
-                                EmailLog.status.in_((EmailStatus.OPENED.value, EmailStatus.CLICKED.value)),
+                                EmailLog.status.in_(
+                                    (EmailStatus.OPENED.value, EmailStatus.CLICKED.value, EmailStatus.REPLIED.value)
+                                ),
                             ),
                             1,
                         ),
@@ -436,6 +447,7 @@ class EmailHealthService:
                                         EmailStatus.DELIVERED.value,
                                         EmailStatus.OPENED.value,
                                         EmailStatus.CLICKED.value,
+                                        EmailStatus.REPLIED.value,
                                     )
                                 ),
                             ),
@@ -449,7 +461,9 @@ class EmailHealthService:
                         (
                             or_(
                                 EmailLog.opened_at.isnot(None),
-                                EmailLog.status.in_((EmailStatus.OPENED.value, EmailStatus.CLICKED.value)),
+                                EmailLog.status.in_(
+                                    (EmailStatus.OPENED.value, EmailStatus.CLICKED.value, EmailStatus.REPLIED.value)
+                                ),
                             ),
                             1,
                         ),

@@ -19,6 +19,7 @@ class EmailStatus(str, Enum):
         BOUNCED: Email bounced
         FAILED: Email sending failed
         COMPLAINED: Recipient marked as spam
+        REPLIED: Recipient replied to the email
     """
 
     PENDING = "pending"
@@ -33,3 +34,4 @@ class EmailStatus(str, Enum):
     FAILED = "failed"
     COMPLAINED = "complained"
     SUPPRESSED = "suppressed"
+    REPLIED = "replied"

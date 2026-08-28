@@ -293,6 +293,17 @@
           </div>
 
           <div
+            v-if="hasReplyCapture"
+            class="mb-3 flex items-start gap-2 rounded-lg border border-[var(--app-green)]/20 bg-[var(--app-green-soft)] px-3 py-2"
+          >
+            <UIcon name="i-lucide-circle-check" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--app-green)]" />
+            <p class="text-xs text-[var(--app-ink)]">
+              <span class="font-medium">Arrêt automatique à la réponse.</span>
+              Dès qu'un prospect répond, ses relances restantes sont annulées — rien à configurer.
+            </p>
+          </div>
+
+          <div
             v-if="settingsForm.follow_ups.length === 0"
             class="rounded-lg border border-dashed border-[var(--app-line)] py-8 text-center"
           >
@@ -697,6 +708,8 @@ import { useDrawerStackStore } from '~/stores/drawerStack'
 import type { SendPolicy } from '~/types/Automation'
 import { SendPolicyService } from '~/services/sendPolicyService'
 import { formatSendPolicySummary } from '~/utils/sendPolicy'
+import type { SendingIdentityResponse } from '~/services/settingsService'
+import { SettingsService } from '~/services/settingsService'
 
 definePageMeta({ layout: 'dashboard', middleware: 'auth' })
 
@@ -1294,8 +1307,26 @@ watch(isCampaignActive, (active: boolean): void => {
   else stopAutoRefresh()
 })
 
+/** Sending identity — powers the « arrêt automatique à la réponse » assurance line. */
+const sendingIdentity: Ref<SendingIdentityResponse | null> = ref(null)
+
+/**
+ * Whether prospect replies are captured for this user's sends (Resend provider
+ * + platform inbound domain active) — the follow-up auto-stop promise only
+ * holds in that case, so the assurance line hides otherwise.
+ */
+const hasReplyCapture: ComputedRef<boolean> = computed(
+  (): boolean => Boolean(sendingIdentity.value?.reply_capture_enabled) && sendingIdentity.value?.provider === 'resend',
+)
+
 onMounted((): void => {
   loadAll()
+  // Best-effort: the assurance line simply stays hidden if this fails.
+  SettingsService.getSendingIdentity()
+    .then((identity: SendingIdentityResponse): void => {
+      sendingIdentity.value = identity
+    })
+    .catch((): void => {})
   document.addEventListener('visibilitychange', refreshOnTabVisible)
 })
 

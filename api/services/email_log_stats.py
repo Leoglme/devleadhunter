@@ -21,6 +21,7 @@ _POST_SEND_STATUSES: tuple[str, ...] = (
     EmailStatus.DELIVERY_DELAYED.value,
     EmailStatus.OPENED.value,
     EmailStatus.CLICKED.value,
+    EmailStatus.REPLIED.value,
     EmailStatus.BOUNCED.value,
     EmailStatus.COMPLAINED.value,
 )
@@ -31,16 +32,25 @@ def _sent_marker() -> or_:
 
 
 def _delivered_marker() -> or_:
+    # A reply proves delivery even when the delivered webhook never landed.
     return or_(
         EmailLog.delivered_at.isnot(None),
-        EmailLog.status.in_((EmailStatus.DELIVERED.value, EmailStatus.OPENED.value, EmailStatus.CLICKED.value)),
+        EmailLog.status.in_(
+            (
+                EmailStatus.DELIVERED.value,
+                EmailStatus.OPENED.value,
+                EmailStatus.CLICKED.value,
+                EmailStatus.REPLIED.value,
+            )
+        ),
     )
 
 
 def _opened_marker() -> or_:
+    # A human reply implies the mail was read, tracking pixel or not.
     return or_(
         EmailLog.opened_at.isnot(None),
-        EmailLog.status.in_((EmailStatus.OPENED.value, EmailStatus.CLICKED.value)),
+        EmailLog.status.in_((EmailStatus.OPENED.value, EmailStatus.CLICKED.value, EmailStatus.REPLIED.value)),
     )
 
 

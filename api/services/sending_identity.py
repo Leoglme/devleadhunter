@@ -256,4 +256,7 @@ def describe_sending_config(db: Session, user_id: int) -> dict[str, object]:
         "resend_from_email": from_email,
         "gmail_configured": gmail is not None,
         "gmail_email": gmail.email if gmail else None,
+        # Platform-wide reply capture (Resend inbound domain) — lets the UI tell
+        # the user their prospect replies are detected automatically.
+        "reply_capture_enabled": bool((getattr(settings, "reply_capture_domain", "") or "").strip()),
     }

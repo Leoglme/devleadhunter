@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # Statuses proving the prospect already received the campaign — no point falling back after that.
 _DELIVERED_STATUSES: frozenset[str] = frozenset(
-    {EmailStatus.DELIVERED.value, EmailStatus.OPENED.value, EmailStatus.CLICKED.value}
+    {EmailStatus.DELIVERED.value, EmailStatus.OPENED.value, EmailStatus.CLICKED.value, EmailStatus.REPLIED.value}
 )
 
 

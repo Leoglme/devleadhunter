@@ -317,6 +317,14 @@ class Settings(BaseSettings):
         alias="RESEND_WEBHOOK_SECRET",
         description="Resend webhook signing secret for verifying event payloads",
     )
+    reply_capture_domain: str = Field(
+        default="",
+        alias="REPLY_CAPTURE_DOMAIN",
+        description=(
+            "Receiving-enabled Resend domain used as Reply-To on outreach "
+            "(e.g. reply.dibodev.fr). Empty disables reply capture."
+        ),
+    )
 
     # Web Push (VAPID) — mobile PWA notifications for the dashboard user
     vapid_public_key: str | None = Field(

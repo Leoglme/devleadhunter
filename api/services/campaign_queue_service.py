@@ -362,6 +362,33 @@ class CampaignQueueService:
         )
         return count > 0
 
+    def _prospect_replied(self, user_id: int, prospect_id: int) -> bool:
+        """
+        ``True`` when the prospect has a captured human reply to any of this user's sends.
+
+        Scoped to the user (not the campaign): once a conversation started, no
+        automated relance should interrupt it, whichever campaign it came from.
+
+        Args:
+            user_id: Owner of the sends.
+            prospect_id: The prospect to check.
+
+        Returns:
+            ``True`` when at least one send carries a ``replied_at`` timestamp.
+        """
+        return (
+            self.db.execute(
+                select(EmailLog.id)
+                .where(
+                    EmailLog.user_id == user_id,
+                    EmailLog.prospect_id == prospect_id,
+                    EmailLog.replied_at.isnot(None),
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            is not None
+        )
+
     async def process_next(self) -> bool:
         """
         Dispatch the next due queue item across all active campaigns.
@@ -498,6 +525,15 @@ class CampaignQueueService:
         # the prospect unsubscribed or the operator cancelled it by hand from the
         # queue. Unsubscribe is still enforced above; manual control lives in
         # ``cancel_queue_item`` / ``requeue_item``.
+        #
+        # A captured REPLY is different: it is a definitive human signal, and a
+        # relance in the middle of a live conversation would be embarrassing.
+        if item.queue_type != "initial" and self._prospect_replied(item.user_id, prospect.id):
+            logger.info("[Queue] Skipping follow-up for prospect %d — prospect replied", prospect.id)
+            item.status = _STATUS_SKIPPED
+            item.skip_reason = "Le prospect a répondu"
+            self.db.commit()
+            return
 
         # Guard (defense in depth): never send an email whose template needs
         # {lien_demo} when the prospect has no active demo site — e.g. the demo

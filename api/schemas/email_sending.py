@@ -92,6 +92,7 @@ class EmailLogResponse(BaseModel):
     open_count: int = 0
     last_open_at: datetime | None = None
     clicked_at: datetime | None = None
+    replied_at: datetime | None = None
     bounced_at: datetime | None = None
     complained_at: datetime | None = None
     suppressed_at: datetime | None = None

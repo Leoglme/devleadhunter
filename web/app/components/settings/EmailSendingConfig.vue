@@ -24,6 +24,74 @@
         </div>
       </div>
 
+      <div
+        v-if="hasReplyCapture"
+        class="flex gap-3 rounded-lg border border-[var(--app-green)]/25 bg-[var(--app-green-soft)] px-3 py-3 text-sm"
+        role="status"
+      >
+        <UIcon name="i-lucide-reply" class="mt-0.5 h-4 w-4 shrink-0 text-[var(--app-green)]" />
+        <p class="leading-relaxed text-[var(--app-ink)]">
+          <span class="font-medium">Réponses détectées automatiquement — rien à configurer.</span>
+          Quand un prospect répond à l'un de vos emails, DevLeadHunter le détecte : statut « Répondu », notification, et
+          les relances prévues pour ce prospect sont annulées.
+        </p>
+      </div>
+
+      <UiCollapsibleCard icon="i-lucide-info" title="Comment ça marche" suffix="Côté Resend, 3 étapes">
+        <div class="px-4 py-4">
+          <ol class="space-y-2.5">
+            <li class="flex items-start gap-2.5">
+              <span
+                class="font-label flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--app-surface-2)] text-[0.6rem] font-semibold text-[var(--app-ink)]"
+              >
+                1
+              </span>
+              <p class="text-[11px] leading-relaxed text-[var(--app-ink-soft)]">
+                Créez un compte gratuit sur resend.com, ajoutez votre domaine d'envoi (Resend
+                <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> Domains) et posez les
+                enregistrements DNS demandés chez votre hébergeur pour le vérifier.
+              </p>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span
+                class="font-label flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--app-surface-2)] text-[0.6rem] font-semibold text-[var(--app-ink)]"
+              >
+                2
+              </span>
+              <p class="text-[11px] leading-relaxed text-[var(--app-ink-soft)]">
+                Créez une clé API « Full Access » (Resend
+                <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> API Keys), puis
+                collez-la ci-dessous avec votre adresse d'envoi sur ce domaine.
+              </p>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span
+                class="font-label flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--app-surface-2)] text-[0.6rem] font-semibold text-[var(--app-ink)]"
+              >
+                3
+              </span>
+              <p class="text-[11px] leading-relaxed text-[var(--app-ink-soft)]">
+                Pour le suivi temps réel (ouvertures, clics, bounces) : créez un webhook (Resend
+                <UIcon name="i-lucide-arrow-right" class="inline-block h-3 w-3 align-[-1px]" /> Webhooks) vers
+                <code class="rounded bg-[var(--app-surface-2)] px-1 py-0.5 break-all text-[var(--app-ink)]">{{
+                  resendWebhookUrl
+                }}</code>
+                avec tous les événements « email », puis collez le secret
+                <code class="rounded bg-[var(--app-surface-2)] px-1 py-0.5 text-[var(--app-ink)]">whsec_…</code> dans
+                les options avancées ci-dessous.
+              </p>
+            </li>
+          </ol>
+          <p
+            v-if="hasReplyCapture"
+            class="mt-3 flex items-center gap-2 border-t border-[var(--app-line-soft)] pt-3 text-[11px] text-[var(--app-ink-soft)]"
+          >
+            <UIcon name="i-lucide-reply" class="h-3.5 w-3.5 shrink-0 text-[var(--app-green)]" />
+            Les réponses des prospects, elles, ne demandent rien : DevLeadHunter les capte automatiquement.
+          </p>
+        </div>
+      </UiCollapsibleCard>
+
       <form class="space-y-5" @submit.prevent="saveResend">
         <div
           v-if="showWebhookSecretWarning"
@@ -190,6 +258,14 @@
           + Connecter un autre compte
         </button>
       </div>
+
+      <p v-if="hasReplyCapture" class="text-muted flex gap-2 text-xs leading-relaxed">
+        <UIcon name="i-lucide-info" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span>
+          Avec Gmail, les réponses des prospects arrivent directement dans votre boîte Gmail. La détection automatique
+          des réponses (statut « Répondu », arrêt des relances) est disponible avec l'envoi par domaine personnalisé.
+        </span>
+      </p>
     </section>
 
     <UiConfirmModal
@@ -254,6 +330,14 @@ const isResendConfigured: ComputedRef<boolean> = computed((): boolean => Boolean
 /** Whether the user should be warned about missing webhook secret for tracking. */
 const showWebhookSecretWarning: ComputedRef<boolean> = computed((): boolean =>
   Boolean(resendConfig.value?.show_webhook_secret_warning),
+)
+
+/** Whether platform-wide prospect-reply capture is active (Resend inbound domain). */
+const hasReplyCapture: ComputedRef<boolean> = computed((): boolean => Boolean(identity.value?.reply_capture_enabled))
+
+/** Full webhook URL to paste in the Resend dashboard (copy-ready, no relative path to resolve). */
+const resendWebhookUrl: ComputedRef<string> = computed(
+  (): string => `${useRuntimeConfig().public.apiBase}/api/v1/webhooks/resend`,
 )
 
 const fromNamePlaceholder: ComputedRef<string> = computed((): string => {

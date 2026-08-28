@@ -10,6 +10,7 @@ from models.credit_transaction import CreditTransaction
 from models.demo_site import DemoSite
 from models.email_account import EmailAccount
 from models.email_log import EmailLog
+from models.email_reply import EmailReply
 from models.email_signature import EmailSignature
 from models.email_template import EmailTemplate
 from models.email_unsubscribe import EmailUnsubscribe
@@ -42,6 +43,7 @@ __all__ = [
     "DemoSite",
     "EmailAccount",
     "EmailLog",
+    "EmailReply",
     "EmailSignature",
     "EmailTemplate",
     "EmailUnsubscribe",

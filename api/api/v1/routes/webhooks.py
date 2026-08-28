@@ -4,7 +4,7 @@ Webhook endpoint for Resend email events.
 Configure in your Resend dashboard:
   URL: https://your-api.com/api/v1/webhooks/resend
   Events: email.sent, email.delivered, email.opened, email.clicked,
-          email.bounced, email.complained
+          email.bounced, email.complained, email.received (reply capture)
 
 Resend signs each request with a ``svix-signature`` header.
 Set RESEND_WEBHOOK_SECRET in your .env to enable signature verification.
@@ -31,6 +31,7 @@ from enums.email_status import EmailStatus
 from models.demo_site import DemoSite
 from models.email_log import EmailLog
 from models.resend_config import ResendConfig
+from services import reply_capture_service
 from services.bounce_fallback_service import bounce_fallback_service
 from services.demo_identity import posthog_distinct_id, resolve_demo_slug
 from services.encryption_service import encryption_service
@@ -56,7 +57,7 @@ _EVENT_STATUS_MAP: dict[str, str] = {
     "email.complained": EmailStatus.COMPLAINED.value,
     "email.failed": EmailStatus.FAILED.value,
     "email.suppressed": EmailStatus.SUPPRESSED.value,
-    # email.received is for Resend inbound inbox — not relevant here.
+    # email.received (inbound reply capture) is handled separately — see reply_capture_service.
 }
 
 # Maps each event type to the EmailLog timestamp column it populates.
@@ -112,6 +113,8 @@ _STATUS_RANK: dict[str, int] = {
     EmailStatus.COMPLAINED.value: 7,
     EmailStatus.FAILED.value: 7,
     EmailStatus.SUPPRESSED.value: 7,
+    # A captured reply is the strongest signal — nothing may overwrite it.
+    EmailStatus.REPLIED.value: 8,
 }
 
 # An ``email.opened`` landing within this many seconds of delivery is a machine
@@ -443,6 +446,12 @@ async def resend_webhook(
     event_type: str = payload.get("type", "")
 
     logger.info("[Webhook] Resend event=%s message_id=%s", event_type, data.get("email_id"))
+
+    # Inbound reply on the capture domain — its own pipeline (token matching,
+    # body fetch, REPLIED status, notification), see reply_capture_service.
+    if event_type == "email.received":
+        await reply_capture_service.handle_received(db, data)
+        return
 
     if event_type not in _EVENT_STATUS_MAP:
         # Unknown / unsubscribed event — acknowledge without error so Resend

@@ -15,6 +15,7 @@ from enums.email_status import EmailStatus
 if TYPE_CHECKING:
     from models.campaign import Campaign
     from models.email_account import EmailAccount
+    from models.email_reply import EmailReply
     from models.user import User
 
 
@@ -45,6 +46,7 @@ class EmailLog(Base):
         open_count: Number of HUMAN opens (reopens included)
         last_open_at: Timestamp of the most recent HUMAN open
         clicked_at: Timestamp when email links were clicked
+        replied_at: Timestamp of the first captured prospect reply
         bounced_at: Timestamp when email bounced
         failed_at: Timestamp when email failed
 
@@ -85,6 +87,8 @@ class EmailLog(Base):
     open_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_open_at: Mapped[datetime | None] = mapped_column(nullable=True)
     clicked_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    # replied_at = first prospect reply captured via the reply-capture inbound domain.
+    replied_at: Mapped[datetime | None] = mapped_column(nullable=True)
     bounced_at: Mapped[datetime | None] = mapped_column(nullable=True)
     complained_at: Mapped[datetime | None] = mapped_column(nullable=True)
     suppressed_at: Mapped[datetime | None] = mapped_column(nullable=True)
@@ -103,6 +107,9 @@ class EmailLog(Base):
     user: Mapped["User"] = relationship("User", back_populates="email_logs")
     email_account: Mapped["EmailAccount"] = relationship("EmailAccount", back_populates="email_logs")
     campaign: Mapped[Optional["Campaign"]] = relationship("Campaign", back_populates="email_logs")
+    replies: Mapped[list["EmailReply"]] = relationship(
+        "EmailReply", back_populates="email_log", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         """String representation of the email log."""

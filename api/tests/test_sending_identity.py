@@ -134,6 +134,7 @@ def test_describe_sending_config_shape(monkeypatch: pytest.MonkeyPatch) -> None:
         si, "_resend_config", lambda db, uid: SimpleNamespace(api_key="enc", from_email="leo@mail.dibodev.fr")
     )
     monkeypatch.setattr(si, "_default_gmail_account", lambda db, uid: SimpleNamespace(email="me@gmail.com"))
+    monkeypatch.setattr(si.settings, "reply_capture_domain", "reply.dibodev.fr", raising=False)
 
     assert describe_sending_config(None, 1) == {
         "provider": "gmail",
@@ -141,4 +142,5 @@ def test_describe_sending_config_shape(monkeypatch: pytest.MonkeyPatch) -> None:
         "resend_from_email": "leo@mail.dibodev.fr",
         "gmail_configured": True,
         "gmail_email": "me@gmail.com",
+        "reply_capture_enabled": True,
     }

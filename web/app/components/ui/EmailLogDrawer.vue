@@ -325,6 +325,17 @@ const timelineItems: ComputedRef<EmailTimelineEntry[]> = computed((): EmailTimel
       },
     },
     {
+      key: 'replied',
+      label: 'Répondu',
+      icon: 'i-lucide-reply',
+      timestamp: l.replied_at,
+      alwaysShow: false,
+      style: {
+        indicator: 'bg-[var(--app-green-soft)] text-[var(--app-green)] ring-1 ring-inset ring-[var(--app-green)]/25',
+        separator: 'bg-[var(--app-green)]/30',
+      },
+    },
+    {
       key: 'bounced',
       label: 'Bounce',
       icon: 'i-lucide-undo-2',

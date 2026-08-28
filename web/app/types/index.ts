@@ -461,6 +461,7 @@ export type EmailStatus =
   | 'failed'
   | 'complained'
   | 'suppressed'
+  | 'replied'
 
 /**
  * A follow-up step in a campaign email sequence.
@@ -521,6 +522,7 @@ export type EmailLog = {
   open_count?: number
   last_open_at?: string | null
   clicked_at?: string | null
+  replied_at?: string | null
   bounced_at?: string | null
   complained_at?: string | null
   suppressed_at?: string | null

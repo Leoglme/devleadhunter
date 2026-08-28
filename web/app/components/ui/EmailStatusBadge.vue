@@ -40,6 +40,7 @@ const STATUS_CONFIG: Record<EmailStatus, EmailStatusPresentation> = {
   failed: { label: 'Échoué', icon: 'i-lucide-x', variant: 'app-badge--danger' },
   complained: { label: 'Spam', icon: 'i-lucide-ban', variant: 'app-badge--danger' },
   suppressed: { label: 'Supprimé', icon: 'i-lucide-circle-minus', variant: '' },
+  replied: { label: 'Répondu', icon: 'i-lucide-reply', variant: 'app-badge--strong' },
 }
 
 const config: ComputedRef<EmailStatusPresentation> = computed(

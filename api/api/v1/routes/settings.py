@@ -144,6 +144,7 @@ class SendingIdentityResponse(BaseModel):
     resend_from_email: str | None
     gmail_configured: bool
     gmail_email: str | None
+    reply_capture_enabled: bool = False
 
 
 class SendingProviderUpdate(BaseModel):

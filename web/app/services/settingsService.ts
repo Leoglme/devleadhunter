@@ -40,6 +40,8 @@ export type SendingIdentityResponse = {
   resend_from_email: string | null
   gmail_configured: boolean
   gmail_email: string | null
+  /** Platform-wide prospect-reply capture (Resend inbound) is active. */
+  reply_capture_enabled: boolean
 }
 
 /** HTTP client for the /settings API resource. */
