@@ -49,6 +49,7 @@ class ScrapingJobService:
             source=job_data.source,
             skip_duplicates=job_data.skip_duplicates,
             only_without_website=job_data.only_without_website,
+            parent_job_id=job_data.parent_job_id,
         )
         self._jobs[job_id] = job
         logger.info("Created job %s for user %s", job_id, user_id)

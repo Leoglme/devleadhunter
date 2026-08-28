@@ -31,6 +31,7 @@ export type ScrapingJob = {
   results: number[]
   skipped_duplicates: number
   known_pages_skipped: number
+  parent_job_id?: string | null
   error: string | null
   created_at: string
   started_at: string | null
@@ -408,6 +409,8 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
         source: 'facebook',
         skip_duplicates: job.skip_duplicates,
         only_without_website: job.only_without_website,
+        // Rounds all point at the user's ORIGINAL search — one search, one row.
+        parent_job_id: job.parent_job_id ?? job.id,
       })
       facebookRoundJobIds.add(next.id)
     } catch (err: unknown) {
@@ -524,16 +527,53 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
   }
 
   /**
+   * Fetch every job of the user from the API.
+   * @returns The raw job list.
+   */
+  async function fetchJobs(): Promise<ScrapingJob[]> {
+    return await $fetch<ScrapingJob[]>(`${config.public.apiBase}/api/v1/scraping-jobs`, {
+      method: 'GET',
+      headers: authHeaders(),
+    })
+  }
+
+  /**
+   * The prospects a search actually kept — including its automatic Facebook rounds,
+   * which are separate jobs linked by ``parent_job_id`` (one user search = one row).
+   * @param job - The origin job (a row of the recent-searches list).
+   * @returns The kept prospects with fresh data, in creation order.
+   */
+  async function loadJobProspects(job: ScrapingJob): Promise<Prospect[]> {
+    const [prospects, jobs]: [Prospect[], ScrapingJob[]] = await Promise.all([
+      ProspectsService.listProspects(),
+      fetchJobs(),
+    ])
+    const family: ScrapingJob[] = [
+      job,
+      ...jobs.filter((candidate: ScrapingJob): boolean => candidate.parent_job_id === job.id),
+    ].sort(
+      (a: ScrapingJob, b: ScrapingJob): number => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    )
+    const order: Map<number, number> = new Map(
+      family
+        .flatMap((member: ScrapingJob): number[] => member.results)
+        .map((id: number, index: number): [number, number] => [id, index]),
+    )
+    return prospects
+      .filter((prospect: Prospect): boolean => order.has(prospect.id))
+      .sort((a: Prospect, b: Prospect): number => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+  }
+
+  /**
    * Load the user's recent jobs (and adopt a running one if idle).
    * @returns A promise resolved once loaded.
    */
   async function loadRecent(): Promise<void> {
     try {
-      const response: ScrapingJob[] = await $fetch<ScrapingJob[]>(`${config.public.apiBase}/api/v1/scraping-jobs`, {
-        method: 'GET',
-        headers: authHeaders(),
-      })
+      const response: ScrapingJob[] = await fetchJobs()
       recentJobs.value = [...response]
+        // Automatic rounds fold into their origin search — never listed on their own.
+        .filter((job: ScrapingJob): boolean => !job.parent_job_id)
         .sort(
           (a: ScrapingJob, b: ScrapingJob): number =>
             new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
@@ -585,6 +625,7 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
     cancelSearch,
     refreshJobStatus,
     loadJob,
+    loadJobProspects,
     loadRecent,
     reset,
   }

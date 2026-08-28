@@ -33,6 +33,9 @@ class ScrapingJobCreate(BaseModel):
         True,
         description="When True, only keep prospects without an existing website",
     )
+    # Facebook match loop: extra rounds are separate jobs pointing at the user's
+    # original search, so the UI can present one search instead of N rounds.
+    parent_job_id: str | None = Field(None, description="Origin job when this job is an automatic extra round")
 
 
 class ScrapingJobProgress(BaseModel):
@@ -96,6 +99,7 @@ class ScrapingJob(BaseModel):
     # Facebook discovery: pages skipped because a previous search already tested and
     # rejected them — lets the client explain an « exhausted » run honestly.
     known_pages_skipped: int = Field(0, description="Pages skipped as already tested by past searches")
+    parent_job_id: str | None = Field(None, description="Origin job when this job is an automatic extra round")
     error: str | None = Field(None, description="Error message if failed")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
     started_at: datetime | None = Field(None, description="Start timestamp")

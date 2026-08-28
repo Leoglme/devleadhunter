@@ -240,36 +240,41 @@
               Aucun prospect conservé pour cette recherche (ignorés par le filtre ou supprimés depuis).
             </p>
             <template v-else>
-              <div
+              <button
                 v-for="prospect in expandedProspects"
                 :key="prospect.id"
-                class="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] px-3 py-2"
+                type="button"
+                class="flex w-full cursor-pointer items-center gap-3 rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--app-surface-2)]"
+                @click="openProspectDrawer(prospect)"
               >
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <span class="text-sm font-medium text-[var(--app-ink)]">{{ prospect.name }}</span>
-                  <span class="text-xs text-[var(--app-ink-soft)]">{{ prospect.city || 'Ville inconnue' }}</span>
-                  <a
-                    v-if="prospect.website"
-                    :href="prospect.website"
-                    target="_blank"
-                    rel="noopener"
-                    class="app-badge app-badge--info"
-                  >
-                    Site web
-                  </a>
-                  <span v-else class="app-badge">Sans site</span>
-                </div>
-                <div class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--app-ink-soft)]">
-                  <span class="inline-flex items-center gap-1">
-                    <UIcon name="i-lucide-mail" class="h-3 w-3" />
-                    {{ prospect.email || '—' }}
+                <span class="min-w-0 flex-1">
+                  <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span class="truncate text-sm font-medium text-[var(--app-ink)]">{{ prospect.name }}</span>
+                    <UiProspectSourceBadge :source="prospect.source" />
                   </span>
-                  <span class="inline-flex items-center gap-1">
-                    <UIcon name="i-lucide-phone" class="h-3 w-3" />
-                    {{ prospect.phone || '—' }}
+                  <span class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--app-ink-soft)]">
+                    <span class="inline-flex items-center gap-1">
+                      <UIcon name="i-lucide-map-pin" class="h-3 w-3 shrink-0" />
+                      {{ prospect.city || '—' }}
+                    </span>
+                    <span class="inline-flex items-center gap-1">
+                      <UIcon name="i-lucide-mail" class="h-3 w-3 shrink-0" />
+                      {{ prospect.email || '—' }}
+                    </span>
+                    <span class="inline-flex items-center gap-1">
+                      <UIcon name="i-lucide-phone" class="h-3 w-3 shrink-0" />
+                      {{ prospect.phone || '—' }}
+                    </span>
+                    <span v-if="prospect.category" class="inline-flex items-center gap-1 capitalize">
+                      <UIcon name="i-lucide-briefcase" class="h-3 w-3 shrink-0" />
+                      {{ prospect.category }}
+                    </span>
                   </span>
-                </div>
-              </div>
+                </span>
+                <span v-if="prospect.website" class="app-badge app-badge--info shrink-0">Site web</span>
+                <span v-else class="app-badge shrink-0">Sans site</span>
+                <UIcon name="i-lucide-chevron-right" class="h-4 w-4 shrink-0 text-[var(--app-ink-soft)]" />
+              </button>
               <NuxtLink
                 to="/dashboard/my-prospects"
                 class="inline-flex items-center gap-1 text-xs font-medium text-[var(--app-ink)] underline underline-offset-2"
@@ -292,7 +297,6 @@ import type { ComputedRef, Ref } from 'vue'
 import { computed, onMounted, ref } from 'vue'
 import { useProspectSearchStore } from '~/stores/prospectSearch'
 import { useDrawerStackStore } from '~/stores/drawerStack'
-import { ProspectsService } from '~/services/prospectsService'
 
 definePageMeta({
   layout: 'dashboard',
@@ -373,20 +377,22 @@ async function toggleRecentJob(job: ScrapingJob): Promise<void> {
   isLoadingExpanded.value = true
   expandedProspects.value = []
   try {
-    const all: Prospect[] = await ProspectsService.listProspects()
-    const order: Map<number, number> = new Map(
-      job.results.map((id: number, index: number): [number, number] => [id, index]),
-    )
-    // Prospects rejected by the match filter or deleted since are gone from this list — on
-    // purpose: the row must reflect what the user actually kept, not the raw snapshot.
-    expandedProspects.value = all
-      .filter((prospect: Prospect): boolean => order.has(prospect.id))
-      .sort((a: Prospect, b: Prospect): number => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+    // Fresh data, rounds folded in; rejected or deleted prospects are gone on purpose —
+    // the row must reflect what the user actually kept, not the raw snapshot.
+    expandedProspects.value = await store.loadJobProspects(job)
   } catch {
     expandedProspects.value = job.live_prospects ?? []
   } finally {
     isLoadingExpanded.value = false
   }
+}
+
+/**
+ * Open the prospect drawer for a row of the expanded search summary.
+ * @param prospect - The clicked prospect.
+ */
+function openProspectDrawer(prospect: Prospect): void {
+  drawerStack.push({ kind: 'prospect', prospect })
 }
 
 /**
