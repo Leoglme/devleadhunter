@@ -97,6 +97,9 @@ async def close_autocomplete_session() -> None:
 # État de l'approvisionnement Chrome, exposé par ``/health``.
 _chrome_state: str = "unknown"
 _chrome_path: str | None = None
+# Why the last provisioning attempt failed — surfaced to the app so the user sees
+# the actual cause (firewall, network…) instead of a bare « unavailable ».
+_chrome_error: str = ""
 
 # Le sidecar n'écoute que la boucle locale : il ne doit jamais être joignable
 # depuis le réseau, même sur une machine partagée.
@@ -153,15 +156,6 @@ async def provision_chrome() -> None:
     desktop app must be able to show that state rather than look frozen.
     """
 
-    def _provision() -> None:
-        global _chrome_state, _chrome_path
-        try:
-            _chrome_path = ensure_chrome()
-            _chrome_state = "ready"
-        except Exception as exc:
-            _chrome_state = "unavailable"
-            logger.exception("Chrome provisioning failed: %s", exc)
-
     if find_installed_chrome():
         _provision()
         return
@@ -171,6 +165,19 @@ async def provision_chrome() -> None:
     asyncio.get_running_loop().run_in_executor(None, _provision)
 
 
+def _provision() -> None:
+    """Find or download Chrome, recording the outcome (and the failure cause)."""
+    global _chrome_state, _chrome_path, _chrome_error
+    try:
+        _chrome_path = ensure_chrome()
+        _chrome_state = "ready"
+        _chrome_error = ""
+    except Exception as exc:
+        _chrome_state = "unavailable"
+        _chrome_error = str(exc)
+        logger.exception("Chrome provisioning failed: %s", exc)
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     """Liveness probe the desktop shell polls before routing any call.
@@ -178,7 +185,32 @@ async def health() -> dict[str, str]:
     ``chrome`` is ``ready``, ``installing`` (first-launch download) or
     ``unavailable`` — the app surfaces it instead of failing on the first scrape.
     """
-    return {"status": "ok", "chrome": _chrome_state, "chrome_path": _chrome_path or ""}
+    return {
+        "status": "ok",
+        "chrome": _chrome_state,
+        "chrome_path": _chrome_path or "",
+        "chrome_error": _chrome_error,
+    }
+
+
+@app.post("/chrome/provision", dependencies=[Depends(require_sidecar_token)])
+async def retry_chrome_provisioning() -> dict[str, str]:
+    """Retry finding or downloading Chrome without restarting the app.
+
+    The startup attempt can fail transiently (network refusal, firewall prompt
+    denied); the app calls this before a browser-driven run so the user is never
+    stuck on « unavailable » until the next restart.
+
+    Returns:
+        The chrome state after (or while) retrying.
+    """
+    global _chrome_state, _chrome_error
+    if _chrome_state in ("ready", "installing"):
+        return {"chrome": _chrome_state}
+    _chrome_state = "installing"
+    _chrome_error = ""
+    asyncio.get_running_loop().run_in_executor(None, _provision)
+    return {"chrome": _chrome_state}
 
 
 @app.post(

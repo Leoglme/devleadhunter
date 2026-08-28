@@ -111,20 +111,59 @@ export async function postToScraperSidecar<T>(
  *
  * @returns The reported state, or `unknown` when the sidecar is unreachable.
  */
-export async function getScraperChromeState(): Promise<ScraperChromeState> {
+/** Chrome provisioning state plus the failure cause when it is unavailable. */
+export type ScraperChromeHealth = {
+  state: ScraperChromeState
+  error: string | null
+}
+
+/**
+ * Chrome provisioning state AND the failure cause, from the sidecar's health probe.
+ *
+ * @returns The reported state with its error detail, `unknown` when unreachable.
+ */
+export async function getScraperChromeHealth(): Promise<ScraperChromeHealth> {
   const info: ScraperSidecarInfo | null = await getScraperSidecarInfo()
-  if (!info) return 'unknown'
+  if (!info) return { state: 'unknown', error: null }
   const controller: AbortController = new AbortController()
   // A health probe must never hang the caller — 5s is generous for loopback.
   const timer: ReturnType<typeof setTimeout> = setTimeout((): void => controller.abort(), 5_000)
   try {
     const response: Response = await fetch(`http://127.0.0.1:${info.port}/health`, { signal: controller.signal })
-    if (!response.ok) return 'unknown'
-    const body: { chrome?: ScraperChromeState } = await response.json()
-    return body.chrome ?? 'unknown'
+    if (!response.ok) return { state: 'unknown', error: null }
+    const body: { chrome?: ScraperChromeState; chrome_error?: string } = await response.json()
+    return { state: body.chrome ?? 'unknown', error: body.chrome_error || null }
   } catch {
-    return 'unknown'
+    return { state: 'unknown', error: null }
   } finally {
     clearTimeout(timer)
+  }
+}
+
+/**
+ * Chrome provisioning state, so the UI can explain a first-launch download.
+ *
+ * @returns The reported state, or `unknown` when the sidecar is unreachable.
+ */
+export async function getScraperChromeState(): Promise<ScraperChromeState> {
+  return (await getScraperChromeHealth()).state
+}
+
+/**
+ * Ask the sidecar to retry finding or downloading its Chrome, without an app
+ * restart — the startup attempt can fail transiently (firewall, network).
+ *
+ * @returns A promise resolved once the retry is requested (poll health after).
+ */
+export async function requestChromeProvision(): Promise<void> {
+  const info: ScraperSidecarInfo | null = await getScraperSidecarInfo()
+  if (!info) return
+  try {
+    await fetch(`http://127.0.0.1:${info.port}/chrome/provision`, {
+      method: 'POST',
+      headers: { 'X-Sidecar-Token': info.token },
+    })
+  } catch {
+    // Best-effort: the health poll that follows reports the real state.
   }
 }

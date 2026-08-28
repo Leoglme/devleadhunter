@@ -11,8 +11,8 @@ import type { Prospect } from '~/types'
 import { EnrichmentService } from '~/services/enrichmentService'
 import type { ProspectEnrichment } from '~/services/enrichmentService'
 import { ProspectsService } from '~/services/prospectsService'
-import { getScraperChromeState, getScraperSidecarInfo } from '~/services/scraperSidecarService'
-import type { ScraperChromeState, ScraperSidecarInfo } from '~/services/scraperSidecarService'
+import { getScraperChromeHealth, getScraperSidecarInfo, requestChromeProvision } from '~/services/scraperSidecarService'
+import type { ScraperChromeHealth, ScraperSidecarInfo } from '~/services/scraperSidecarService'
 
 /** A scraping job as returned by the API. */
 export type ScrapingJob = {
@@ -286,25 +286,33 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
     }
 
     // First launch on a new machine: the sidecar may still be downloading its Chrome
-    // (~150 MB). Wait for it instead of failing every page — plug-and-play.
-    let chrome: ScraperChromeState = await getScraperChromeState()
-    if (chrome === 'installing') {
+    // (~150 MB). Wait for it instead of failing every page — plug-and-play. A failed
+    // startup download is retried on demand here, so a transient network refusal
+    // never requires an app restart.
+    let health: ScraperChromeHealth = await getScraperChromeHealth()
+    if (health.state === 'unavailable') {
+      await requestChromeProvision()
+      health = await getScraperChromeHealth()
+    }
+    if (health.state === 'installing') {
       state.chromeInstalling = true
       const deadline: number = Date.now() + 10 * 60_000
-      while (chrome === 'installing' && Date.now() < deadline) {
+      while (health.state === 'installing' && Date.now() < deadline) {
         await new Promise(
           (resolve: (value: unknown) => void): ReturnType<typeof setTimeout> => setTimeout(resolve, 10_000),
         )
-        chrome = await getScraperChromeState()
+        health = await getScraperChromeHealth()
       }
       state.chromeInstalling = false
     }
-    if (chrome === 'installing' || chrome === 'unavailable') {
+    if (health.state === 'installing' || health.state === 'unavailable') {
       state.running = false
       state.error =
-        chrome === 'installing'
+        health.state === 'installing'
           ? "Chrome est toujours en cours d'installation sur ce poste — relancez la recherche dans quelques minutes."
-          : 'Chrome est indisponible sur ce poste — impossible de lire les pages Facebook.'
+          : `Le téléchargement automatique de Chrome a échoué sur ce poste${
+              health.error ? ` (cause : ${health.error})` : ''
+            }. Installez Google Chrome puis relancez la recherche.`
       await discardCandidates(candidates)
       return
     }
