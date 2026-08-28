@@ -85,6 +85,8 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
   const isRefreshing: Ref<boolean> = ref(false)
   const completedSignal: Ref<number> = ref(0)
   const autoEnrich: Ref<FacebookAutoEnrichState | null> = ref(null)
+  /** The usable prospects the Facebook match loop kept — the only ones the user sees. */
+  const facebookKeptProspects: Ref<Prospect[]> = ref([])
   /** Jobs whose chained enrichment already ran — completion is signalled twice (stream + poll). */
   const autoEnrichedJobIds: Set<string> = new Set()
   /** Jobs launched BY the match loop as extra rounds — they continue the running state. */
@@ -104,6 +106,26 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
   const isSearching: ComputedRef<boolean> = computed(
     (): boolean => currentJob.value?.status === 'running' || currentJob.value?.status === 'pending',
   )
+
+  /**
+   * User-facing progress. A Facebook search is measured in USABLE prospects kept by
+   * the match loop against the count asked — never in internal candidates.
+   */
+  const displayProgress: ComputedRef<ScrapingJobProgressState> = computed((): ScrapingJobProgressState => {
+    const job: ScrapingJob | null = currentJob.value
+    if (job?.source === 'facebook') {
+      const needed: number = autoEnrich.value?.needed ?? job.max_results
+      const kept: number = autoEnrich.value?.kept ?? 0
+      return {
+        current: kept,
+        total: needed,
+        percentage: needed > 0 ? Math.min(100, (kept / needed) * 100) : 0,
+        current_prospect: null,
+        estimated_time_remaining: null,
+      }
+    }
+    return liveProgress.value
+  })
 
   /**
    * Build the auth header from the user's token.
@@ -206,6 +228,7 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
         error: null,
       }
       autoEnrich.value = state
+      facebookKeptProspects.value = []
     }
 
     const candidates: Prospect[] = (job.live_prospects ?? []).filter((prospect: Prospect): boolean =>
@@ -262,6 +285,7 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
         const usable: boolean = Boolean(fresh.email) && (!job.only_without_website || !fresh.website)
         if (usable) {
           state.kept += 1
+          facebookKeptProspects.value.push(fresh)
         } else {
           if (fresh.email) {
             state.rejectedWebsite += 1
@@ -376,6 +400,7 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
     isStarting.value = true
     try {
       autoEnrich.value = null
+      facebookKeptProspects.value = []
       await launchJob({
         category: params.category || null,
         city: params.city || null,
@@ -461,6 +486,7 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
   function reset(): void {
     currentJob.value = null
     autoEnrich.value = null
+    facebookKeptProspects.value = []
     stream.disconnect()
     stream.reset()
     stopPolling()
@@ -474,6 +500,8 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
     isRefreshing,
     completedSignal,
     autoEnrich,
+    facebookKeptProspects,
+    displayProgress,
     liveProgress,
     streamLogs,
     streamProspects,

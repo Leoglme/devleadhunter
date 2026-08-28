@@ -101,8 +101,11 @@ class ScrapingJobService:
         # Facebook overshoot: the match filter (email present, website per the checkbox)
         # only runs AFTER the desktop enrichment reads each page, so the job gathers more
         # candidates than asked — the desktop keeps the first max_results matches and
-        # removes the rest.
-        save_cap = job.max_results * 3 if (job.source or "").lower() == "facebook" else job.max_results
+        # removes the rest. Candidates are internal plumbing: the user asked for N usable
+        # prospects, so for Facebook the journal and progress stay quiet about candidates
+        # (the desktop match loop reports usable-prospect progress instead).
+        is_facebook = (job.source or "").lower() == "facebook"
+        save_cap = job.max_results * 3 if is_facebook else job.max_results
 
         async def on_log(message: str) -> None:
             await self._append_log(job, message)
@@ -122,24 +125,25 @@ class ScrapingJobService:
             fb_url = (prospect_data.facebook_url or "").strip()
             if fb_url:
                 # Pages already rejected by the match filter are never re-tested —
-                # each test costs a full desktop enrichment of the page.
+                # each test costs a full desktop enrichment of the page. Quiet skip:
+                # candidates are internal, the user never asked to hear about them.
                 if facebook_exclusion_service.is_excluded(db, job.user_id, fb_url):
-                    await self._append_log(job, f"Page ignorée (déjà testée, inutilisable) : {prospect_data.name}")
+                    logger.info("Job %s: candidate skipped (excluded page) %s", job_id, fb_url)
                     return
                 # Page-URL duplicate check — sharper than name+city for Facebook, whose
                 # names come from SERP titles and vary from one search to the next.
                 if job.skip_duplicates and await prospect_service.facebook_url_exists(db, fb_url, job.user_id):
                     skipped_count += 1
                     job.skipped_duplicates = skipped_count
-                    await self._append_log(job, f"Doublon ignoré (page déjà enregistrée) : {prospect_data.name}")
                     await scraping_job_stream_hub.broadcast(
                         job.id,
                         {"type": "duplicate_skipped", "name": prospect_data.name},
                     )
                     return
 
-            job.progress.current_prospect = prospect_data.name
-            await self._emit_progress(job)
+            if not is_facebook:
+                job.progress.current_prospect = prospect_data.name
+                await self._emit_progress(job)
 
             if job.skip_duplicates:
                 is_duplicate = await prospect_service.check_duplicate(
@@ -151,7 +155,8 @@ class ScrapingJobService:
                 if is_duplicate:
                     skipped_count += 1
                     job.skipped_duplicates = skipped_count
-                    await self._append_log(job, f"Doublon ignoré : {prospect_data.name}")
+                    if not is_facebook:
+                        await self._append_log(job, f"Doublon ignoré : {prospect_data.name}")
                     await scraping_job_stream_hub.broadcast(
                         job.id,
                         {"type": "duplicate_skipped", "name": prospect_data.name},
@@ -171,27 +176,34 @@ class ScrapingJobService:
                 return
 
             saved_count += 1
-            # Decision-maker name resolves in the background while the job keeps scraping.
-            enrichment_service.schedule_contact_resolution([created.id])
             job.results.append(created.id)
-            job.progress.current = saved_count
-            job.progress.total = max(job.progress.total, save_cap)
-            job.progress.percentage = min(100.0, (saved_count / save_cap) * 100)
-
-            elapsed = time.time() - start_time
-            if saved_count > 0:
-                avg = elapsed / saved_count
-                job.progress.estimated_time_remaining = int(avg * max(save_cap - saved_count, 0))
-
             prospect_payload = Prospect.model_validate(created).model_dump(mode="json")
+            # The match loop reads the candidates from here even in quiet Facebook mode.
             job.live_prospects.append(prospect_payload)
 
-            await scraping_job_stream_hub.broadcast(
-                job.id,
-                {"type": "prospect", "prospect": prospect_payload},
-            )
-            await self._append_log(job, f"Prospect ajouté : {created.name} ({created.city or '—'})")
-            await self._emit_progress(job)
+            if is_facebook:
+                # Candidate saved silently: no journal line, no prospect broadcast, no
+                # per-candidate progress — and no contact resolution either (it runs
+                # during the match enrichment, and most candidates get discarded).
+                logger.info("Job %s: facebook candidate %s saved (%d)", job_id, created.name, saved_count)
+            else:
+                # Decision-maker name resolves in the background while the job keeps scraping.
+                enrichment_service.schedule_contact_resolution([created.id])
+                job.progress.current = saved_count
+                job.progress.total = max(job.progress.total, save_cap)
+                job.progress.percentage = min(100.0, (saved_count / save_cap) * 100)
+
+                elapsed = time.time() - start_time
+                if saved_count > 0:
+                    avg = elapsed / saved_count
+                    job.progress.estimated_time_remaining = int(avg * max(save_cap - saved_count, 0))
+
+                await scraping_job_stream_hub.broadcast(
+                    job.id,
+                    {"type": "prospect", "prospect": prospect_payload},
+                )
+                await self._append_log(job, f"Prospect ajouté : {created.name} ({created.city or '—'})")
+                await self._emit_progress(job)
 
             if saved_count >= save_cap:
                 with state_lock:
@@ -206,7 +218,8 @@ class ScrapingJobService:
         try:
             job.status = JobStatus.RUNNING
             job.started_at = datetime.utcnow()
-            job.progress.total = save_cap
+            # The user-facing total is what was asked; the Facebook overshoot stays internal.
+            job.progress.total = job.max_results
             await self._append_log(
                 job,
                 f"Démarrage — {job.category or '?'} à {job.city or '?'} "
@@ -255,10 +268,16 @@ class ScrapingJobService:
                     },
                 )
             else:
-                await self._append_log(
-                    job,
-                    f"Terminé — {saved_count} prospect(s) ajouté(s), {skipped_count} doublon(s) ignoré(s)",
-                )
+                if is_facebook:
+                    await self._append_log(
+                        job,
+                        "Recherche de pages terminée — vérification des prospects utilisables sur votre poste…",
+                    )
+                else:
+                    await self._append_log(
+                        job,
+                        f"Terminé — {saved_count} prospect(s) ajouté(s), {skipped_count} doublon(s) ignoré(s)",
+                    )
                 await scraping_job_stream_hub.broadcast(
                     job.id,
                     {

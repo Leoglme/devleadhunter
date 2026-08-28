@@ -110,21 +110,21 @@
             <div class="mb-1.5 flex items-center justify-between text-xs">
               <span class="font-medium text-[var(--app-ink)]">{{ statusLabel }}</span>
               <span class="text-[var(--app-ink-soft)] tabular-nums">
-                {{ store.liveProgress.current }} / {{ store.liveProgress.total || store.currentJob.max_results }}
+                {{ store.displayProgress.current }} / {{ store.displayProgress.total || store.currentJob.max_results }}
               </span>
             </div>
             <div class="h-2 w-full overflow-hidden rounded-full bg-[var(--app-surface-2)]">
               <div
                 class="h-full rounded-full transition-all"
                 :class="store.currentJob.status === 'cancelled' ? 'bg-[var(--app-ink-soft)]' : 'bg-[var(--app-ink)]'"
-                :style="{ width: Math.min(store.liveProgress.percentage, 100) + '%' }"
+                :style="{ width: Math.min(store.displayProgress.percentage, 100) + '%' }"
               />
             </div>
             <p
-              v-if="store.isSearching && store.liveProgress.current_prospect"
+              v-if="store.isSearching && store.displayProgress.current_prospect"
               class="mt-2 truncate text-[11px] text-[var(--app-ink-soft)]"
             >
-              {{ store.liveProgress.current_prospect }}
+              {{ store.displayProgress.current_prospect }}
             </p>
 
             <button
@@ -228,6 +228,10 @@ const toast: UseToastReturn = useToast()
 
 /** Label of the live-status card, driven by the job status. */
 const statusLabel: ComputedRef<string> = computed((): string => {
+  // A Facebook search is only over once the local match verification is too.
+  if (store.currentJob?.source === 'facebook' && store.autoEnrich?.running) {
+    return 'Vérification des prospects…'
+  }
   switch (store.currentJob?.status) {
     case 'completed':
       return 'Recherche terminée'

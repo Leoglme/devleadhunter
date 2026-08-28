@@ -61,7 +61,8 @@
         <div>
           <div class="mb-2 flex items-center justify-between text-sm">
             <span class="font-medium text-[var(--app-ink-soft)]">
-              {{ store.liveProgress.current }} / {{ store.liveProgress.total || store.currentJob.max_results }} ajoutés
+              {{ store.displayProgress.current }} /
+              {{ store.displayProgress.total || store.currentJob.max_results }} ajoutés
             </span>
             <div class="flex items-center gap-3">
               <button
@@ -77,28 +78,28 @@
                 {{ store.isCancelling ? 'Annulation…' : 'Annuler' }}
               </button>
               <span class="font-medium text-[var(--app-ink-soft)]"
-                >{{ Math.round(store.liveProgress.percentage) }}%</span
+                >{{ Math.round(store.displayProgress.percentage) }}%</span
               >
             </div>
           </div>
           <div class="h-3 w-full overflow-hidden rounded-full border border-[var(--app-line)] bg-[var(--app-bg)]">
             <div
               class="h-full rounded-full bg-[var(--app-ink)] transition-all duration-300"
-              :style="{ width: Math.min(store.liveProgress.percentage, 100) + '%' }"
+              :style="{ width: Math.min(store.displayProgress.percentage, 100) + '%' }"
             />
           </div>
         </div>
         <div
-          v-if="store.liveProgress.current_prospect"
+          v-if="store.displayProgress.current_prospect"
           class="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] p-3"
         >
           <p class="text-sm text-[var(--app-ink)]">
-            <span class="font-medium">En cours :</span> {{ store.liveProgress.current_prospect }}
+            <span class="font-medium">En cours :</span> {{ store.displayProgress.current_prospect }}
           </p>
         </div>
         <ScrapingJobLivePanel
           :logs="store.streamLogs"
-          :prospects="store.streamProspects"
+          :prospects="store.currentJob.source === 'facebook' ? store.facebookKeptProspects : store.streamProspects"
           :is-running="store.currentJob.status === 'running'"
         />
       </div>
@@ -130,43 +131,34 @@
         <div v-if="store.autoEnrich" class="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] p-4">
           <p v-if="store.autoEnrich.running" class="flex items-center gap-2 text-sm text-[var(--app-ink)]">
             <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-            Recherche de {{ store.autoEnrich.needed }} prospect(s) utilisable(s) — round {{ store.autoEnrich.round }}/{{
-              FACEBOOK_MAX_ROUNDS
-            }}
-            : {{ store.autoEnrich.tested }} page(s) testée(s), {{ store.autoEnrich.kept }} retenu(s)…
+            Vérification en cours — {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }} prospect(s) utilisable(s)
+            trouvé(s)…
           </p>
           <p v-else-if="store.autoEnrich.error" class="text-sm text-[var(--app-red)]">
             Vérification interrompue : {{ store.autoEnrich.error }}
           </p>
           <p v-else-if="store.autoEnrich.exhausted" class="text-sm text-[var(--app-ink)]">
-            Source épuisée : {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }} prospect(s) utilisable(s) après
-            {{ store.autoEnrich.tested }} page(s) testée(s)
+            {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }} prospect(s) utilisable(s) — la source est épuisée
+            pour cette recherche
             <span class="text-[var(--app-ink-soft)]">
-              ({{ store.autoEnrich.rejectedNoEmail }} sans email, {{ store.autoEnrich.rejectedWebsite }} avec site web —
-              essayez une autre ville ou catégorie)
+              ({{ store.autoEnrich.tested }} page(s) vérifiée(s) : {{ store.autoEnrich.rejectedNoEmail }} sans email,
+              {{ store.autoEnrich.rejectedWebsite }} avec site web — essayez une autre ville ou catégorie)
             </span>
           </p>
           <p v-else class="text-sm text-[var(--app-ink)]">
             <span class="font-medium text-[var(--app-green)]">✓</span>
-            {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }} prospect(s) utilisable(s) trouvé(s)
-            <span
-              v-if="store.autoEnrich.rejectedNoEmail + store.autoEnrich.rejectedWebsite > 0"
-              class="text-[var(--app-ink-soft)]"
-            >
-              — {{ store.autoEnrich.rejectedNoEmail + store.autoEnrich.rejectedWebsite }} page(s) écartée(s) ({{
-                store.autoEnrich.rejectedNoEmail
-              }}
-              sans email, {{ store.autoEnrich.rejectedWebsite }} avec site)
-            </span>
+            {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }} prospect(s) utilisable(s) ajouté(s) — avec email{{
+              store.currentJob.only_without_website ? ', sans site web' : ''
+            }}
             <span v-if="store.autoEnrich.failed > 0" class="text-[var(--app-red)]">
-              — {{ store.autoEnrich.failed }} échec(s) d'enrichissement
+              — {{ store.autoEnrich.failed }} page(s) illisible(s)
             </span>
           </p>
         </div>
         <ScrapingJobLivePanel
           v-if="store.streamLogs.length > 0"
           :logs="store.streamLogs"
-          :prospects="store.streamProspects"
+          :prospects="store.currentJob.source === 'facebook' ? store.facebookKeptProspects : store.streamProspects"
           :is-running="false"
         />
         <div class="flex items-center gap-3 pt-2">
@@ -203,7 +195,7 @@
               </div>
               <p class="mt-0.5 text-xs text-[var(--app-ink-soft)]">
                 {{ new Date(job.created_at).toLocaleString('fr-FR') }}
-                <span v-if="job.status === 'completed' || job.status === 'cancelled'">
+                <span v-if="(job.status === 'completed' || job.status === 'cancelled') && job.source !== 'facebook'">
                   · {{ job.results.length }} prospects ajoutés
                 </span>
               </p>
@@ -272,7 +264,7 @@ import type { CompletedStat } from '~/types/SearchProspectsPage'
 import type { Prospect } from '~/types'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, onMounted, ref } from 'vue'
-import { FACEBOOK_MAX_ROUNDS, useProspectSearchStore } from '~/stores/prospectSearch'
+import { useProspectSearchStore } from '~/stores/prospectSearch'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import { ProspectsService } from '~/services/prospectsService'
 
@@ -290,27 +282,14 @@ const completedStats: ComputedRef<CompletedStat[]> = computed((): CompletedStat[
   if (job === null) return []
   const match: FacebookAutoEnrichState | null = store.autoEnrich
   if (job.source === 'facebook' && match) {
+    // The user asked for N usable prospects — that is the only number that matters.
     return [
       {
-        label: 'Prospects retenus',
+        label: 'Prospects utilisables',
         value: match.kept,
         icon: 'i-lucide-user-check',
         iconBg: 'bg-[var(--app-green-soft)]',
         iconColor: 'text-[var(--app-green)]',
-      },
-      {
-        label: 'Pages testées',
-        value: match.tested,
-        icon: 'i-lucide-search',
-        iconBg: 'bg-[var(--app-blue-soft)]',
-        iconColor: 'text-[var(--app-blue)]',
-      },
-      {
-        label: 'Pages écartées',
-        value: match.rejectedNoEmail + match.rejectedWebsite,
-        icon: 'i-lucide-copy-x',
-        iconBg: 'bg-[var(--app-surface-2)]',
-        iconColor: 'text-[var(--app-ink-soft)]',
       },
     ]
   }
