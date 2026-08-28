@@ -131,8 +131,17 @@
         <div v-if="store.autoEnrich" class="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] p-4">
           <p v-if="store.autoEnrich.running" class="flex items-center gap-2 text-sm text-[var(--app-ink)]">
             <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-            Vérification en cours — {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }} prospect(s) utilisable(s)
-            trouvé(s)…
+            <template v-if="store.autoEnrich.chromeInstalling">
+              Installation de Chrome sur ce poste (premier lancement, ~150 Mo) — la vérification démarrera ensuite…
+            </template>
+            <template v-else-if="store.autoEnrich.checking > 0">
+              Vérification de la page {{ store.autoEnrich.checking }}/{{ store.autoEnrich.roundSize }} (~1 min par page)
+              — {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }} prospect(s) utilisable(s) trouvé(s)…
+            </template>
+            <template v-else>
+              Vérification en cours — {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }} prospect(s)
+              utilisable(s) trouvé(s)…
+            </template>
           </p>
           <p v-else-if="store.autoEnrich.error" class="text-sm text-[var(--app-red)]">
             Vérification interrompue : {{ store.autoEnrich.error }}

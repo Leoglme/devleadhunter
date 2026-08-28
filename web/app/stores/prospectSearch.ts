@@ -11,8 +11,8 @@ import type { Prospect } from '~/types'
 import { EnrichmentService } from '~/services/enrichmentService'
 import type { ProspectEnrichment } from '~/services/enrichmentService'
 import { ProspectsService } from '~/services/prospectsService'
-import { getScraperSidecarInfo } from '~/services/scraperSidecarService'
-import type { ScraperSidecarInfo } from '~/services/scraperSidecarService'
+import { getScraperChromeState, getScraperSidecarInfo } from '~/services/scraperSidecarService'
+import type { ScraperChromeState, ScraperSidecarInfo } from '~/services/scraperSidecarService'
 
 /** A scraping job as returned by the API. */
 export type ScrapingJob = {
@@ -68,6 +68,12 @@ export type FacebookAutoEnrichState = {
   lastFailure: string | null
   /** Pages skipped because previous searches already tested and rejected them. */
   knownSkipped: number
+  /** 1-based index of the page being verified in the current round (0 = none yet). */
+  checking: number
+  /** Number of candidate pages in the current round. */
+  roundSize: number
+  /** Chrome is being installed by the sidecar (first launch on this machine). */
+  chromeInstalling: boolean
   /** The source dried up (or the round cap was hit) before reaching `needed`. */
   exhausted: boolean
   error: string | null
@@ -196,6 +202,22 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
   }
 
   /**
+   * Remove untested candidate prospects (no exclusion) so nothing unusable lingers
+   * when the match loop cannot run — the pages stay rediscoverable later.
+   * @param candidates - The candidates to remove.
+   * @returns A promise resolved once they are gone.
+   */
+  async function discardCandidates(candidates: Prospect[]): Promise<void> {
+    for (const candidate of candidates) {
+      try {
+        await ProspectsService.deleteProspect(candidate.id)
+      } catch {
+        // Non-critical: an extra empty prospect is annoying but harmless.
+      }
+    }
+  }
+
+  /**
    * Chain the local enrich-and-match LOOP right after a Facebook search completes.
    *
    * Facebook discovery only yields name + city + page URL (the SERP carries no
@@ -231,6 +253,9 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
         failed: 0,
         lastFailure: null,
         knownSkipped: 0,
+        checking: 0,
+        roundSize: 0,
+        chromeInstalling: false,
         exhausted: false,
         error: null,
       }
@@ -254,12 +279,40 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
       state.running = false
       state.error =
         "La lecture des pages Facebook s'exécute en local — relancez la recherche depuis l'application desktop."
+      await discardCandidates(candidates)
       return
     }
 
+    // First launch on a new machine: the sidecar may still be downloading its Chrome
+    // (~150 MB). Wait for it instead of failing every page — plug-and-play.
+    let chrome: ScraperChromeState = await getScraperChromeState()
+    if (chrome === 'installing') {
+      state.chromeInstalling = true
+      const deadline: number = Date.now() + 10 * 60_000
+      while (chrome === 'installing' && Date.now() < deadline) {
+        await new Promise(
+          (resolve: (value: unknown) => void): ReturnType<typeof setTimeout> => setTimeout(resolve, 10_000),
+        )
+        chrome = await getScraperChromeState()
+      }
+      state.chromeInstalling = false
+    }
+    if (chrome === 'installing' || chrome === 'unavailable') {
+      state.running = false
+      state.error =
+        chrome === 'installing'
+          ? "Chrome est toujours en cours d'installation sur ce poste — relancez la recherche dans quelques minutes."
+          : 'Chrome est indisponible sur ce poste — impossible de lire les pages Facebook.'
+      await discardCandidates(candidates)
+      return
+    }
+
+    state.checking = 0
+    state.roundSize = candidates.length
     const testedBefore: number = state.tested
     const failedBefore: number = state.failed
     for (const candidate of candidates) {
+      state.checking += 1
       if (state.kept >= state.needed) {
         // Surplus candidate, never tested — removed; a future search can rediscover it.
         try {

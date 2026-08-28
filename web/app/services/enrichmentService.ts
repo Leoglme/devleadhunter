@@ -159,12 +159,17 @@ export class EnrichmentService {
     facebookUrl: string = '',
   ): Promise<ProspectEnrichment> {
     const scrapedData: unknown = businessName
-      ? await postToScraperSidecar<unknown>('/scraper/enrichment', {
-          business_name: businessName,
-          city: city || null,
-          google_maps_url: googleMapsUrl || null,
-          facebook_url: facebookUrl || null,
-        })
+      ? await postToScraperSidecar<unknown>(
+          '/scraper/enrichment',
+          {
+            business_name: businessName,
+            city: city || null,
+            google_maps_url: googleMapsUrl || null,
+            facebook_url: facebookUrl || null,
+          },
+          // The sidecar caps a scrape at 180s — a call still pending past that is wedged.
+          { timeoutMs: 240_000 },
+        )
       : null
     // `null` et non `{}` : chaque champ d'EnrichmentData a un défaut, donc un objet
     // vide passerait pour un scrape réussi et l'API cesserait de scraper elle-même.
@@ -253,12 +258,16 @@ export class EnrichmentService {
     for (const target of targets) {
       let scraped: unknown
       try {
-        scraped = await postToScraperSidecar<unknown>('/scraper/enrichment', {
-          business_name: target.name,
-          city: target.city,
-          google_maps_url: target.googleMapsUrl,
-          facebook_url: target.facebookUrl,
-        })
+        scraped = await postToScraperSidecar<unknown>(
+          '/scraper/enrichment',
+          {
+            business_name: target.name,
+            city: target.city,
+            google_maps_url: target.googleMapsUrl,
+            facebook_url: target.facebookUrl,
+          },
+          { timeoutMs: 240_000 },
+        )
       } catch (err: unknown) {
         await pendingPersist
         results.push({ prospect_id: target.id, status: 'failed', error: err instanceof Error ? err.message : null })

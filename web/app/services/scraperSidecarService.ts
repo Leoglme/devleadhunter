@@ -57,18 +57,40 @@ export async function getScraperSidecarInfo(): Promise<ScraperSidecarInfo | null
  *
  * @param path - Sidecar path, e.g. `/scraper/enrich`.
  * @param payload - JSON body.
+ * @param options - `timeoutMs` aborts a call the sidecar never answers (a wedged
+ * browser scrape would otherwise hang the caller forever).
  * @returns The parsed response, or `null` when no sidecar is available.
- * @throws With the sidecar's message when it answers an error.
+ * @throws With the sidecar's message when it answers an error, or a plain
+ * "ne répond pas" message when the timeout fires.
  */
-export async function postToScraperSidecar<T>(path: string, payload: unknown): Promise<T | null> {
+export async function postToScraperSidecar<T>(
+  path: string,
+  payload: unknown,
+  options: { timeoutMs?: number } = {},
+): Promise<T | null> {
   const info: ScraperSidecarInfo | null = await getScraperSidecarInfo()
   if (!info) return null
 
-  const response: Response = await fetch(`http://127.0.0.1:${info.port}${path}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'X-Sidecar-Token': info.token },
-    body: JSON.stringify(payload),
-  })
+  const controller: AbortController = new AbortController()
+  const timer: ReturnType<typeof setTimeout> | null = options.timeoutMs
+    ? setTimeout((): void => controller.abort(), options.timeoutMs)
+    : null
+  let response: Response
+  try {
+    response = await fetch(`http://127.0.0.1:${info.port}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-Sidecar-Token': info.token },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+  } catch (err: unknown) {
+    if (controller.signal.aborted) {
+      throw new Error('Le scraper local ne répond pas (délai dépassé) — vérifiez que Chrome peut démarrer.')
+    }
+    throw err
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 
   if (!response.ok) {
     const raw: string = await response.text().catch((): string => '')
