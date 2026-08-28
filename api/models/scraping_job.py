@@ -93,6 +93,9 @@ class ScrapingJob(BaseModel):
     )
     results: list[int] = Field(default_factory=list, description="List of prospect IDs created")
     skipped_duplicates: int = Field(0, description="Number of duplicates skipped")
+    # Facebook discovery: pages skipped because a previous search already tested and
+    # rejected them — lets the client explain an « exhausted » run honestly.
+    known_pages_skipped: int = Field(0, description="Pages skipped as already tested by past searches")
     error: str | None = Field(None, description="Error message if failed")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
     started_at: datetime | None = Field(None, description="Start timestamp")

@@ -140,9 +140,24 @@
           <p v-else-if="store.autoEnrich.exhausted" class="text-sm text-[var(--app-ink)]">
             {{ store.autoEnrich.kept }}/{{ store.autoEnrich.needed }} prospect(s) utilisable(s) — la source est épuisée
             pour cette recherche
-            <span class="text-[var(--app-ink-soft)]">
+            <span
+              v-if="store.autoEnrich.tested === 0 && store.autoEnrich.knownSkipped > 0"
+              class="text-[var(--app-ink-soft)]"
+            >
+              (les {{ store.autoEnrich.knownSkipped }} pages trouvées ont déjà été testées et rejetées par vos
+              recherches précédentes — essayez une autre ville ou catégorie)
+            </span>
+            <span v-else class="text-[var(--app-ink-soft)]">
               ({{ store.autoEnrich.tested }} page(s) vérifiée(s) : {{ store.autoEnrich.rejectedNoEmail }} sans email,
-              {{ store.autoEnrich.rejectedWebsite }} avec site web — essayez une autre ville ou catégorie)
+              {{ store.autoEnrich.rejectedWebsite }} avec site web{{
+                store.autoEnrich.knownSkipped > 0 ? `, ${store.autoEnrich.knownSkipped} déjà testée(s) avant` : ''
+              }}
+              — essayez une autre ville ou catégorie)
+            </span>
+            <span v-if="store.autoEnrich.failed > 0" class="text-[var(--app-red)]">
+              — {{ store.autoEnrich.failed }} page(s) illisible(s){{
+                store.autoEnrich.lastFailure ? ` : ${store.autoEnrich.lastFailure}` : ''
+              }}
             </span>
           </p>
           <p v-else class="text-sm text-[var(--app-ink)]">
@@ -151,7 +166,9 @@
               store.currentJob.only_without_website ? ', sans site web' : ''
             }}
             <span v-if="store.autoEnrich.failed > 0" class="text-[var(--app-red)]">
-              — {{ store.autoEnrich.failed }} page(s) illisible(s)
+              — {{ store.autoEnrich.failed }} page(s) illisible(s){{
+                store.autoEnrich.lastFailure ? ` : ${store.autoEnrich.lastFailure}` : ''
+              }}
             </span>
           </p>
         </div>

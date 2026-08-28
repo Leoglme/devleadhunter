@@ -229,6 +229,21 @@ class EnrichmentService:
                 google_maps_url=prospect.google_maps_url,
                 facebook_url=prospect.facebook_url,
             )
+            # A Facebook-anchored scrape that carries NOTHING did not read the page (the
+            # scraper degrades to an empty payload when the browser is unavailable or the
+            # page is walled). Persisting it as success would poison every consumer — the
+            # discovery match filter would blacklist the page as « no email » without ever
+            # having read it — so emptiness is an explicit failure.
+            if self._facebook_scrape_is_empty(prospect, data):
+                logger.warning("Facebook enrichment returned an empty payload for prospect_id=%s", prospect.id)
+                record.status = EnrichmentStatus.FAILED.value
+                record.error_message = (
+                    "Page Facebook illisible (navigateur indisponible ou page bloquée) — relancez l'enrichissement."
+                )
+                self._record_diagnostic(prospect, None, error="facebook scrape returned an empty payload")
+                db.commit()
+                db.refresh(record)
+                return record
             # The homonym guard is a « nom + ville » SEARCH safeguard (it opens the first result, which
             # could be a homonym). When the scrape is anchored on an EXACT source — a Facebook page pasted
             # for this prospect, or the Maps place URL stored at discovery — the listing is guaranteed
@@ -302,6 +317,36 @@ class EnrichmentService:
 
         db.refresh(record)
         return record
+
+    @staticmethod
+    def _facebook_scrape_is_empty(prospect: ProspectDB, data: EnrichmentData) -> bool:
+        """Whether a Facebook-anchored scrape came back with no substance at all.
+
+        A readable public page always yields at least its title (the ``h1``); a payload
+        with none of the substance fields means the page was never actually read.
+
+        Args:
+            prospect: The prospect being enriched.
+            data: The scraped payload.
+
+        Returns:
+            ``True`` when the payload must be treated as a scrape failure.
+        """
+        if not (prospect.facebook_url or "").strip() or not (data.source or "").startswith("facebook"):
+            return False
+        return not any(
+            [
+                (data.place_title or "").strip(),
+                (data.description or "").strip(),
+                data.photos,
+                data.emails,
+                data.reviews,
+                data.rating is not None,
+                data.social_links,
+                (data.website or "").strip(),
+                (data.logo_url or "").strip(),
+            ]
+        )
 
     @staticmethod
     def _facebook_url_from_data(data: object) -> str | None:

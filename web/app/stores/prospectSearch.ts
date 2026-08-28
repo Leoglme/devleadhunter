@@ -30,6 +30,7 @@ export type ScrapingJob = {
   live_prospects?: Prospect[]
   results: number[]
   skipped_duplicates: number
+  known_pages_skipped: number
   error: string | null
   created_at: string
   started_at: string | null
@@ -63,6 +64,10 @@ export type FacebookAutoEnrichState = {
   rejectedWebsite: number
   /** Candidates whose enrichment failed — removed but NOT excluded (retryable later). */
   failed: number
+  /** Last enrichment failure message — surfaces WHY pages were unreadable. */
+  lastFailure: string | null
+  /** Pages skipped because previous searches already tested and rejected them. */
+  knownSkipped: number
   /** The source dried up (or the round cap was hit) before reaching `needed`. */
   exhausted: boolean
   error: string | null
@@ -224,12 +229,15 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
         rejectedNoEmail: 0,
         rejectedWebsite: 0,
         failed: 0,
+        lastFailure: null,
+        knownSkipped: 0,
         exhausted: false,
         error: null,
       }
       autoEnrich.value = state
       facebookKeptProspects.value = []
     }
+    state.knownSkipped += job.known_pages_skipped ?? 0
 
     const candidates: Prospect[] = (job.live_prospects ?? []).filter((prospect: Prospect): boolean =>
       Boolean(prospect.facebook_url),
@@ -274,6 +282,7 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
           // Scrape failed — no data to judge, so the empty candidate is removed rather
           // than left as an unusable prospect. NOT excluded: a later round can retry it.
           state.failed += 1
+          state.lastFailure = record.error_message ?? state.lastFailure
           try {
             await ProspectsService.deleteProspect(candidate.id)
           } catch {
@@ -298,8 +307,9 @@ export const useProspectSearchStore = defineStore('prospectSearch', () => {
             fresh.email ? 'has_website' : 'no_email',
           )
         }
-      } catch {
+      } catch (err: unknown) {
         state.failed += 1
+        if (err instanceof Error && err.message) state.lastFailure = err.message
         try {
           await ProspectsService.deleteProspect(candidate.id)
         } catch {

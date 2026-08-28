@@ -322,6 +322,9 @@ class FacebookSearchScraper(BaseScraper):
         return [
             f'site:facebook.com "{category}" "{city}"',
             f"site:facebook.com {category} {city}",
+            # Pages whose snippet surfaces a gmail address — exactly the segment the
+            # match filter keeps (email required), so this variant boosts usable recall.
+            f'site:facebook.com {category} {city} "gmail.com"',
         ]
 
     # SERP pages fetched per engine × query (20 results each). Deeper pages are only
@@ -408,11 +411,18 @@ class FacebookSearchScraper(BaseScraper):
                 return len(prospects) >= max_results
 
             for engine in ("google", "bing"):
-                for query in queries:
+                engine_label = "Google" if engine == "google" else "Bing"
+                for query_index, query in enumerate(queries, start=1):
                     for page in range(self._PAGES_PER_QUERY):
                         if enough():
                             break
                         attempts += 1
+                        if progress:
+                            # Each SERP fetch takes ~10-20s through Bright Data — heartbeat
+                            # so the journal shows the search alive during that stretch.
+                            await progress.log(
+                                f"Facebook — {engine_label} : requête {query_index}/{len(queries)}, page {page + 1}…"
+                            )
                         html = await self._fetch_serp(engine, query, page)
                         if html is None:
                             failures += 1

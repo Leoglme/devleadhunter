@@ -128,6 +128,7 @@ class ScrapingJobService:
                 # each test costs a full desktop enrichment of the page. Quiet skip:
                 # candidates are internal, the user never asked to hear about them.
                 if facebook_exclusion_service.is_excluded(db, job.user_id, fb_url):
+                    job.known_pages_skipped += 1
                     logger.info("Job %s: candidate skipped (excluded page) %s", job_id, fb_url)
                     return
                 # Page-URL duplicate check — sharper than name+city for Facebook, whose

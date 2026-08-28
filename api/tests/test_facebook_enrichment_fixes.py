@@ -1,5 +1,8 @@
 """Unit tests for the 2026-08 Facebook enrichment fixes (website / city-postal / social)."""
 
+from types import SimpleNamespace
+
+from scrappers.enrichment_scraper import EnrichmentData
 from scrappers.facebook_enrichment_scraper import (
     _clean_social_url,
     _parse_city_postal,
@@ -90,3 +93,33 @@ class TestParsePhone:
 
     def test_no_phone_returns_none(self) -> None:
         assert _parse_phone("Aucun numéro ici", "") is None
+
+
+class TestFacebookScrapeEmptyGuard:
+    """An empty Facebook-anchored scrape is a FAILURE, never a valid « no data » result."""
+
+    @staticmethod
+    def _is_empty(prospect: object, data: EnrichmentData) -> bool:
+        from services.enrichment_service import EnrichmentService
+
+        return EnrichmentService._facebook_scrape_is_empty(prospect, data)  # type: ignore[arg-type]
+
+    def test_empty_payload_flagged(self) -> None:
+        prospect = SimpleNamespace(facebook_url="https://www.facebook.com/PizzaFlam44")
+        assert self._is_empty(prospect, EnrichmentData(source="facebook")) is True
+
+    def test_payload_with_title_passes(self) -> None:
+        prospect = SimpleNamespace(facebook_url="https://www.facebook.com/PizzaFlam44")
+        assert self._is_empty(prospect, EnrichmentData(source="facebook", place_title="PIZZ'A FLAM")) is False
+
+    def test_payload_with_emails_passes(self) -> None:
+        prospect = SimpleNamespace(facebook_url="https://www.facebook.com/PizzaFlam44")
+        assert self._is_empty(prospect, EnrichmentData(source="facebook", emails=["a@b.fr"])) is False
+
+    def test_prospect_without_facebook_url_not_guarded(self) -> None:
+        prospect = SimpleNamespace(facebook_url=None)
+        assert self._is_empty(prospect, EnrichmentData(source="facebook")) is False
+
+    def test_google_sourced_payload_not_guarded(self) -> None:
+        prospect = SimpleNamespace(facebook_url="https://www.facebook.com/PizzaFlam44")
+        assert self._is_empty(prospect, EnrichmentData(source="google")) is False
