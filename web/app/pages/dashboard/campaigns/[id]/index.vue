@@ -554,12 +554,13 @@
         </div>
 
         <div v-else class="app-card overflow-hidden">
-          <BaseTable min-width="640px">
+          <BaseTable min-width="760px">
             <template #head>
               <BaseTableTh>Prospect</BaseTableTh>
               <BaseTableTh>Type</BaseTableTh>
               <BaseTableTh>Planifié</BaseTableTh>
               <BaseTableTh align="center">Statut</BaseTableTh>
+              <BaseTableTh align="right">Actions</BaseTableTh>
             </template>
 
             <BaseTableTr v-for="item in queueData.items" :key="item.id">
@@ -601,6 +602,31 @@
                 <span :class="['app-badge', QUEUE_STATUS_BADGE_CLASS[item.status] ?? '']">
                   {{ QUEUE_STATUS_LABELS[item.status] ?? item.status }}
                 </span>
+                <span v-if="item.skip_reason" class="text-muted mt-1 block text-xs">
+                  {{ item.skip_reason }}
+                </span>
+              </BaseTableTd>
+
+              <BaseTableTd label="Actions" align="right">
+                <button
+                  v-if="item.status === 'pending'"
+                  type="button"
+                  class="app-btn-secondary h-8 px-3 text-xs"
+                  @click="startCancelQueueItem(item)"
+                >
+                  <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
+                  Annuler
+                </button>
+                <button
+                  v-else-if="item.status === 'skipped'"
+                  type="button"
+                  class="app-btn-primary h-8 px-3 text-xs"
+                  @click="startResendQueueItem(item)"
+                >
+                  <UIcon name="i-lucide-send" class="h-3.5 w-3.5" />
+                  Renvoyer
+                </button>
+                <span v-else class="text-muted text-xs">—</span>
               </BaseTableTd>
             </BaseTableTr>
           </BaseTable>
@@ -625,6 +651,25 @@
       cancel-text="Annuler"
       @confirm="handleDeleteCampaign"
     />
+
+    <UiConfirmModal
+      ref="cancelQueueModal"
+      title="Annuler l'envoi"
+      message="Cet email ne sera pas envoyé. Vous pourrez le renvoyer manuellement plus tard depuis la file d'attente."
+      confirm-text="Ne pas envoyer"
+      cancel-text="Retour"
+      @confirm="handleCancelQueueItem"
+    />
+
+    <UiConfirmModal
+      ref="resendQueueModal"
+      title="Renvoyer l'email"
+      message="Cet email sera renvoyé dans la minute qui suit."
+      confirm-text="Renvoyer"
+      cancel-text="Retour"
+      confirm-button-variant="primary"
+      @confirm="handleResendQueueItem"
+    />
   </div>
 </template>
 
@@ -637,6 +682,7 @@ import { useRouter, useRoute } from 'vue-router'
 import type {
   CampaignDetailResponse,
   CampaignProspect,
+  CampaignQueueItem,
   CampaignQueueResponse,
   CampaignStats,
   LaunchCampaignResponse,
@@ -715,6 +761,9 @@ const campaignSelectedProspects: Ref<string[]> = ref([])
 const prospectToRemoveId: Ref<number | null> = ref(null)
 const removeProspectModal: Ref<{ open: () => void } | null> = ref(null)
 const confirmDeleteModal: Ref<{ open: () => void } | null> = ref(null)
+const queueActionItem: Ref<CampaignQueueItem | null> = ref(null)
+const cancelQueueModal: Ref<{ open: () => void } | null> = ref(null)
+const resendQueueModal: Ref<{ open: () => void } | null> = ref(null)
 const isRefreshing: Ref<boolean> = ref(false)
 const autoRefreshTimer: Ref<ReturnType<typeof setInterval> | null> = ref(null)
 
@@ -1153,6 +1202,58 @@ async function handleRemoveProspect(): Promise<void> {
     toast.error('Erreur lors du retrait')
   } finally {
     prospectToRemoveId.value = null
+  }
+}
+
+/**
+ * Open the confirm modal to cancel a pending queue item.
+ * @param item - Queue item to cancel.
+ */
+function startCancelQueueItem(item: CampaignQueueItem): void {
+  queueActionItem.value = item
+  cancelQueueModal.value?.open()
+}
+
+/**
+ * Cancel the targeted pending item after confirmation — it will not be sent.
+ */
+async function handleCancelQueueItem(): Promise<void> {
+  const item: CampaignQueueItem | null = queueActionItem.value
+  if (!item) return
+  try {
+    await CampaignService.cancelQueueItem(campaignId.value, item.id)
+    toast.success('Envoi annulé')
+    await loadQueue()
+  } catch {
+    toast.error("Impossible d'annuler l'envoi")
+  } finally {
+    queueActionItem.value = null
+  }
+}
+
+/**
+ * Open the confirm modal to re-send a skipped queue item.
+ * @param item - Queue item to re-send.
+ */
+function startResendQueueItem(item: CampaignQueueItem): void {
+  queueActionItem.value = item
+  resendQueueModal.value?.open()
+}
+
+/**
+ * Re-queue the targeted skipped item after confirmation — the worker sends it within ~1 min.
+ */
+async function handleResendQueueItem(): Promise<void> {
+  const item: CampaignQueueItem | null = queueActionItem.value
+  if (!item) return
+  try {
+    await CampaignService.resendQueueItem(campaignId.value, item.id)
+    toast.success('Email replanifié — envoi imminent')
+    await loadQueue()
+  } catch {
+    toast.error("Impossible de renvoyer l'email")
+  } finally {
+    queueActionItem.value = null
   }
 }
 

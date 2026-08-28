@@ -633,10 +633,66 @@ async def get_campaign_queue(
                 "ab_variant": i.ab_variant,
                 "follow_up_index": i.follow_up_index,
                 "email_log_id": i.email_log_id,
+                "skip_reason": i.skip_reason,
             }
             for i in items
         ],
     }
+
+
+@router.post("/{campaign_id}/queue/{queue_id}/cancel")
+async def cancel_queue_item(
+    campaign_id: int,
+    queue_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Cancel a single pending queue item so it is never sent.
+
+    The row is marked ``skipped`` with a manual reason and can be re-sent later
+    via the resend endpoint.
+    """
+    _get_or_404(db, campaign_id, current_user.id)
+    item: EmailQueue | None = db.get(EmailQueue, queue_id)
+    if item is None or item.campaign_id != campaign_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Élément de file introuvable")
+
+    try:
+        CampaignQueueService(db).cancel_queue_item(item)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return {"success": True, "id": item.id, "status": item.status}
+
+
+@router.post("/{campaign_id}/queue/{queue_id}/resend")
+async def resend_queue_item(
+    campaign_id: int,
+    queue_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Re-queue a skipped item so the worker sends it on its next tick (~1 min).
+
+    Used to send a follow-up that had been skipped — cancelled by hand, or by an
+    earlier auto-skip rule.
+    """
+    _get_or_404(db, campaign_id, current_user.id)
+    if not _has_resend_config(db, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Configuration Resend manquante — Paramètres → Configuration Resend",
+        )
+    item: EmailQueue | None = db.get(EmailQueue, queue_id)
+    if item is None or item.campaign_id != campaign_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Élément de file introuvable")
+
+    try:
+        CampaignQueueService(db).requeue_item(item)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return {"success": True, "id": item.id, "status": item.status, "scheduled_at": item.scheduled_at.isoformat()}
 
 
 @router.get("/{campaign_id}/stats", response_model=CampaignStats)

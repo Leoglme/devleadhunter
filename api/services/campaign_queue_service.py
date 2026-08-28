@@ -8,8 +8,9 @@ Responsibilities:
   - Multiple follow-ups: after a J1 send, schedule all steps from
     ``campaign_follow_ups`` in order.  Falls back to the legacy
     ``follow_up_template_id`` if no ``campaign_follow_ups`` rows exist.
-  - Skip sending to prospects who have unsubscribed or who already engaged
-    (follow-ups only).
+  - Skip sending to prospects who have unsubscribed.
+  - Manual queue control: cancel a pending item, or re-queue a skipped one so
+    the worker sends it on its next tick.
 """
 
 from __future__ import annotations
@@ -22,7 +23,6 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from enums.demo_site_status import DemoSiteStatus
-from enums.email_status import EmailStatus
 from models.campaign import Campaign, CampaignStatus
 from models.campaign_follow_up import CampaignFollowUp
 from models.demo_site import DemoSite
@@ -43,6 +43,9 @@ _STATUS_SENDING = "sending"
 _STATUS_SENT = "sent"
 _STATUS_SKIPPED = "skipped"
 _STATUS_FAILED = "failed"
+
+# Reason stamped on a row the operator cancels by hand (shown on the campaign page).
+_MANUAL_CANCEL_REASON = "Annulé manuellement"
 
 
 @dataclass
@@ -490,28 +493,11 @@ class CampaignQueueService:
             self.db.commit()
             return
 
-        # Follow-up guard: skip if the prospect already engaged.
-        if item.queue_type == "followup":
-            engaged: int = (
-                self.db.execute(
-                    select(func.count()).where(
-                        EmailLog.campaign_id == item.campaign_id,
-                        EmailLog.prospect_id == str(item.prospect_id),
-                        EmailLog.status.in_(
-                            [
-                                EmailStatus.OPENED.value,
-                                EmailStatus.CLICKED.value,
-                            ]
-                        ),
-                    )
-                ).scalar()
-                or 0
-            )
-            if engaged > 0:
-                logger.info("[Queue] Follow-up skipped — prospect %d already engaged", prospect.id)
-                item.status = _STATUS_SKIPPED
-                self.db.commit()
-                return
+        # A follow-up is NOT auto-skipped on an open/click: opens are a noisy
+        # signal (bot/proxy prefetch inflates them), so a relance goes out unless
+        # the prospect unsubscribed or the operator cancelled it by hand from the
+        # queue. Unsubscribe is still enforced above; manual control lives in
+        # ``cancel_queue_item`` / ``requeue_item``.
 
         # Guard (defense in depth): never send an email whose template needs
         # {lien_demo} when the prospect has no active demo site — e.g. the demo
@@ -820,6 +806,49 @@ class CampaignQueueService:
         self.db.commit()
         logger.info("[Queue] Cancelled %d pending items for campaign %d", len(items), campaign_id)
         return len(items)
+
+    def cancel_queue_item(self, item: EmailQueue) -> None:
+        """
+        Cancel a single pending queue item so the worker never sends it.
+
+        The row is marked ``skipped`` with a manual reason (surfaced on the campaign
+        page); a later :meth:`requeue_item` can put it back. Only a ``pending`` item
+        can be cancelled.
+
+        Args:
+            item: The queue row to cancel — already loaded and ownership-checked by the caller.
+
+        Raises:
+            ValueError: When the item is not ``pending``.
+        """
+        if item.status != _STATUS_PENDING:
+            raise ValueError("Seuls les envois en attente peuvent être annulés")
+        item.status = _STATUS_SKIPPED
+        item.skip_reason = _MANUAL_CANCEL_REASON
+        self.db.commit()
+        logger.info("[Queue] Item %d cancelled manually", item.id)
+
+    def requeue_item(self, item: EmailQueue) -> None:
+        """
+        Re-queue a skipped item so the worker sends it on its next tick (~1 min).
+
+        The row returns to ``pending`` scheduled now and its ``skip_reason`` is cleared,
+        so the standard dispatch path re-runs in full — personalisation, signature, A/B,
+        logging, and follow-up chaining. Only a ``skipped`` item can be re-queued.
+
+        Args:
+            item: The queue row to re-send — already loaded and ownership-checked by the caller.
+
+        Raises:
+            ValueError: When the item is not ``skipped``.
+        """
+        if item.status != _STATUS_SKIPPED:
+            raise ValueError("Seuls les envois ignorés peuvent être renvoyés")
+        item.status = _STATUS_PENDING
+        item.skip_reason = None
+        item.scheduled_at = _utcnow()
+        self.db.commit()
+        logger.info("[Queue] Item %d re-queued for immediate send", item.id)
 
     def get_pending_count(self, campaign_id: int) -> int:
         """Return the number of pending items in the queue for a campaign."""

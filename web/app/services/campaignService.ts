@@ -125,6 +125,8 @@ export type CampaignQueueItem = {
   ab_variant?: string | null
   follow_up_index: number
   email_log_id?: number | null
+  /** Why a row was skipped (e.g. « Annulé manuellement », « Site démo expiré ») — null otherwise. */
+  skip_reason?: string | null
 }
 
 export type CampaignQueueResponse = {
@@ -291,6 +293,31 @@ export class CampaignService {
       prospect_id: prospectId,
       template_id: templateId,
     })
+  }
+
+  /**
+   * Cancel a single pending queue item so it is not sent.
+   * The item becomes « Ignoré » with a manual reason and can be re-sent later.
+   * @param campaignId - Campaign ID.
+   * @param queueId    - Queue item ID.
+   */
+  static async cancelQueueItem(
+    campaignId: number,
+    queueId: number,
+  ): Promise<{ success: boolean; id: number; status: QueueItemStatus }> {
+    return ApiClient.post(`/api/v1/campaigns/${campaignId}/queue/${queueId}/cancel`, {})
+  }
+
+  /**
+   * Re-queue a skipped item so the worker sends it on its next tick (~1 min).
+   * @param campaignId - Campaign ID.
+   * @param queueId    - Queue item ID.
+   */
+  static async resendQueueItem(
+    campaignId: number,
+    queueId: number,
+  ): Promise<{ success: boolean; id: number; status: QueueItemStatus; scheduled_at?: string }> {
+    return ApiClient.post(`/api/v1/campaigns/${campaignId}/queue/${queueId}/resend`, {})
   }
 
   /**
