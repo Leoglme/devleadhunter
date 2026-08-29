@@ -50,7 +50,7 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-3 @sm:grid-cols-3 @4xl:grid-cols-6">
+    <div class="grid grid-cols-2 gap-3 @sm:grid-cols-4 @4xl:grid-cols-7">
       <div class="card text-center">
         <p class="text-muted text-xs font-medium">Envoyés</p>
         <p class="mt-1 text-2xl font-bold text-[var(--app-ink)]">{{ stats.total_sent }}</p>
@@ -68,6 +68,10 @@
         <p class="mt-1 text-2xl font-bold text-[var(--app-ink)]">{{ stats.total_clicked }}</p>
       </div>
       <div class="card text-center">
+        <p class="text-muted text-xs font-medium">Répondus</p>
+        <p class="mt-1 text-2xl font-bold text-[var(--app-green)]">{{ stats.total_replied }}</p>
+      </div>
+      <div class="card text-center">
         <p class="text-muted text-xs font-medium">Bounces</p>
         <p class="mt-1 text-2xl font-bold text-[var(--app-red)]">{{ stats.total_bounced }}</p>
       </div>
@@ -76,6 +80,32 @@
         <p class="mt-1 text-2xl font-bold text-[var(--app-ink)]">{{ stats.open_rate }}%</p>
       </div>
     </div>
+
+    <button
+      v-if="pendingReplies.count > 0"
+      :class="[
+        'flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors',
+        showPendingOnly
+          ? 'border-[var(--app-green)] bg-[var(--app-green-soft)]'
+          : 'border-[var(--app-green)]/30 bg-[var(--app-surface)] hover:bg-[var(--app-green-soft)]',
+      ]"
+      @click="showPendingOnly = !showPendingOnly"
+    >
+      <span
+        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--app-green-soft)] text-[var(--app-green)]"
+      >
+        <UIcon name="i-lucide-reply" class="h-4 w-4" />
+      </span>
+      <span class="flex-1 text-sm text-[var(--app-ink)]">
+        <span class="font-semibold">
+          {{ pendingReplies.count }} réponse{{ pendingReplies.count > 1 ? 's' : '' }} à traiter
+        </span>
+        <span class="text-muted"> — un prospect attend votre réponse.</span>
+      </span>
+      <span class="text-muted shrink-0 text-xs font-medium">
+        {{ showPendingOnly ? 'Tout afficher' : 'Voir' }}
+      </span>
+    </button>
 
     <div class="card">
       <div class="grid grid-cols-2 gap-4 @4xl:grid-cols-4">
@@ -231,9 +261,10 @@ import type { EngagementStep } from '~/types/EmailsListPage'
 import type { SelectFieldOption } from '~/types/SelectField'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, onMounted, ref, watch } from 'vue'
-import type { EmailLog, EmailStats, EmailStatus } from '~/types'
+import type { EmailLog, EmailStats, EmailStatus, PendingReply } from '~/types'
 import { formatCompactDateTime } from '~/utils/date'
 import { EmailCampaignsService } from '~/services/emailCampaignsService'
+import { EmailLogsService } from '~/services/emailLogsService'
 import type { CampaignListResponse, CampaignResponse } from '~/services/campaignService'
 import { CampaignService } from '~/services/campaignService'
 import { useToast } from '~/composables/useToast'
@@ -264,12 +295,19 @@ const stats: Ref<EmailStats> = ref({
   total_delivered: 0,
   total_opened: 0,
   total_clicked: 0,
+  total_replied: 0,
   total_bounced: 0,
   total_failed: 0,
   delivery_rate: 0,
   open_rate: 0,
   click_rate: 0,
+  reply_rate: 0,
 })
+
+/** « À traiter » queue: human replies awaiting an answer. */
+const pendingReplies: Ref<{ count: number; items: PendingReply[] }> = ref({ count: 0, items: [] })
+/** When on, the table shows only the logs whose reply awaits an answer. */
+const showPendingOnly: Ref<boolean> = ref(false)
 
 const statusOptions: { value: string; label: string }[] = [
   { value: 'all', label: 'Tous' },
@@ -292,6 +330,11 @@ const campaignOptions: ComputedRef<SelectFieldOption[]> = computed(() => [
 
 const filteredLogs: ComputedRef<EmailLog[]> = computed((): EmailLog[] => {
   let list: EmailLog[] = logs.value
+
+  if (showPendingOnly.value) {
+    const pendingLogIds: Set<number> = new Set(pendingReplies.value.items.map((r: PendingReply) => r.email_log_id))
+    list = list.filter((l: EmailLog) => pendingLogIds.has(l.id))
+  }
 
   if (searchQuery.value) {
     const q: string = searchQuery.value.toLowerCase()
@@ -418,6 +461,7 @@ function clearFilters(): void {
   searchQuery.value = ''
   filterStatus.value = 'all'
   filterCampaignId.value = 'all'
+  showPendingOnly.value = false
   currentPage.value = 1
 }
 
@@ -449,12 +493,22 @@ async function loadLogs(): Promise<void> {
   isLoading.value = true
   error.value = null
   try {
-    const [logsRes, statsRes]: [{ total: number; logs: EmailLog[] }, EmailStats] = await Promise.all([
+    const [logsRes, statsRes, pendingRes]: [
+      { total: number; logs: EmailLog[] },
+      EmailStats,
+      { count: number; items: PendingReply[] },
+    ] = await Promise.all([
       EmailCampaignsService.getEmailLogs({ limit: 500 }),
       EmailCampaignsService.getEmailStats(),
+      EmailLogsService.getPendingReplies().catch((): { count: number; items: PendingReply[] } => ({
+        count: 0,
+        items: [],
+      })),
     ])
     logs.value = logsRes.logs
     stats.value = statsRes
+    pendingReplies.value = pendingRes
+    if (pendingRes.count === 0) showPendingOnly.value = false
   } catch (err: unknown) {
     error.value = err instanceof Error ? err.message : 'Erreur lors du chargement des emails'
   } finally {

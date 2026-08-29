@@ -13,16 +13,18 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from enums.demo_site_status import DemoSiteStatus
 from models.demo_site import DemoSite
 from models.email_log import EmailLog
+from models.email_reply import EmailReply
 from models.prospect_db import ProspectDB
 from services import lead_scoring
 from services.llm_service import llm_service
 from services.posthog_service import posthog_service
+from services.reply_intent_service import NEGATIVE_INTENTS
 
 # Human labels for the timeline.
 _EVENT_LABELS: dict[str, str] = {
@@ -49,6 +51,7 @@ _EVENT_LABELS: dict[str, str] = {
     "email_sent": "Email envoyé",
     "email_opened": "Email ouvert",
     "email_clicked": "Lien de l'email cliqué",
+    "email_replied": "A répondu à l'email",
 }
 
 
@@ -88,7 +91,7 @@ class BehaviorService:
     def _email_engagement(self, db: Session, user_id: int, prospect_id: int) -> dict[str, Any]:
         """Return email engagement counts + timeline entries for a prospect."""
         logs = db.query(EmailLog).filter(EmailLog.user_id == user_id, EmailLog.prospect_id == prospect_id).all()
-        sent = opened = clicked = reopens = 0
+        sent = opened = clicked = replied = reopens = 0
         timeline: list[dict[str, Any]] = []
         for log in logs:
             if log.sent_at:
@@ -102,7 +105,34 @@ class BehaviorService:
             if log.clicked_at:
                 clicked += 1
                 timeline.append(self._email_entry("email_clicked", log.clicked_at))
-        return {"sent": sent, "opened": opened, "clicked": clicked, "reopens": reopens, "timeline": timeline}
+            if log.replied_at:
+                replied += 1
+                timeline.append(self._email_entry("email_replied", log.replied_at))
+        # Reply-level intent: a « pas intéressé » must cool the lead, not heat it.
+        intents = (
+            db.execute(
+                select(EmailReply.intent).where(
+                    EmailReply.user_id == user_id,
+                    EmailReply.prospect_id == prospect_id,
+                    EmailReply.is_auto_reply.is_(False),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        negative = sum(1 for intent in intents if intent in NEGATIVE_INTENTS)
+        if intents:
+            # Unclassified (NULL) counts as neutral-positive: benefit of the doubt.
+            replied = len(intents) - negative
+        return {
+            "sent": sent,
+            "opened": opened,
+            "clicked": clicked,
+            "replied": replied,
+            "negative_replies": negative,
+            "reopens": reopens,
+            "timeline": timeline,
+        }
 
     def _email_engagement_bulk(self, db: Session, user_id: int, prospect_ids: list[int]) -> dict[int, dict[str, int]]:
         """Return email engagement counts per prospect (one grouped query)."""
@@ -114,22 +144,43 @@ class BehaviorService:
                 func.count(EmailLog.sent_at),
                 func.count(EmailLog.opened_at),
                 func.count(EmailLog.clicked_at),
+                func.count(EmailLog.replied_at),
                 func.coalesce(func.sum(EmailLog.open_count), 0),
             )
             .where(EmailLog.user_id == user_id, EmailLog.prospect_id.in_(prospect_ids))
             .group_by(EmailLog.prospect_id)
         ).all()
+        # Reply-level intent breakdown (one grouped query): negatives cool the lead.
+        reply_rows = db.execute(
+            select(
+                EmailReply.prospect_id,
+                func.sum(case((EmailReply.intent.in_(NEGATIVE_INTENTS), 1), else_=0)),
+                func.count(EmailReply.id),
+            )
+            .where(
+                EmailReply.user_id == user_id,
+                EmailReply.prospect_id.in_(prospect_ids),
+                EmailReply.is_auto_reply.is_(False),
+            )
+            .group_by(EmailReply.prospect_id)
+        ).all()
+        intent_by_pid: dict[int, tuple[int, int]] = {
+            int(pid): (int(negative or 0), int(total or 0)) for pid, negative, total in reply_rows if pid is not None
+        }
         result: dict[int, dict[str, int]] = {}
-        for pid, sent, opened, clicked, total_opens in rows:
+        for pid, sent, opened, clicked, replied, total_opens in rows:
             if pid is None:
                 continue
             opened_count = int(opened or 0)
             # sum(open_count) - count(opened_at) = reopens (machine-only rows contribute 0 to both).
             reopens = max(int(total_opens or 0) - opened_count, 0)
+            negative, total_replies = intent_by_pid.get(int(pid), (0, 0))
             result[int(pid)] = {
                 "sent": int(sent or 0),
                 "opened": opened_count,
                 "clicked": int(clicked or 0),
+                "replied": (total_replies - negative) if total_replies else int(replied or 0),
+                "negative_replies": negative,
                 "reopens": reopens,
             }
         return result

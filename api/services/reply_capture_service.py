@@ -271,6 +271,21 @@ async def handle_received(db: Session, data: dict[str, Any]) -> None:
     if auto:
         return
 
+    # One-shot LLM verdict on what the reply means (persisted — never re-asked).
+    # Late imports: conversation_service → email_sending_service → this module.
+    intent: str | None = None
+    try:
+        from services import reply_intent_service
+        from services.conversation_service import reply_display_text
+
+        intent = await reply_intent_service.classify_reply(db, reply, reply_display_text(reply))
+    except Exception:
+        logger.warning("[ReplyCapture] Intent classification failed for reply %d", reply.id, exc_info=True)
+
+    from services.reply_intent_service import replied_event_name
+
+    event_name: str = replied_event_name(intent)
+
     # Mirror into PostHog + push — same conventions as the other webhook events.
     demo_slug: str | None = resolve_demo_slug(db, email_log.user_id, email_log.prospect_id)
     await posthog_service.capture(
@@ -283,6 +298,7 @@ async def handle_received(db: Session, data: dict[str, Any]) -> None:
             "ab_variant": email_log.ab_variant,
             "email_log_id": email_log.id,
             "matched_by": matched_by,
+            "intent": intent,
             "$lib": "devleadhunter-api",
         },
         timestamp=received_at.isoformat(),
@@ -290,7 +306,7 @@ async def handle_received(db: Session, data: dict[str, Any]) -> None:
     await notification_service.notify_email_event(
         db,
         user_id=email_log.user_id,
-        event_name="email_replied",
+        event_name=event_name,
         recipient_email=email_log.recipient_email,
         prospect_id=email_log.prospect_id,
         subject=subject,

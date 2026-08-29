@@ -486,8 +486,10 @@ export type CampaignVariantStats = {
   delivered: number
   opened: number
   clicked: number
+  replied: number
   open_rate: number
   click_rate: number
+  reply_rate: number
 }
 
 export type EmailFailureInfo = {
@@ -597,11 +599,47 @@ export type EmailStats = {
   total_delivered: number
   total_opened: number
   total_clicked: number
+  total_replied: number
   total_bounced: number
   total_failed: number
   delivery_rate: number
   open_rate: number
   click_rate: number
+  reply_rate: number
+}
+
+/** One message of the user↔prospect exchange (outbound send or captured reply). */
+export type ConversationItem = {
+  direction: 'outbound' | 'inbound'
+  id: number
+  subject?: string | null
+  /** Inbound replies: safe plain text (untrusted HTML stripped server-side). */
+  body_text?: string | null
+  /** Outbound sends only (authored by the user). */
+  body_html?: string | null
+  counterpart: string
+  timestamp?: string | null
+  is_auto_reply: boolean
+  is_conversation_reply: boolean
+  pending: boolean
+  status?: string | null
+  /** LLM verdict on inbound replies: interested | not_interested | later | question | unsubscribe | other. */
+  intent?: string | null
+  /** The reply id behind an inbound item (action targets). */
+  reply_id?: number | null
+}
+
+/** A human reply still awaiting an answer (« à traiter »). */
+export type PendingReply = {
+  id: number
+  email_log_id: number
+  prospect_id?: number | null
+  prospect_name?: string | null
+  from_email: string
+  subject?: string | null
+  preview: string
+  intent?: string | null
+  received_at?: string | null
 }
 
 export type DNSVerificationResponse = {

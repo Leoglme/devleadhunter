@@ -54,6 +54,8 @@ _EMAIL_EVENT_NOTIFS: dict[str, tuple[str, str, str]] = {
     "email_delivery_delayed": ("⏳", "warning", "Livraison retardée"),
     "email_suppressed": ("🚫", "warning", "Mail supprimé (suppression)"),
     "email_replied": ("💬", "success", "T'a répondu !"),
+    "email_replied_interested": ("🎯", "success", "T'a répondu — intéressé !"),
+    "email_replied_negative": ("🙅", "warning", "T'a répondu — pas intéressé"),
 }
 
 # Live demo / video event → (emoji, level, body). Same title convention.
@@ -107,7 +109,13 @@ class NotificationService:
         prospect_name = self._resolve_prospect_name(db, prospect_id, recipient_email)
         if event_name == "email_opened" and open_count > 1:
             emoji, body = "🔁", f"A rouvert ton mail ({open_count}×)"
-        if subject and event_name in ("email_opened", "email_clicked", "email_replied"):
+        if subject and event_name in (
+            "email_opened",
+            "email_clicked",
+            "email_replied",
+            "email_replied_interested",
+            "email_replied_negative",
+        ):
             body = f"{body} : « {subject} »"
         tag = f"email-{email_log_id}" if email_log_id else None
         await self._dispatch(

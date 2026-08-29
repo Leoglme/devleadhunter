@@ -62,7 +62,8 @@
         <h2 class="text-sm font-semibold text-[var(--app-ink)]">Signaux de santé</h2>
         <p class="text-xs text-[var(--app-ink-soft)] tabular-nums">
           {{ formatInt(overview.totals.sent) }} envoyés · {{ formatInt(overview.totals.delivered) }} délivrés ·
-          {{ formatInt(overview.totals.opened) }} ouverts sur {{ period }} jours
+          {{ formatInt(overview.totals.opened) }} ouverts · {{ formatInt(overview.totals.replied ?? 0) }} répondus sur
+          {{ period }} jours
         </p>
       </div>
       <div class="grid grid-cols-2 gap-3 sm:gap-4 @4xl:grid-cols-4">
@@ -80,7 +81,10 @@
       <p class="mt-2 flex items-center gap-1.5 text-[11px] text-[var(--app-ink-soft)]">
         <UIcon name="i-lucide-info" class="h-3 w-3 shrink-0" />
         Le taux d'ouverture ({{ formatRate(overview.totals.open_rate) }} %) est indicatif : Apple Mail le gonfle
-        artificiellement en préchargeant les images.
+        artificiellement en préchargeant les images. Le taux de réponse ({{
+          formatRate(overview.totals.reply_rate ?? 0)
+        }}
+        %) est l'indicateur fiable — une réponse humaine ne se simule pas.
       </p>
     </section>
 

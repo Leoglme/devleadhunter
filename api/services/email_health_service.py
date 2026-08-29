@@ -249,6 +249,7 @@ class EmailHealthService:
             EmailLog.status.in_((EmailStatus.OPENED.value, EmailStatus.CLICKED.value, EmailStatus.REPLIED.value)),
         )
         clicked_marker = or_(EmailLog.clicked_at.isnot(None), EmailLog.status == EmailStatus.CLICKED.value)
+        replied_marker = or_(EmailLog.replied_at.isnot(None), EmailLog.status == EmailStatus.REPLIED.value)
         bounced_marker = or_(EmailLog.bounced_at.isnot(None), EmailLog.status == EmailStatus.BOUNCED.value)
         complained_marker = or_(EmailLog.complained_at.isnot(None), EmailLog.status == EmailStatus.COMPLAINED.value)
         suppressed_marker = or_(EmailLog.suppressed_at.isnot(None), EmailLog.status == EmailStatus.SUPPRESSED.value)
@@ -259,6 +260,7 @@ class EmailHealthService:
             func.sum(case((delivered_marker, 1), else_=0)),
             func.sum(case((opened_marker, 1), else_=0)),
             func.sum(case((clicked_marker, 1), else_=0)),
+            func.sum(case((replied_marker, 1), else_=0)),
             func.sum(case((bounced_marker, 1), else_=0)),
             func.sum(case((complained_marker, 1), else_=0)),
             func.sum(case((suppressed_marker, 1), else_=0)),
@@ -271,13 +273,16 @@ class EmailHealthService:
             query = query.filter(EmailLog.email_account_id == email_account_id)
 
         row = query.one()
-        sent, delivered, opened, clicked, bounced, complained, suppressed, failed = (int(value or 0) for value in row)
+        sent, delivered, opened, clicked, replied, bounced, complained, suppressed, failed = (
+            int(value or 0) for value in row
+        )
 
         return {
             "sent": sent,
             "delivered": delivered,
             "opened": opened,
             "clicked": clicked,
+            "replied": replied,
             "bounced": bounced,
             "complained": complained,
             "suppressed": suppressed,
@@ -285,6 +290,8 @@ class EmailHealthService:
             "delivery_rate": _rate(delivered, sent),
             "open_rate": _rate(opened, delivered or sent),
             "click_rate": _rate(clicked, delivered or sent),
+            # The gold metric: a human reply cannot be faked by proxies/scanners.
+            "reply_rate": _rate(replied, delivered or sent),
             "bounce_rate": _rate(bounced, sent),
             "complaint_rate": _rate(complained, sent),
         }

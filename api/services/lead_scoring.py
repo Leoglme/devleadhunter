@@ -32,6 +32,8 @@ class BehaviorSignals(TypedDict):
     emails_sent: int
     emails_opened: int
     emails_clicked: int
+    emails_replied: int
+    emails_negative_replies: int
     email_reopens: int
     last_seen: str | None
 
@@ -69,6 +71,8 @@ def empty_signals() -> BehaviorSignals:
         "emails_sent": 0,
         "emails_opened": 0,
         "emails_clicked": 0,
+        "emails_replied": 0,
+        "emails_negative_replies": 0,
         "email_reopens": 0,
         "last_seen": None,
     }
@@ -92,6 +96,8 @@ def _has_any_activity(signals: BehaviorSignals) -> bool:
             signals["emails_sent"],
             signals["emails_opened"],
             signals["emails_clicked"],
+            signals["emails_replied"],
+            signals["emails_negative_replies"],
             signals["email_reopens"],
         )
     )
@@ -141,16 +147,25 @@ def score_from_signals(signals: BehaviorSignals, site_improvable: bool = False) 
     # Reopening the same email (machine prefetch already filtered out) = the prospect
     # keeps coming back. Capped below a single click so a click always outweighs reopens.
     score += min(signals["email_reopens"], 3) * 3
+    # A human reply (autoresponders already filtered at capture) is the strongest
+    # email signal — same calibre as a phone click: a deliberate act, immune to the
+    # proxy noise that pollutes opens.
+    score += min(signals["emails_replied"], 2) * 25
     # Redesign opportunity: an engaged prospect whose current site is weak is
     # easier to close (the pitch has proof) → flat bonus.
     if site_improvable:
         score += 10
+    # A « pas intéressé » / désinscription with no positive reply since: whatever
+    # the demo says, the prospect said no — cool the lead hard.
+    if signals["emails_negative_replies"] > 0 and signals["emails_replied"] == 0:
+        score = max(score - 30, 0)
     score = min(score, 100)
 
     strong_intent = (
         signals["phone_clicks"] > 0
         or signals["contact_clicks"] > 0
         or signals["emails_clicked"] > 0
+        or signals["emails_replied"] > 0  # a human reply = the conversation started
         or signals["email_reopens"] >= 3  # kept coming back to the email = hot
     )
     if strong_intent or score >= 60:
@@ -170,6 +185,8 @@ def _apply_email(signals: BehaviorSignals, email: dict[str, Any] | None) -> None
     signals["emails_sent"] = int(email.get("sent", 0) or 0)
     signals["emails_opened"] = int(email.get("opened", 0) or 0)
     signals["emails_clicked"] = int(email.get("clicked", 0) or 0)
+    signals["emails_replied"] = int(email.get("replied", 0) or 0)
+    signals["emails_negative_replies"] = int(email.get("negative_replies", 0) or 0)
     signals["email_reopens"] = int(email.get("reopens", 0) or 0)
 
 

@@ -56,6 +56,14 @@ class EmailReply(Base):
     is_auto_reply: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     received_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    # When the user dealt with the reply (answered from the app or marked handled).
+    # A human reply with handled_at IS NULL is « à traiter ».
+    handled_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    # LLM verdict on what the prospect meant (interested / not_interested / later /
+    # question / unsubscribe / other). Classified once, persisted forever.
+    intent: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # SHA-256 of the classified text — identical content reuses the stored verdict.
+    content_sha: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
 
     email_log: Mapped["EmailLog"] = relationship("EmailLog", back_populates="replies")

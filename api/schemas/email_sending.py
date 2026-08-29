@@ -130,6 +130,59 @@ class EmailLogListResponse(BaseModel):
     logs: list[EmailLogResponse]
 
 
+class ConversationItem(BaseModel):
+    """One message of the user↔prospect exchange (outbound send or captured reply)."""
+
+    direction: str  # outbound | inbound
+    id: int
+    subject: str | None = None
+    body_text: str | None = None  # inbound replies: safe plain text (untrusted HTML stripped server-side)
+    body_html: str | None = None  # outbound sends only (authored by the user)
+    counterpart: str
+    timestamp: str | None = None
+    is_auto_reply: bool = False
+    is_conversation_reply: bool = False
+    pending: bool = False
+    status: str | None = None
+    # LLM verdict on inbound replies (interested / not_interested / later / question / unsubscribe / other).
+    intent: str | None = None
+    # The EmailReply id behind an inbound item (action targets: handle, unsubscribe).
+    reply_id: int | None = None
+
+
+class ConversationResponse(BaseModel):
+    """The full exchange around a send, oldest first."""
+
+    items: list[ConversationItem]
+
+
+class PendingReplyItem(BaseModel):
+    """A human reply still awaiting an answer."""
+
+    id: int
+    email_log_id: int
+    prospect_id: int | None = None
+    prospect_name: str | None = None
+    from_email: str
+    subject: str | None = None
+    preview: str
+    intent: str | None = None
+    received_at: str | None = None
+
+
+class PendingRepliesResponse(BaseModel):
+    """The « à traiter » queue."""
+
+    count: int
+    items: list[PendingReplyItem]
+
+
+class ReplySendRequest(BaseModel):
+    """Payload to answer a prospect's reply from the app."""
+
+    body_html: str
+
+
 class EmailStatsResponse(BaseModel):
     """Schema for email statistics response."""
 
@@ -137,8 +190,10 @@ class EmailStatsResponse(BaseModel):
     total_delivered: int
     total_opened: int
     total_clicked: int
+    total_replied: int
     total_bounced: int
     total_failed: int
     delivery_rate: float
     open_rate: float
     click_rate: float
+    reply_rate: float

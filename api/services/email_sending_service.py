@@ -148,6 +148,7 @@ class EmailSendingService:
         recipient_name: str | None = None,
         body_text: str | None = None,
         unsubscribe_link: str | None = None,
+        thread_headers: dict[str, str] | None = None,
         bcc: list[str] | None = None,
         attachments: list[EmailAttachment] | None = None,
     ) -> dict:
@@ -171,6 +172,12 @@ class EmailSendingService:
             except Exception as e:
                 raise Exception(f"Failed to refresh Gmail token: {e!s}")
 
+        merged_headers: dict[str, str] = {}
+        if unsubscribe_link:
+            merged_headers.update(self._unsubscribe_headers(unsubscribe_link))
+        if thread_headers:
+            merged_headers.update(thread_headers)
+
         return await self.gmail_service.send_email(
             access_token=access_token,
             from_email=email_account.email,
@@ -179,7 +186,7 @@ class EmailSendingService:
             subject=subject,
             html_body=body_html,
             text_body=body_text,
-            extra_headers=self._unsubscribe_headers(unsubscribe_link) if unsubscribe_link else None,
+            extra_headers=merged_headers or None,
             bcc=bcc,
             attachments=attachments,
         )
@@ -197,6 +204,8 @@ class EmailSendingService:
         bcc: list[str] | None = None,
         attachments: list[EmailAttachment] | None = None,
         is_transactional: bool = False,
+        is_conversation_reply: bool = False,
+        thread_headers: dict[str, str] | None = None,
     ) -> dict:
         """
         Send an email via the user's active sending identity (Resend or Gmail).
@@ -223,6 +232,12 @@ class EmailSendingService:
             is_transactional: Invoice / payment email owed to a client rather than
                              outreach — sent without the unsubscribe footer and
                              headers, and never blocked by an unsubscribe.
+            is_conversation_reply: Direct answer to a prospect's reply — human
+                             correspondence, not outreach: no unsubscribe footer or
+                             guard, excluded from funnel stats, but the reply-capture
+                             Reply-To IS kept so the next answer comes back too.
+            thread_headers:  RFC threading headers (``In-Reply-To`` / ``References``)
+                             so the answer lands in the prospect's existing thread.
 
         Returns:
             Dict with ``success``, ``email_log_id`` and ``message_id`` / ``error``.
@@ -240,7 +255,7 @@ class EmailSendingService:
         # invoice is still owed it — unsubscribing from prospection must not make them
         # unbillable, and a transactional email carries no unsubscribe link to honour.
         unsubscribe_link: str | None = None
-        if not is_transactional:
+        if not is_transactional and not is_conversation_reply:
             if unsubscribe_service.is_unsubscribed(self.db, recipient_email):
                 raise Exception(f"{recipient_email} s'est désabonné")
 
@@ -266,10 +281,19 @@ class EmailSendingService:
             status=EmailStatus.PENDING.value,
             provider=identity.provider,
             ab_variant=ab_variant,
+            is_conversation_reply=is_conversation_reply,
         )
         self.db.add(email_log)
         self.db.commit()
         self.db.refresh(email_log)
+
+        # RFC 8058 one-click unsubscribe (bulk-sender requirement) + optional RFC
+        # threading headers (conversation replies land in the prospect's thread).
+        extra_headers: dict[str, str] = {}
+        if unsubscribe_link:
+            extra_headers.update(self._unsubscribe_headers(unsubscribe_link))
+        if thread_headers:
+            extra_headers.update(thread_headers)
 
         try:
             if identity.provider == SendingProvider.GMAIL.value:
@@ -280,6 +304,7 @@ class EmailSendingService:
                     subject=subject,
                     body_html=body_html,
                     unsubscribe_link=unsubscribe_link,
+                    thread_headers=thread_headers,
                     bcc=bcc,
                     attachments=attachments,
                 )
@@ -296,9 +321,7 @@ class EmailSendingService:
                     # Outreach replies are captured on the inbound domain; transactional
                     # emails (invoices) keep replying to the real sender address.
                     reply_to=None if is_transactional else reply_capture_service.reply_address_for_log(email_log.id),
-                    # RFC 8058 one-click unsubscribe — required by Gmail/Yahoo for bulk
-                    # senders; the POST route exists on /api/v1/unsubscribe.
-                    extra_headers=self._unsubscribe_headers(unsubscribe_link) if unsubscribe_link else None,
+                    extra_headers=extra_headers or None,
                     bcc=bcc,
                     attachments=attachments,
                 )
@@ -307,7 +330,7 @@ class EmailSendingService:
             email_log.provider_message_id = result.get("message_id")
             email_log.sent_at = datetime.utcnow()
             self.db.commit()
-            if not is_transactional and prospect_id:
+            if not is_transactional and not is_conversation_reply and prospect_id:
                 from services.demo_site_service import demo_site_service
 
                 try:
@@ -325,14 +348,17 @@ class EmailSendingService:
                         exc_info=True,
                     )
             self._mark_prospect_contacted(prospect_id)
-            await self._capture_email_sent(
-                user_id=user_id,
-                prospect_id=prospect_id,
-                campaign_id=campaign_id,
-                email_log_id=email_log.id,
-                recipient_email=recipient_email,
-                ab_variant=ab_variant,
-            )
+            # A conversation reply is the user's own message — no funnel event, no
+            # self-notification.
+            if not is_conversation_reply:
+                await self._capture_email_sent(
+                    user_id=user_id,
+                    prospect_id=prospect_id,
+                    campaign_id=campaign_id,
+                    email_log_id=email_log.id,
+                    recipient_email=recipient_email,
+                    ab_variant=ab_variant,
+                )
             return {
                 "success": True,
                 "email_log_id": email_log.id,

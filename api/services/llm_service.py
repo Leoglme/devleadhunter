@@ -36,7 +36,9 @@ class LLMService:
         """True when a Groq API key is available."""
         return bool(settings.groq_api_key)
 
-    async def _chat(self, messages: list[dict[str, str]], *, max_tokens: int = 600) -> str | None:
+    async def _chat(
+        self, messages: list[dict[str, str]], *, max_tokens: int = 600, temperature: float = 0.6
+    ) -> str | None:
         """Call Groq chat completions. Returns the text, or None on failure."""
         if not self.is_configured:
             return None
@@ -48,7 +50,7 @@ class LLMService:
                     json={
                         "model": settings.groq_model,
                         "messages": messages,
-                        "temperature": 0.6,
+                        "temperature": temperature,
                         "max_tokens": max_tokens,
                     },
                 )
@@ -58,6 +60,37 @@ class LLMService:
         except Exception as exc:
             logger.warning("Groq call failed: %s", exc)
             return None
+
+    async def classify_reply_intent(self, reply_text: str) -> str | None:
+        """
+        Classify what a prospect's reply means, in one deterministic word.
+
+        Called at most once per reply (the verdict is persisted by the caller);
+        ``temperature=0`` so the same content always yields the same verdict.
+
+        Args:
+            reply_text: The reply as plain text (already stripped of HTML).
+
+        Returns:
+            The raw model output (single word expected), or ``None`` when Groq is
+            not configured or the call failed. Validation happens in the caller.
+        """
+        excerpt = reply_text.strip()[:1500]
+        if not excerpt:
+            return None
+        prompt = (
+            "Tu classes la réponse d'un prospect (artisan/commerçant français) à un email de "
+            "prospection pour la création d'un site web. Réponds par UN SEUL mot, exactement "
+            "parmi : interested, not_interested, later, question, unsubscribe, other.\n"
+            "- interested : intérêt clair (oui, rdv, rappelez-moi, envoyez le devis…)\n"
+            "- not_interested : refus (pas intéressé, j'ai déjà un site, non merci…)\n"
+            "- later : pas maintenant mais ouvert (recontactez-moi en septembre, trop tôt…)\n"
+            "- question : demande d'information (prix, délais, comment ça marche…)\n"
+            "- unsubscribe : demande explicite d'arrêter les emails\n"
+            "- other : tout le reste (hors sujet, illisible…)\n\n"
+            f"Réponse du prospect :\n« {excerpt} »"
+        )
+        return await self._chat([{"role": "user", "content": prompt}], max_tokens=10, temperature=0.0)
 
     async def summarize_behavior(
         self,

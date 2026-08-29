@@ -61,11 +61,13 @@ export type CampaignStats = {
   emails_delivered: number
   emails_opened: number
   emails_clicked: number
+  emails_replied: number
   emails_bounced: number
   emails_failed: number
   delivery_rate: number
   open_rate: number
   click_rate: number
+  reply_rate: number
   ab_stats?: CampaignVariantStats[] | null
 }
 

@@ -58,6 +58,10 @@ def _clicked_marker() -> or_:
     return or_(EmailLog.clicked_at.isnot(None), EmailLog.status == EmailStatus.CLICKED.value)
 
 
+def _replied_marker() -> or_:
+    return or_(EmailLog.replied_at.isnot(None), EmailLog.status == EmailStatus.REPLIED.value)
+
+
 def _bounced_marker() -> or_:
     return or_(EmailLog.bounced_at.isnot(None), EmailLog.status == EmailStatus.BOUNCED.value)
 
@@ -74,6 +78,7 @@ class EmailLogCounts:
     delivered: int
     opened: int
     clicked: int
+    replied: int
     bounced: int
     failed: int
 
@@ -85,6 +90,8 @@ class EmailEngagementRates:
     delivery_rate: float
     open_rate: float
     click_rate: float
+    # Replies per delivered email — the gold metric of cold outreach.
+    reply_rate: float
 
 
 def aggregate_email_log_counts(db: Session, *filters: object) -> EmailLogCounts:
@@ -103,18 +110,22 @@ def aggregate_email_log_counts(db: Session, *filters: object) -> EmailLogCounts:
             func.sum(case((_delivered_marker(), 1), else_=0)),
             func.sum(case((_opened_marker(), 1), else_=0)),
             func.sum(case((_clicked_marker(), 1), else_=0)),
+            func.sum(case((_replied_marker(), 1), else_=0)),
             func.sum(case((_bounced_marker(), 1), else_=0)),
             func.sum(case((_failed_marker(), 1), else_=0)),
         )
-        .filter(*filters)
+        # Threaded answers to a prospect's reply are correspondence, not outreach —
+        # they must not inflate the funnel.
+        .filter(EmailLog.is_conversation_reply.is_(False), *filters)
         .one()
     )
-    sent, delivered, opened, clicked, bounced, failed = (int(value or 0) for value in row)
+    sent, delivered, opened, clicked, replied, bounced, failed = (int(value or 0) for value in row)
     return EmailLogCounts(
         sent=sent,
         delivered=delivered,
         opened=opened,
         clicked=clicked,
+        replied=replied,
         bounced=bounced,
         failed=failed,
     )
@@ -131,9 +142,10 @@ def _capped_rate(numerator: int, denominator: int) -> float:
 
 
 def compute_engagement_rates(counts: EmailLogCounts) -> EmailEngagementRates:
-    """Compute delivery / open / click rates from cumulative counters."""
+    """Compute delivery / open / click / reply rates from cumulative counters."""
     return EmailEngagementRates(
         delivery_rate=_rate(counts.delivered, counts.sent),
         open_rate=_capped_rate(counts.opened, counts.delivered),
         click_rate=_capped_rate(counts.clicked, counts.opened),
+        reply_rate=_capped_rate(counts.replied, counts.delivered),
     )

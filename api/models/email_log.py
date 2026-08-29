@@ -5,7 +5,7 @@ Email log model for tracking sent emails.
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -96,6 +96,10 @@ class EmailLog(Base):
 
     # A/B variant ('A' or 'B') — populated from the queue item at send time.
     ab_variant: Mapped[str | None] = mapped_column(String(1), nullable=True)
+
+    # Direct answer to a prospect's reply (threaded conversation, not outreach) —
+    # excluded from the outreach funnel stats.
+    is_conversation_reply: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     extra_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string

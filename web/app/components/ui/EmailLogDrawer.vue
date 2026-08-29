@@ -58,6 +58,104 @@
             <UTimeline :items="timelineItems" size="md" color="neutral" :ui="{ date: 'text-[var(--app-ink-soft)]' }" />
           </div>
 
+          <template v-if="threadItems.length > 0 || replyTarget">
+            <div class="mx-5 border-t border-[var(--app-surface-2)]"></div>
+
+            <div class="px-5 py-4">
+              <p class="mb-3 text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">
+                Conversation
+              </p>
+
+              <div class="space-y-3">
+                <div
+                  v-for="item in threadItems"
+                  :key="`${item.direction}-${item.id}`"
+                  :class="item.direction === 'inbound' ? 'mr-6' : 'ml-6'"
+                >
+                  <div
+                    :class="[
+                      'rounded-xl border px-3 py-2.5',
+                      item.direction === 'inbound'
+                        ? 'border-[var(--app-line)] bg-[var(--app-surface-2)]'
+                        : 'border-[var(--app-accent)]/25 bg-[var(--app-accent-soft)]',
+                    ]"
+                  >
+                    <div class="mb-1 flex flex-wrap items-center gap-2">
+                      <span class="text-[11px] font-medium text-[var(--app-ink)]">
+                        {{ item.direction === 'inbound' ? item.counterpart : 'Moi' }}
+                      </span>
+                      <span v-if="item.timestamp" class="text-[10px] text-[var(--app-faint)]">
+                        {{ formatCompactDateTime(item.timestamp) }}
+                      </span>
+                      <span v-if="item.is_auto_reply" class="app-badge text-[10px]">
+                        <UIcon name="i-lucide-bot" class="h-2.5 w-2.5" />
+                        Réponse automatique
+                      </span>
+                      <template v-else>
+                        <span
+                          v-if="item.intent && INTENT_BADGES[item.intent]"
+                          :class="['app-badge text-[10px]', INTENT_BADGES[item.intent]?.variant]"
+                        >
+                          <UIcon :name="INTENT_BADGES[item.intent]?.icon ?? 'i-lucide-tag'" class="h-2.5 w-2.5" />
+                          {{ INTENT_BADGES[item.intent]?.label }}
+                        </span>
+                        <span v-if="item.pending" class="app-badge app-badge--progress text-[10px]">
+                          <UIcon name="i-lucide-clock" class="h-2.5 w-2.5" />
+                          À traiter
+                        </span>
+                      </template>
+                    </div>
+                    <p class="text-xs leading-relaxed whitespace-pre-wrap text-[var(--app-ink)]">
+                      {{ item.direction === 'inbound' ? item.body_text : outboundPreview(item) }}
+                    </p>
+                    <button
+                      v-if="item.intent === 'unsubscribe' && item.pending"
+                      class="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[var(--app-red)]/40 px-2.5 py-1 text-[11px] font-medium text-[var(--app-red)] transition-colors hover:bg-[var(--app-red)]/10"
+                      title="Ajoute cette adresse aux désinscrits — plus aucune prospection ne lui sera envoyée"
+                      @click="unsubscribeFromReply(item.id)"
+                    >
+                      <UIcon name="i-lucide-user-x" class="h-3 w-3" />
+                      Honorer la désinscription
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="replyTarget" class="mt-4">
+                <textarea
+                  v-model="replyText"
+                  rows="4"
+                  class="input-field w-full text-sm"
+                  placeholder="Votre réponse au prospect…"
+                ></textarea>
+                <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+                  <button
+                    v-if="pendingTarget"
+                    class="text-muted text-xs font-medium transition-colors hover:text-[var(--app-ink)]"
+                    title="J'ai déjà répondu ailleurs (ex : depuis ma boîte mail)"
+                    @click="markHandled(pendingTarget.id)"
+                  >
+                    Marquer comme traité sans répondre
+                  </button>
+                  <button
+                    class="btn-primary ml-auto disabled:cursor-not-allowed disabled:opacity-50"
+                    :disabled="isSendingReply || !replyText.trim()"
+                    @click="sendReply"
+                  >
+                    <UIcon
+                      :name="isSendingReply ? 'i-lucide-loader-circle' : 'i-lucide-reply'"
+                      :class="['mr-1.5 h-4 w-4', isSendingReply && 'animate-spin']"
+                    />
+                    {{ isSendingReply ? 'Envoi…' : 'Envoyer la réponse' }}
+                  </button>
+                </div>
+                <p class="text-muted mt-1.5 text-[11px]">
+                  Envoyée dans le fil de discussion du prospect, sa prochaine réponse reviendra ici.
+                </p>
+              </div>
+            </div>
+          </template>
+
           <div class="mx-5 border-t border-[var(--app-surface-2)]"></div>
 
           <div class="px-5 py-4">
@@ -194,11 +292,14 @@
 
 <script lang="ts" setup>
 import type { EmailDeliveryStage, EmailTimelineEntry, UiEmailLogDrawerEmits } from '~/types/UiEmailLogDrawer'
-import type { ComputedRef, EmitFn, PropType } from 'vue'
-import type { EmailLog, EmailStatus } from '~/types'
+import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
+import type { ConversationItem, EmailLog, EmailStatus } from '~/types'
 import type { EmailLogDrawerProps } from '~/types/EmailLogDrawer'
 import { DemoSiteService } from '~/services/demoSiteService'
+import { EmailLogsService } from '~/services/emailLogsService'
 import { formatCompactDateTime } from '~/utils/date'
+import { useToast } from '~/composables/useToast'
+import { useDrawerStackStore } from '~/stores/drawerStack'
 
 /** Drawer showing email delivery timeline and events. */
 const props: EmailLogDrawerProps = defineProps({
@@ -231,7 +332,8 @@ const statusBadges: ComputedRef<EmailStatus[]> = computed((): EmailStatus[] => {
   const l: EmailLog = props.log
   const badges: EmailStatus[] = []
 
-  if (l.clicked_at) badges.push('clicked')
+  if (l.replied_at) badges.push('replied')
+  else if (l.clicked_at) badges.push('clicked')
   else if (l.opened_at) badges.push('opened')
   else if (l.delivered_at) badges.push('delivered')
   else badges.push(l.status)
@@ -240,6 +342,155 @@ const statusBadges: ComputedRef<EmailStatus[]> = computed((): EmailStatus[] => {
 
   return badges
 })
+
+// ------------------------------------------------------------------ //
+// Conversation (captured replies + threaded answers)
+// ------------------------------------------------------------------ //
+
+const toast: ReturnType<typeof useToast> = useToast()
+const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
+
+const conversation: Ref<ConversationItem[]> = ref([])
+const replyText: Ref<string> = ref('')
+const isSendingReply: Ref<boolean> = ref(false)
+
+/** Badge presentation per LLM intent verdict on a reply. */
+const INTENT_BADGES: Record<string, { label: string; icon: string; variant: string }> = {
+  interested: { label: 'Intéressé', icon: 'i-lucide-target', variant: 'app-badge--success' },
+  not_interested: { label: 'Pas intéressé', icon: 'i-lucide-x', variant: 'app-badge--danger' },
+  later: { label: 'À relancer plus tard', icon: 'i-lucide-calendar-clock', variant: 'app-badge--progress' },
+  question: { label: 'Pose une question', icon: 'i-lucide-message-circle-question', variant: 'app-badge--engaged' },
+  unsubscribe: { label: 'Demande de désinscription', icon: 'i-lucide-user-x', variant: 'app-badge--danger' },
+}
+
+/** The exchange bubbles: captured replies + answers sent from the app (outreach sends stay in « Contenu »). */
+const threadItems: ComputedRef<ConversationItem[]> = computed((): ConversationItem[] =>
+  conversation.value.filter((item: ConversationItem) => item.direction === 'inbound' || item.is_conversation_reply),
+)
+
+/** The reply the answer box targets: the prospect's most recent human reply. */
+const replyTarget: ComputedRef<ConversationItem | null> = computed((): ConversationItem | null => {
+  const humans: ConversationItem[] = conversation.value.filter(
+    (item: ConversationItem) => item.direction === 'inbound' && !item.is_auto_reply,
+  )
+  return humans.length > 0 ? (humans[humans.length - 1] ?? null) : null
+})
+
+/** The most recent reply still awaiting an answer, if any. */
+const pendingTarget: ComputedRef<ConversationItem | null> = computed((): ConversationItem | null => {
+  const pending: ConversationItem[] = conversation.value.filter((item: ConversationItem) => item.pending)
+  return pending.length > 0 ? (pending[pending.length - 1] ?? null) : null
+})
+
+/**
+ * Flatten an outbound answer's own HTML to a text preview for its bubble.
+ * @param item - The outbound conversation item.
+ * @returns The message as plain text.
+ */
+function outboundPreview(item: ConversationItem): string {
+  const html: string = item.body_html ?? ''
+  const text: string = html
+    .replace(/<(?:br|\/p|\/div)[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .trim()
+  const doc: HTMLTextAreaElement | null = typeof document !== 'undefined' ? document.createElement('textarea') : null
+  if (!doc) return text
+  doc.innerHTML = text
+  return doc.value
+}
+
+/**
+ * Load the conversation for the currently displayed log.
+ * @returns A promise resolved once loaded (silently empty on failure).
+ */
+async function loadConversation(): Promise<void> {
+  const id: number | undefined = props.log?.id
+  if (!props.open || !id) {
+    conversation.value = []
+    return
+  }
+  try {
+    conversation.value = await EmailLogsService.getConversation(id)
+  } catch {
+    conversation.value = []
+  }
+}
+
+watch(
+  (): [boolean, number | undefined] => [props.open, props.log?.id],
+  (): void => {
+    replyText.value = ''
+    void loadConversation()
+  },
+  { immediate: true },
+)
+
+/** Escape user text for safe HTML embedding. */
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/**
+ * Send the typed answer to the prospect, threaded into their mail client.
+ * @returns A promise resolved once the send is attempted.
+ */
+async function sendReply(): Promise<void> {
+  const target: ConversationItem | null = replyTarget.value
+  const text: string = replyText.value.trim()
+  if (!target || !text || isSendingReply.value) return
+  isSendingReply.value = true
+  try {
+    const html: string = text
+      .split(/\n{2,}/)
+      .map((paragraph: string): string => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br />')}</p>`)
+      .join('')
+    const result: { success: boolean; error?: string } = await EmailLogsService.sendReply(target.id, html)
+    if (result.success) {
+      toast.success('Réponse envoyée')
+      replyText.value = ''
+      await loadConversation()
+      drawerStack.bumpEmailLogsRefresh()
+    } else {
+      toast.error(result.error || "Échec de l'envoi de la réponse")
+    }
+  } catch {
+    toast.error("Échec de l'envoi de la réponse")
+  } finally {
+    isSendingReply.value = false
+  }
+}
+
+/**
+ * Mark a reply as dealt with (answered outside the app).
+ * @param replyId - The reply to mark.
+ * @returns A promise resolved once marked.
+ */
+async function markHandled(replyId: number): Promise<void> {
+  try {
+    await EmailLogsService.markReplyHandled(replyId)
+    toast.success('Réponse marquée comme traitée')
+    await loadConversation()
+    drawerStack.bumpEmailLogsRefresh()
+  } catch {
+    toast.error('Impossible de marquer la réponse')
+  }
+}
+
+/**
+ * Honour an unsubscribe request expressed in the reply (one click, user-validated).
+ * @param replyId - The reply carrying the request.
+ * @returns A promise resolved once done.
+ */
+async function unsubscribeFromReply(replyId: number): Promise<void> {
+  try {
+    await EmailLogsService.unsubscribeFromReply(replyId)
+    toast.success('Adresse ajoutée aux désinscrits')
+    await loadConversation()
+    drawerStack.bumpEmailLogsRefresh()
+  } catch {
+    toast.error('Impossible de désinscrire cette adresse')
+  }
+}
 
 /**
  * Strip ``<script>`` tags from the HTML body as a defence-in-depth measure

@@ -13,6 +13,7 @@ export type EmailHealthStats = {
   delivered: number
   opened: number
   clicked: number
+  replied: number
   bounced: number
   complained: number
   suppressed: number
@@ -20,6 +21,8 @@ export type EmailHealthStats = {
   delivery_rate: number
   open_rate: number
   click_rate: number
+  /** Replies per delivered email — the reliable engagement metric (proxy-proof). */
+  reply_rate: number
   bounce_rate: number
   complaint_rate: number
 }

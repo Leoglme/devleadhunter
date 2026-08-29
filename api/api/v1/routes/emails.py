@@ -17,12 +17,16 @@ from enums.email_status import EmailStatus
 from models.email_log import EmailLog
 from models.user import User
 from schemas.email_sending import (
+    ConversationResponse,
     EmailLogListResponse,
     EmailLogResponse,
     EmailStatsResponse,
+    PendingRepliesResponse,
+    ReplySendRequest,
     SendEmailResponse,
 )
 from services.auth_service import get_current_user
+from services.conversation_service import conversation_service
 from services.email_log_stats import aggregate_email_log_counts, compute_engagement_rates
 from services.email_sending_service import EmailSendingService
 
@@ -341,6 +345,100 @@ async def resend_email_log(
     )
 
 
+@router.get("/logs/{log_id}/conversation", response_model=ConversationResponse)
+async def get_conversation(
+    log_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ConversationResponse:
+    """
+    Return the full user↔prospect exchange around a send, oldest first.
+
+    Inbound bodies are plain text only — the untrusted HTML is stripped
+    server-side, never shipped to the UI.
+    """
+    # Classify replies captured before the intent feature (persisted → converges
+    # to zero LLM calls; identical content reuses stored verdicts).
+    await conversation_service.backfill_intents(db, current_user.id, log_id)
+    items = conversation_service.get_conversation(db, current_user.id, log_id)
+    if items is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email introuvable")
+    return ConversationResponse(items=items)
+
+
+@router.get("/replies/pending", response_model=PendingRepliesResponse)
+async def get_pending_replies(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PendingRepliesResponse:
+    """The « à traiter » queue: human replies not yet answered, newest first."""
+    items = conversation_service.pending_replies(db, current_user.id)
+    return PendingRepliesResponse(count=len(items), items=items)
+
+
+@router.post("/replies/{reply_id}/handled", status_code=status.HTTP_204_NO_CONTENT)
+async def mark_reply_handled(
+    reply_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    """Mark a reply as dealt with (e.g. answered from the user's own mailbox)."""
+    if not conversation_service.mark_handled(db, current_user.id, reply_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Réponse introuvable")
+
+
+@router.post("/replies/{reply_id}/unsubscribe", status_code=status.HTTP_204_NO_CONTENT)
+async def unsubscribe_from_reply(
+    reply_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    """
+    Honour an unsubscribe request expressed in a reply (user-validated, one click).
+
+    Adds the sender to the unsubscribe list — no further outreach will reach
+    them — and marks the reply handled. Never triggered automatically by the
+    LLM verdict: the user clicks.
+    """
+    from models.email_reply import EmailReply
+    from services.unsubscribe_service import unsubscribe_service
+
+    reply: EmailReply | None = db.get(EmailReply, reply_id)
+    if reply is None or reply.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Réponse introuvable")
+    unsubscribe_service.unsubscribe(
+        db,
+        reply.from_email,
+        prospect_id=reply.prospect_id,
+        user_id=current_user.id,
+        reason="Demande exprimée dans une réponse email",
+    )
+    conversation_service.mark_handled(db, current_user.id, reply_id)
+
+
+@router.post("/replies/{reply_id}/reply")
+async def reply_to_prospect(
+    reply_id: int,
+    payload: ReplySendRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Answer a prospect's reply from the app (threaded via In-Reply-To/References).
+
+    Sent through the user's active identity, without the outreach unsubscribe
+    footer, and excluded from the outreach funnel stats. Marks every pending
+    reply from that sender as handled on success.
+    """
+    body_html = (payload.body_html or "").strip()
+    if not body_html:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Message vide")
+    result = await conversation_service.send_reply(db, current_user.id, reply_id, body_html)
+    if result.get("error") == "not_found":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Réponse introuvable")
+    return result
+
+
 @router.get("/stats", response_model=EmailStatsResponse)
 async def get_email_stats(
     campaign_id: str = Query(None, description="Filter by campaign ID"),
@@ -362,9 +460,11 @@ async def get_email_stats(
         total_delivered=counts.delivered,
         total_opened=counts.opened,
         total_clicked=counts.clicked,
+        total_replied=counts.replied,
         total_bounced=counts.bounced,
         total_failed=counts.failed,
         delivery_rate=rates.delivery_rate,
         open_rate=rates.open_rate,
         click_rate=rates.click_rate,
+        reply_rate=rates.reply_rate,
     )

@@ -105,8 +105,10 @@ class CampaignVariantStats(BaseModel):
     delivered: int
     opened: int
     clicked: int
+    replied: int = 0
     open_rate: float
     click_rate: float
+    reply_rate: float = 0.0
 
 
 class CampaignStats(BaseModel):
@@ -118,11 +120,13 @@ class CampaignStats(BaseModel):
     emails_delivered: int
     emails_opened: int
     emails_clicked: int
+    emails_replied: int = 0
     emails_bounced: int
     emails_failed: int
     delivery_rate: float
     open_rate: float
     click_rate: float
+    reply_rate: float = 0.0
     # A/B breakdown (only populated when campaign uses ab_template_id_b)
     ab_stats: list[CampaignVariantStats] | None = None
 

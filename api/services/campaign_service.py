@@ -277,8 +277,10 @@ class CampaignService:
                         delivered=variant_counts.delivered,
                         opened=variant_counts.opened,
                         clicked=variant_counts.clicked,
+                        replied=variant_counts.replied,
                         open_rate=variant_rates.open_rate,
                         click_rate=variant_rates.click_rate,
+                        reply_rate=variant_rates.reply_rate,
                     )
                 )
 
@@ -289,11 +291,13 @@ class CampaignService:
             emails_delivered=counts.delivered,
             emails_opened=counts.opened,
             emails_clicked=counts.clicked,
+            emails_replied=counts.replied,
             emails_bounced=counts.bounced,
             emails_failed=counts.failed,
             delivery_rate=rates.delivery_rate,
             open_rate=rates.open_rate,
             click_rate=rates.click_rate,
+            reply_rate=rates.reply_rate,
             ab_stats=ab_stats,
         )
 

@@ -82,7 +82,7 @@
         </div>
       </div>
 
-      <div v-if="stats" class="grid grid-cols-2 gap-3 @xl:grid-cols-3 @5xl:grid-cols-6">
+      <div v-if="stats" class="grid grid-cols-2 gap-3 @xl:grid-cols-4 @5xl:grid-cols-7">
         <div
           v-for="m in metricCards"
           :key="m.label"
@@ -447,7 +447,7 @@
                   <UIcon name="i-lucide-trophy" class="h-3 w-3" /> Gagnant
                 </span>
               </div>
-              <div class="grid grid-cols-3 gap-3 text-center">
+              <div class="grid grid-cols-4 gap-3 text-center">
                 <div>
                   <p class="text-xl font-bold text-[var(--app-ink)]">{{ v.sent }}</p>
                   <p class="text-muted text-xs">Envoyés</p>
@@ -459,6 +459,10 @@
                 <div>
                   <p class="text-xl font-bold text-[var(--app-ink)]">{{ v.click_rate }}%</p>
                   <p class="text-muted text-xs">Clic</p>
+                </div>
+                <div>
+                  <p class="text-xl font-bold text-[var(--app-green)]">{{ v.replied }}</p>
+                  <p class="text-muted text-xs">Réponses</p>
                 </div>
               </div>
               <div class="mt-4">
@@ -865,22 +869,39 @@ const metricCards: ComputedRef<Array<{ label: string; value: number | string; ic
         icon: 'i-lucide-mouse-pointer-click',
         color: 'text-[var(--app-ink)]',
       },
+      { label: 'Répondus', value: s.emails_replied, icon: 'i-lucide-reply', color: 'text-[var(--app-green)]' },
       { label: 'Taux ouv.', value: `${s.open_rate}%`, icon: 'i-lucide-eye', color: 'text-[var(--app-accent-ink)]' },
-      { label: 'Taux clic', value: `${s.click_rate}%`, icon: 'i-lucide-pointer', color: 'text-[var(--app-accent)]' },
+      { label: 'Taux rép.', value: `${s.reply_rate}%`, icon: 'i-lucide-pointer', color: 'text-[var(--app-accent)]' },
     ]
   })
+
+/** True when at least one variant captured a reply — replies then judge the A/B, not opens. */
+const judgeByReplies: ComputedRef<boolean> = computed((): boolean =>
+  (stats.value?.ab_stats ?? []).some((v: CampaignVariantStats): boolean => v.replied > 0),
+)
+
+/**
+ * The metric a variant is judged on: reply rate once replies exist (the strongest,
+ * proxy-proof signal), open rate before that.
+ * @param v - Variant stats to evaluate.
+ */
+function judgeMetric(v: CampaignVariantStats): number {
+  return judgeByReplies.value ? v.reply_rate : v.open_rate
+}
 
 const hasSignificantDiff: ComputedRef<boolean> = computed((): boolean => {
   const [first, second]: CampaignVariantStats[] = stats.value?.ab_stats ?? []
   if (!first || !second) return false
-  return Math.abs(first.open_rate - second.open_rate) >= 10
+  return Math.abs(judgeMetric(first) - judgeMetric(second)) >= 10
 })
 
 const winnerMessage: ComputedRef<string> = computed((): string => {
   const [first, second]: CampaignVariantStats[] = stats.value?.ab_stats ?? []
   if (!first || !second) return ''
-  const winner: CampaignVariantStats = first.open_rate > second.open_rate ? first : second
-  return `Variante ${winner.variant} en tête avec ${winner.open_rate}% d'ouverture.`
+  const winner: CampaignVariantStats = judgeMetric(first) > judgeMetric(second) ? first : second
+  return judgeByReplies.value
+    ? `Variante ${winner.variant} en tête avec ${winner.reply_rate}% de réponses.`
+    : `Variante ${winner.variant} en tête avec ${winner.open_rate}% d'ouverture.`
 })
 
 /** Detects whether the settings form differs from the persisted campaign. */
@@ -912,14 +933,15 @@ const settingsDirty: ComputedRef<boolean> = computed((): boolean => {
 })
 
 /**
- * Determine if a variant is the open-rate winner (>= 10pp lead).
+ * Determine if a variant is the winner (>= 10pp lead on the judge metric:
+ * reply rate once replies exist, open rate before that).
  * @param v - Variant stats to evaluate.
  */
 function isWinner(v: CampaignVariantStats): boolean {
   const ab: CampaignVariantStats[] | null | undefined = stats.value?.ab_stats
   if (!ab || ab.length < 2 || !hasSignificantDiff.value) return false
   return ab.every(
-    (other: CampaignVariantStats): boolean => other.variant === v.variant || v.open_rate > other.open_rate,
+    (other: CampaignVariantStats): boolean => other.variant === v.variant || judgeMetric(v) > judgeMetric(other),
   )
 }
 
