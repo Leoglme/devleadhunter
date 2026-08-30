@@ -109,6 +109,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_wallet_automation_jobs", "migrations.add_wallet_automation_jobs"),
     ("add_user_modules", "migrations.add_user_modules"),
     ("add_wallet_subscriptions", "migrations.add_wallet_subscriptions"),
+    ("add_merchant_accounts", "migrations.add_merchant_accounts"),
     # Content rewrites run last, once every schema change is in place.
     ("strip_brands_from_subjects", "migrations.strip_brands_from_subjects"),
     ("reseed_email_template_library", "migrations.reseed_email_template_library"),

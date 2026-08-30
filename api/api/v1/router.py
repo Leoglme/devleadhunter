@@ -27,6 +27,7 @@ from .routes import (
     exports,
     health,
     interactions,
+    merchant,
     modules,
     notifications,
     orders,
@@ -88,6 +89,7 @@ router.include_router(admin_monitoring.router)
 router.include_router(admin_storyblok.router)
 router.include_router(automations.router)
 router.include_router(send_policy.router)
+router.include_router(merchant.router)
 router.include_router(modules.router)
 router.include_router(wallet.router)
 router.include_router(wallet_merchant.router)
