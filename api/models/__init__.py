@@ -42,6 +42,7 @@ from models.user_module import UserModule
 from models.wallet_automation_job import WalletAutomationJob
 from models.wallet_credentials import WalletCredentials
 from models.wallet_device_registration import WalletDeviceRegistration
+from models.wallet_subscription import WalletSubscription
 
 __all__ = [
     "AcquisitionRun",
@@ -85,4 +86,5 @@ __all__ = [
     "WalletAutomationJob",
     "WalletCredentials",
     "WalletDeviceRegistration",
+    "WalletSubscription",
 ]

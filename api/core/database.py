@@ -93,5 +93,6 @@ def init_db():
     from models.wallet_automation_job import WalletAutomationJob  # noqa: F401
     from models.wallet_credentials import WalletCredentials  # noqa: F401
     from models.wallet_device_registration import WalletDeviceRegistration  # noqa: F401
+    from models.wallet_subscription import WalletSubscription  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
