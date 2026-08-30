@@ -16,6 +16,23 @@
     </div>
 
     <template v-else-if="behavior">
+      <!-- Le prospect l'a dit lui-même (« Je suis intéressé » sur sa démo) : le
+           signal le plus fort de tous — affiché en premier, quoi qu'il arrive. -->
+      <div
+        v-if="behavior.leads?.length"
+        class="space-y-2 rounded border border-[var(--app-green)]/40 bg-[var(--app-green)]/10 p-3"
+      >
+        <p class="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-[var(--app-green)] uppercase">
+          <UIcon name="i-lucide-hand" class="h-3.5 w-3.5" />
+          S'est déclaré intéressé
+        </p>
+        <div v-for="(lead, i) in behavior.leads" :key="i" class="text-xs">
+          <p v-if="lead.message" class="whitespace-pre-line text-[var(--app-ink)]">« {{ lead.message }} »</p>
+          <p v-else class="text-[var(--app-ink-soft)] italic">A cliqué « Je suis intéressé » sans message.</p>
+          <p class="mt-0.5 text-[10px] text-[var(--app-ink-soft)]">{{ formatTime(lead.created_at) }}</p>
+        </div>
+      </div>
+
       <p v-if="!behavior.tracking_configured" class="text-xs text-[var(--app-ink-soft)]">
         PostHog n'est pas configuré — le suivi comportemental est inactif.
       </p>

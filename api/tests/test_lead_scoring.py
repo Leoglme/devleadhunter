@@ -120,3 +120,34 @@ def test_aggregate_maps_new_keys() -> None:
     signals = ls.build_signals_from_aggregate({"pageviews": 3, "visits": 1, "sections_viewed": 4, "outbound_clicks": 2})
     assert signals["sections_viewed"] == 4
     assert signals["outbound_clicks"] == 2
+
+
+def test_demo_lead_alone_is_hot() -> None:
+    """A « Je suis intéressé » banner submission makes the lead hot with zero other activity."""
+    result = ls.compute([], demo_leads=1)
+    assert result["temperature"] == "hot"
+    assert result["signals"]["demo_leads"] == 1
+    assert result["score"] >= 30
+
+
+def test_demo_lead_outweighs_every_other_single_signal() -> None:
+    """One banner lead scores above one phone click and above one email reply."""
+    lead = ls.compute([], demo_leads=1)
+    phone = ls.compute([{"event": "demo_phone_click", "timestamp": "t", "properties": {}}])
+    reply = ls.compute([], email={"sent": 1, "opened": 0, "clicked": 0, "replied": 1})
+    assert lead["score"] > phone["score"]
+    assert lead["score"] > reply["score"]
+
+
+def test_demo_lead_score_is_capped() -> None:
+    """Repeated submissions cap out — spamming the banner cannot inflate the score forever."""
+    two = ls.compute([], demo_leads=2)
+    ten = ls.compute([], demo_leads=10)
+    assert two["score"] == ten["score"]
+
+
+def test_aggregate_signals_carry_demo_leads() -> None:
+    """The bulk path (hot-leads list, temperatures) folds the banner-lead count in."""
+    signals = ls.build_signals_from_aggregate({"pageviews": 1, "visits": 1}, demo_leads=1)
+    result = ls.score_from_signals(signals)
+    assert result["temperature"] == "hot"

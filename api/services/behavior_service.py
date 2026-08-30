@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from enums.demo_site_status import DemoSiteStatus
 from models.demo_site import DemoSite
+from models.demo_site_lead import DemoSiteLead
 from models.email_log import EmailLog
 from models.email_reply import EmailReply
 from models.prospect_db import ProspectDB
@@ -52,6 +53,7 @@ _EVENT_LABELS: dict[str, str] = {
     "email_opened": "Email ouvert",
     "email_clicked": "Lien de l'email cliqué",
     "email_replied": "A répondu à l'email",
+    "demo_lead": "S'est déclaré intéressé depuis sa démo",
 }
 
 
@@ -185,6 +187,32 @@ class BehaviorService:
             }
         return result
 
+    # ------------------------------------------------------------------ #
+    # Demo leads (« Ce site vous plaît ? » banner)
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _demo_leads(db: Session, user_id: int, prospect_id: int) -> list[DemoSiteLead]:
+        """Return the prospect's banner leads, newest first."""
+        return (
+            db.query(DemoSiteLead)
+            .filter(DemoSiteLead.user_id == user_id, DemoSiteLead.prospect_id == prospect_id)
+            .order_by(DemoSiteLead.created_at.desc())
+            .all()
+        )
+
+    @staticmethod
+    def _demo_leads_count_bulk(db: Session, user_id: int, prospect_ids: list[int]) -> dict[int, int]:
+        """Return the banner-lead count per prospect (one grouped query)."""
+        if not prospect_ids:
+            return {}
+        rows = db.execute(
+            select(DemoSiteLead.prospect_id, func.count(DemoSiteLead.id))
+            .where(DemoSiteLead.user_id == user_id, DemoSiteLead.prospect_id.in_(prospect_ids))
+            .group_by(DemoSiteLead.prospect_id)
+        ).all()
+        return {int(pid): int(count or 0) for pid, count in rows if pid is not None}
+
     @staticmethod
     def _email_entry(event_type: str, when: Any, count: int = 1) -> dict[str, Any]:
         """Build a timeline entry for an email event (open count folds into the open label)."""
@@ -232,18 +260,36 @@ class BehaviorService:
         return bool(audit.get("is_improvable")) if isinstance(audit, dict) else False
 
     async def get_behavior(self, db: Session, user_id: int, prospect_id: int) -> dict[str, Any]:
-        """Return combined (demo + email) temperature, score, signals and timeline."""
+        """Return combined (demo + email + banner leads) temperature, score, signals and timeline."""
         events = await self._events_for_prospect(db, user_id, prospect_id)
         email = self._email_engagement(db, user_id, prospect_id)
+        leads = self._demo_leads(db, user_id, prospect_id)
+        lead_entries = [
+            {
+                "type": "demo_lead",
+                "label": _EVENT_LABELS["demo_lead"],
+                "timestamp": lead.created_at.isoformat() if lead.created_at else None,
+                "properties": {"message": lead.message or ""},
+            }
+            for lead in leads
+        ]
         site_improvable = self._site_improvable(db, prospect_id)
-        score = lead_scoring.compute(events, email=email, site_improvable=site_improvable)
+        score = lead_scoring.compute(events, email=email, site_improvable=site_improvable, demo_leads=len(leads))
         return {
             "temperature": score["temperature"],
             "score": score["score"],
             "signals": score["signals"],
             "site_improvable": score["site_improvable"],
-            "timeline": self._build_timeline(events, email["timeline"]),
-            "has_data": bool(events) or email["sent"] > 0,
+            "timeline": self._build_timeline(events, email["timeline"] + lead_entries),
+            # The prospect's own words — shown prominently in the drawer, newest first.
+            "leads": [
+                {
+                    "message": lead.message,
+                    "created_at": lead.created_at.isoformat() if lead.created_at else None,
+                }
+                for lead in leads
+            ],
+            "has_data": bool(events) or email["sent"] > 0 or bool(leads),
             "tracking_configured": posthog_service.is_configured,
         }
 
@@ -315,6 +361,7 @@ class BehaviorService:
         aggregate = await posthog_service.get_aggregate_by_slugs(all_slugs)
         prospect_ids = list(pid_to_slugs.keys())
         email_by_pid = self._email_engagement_bulk(db, user_id, prospect_ids)
+        demo_leads_by_pid = self._demo_leads_count_bulk(db, user_id, prospect_ids)
 
         prospects = db.query(ProspectDB).filter(ProspectDB.id.in_(prospect_ids), ProspectDB.user_id == user_id).all()
         prospect_by_id = {p.id: p for p in prospects}
@@ -325,7 +372,9 @@ class BehaviorService:
             if not prospect:
                 continue
             combined = self._combine_slug_aggregates(aggregate, slugs)
-            signals = lead_scoring.build_signals_from_aggregate(combined, email_by_pid.get(pid))
+            signals = lead_scoring.build_signals_from_aggregate(
+                combined, email_by_pid.get(pid), demo_leads=demo_leads_by_pid.get(pid, 0)
+            )
             audit = prospect.lighthouse_json if isinstance(prospect.lighthouse_json, dict) else None
             score = lead_scoring.score_from_signals(
                 signals, site_improvable=bool(audit.get("is_improvable")) if audit else False
@@ -414,12 +463,15 @@ class BehaviorService:
         all_slugs = [slug for slugs in pid_to_slugs.values() for slug in slugs]
         aggregate = await posthog_service.get_aggregate_by_slugs(all_slugs) if all_slugs else {}
         email_by_pid = self._email_engagement_bulk(db, user_id, prospect_ids)
+        demo_leads_by_pid = self._demo_leads_count_bulk(db, user_id, prospect_ids)
         improvable_by_pid = self._improvable_by_prospect(db, user_id, prospect_ids)
 
         result: dict[int, dict[str, Any]] = {}
         for pid in prospect_ids:
             combined = self._combine_slug_aggregates(aggregate, pid_to_slugs.get(pid, []))
-            signals = lead_scoring.build_signals_from_aggregate(combined, email_by_pid.get(pid))
+            signals = lead_scoring.build_signals_from_aggregate(
+                combined, email_by_pid.get(pid), demo_leads=demo_leads_by_pid.get(pid, 0)
+            )
             score = lead_scoring.score_from_signals(signals, site_improvable=improvable_by_pid.get(pid, False))
             result[pid] = {"temperature": score["temperature"], "score": score["score"]}
         return result

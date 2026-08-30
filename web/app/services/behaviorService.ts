@@ -8,12 +8,19 @@ export type BehaviorTimelineEntry = {
   properties: Record<string, unknown>
 }
 
+/** A « Ce site vous plaît ? » banner submission — the prospect's own words. */
+export type DemoLeadEntry = {
+  message: string | null
+  created_at: string | null
+}
+
 /** Lead score + behaviour timeline for a prospect. */
 export type ProspectBehavior = {
   temperature: string
   score: number
   signals: Record<string, number | string | null>
   timeline: BehaviorTimelineEntry[]
+  leads: DemoLeadEntry[]
   has_data: boolean
   tracking_configured: boolean
 }

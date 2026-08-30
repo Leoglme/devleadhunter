@@ -35,6 +35,9 @@ class BehaviorSignals(TypedDict):
     emails_replied: int
     emails_negative_replies: int
     email_reopens: int
+    # « Ce site vous plaît ? » banner submissions — the prospect explicitly said
+    # they are interested, the strongest signal of all.
+    demo_leads: int
     last_seen: str | None
 
 
@@ -74,6 +77,7 @@ def empty_signals() -> BehaviorSignals:
         "emails_replied": 0,
         "emails_negative_replies": 0,
         "email_reopens": 0,
+        "demo_leads": 0,
         "last_seen": None,
     }
 
@@ -99,6 +103,7 @@ def _has_any_activity(signals: BehaviorSignals) -> bool:
             signals["emails_replied"],
             signals["emails_negative_replies"],
             signals["email_reopens"],
+            signals["demo_leads"],
         )
     )
 
@@ -151,6 +156,9 @@ def score_from_signals(signals: BehaviorSignals, site_improvable: bool = False) 
     # email signal — same calibre as a phone click: a deliberate act, immune to the
     # proxy noise that pollutes opens.
     score += min(signals["emails_replied"], 2) * 25
+    # « Je suis intéressé » submitted from the demo banner: the prospect said it in
+    # so many words — weighted above every other signal (phone click, reply included).
+    score += min(signals["demo_leads"], 2) * 30
     # Redesign opportunity: an engaged prospect whose current site is weak is
     # easier to close (the pitch has proof) → flat bonus.
     if site_improvable:
@@ -162,7 +170,8 @@ def score_from_signals(signals: BehaviorSignals, site_improvable: bool = False) 
     score = min(score, 100)
 
     strong_intent = (
-        signals["phone_clicks"] > 0
+        signals["demo_leads"] > 0  # said « je suis intéressé » on the demo = hot, always
+        or signals["phone_clicks"] > 0
         or signals["contact_clicks"] > 0
         or signals["emails_clicked"] > 0
         or signals["emails_replied"] > 0  # a human reply = the conversation started
@@ -194,6 +203,7 @@ def compute(
     events: list[dict[str, Any]],
     email: dict[str, Any] | None = None,
     site_improvable: bool = False,
+    demo_leads: int = 0,
 ) -> BehaviorScore:
     """
     Compute a lead score from raw demo events + optional email engagement.
@@ -202,11 +212,14 @@ def compute(
         events: List of ``{"event", "timestamp", "properties"}`` items.
         email: Optional ``{"sent", "opened", "clicked"}`` counts.
         site_improvable: Lighthouse verdict on the prospect's existing website.
+        demo_leads: « Je suis intéressé » submissions from the demo banner (DB-side,
+            not a PostHog event).
 
     Returns:
         Temperature, a 0–100 score and the underlying signals.
     """
     signals = empty_signals()
+    signals["demo_leads"] = max(int(demo_leads or 0), 0)
     sessions: set[str] = set()
     section_names: set[str] = set()
 
@@ -279,13 +292,18 @@ def compute(
     return score_from_signals(signals, site_improvable=site_improvable)
 
 
-def build_signals_from_aggregate(aggregate: dict[str, Any], email: dict[str, Any] | None = None) -> BehaviorSignals:
+def build_signals_from_aggregate(
+    aggregate: dict[str, Any],
+    email: dict[str, Any] | None = None,
+    demo_leads: int = 0,
+) -> BehaviorSignals:
     """
     Build a signals structure from PostHog aggregate counts + email engagement.
 
     Used by the hot-leads list (one grouped query instead of per-prospect events).
     """
     signals = empty_signals()
+    signals["demo_leads"] = max(int(demo_leads or 0), 0)
     signals["pageviews"] = int(aggregate.get("pageviews", 0) or 0)
     signals["visits"] = int(aggregate.get("visits", 0) or 0)
     signals["sections_viewed"] = int(aggregate.get("sections_viewed", 0) or 0)
