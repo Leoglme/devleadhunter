@@ -427,6 +427,16 @@ class Settings(BaseSettings):
         alias="WALLET_APNS_AUTH_KEY",
         description=".p8 APNs auth key — seed only, persisted encrypted",
     )
+    wallet_subscription_price_cents: int = Field(
+        default=1900,
+        alias="WALLET_SUBSCRIPTION_PRICE_CENTS",
+        description="Monthly Apple Wallet subscription price in cents (editable)",
+    )
+    wallet_subscription_trial_days: int = Field(
+        default=30,
+        alias="WALLET_SUBSCRIPTION_TRIAL_DAYS",
+        description="Free-trial length in days for the Wallet subscription",
+    )
 
     @property
     def qonto_is_sandbox(self) -> bool:

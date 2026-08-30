@@ -141,6 +141,12 @@ async def stripe_webhook(
         if refunded_order_id is not None:
             return {"status": "success", "message": "Order refund processed"}
 
+        # Wallet subscription lifecycle (checkout completed, trial/active/past_due/canceled).
+        from services.wallet_subscription_service import wallet_subscription_service
+
+        if wallet_subscription_service.handle_webhook_event(db, event):
+            return {"status": "success", "message": "Wallet subscription event processed"}
+
         # Otherwise fall back to the credits purchase handler.
         success = payment_service.handle_webhook_event(db, event)
 
