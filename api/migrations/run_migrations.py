@@ -102,6 +102,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_email_replies", "migrations.add_email_replies"),
     ("add_reply_conversations", "migrations.add_reply_conversations"),
     ("add_reply_intent", "migrations.add_reply_intent"),
+    ("add_wallet_loyalty_tables", "migrations.add_wallet_loyalty_tables"),
     # Content rewrites run last, once every schema change is in place.
     ("strip_brands_from_subjects", "migrations.strip_brands_from_subjects"),
     ("reseed_email_template_library", "migrations.reseed_email_template_library"),
