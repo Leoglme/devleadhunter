@@ -165,6 +165,9 @@ export default defineNuxtConfig({
       demoHostBase:
         process.env.NUXT_PUBLIC_DEMO_HOST_BASE ||
         (process.env.NODE_ENV === 'production' ? 'https://demo.dibodev.fr' : 'http://localhost:3001'),
+      // Public base URL of the wallet enrollment landing (QR + shareable links). Empty → same-origin
+      // "/carte". Set to e.g. https://fid.dibodev.fr (with a rewrite to /carte/:token) for a short QR.
+      walletEnrollBase: process.env.NUXT_PUBLIC_WALLET_ENROLL_BASE || '',
       // True for the Tauri desktop build → the landing page redirects to the app.
       isDesktop: isDesktopBuild,
       // PostHog — marketing-site tracking (surface: 'marketing'). Same project as the
