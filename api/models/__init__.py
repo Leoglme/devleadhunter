@@ -29,6 +29,9 @@ from models.push_subscription import PushSubscription
 from models.scraping_job import ScrapingJob
 from models.search import ProspectSearchRequest, ProspectSearchResponse
 from models.send_policy import SendPolicy
+from models.sms_config import SmsConfig
+from models.sms_message import SmsMessage
+from models.sms_suppression import SmsSuppression
 from models.support_attachment import SupportAttachment
 from models.support_message import SupportMessage
 from models.support_ticket import SupportTicket
@@ -62,6 +65,9 @@ __all__ = [
     "PushSubscription",
     "ScrapingJob",
     "SendPolicy",
+    "SmsConfig",
+    "SmsMessage",
+    "SmsSuppression",
     "SupportAttachment",
     "SupportMessage",
     "SupportTicket",

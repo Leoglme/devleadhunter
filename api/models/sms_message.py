@@ -1,0 +1,45 @@
+"""Log of an outbound SMS (one row per send)."""
+
+from datetime import datetime
+
+from sqlalchemy import Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql import func
+
+from core.database import Base
+
+
+class SmsMessage(Base):
+    """A relance SMS sent (or attempted) to a prospect.
+
+    Attributes:
+        id: Unique identifier (auto-increment)
+        user_id: Sender (owner of the prospect)
+        prospect_id: Recipient prospect
+        to_e164: Normalised recipient number
+        sender: Alphanumeric sender used
+        body: Message body sent
+        status: Lifecycle status (:class:`~enums.sms_status.SmsStatus` value)
+        provider_message_id: Provider id, to match DLR callbacks
+        price_cents: Cost of the send in cents, when known
+        segments: Number of billed SMS segments
+        error: Failure reason when status is ``failed``
+        created_at: When the send was recorded
+        delivered_at: When the DLR confirmed delivery
+    """
+
+    __tablename__ = "sms_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    prospect_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    to_e164: Mapped[str] = mapped_column(String(20), nullable=False)
+    sender: Mapped[str] = mapped_column(String(11), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", index=True)
+    provider_message_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    price_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    segments: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False, index=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(nullable=True)

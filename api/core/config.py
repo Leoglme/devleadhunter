@@ -295,6 +295,19 @@ class Settings(BaseSettings):
         description="BrightData zone name used for Web Unlocker requests",
     )
 
+    # SMS (smsmode) — single platform account; the sender is per-user, injected
+    # per message. Empty key = SMS channel disabled (no send).
+    smsmode_api_key: str = Field(
+        default="",
+        alias="SMSMODE_API_KEY",
+        description="smsmode REST API key (X-Api-Key header)",
+    )
+    smsmode_base_url: str = Field(
+        default="https://rest.smsmode.com/sms/v1/messages",
+        alias="SMSMODE_BASE_URL",
+        description="smsmode REST v1 messages endpoint",
+    )
+
     # Support / ticketing settings — les pièces jointes vivent sur R2 (voir
     # `support_storage_service`), identique en local et en production.
     support_max_attachment_mb: int = Field(

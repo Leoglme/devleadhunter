@@ -5,6 +5,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
     heading: 'Prospection',
     entries: [
       { to: '/dashboard/settings/sending', label: "Configuration d'envoi", icon: 'i-lucide-mail-open' },
+      { to: '/dashboard/settings/sms', label: 'Relance SMS', icon: 'i-lucide-message-square' },
       { to: '/dashboard/email-templates', label: "Modèles d'email", icon: 'i-lucide-layout-template' },
       { to: '/dashboard/settings/video', label: 'Vidéo de prospection', icon: 'i-lucide-video' },
       { to: '/dashboard/email-health', label: 'Santé email', icon: 'i-lucide-heart-pulse' },

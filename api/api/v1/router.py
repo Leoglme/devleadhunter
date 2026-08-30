@@ -35,6 +35,7 @@ from .routes import (
     prospects,
     scraping_jobs,
     send_policy,
+    sms,
     sources,
     support,
     unsubscribe,
@@ -85,3 +86,4 @@ router.include_router(admin_monitoring.router)
 router.include_router(admin_storyblok.router)
 router.include_router(automations.router)
 router.include_router(send_policy.router)
+router.include_router(sms.router)

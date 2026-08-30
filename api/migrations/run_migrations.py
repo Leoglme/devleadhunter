@@ -100,6 +100,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_facebook_page_exclusions", "migrations.add_facebook_page_exclusions"),
     ("purge_facebook_page_exclusions", "migrations.purge_facebook_page_exclusions"),
     ("add_demo_site_leads", "migrations.add_demo_site_leads"),
+    ("add_sms_tables", "migrations.add_sms_tables"),
     ("add_email_replies", "migrations.add_email_replies"),
     ("add_reply_conversations", "migrations.add_reply_conversations"),
     ("add_reply_intent", "migrations.add_reply_intent"),
