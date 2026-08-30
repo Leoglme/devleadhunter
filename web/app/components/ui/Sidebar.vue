@@ -379,6 +379,7 @@ const navGroups: UiSidebarGroup[] = [
     links: [
       { to: '/dashboard', label: 'Tableau de bord', icon: 'i-lucide-layout-dashboard' },
       { to: '/dashboard/automations', label: 'Automatisations', icon: 'i-lucide-workflow' },
+      { to: '/dashboard/wallet', label: 'Cartes de fidélité', icon: 'i-lucide-wallet-cards' },
     ],
   },
   {

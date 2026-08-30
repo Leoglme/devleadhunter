@@ -43,6 +43,7 @@ from .routes import (
     users,
     wallet,
     wallet_merchant,
+    wallet_programs,
     webhooks,
 )
 from .routes import (
@@ -93,3 +94,4 @@ router.include_router(merchant.router)
 router.include_router(modules.router)
 router.include_router(wallet.router)
 router.include_router(wallet_merchant.router)
+router.include_router(wallet_programs.router)
