@@ -39,6 +39,7 @@ from .routes import (
     support,
     unsubscribe,
     users,
+    wallet,
     webhooks,
 )
 from .routes import (
@@ -85,3 +86,4 @@ router.include_router(admin_monitoring.router)
 router.include_router(admin_storyblok.router)
 router.include_router(automations.router)
 router.include_router(send_policy.router)
+router.include_router(wallet.router)
