@@ -38,6 +38,7 @@ from models.support_attachment import SupportAttachment
 from models.support_message import SupportMessage
 from models.support_ticket import SupportTicket
 from models.user import User
+from models.wallet_credentials import WalletCredentials
 from models.wallet_device_registration import WalletDeviceRegistration
 
 __all__ = [
@@ -78,5 +79,6 @@ __all__ = [
     "SupportMessage",
     "SupportTicket",
     "User",
+    "WalletCredentials",
     "WalletDeviceRegistration",
 ]
