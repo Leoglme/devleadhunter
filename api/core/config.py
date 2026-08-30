@@ -391,6 +391,43 @@ class Settings(BaseSettings):
         "missing staging token in sandbox fails loudly instead of hitting the real organization.",
     )
 
+    # Apple Wallet — identifiers are config; the secret PEM/keys are seed-only, stored encrypted.
+    wallet_pass_type_identifier: str = Field(
+        default="",
+        alias="WALLET_PASS_TYPE_IDENTIFIER",
+        description="Apple Pass Type ID (e.g. pass.fr.dibodev.fidelite)",
+    )
+    wallet_team_id: str = Field(
+        default="",
+        alias="WALLET_TEAM_ID",
+        description="Apple Developer Team ID",
+    )
+    wallet_apns_key_id: str = Field(
+        default="",
+        alias="WALLET_APNS_KEY_ID",
+        description="Key ID of the .p8 APNs auth key",
+    )
+    wallet_signing_certificate: str = Field(
+        default="",
+        alias="WALLET_SIGNING_CERTIFICATE",
+        description="Pass signing certificate (PEM) — seed only, persisted encrypted",
+    )
+    wallet_signing_private_key: str = Field(
+        default="",
+        alias="WALLET_SIGNING_PRIVATE_KEY",
+        description="Private signing key (PEM) — seed only, persisted encrypted",
+    )
+    wallet_wwdr_certificate: str = Field(
+        default="",
+        alias="WALLET_WWDR_CERTIFICATE",
+        description="Apple WWDR intermediate certificate (PEM) — seed only, persisted encrypted",
+    )
+    wallet_apns_auth_key: str = Field(
+        default="",
+        alias="WALLET_APNS_AUTH_KEY",
+        description=".p8 APNs auth key — seed only, persisted encrypted",
+    )
+
     @property
     def qonto_is_sandbox(self) -> bool:
         """Whether Qonto runs against its sandbox environment."""
