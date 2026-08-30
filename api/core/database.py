@@ -72,6 +72,10 @@ def init_db():
     from models.email_template import EmailTemplate  # noqa: F401
     from models.email_template_library_hide import EmailTemplateLibraryHide  # noqa: F401
     from models.email_unsubscribe import EmailUnsubscribe  # noqa: F401
+    from models.loyalty_automation import LoyaltyAutomation  # noqa: F401
+    from models.loyalty_card import LoyaltyCard  # noqa: F401
+    from models.loyalty_program import LoyaltyProgram  # noqa: F401
+    from models.loyalty_scan_event import LoyaltyScanEvent  # noqa: F401
     from models.notification import Notification  # noqa: F401
     from models.order import Order  # noqa: F401
     from models.payment_account import PaymentAccount  # noqa: F401
@@ -85,5 +89,6 @@ def init_db():
     from models.support_message import SupportMessage  # noqa: F401
     from models.support_ticket import SupportTicket  # noqa: F401
     from models.user import User  # noqa: F401
+    from models.wallet_device_registration import WalletDeviceRegistration  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
