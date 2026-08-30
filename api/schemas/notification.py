@@ -55,6 +55,8 @@ class DemoEventIn(BaseModel):
     host: str | None = Field(default=None, max_length=255)
     seconds: int | None = None
     max_scroll: int | None = None
+    # Free-text left by the prospect through the demo CTA banner (``demo_lead`` event).
+    message: str | None = Field(default=None, max_length=1000)
 
 
 class NotificationOut(BaseModel):

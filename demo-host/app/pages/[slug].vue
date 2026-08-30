@@ -7,6 +7,7 @@
   </div>
   <main v-else class="min-h-screen bg-white text-slate-900">
     <DemoSiteView :site="previewedSite ?? site" />
+    <DemoCtaBanner :site="site" />
   </main>
 </template>
 

@@ -61,6 +61,8 @@ _EMAIL_EVENT_NOTIFS: dict[str, tuple[str, str, str]] = {
 # Live demo / video event → (emoji, level, body). Same title convention.
 _DEMO_EVENT_NOTIFS: dict[str, tuple[str, str, str]] = {
     "demo_opened": ("🌐", "success", "Vient d'ouvrir sa démo"),
+    # Banner « Ce site vous plaît ? » submitted — the strongest demo signal there is.
+    "demo_lead": ("🙋", "success", "Est intéressé par son site !"),
     "demo_engaged": ("🔥", "success", "Visite qualifiée — prospect engagé"),
     "demo_cta_click": ("👉", "success", "A cliqué « {label} »"),
     "demo_phone_click": ("📞", "success", "A cliqué ton numéro"),
@@ -140,6 +142,7 @@ class NotificationService:
         host: str | None = None,
         seconds: int | None = None,
         max_scroll: int | None = None,
+        message: str | None = None,
     ) -> None:
         """
         Raise a notification for a live demo/video behavioural event.
@@ -154,6 +157,7 @@ class NotificationService:
             host: External host, for ``demo_outbound_click``.
             seconds: Engaged seconds, for the end-of-visit summary.
             max_scroll: Max scroll depth (%), for the end-of-visit summary.
+            message: Free text left by the prospect, for ``demo_lead``.
         """
         mapping = _DEMO_EVENT_NOTIFS.get(event_name)
         if mapping is None:
@@ -166,6 +170,9 @@ class NotificationService:
             seconds=seconds if seconds is not None else 0,
             max_scroll=max_scroll if max_scroll is not None else 0,
         )
+        if event_name == "demo_lead" and (message or "").strip():
+            excerpt = message.strip()[:160]
+            body = f"{body} « {excerpt} »"
         await self._dispatch(
             user_id=user_id,
             category="demo",
