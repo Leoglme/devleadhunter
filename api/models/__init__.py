@@ -21,6 +21,7 @@ from models.loyalty_automation import LoyaltyAutomation
 from models.loyalty_card import LoyaltyCard
 from models.loyalty_program import LoyaltyProgram
 from models.loyalty_scan_event import LoyaltyScanEvent
+from models.merchant_account import MerchantAccount
 from models.notification import Notification
 from models.order import Order
 from models.organization import Organization, OrganizationMember
@@ -64,6 +65,7 @@ __all__ = [
     "LoyaltyCard",
     "LoyaltyProgram",
     "LoyaltyScanEvent",
+    "MerchantAccount",
     "Notification",
     "Order",
     "Organization",

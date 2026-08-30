@@ -76,6 +76,7 @@ def init_db():
     from models.loyalty_card import LoyaltyCard  # noqa: F401
     from models.loyalty_program import LoyaltyProgram  # noqa: F401
     from models.loyalty_scan_event import LoyaltyScanEvent  # noqa: F401
+    from models.merchant_account import MerchantAccount  # noqa: F401
     from models.notification import Notification  # noqa: F401
     from models.order import Order  # noqa: F401
     from models.payment_account import PaymentAccount  # noqa: F401
