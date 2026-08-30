@@ -89,6 +89,7 @@ def init_db():
     from models.support_message import SupportMessage  # noqa: F401
     from models.support_ticket import SupportTicket  # noqa: F401
     from models.user import User  # noqa: F401
+    from models.user_module import UserModule  # noqa: F401
     from models.wallet_automation_job import WalletAutomationJob  # noqa: F401
     from models.wallet_credentials import WalletCredentials  # noqa: F401
     from models.wallet_device_registration import WalletDeviceRegistration  # noqa: F401
