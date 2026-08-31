@@ -36,9 +36,9 @@
           >
             <span
               class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-              :class="presentation(item.level).tile"
+              :class="notificationPresentation(item.level).tile"
             >
-              <UIcon :name="presentation(item.level).icon" class="h-4 w-4" />
+              <UIcon :name="notificationPresentation(item.level).icon" class="h-4 w-4" />
             </span>
             <span class="min-w-0 flex-1">
               <span class="flex items-center gap-2">
@@ -64,37 +64,20 @@
 </template>
 
 <script lang="ts" setup>
-import type { NotificationHistory, NotificationItem, NotificationLevel } from '~/services/notificationsService'
-import type { NotificationLevelPresentation } from '~/types/UiNotificationList'
+import type { NotificationHistory, NotificationItem } from '~/services/notificationsService'
 import type { Ref } from 'vue'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { NotificationsService } from '~/services/notificationsService'
+import { notificationPresentation } from '~/constants/notificationLevels'
 import { formatRelativeTime } from '~/utils/date'
 
 const PAGE_SIZE: number = 20
-
-/** Icon + colored tile for each notification level. */
-const LEVEL_PRESENTATION: Record<NotificationLevel, NotificationLevelPresentation> = {
-  info: { icon: 'i-lucide-info', tile: 'bg-[var(--app-blue-soft)] text-[var(--app-blue)]' },
-  success: { icon: 'i-lucide-check', tile: 'bg-[var(--app-green-soft)] text-[var(--app-green)]' },
-  warning: { icon: 'i-lucide-triangle-alert', tile: 'bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]' },
-  error: { icon: 'i-lucide-circle-alert', tile: 'bg-[var(--app-red-soft)] text-[var(--app-red)]' },
-}
 
 const items: Ref<NotificationItem[]> = ref([])
 const unreadCount: Ref<number> = ref(0)
 const isLoading: Ref<boolean> = ref(false)
 const hasMore: Ref<boolean> = ref(false)
 let pollTimer: ReturnType<typeof setInterval> | undefined
-
-/**
- * Icon + tile classes for a notification level (falls back to info).
- * @param level - The notification level.
- * @returns The presentation for that level.
- */
-function presentation(level: NotificationLevel): NotificationLevelPresentation {
-  return LEVEL_PRESENTATION[level] ?? LEVEL_PRESENTATION.info
-}
 
 /**
  * Load the first page of the notification history.

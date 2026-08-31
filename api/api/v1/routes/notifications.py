@@ -5,7 +5,7 @@ Web Push notification routes — VAPID key, subscribe/unsubscribe, test.
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -172,6 +172,45 @@ async def history(
         for row in rows
     ]
     return NotificationListResponse(items=items, unread_count=unread_count)
+
+
+@router.get("/{notification_id}", response_model=NotificationOut)
+async def get_notification(
+    notification_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Any:
+    """
+    Return one notification of the current user (opened from a push tap).
+
+    Args:
+        notification_id: The notification to fetch.
+        current_user: The authenticated user.
+        db: Database session.
+
+    Returns:
+        The notification.
+
+    Raises:
+        HTTPException: 404 when the notification is unknown or owned by another user.
+    """
+    row = (
+        db.query(Notification)
+        .filter(Notification.id == notification_id, Notification.user_id == current_user.id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification introuvable")
+    return NotificationOut(
+        id=row.id,
+        category=row.category,
+        level=row.level,
+        title=row.title,
+        body=row.body,
+        url=row.url,
+        read=row.read_at is not None,
+        created_at=row.created_at,
+    )
 
 
 @router.post("/read-all", status_code=status.HTTP_204_NO_CONTENT)

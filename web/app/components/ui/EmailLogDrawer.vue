@@ -105,7 +105,9 @@
                         </span>
                       </template>
                     </div>
-                    <p class="text-xs leading-relaxed whitespace-pre-wrap text-[var(--app-ink)]">
+                    <p
+                      class="text-xs leading-relaxed [overflow-wrap:anywhere] break-words whitespace-pre-wrap text-[var(--app-ink)]"
+                    >
                       {{ item.direction === 'inbound' ? item.body_text : outboundPreview(item) }}
                     </p>
                     <button

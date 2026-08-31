@@ -318,11 +318,14 @@ class NotificationService:
             url: In-app deep link opened on tap.
             tag: Optional push tag (collapses same-tag notifications on the device).
         """
-        await asyncio.to_thread(self._persist, user_id, category, level, title, body, url)
-        await push_service.notify(user_id, title, body, url, tag)
+        notification_id = await asyncio.to_thread(self._persist, user_id, category, level, title, body, url)
+        # Tapping the push opens the notification's own page (full content + a link to
+        # the resource), not the generic deep link — the resource url stays on the row.
+        push_url = f"/dashboard/notifications/{notification_id}" if notification_id else url
+        await push_service.notify(user_id, title, body, push_url, tag)
 
     @staticmethod
-    def _persist(user_id: int, category: str, level: str, title: str, body: str, url: str) -> None:
+    def _persist(user_id: int, category: str, level: str, title: str, body: str, url: str) -> int | None:
         """
         Store a notification in the in-app log (own session; never raises).
 
@@ -333,22 +336,27 @@ class NotificationService:
             title: Notification title.
             body: Notification body.
             url: Deep link.
+
+        Returns:
+            The created notification id, or ``None`` when persistence failed.
         """
         db = SessionLocal()
         try:
-            db.add(
-                Notification(
-                    user_id=user_id,
-                    category=category,
-                    level=level,
-                    title=title,
-                    body=body,
-                    url=url,
-                )
+            notification = Notification(
+                user_id=user_id,
+                category=category,
+                level=level,
+                title=title,
+                body=body,
+                url=url,
             )
+            db.add(notification)
             db.commit()
+            db.refresh(notification)
+            return notification.id
         except Exception as exc:
             logger.warning("notification persist failed (user=%s): %s", user_id, exc)
+            return None
         finally:
             db.close()
 
