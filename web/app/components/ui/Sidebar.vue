@@ -118,7 +118,7 @@
           <p v-if="group.heading" class="app-label mb-1.5 px-3 !text-[0.6rem]">{{ group.heading }}</p>
           <div class="space-y-0.5">
             <NuxtLink
-              v-for="link in group.links"
+              v-for="link in visibleLinks(group.links)"
               :key="link.to"
               :to="link.to"
               :class="navItemClass(isActive(link.to))"
@@ -287,6 +287,7 @@ import { useAppTheme } from '~/composables/useAppTheme'
 import { useCommandPalette } from '~/composables/useCommandPalette'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import { useToast } from '~/composables/useToast'
+import { useModules } from '~/composables/useModules'
 import { useHorizontalSwipe } from '~/composables/useHorizontalSwipe'
 
 /** Dashboard sidebar shell with nav groups and user menu. */
@@ -311,6 +312,7 @@ const emit: {
 const userStore: ReturnType<typeof useUserStore> = useUserStore()
 
 const toast: UseToastReturn = useToast()
+const { isModuleActive, loadModules, activateModule }: ReturnType<typeof useModules> = useModules()
 
 const { logout }: UseAuthReturn = useAuth()
 
@@ -340,6 +342,10 @@ onMounted(async (): Promise<void> => {
   }
 })
 
+onMounted(async (): Promise<void> => {
+  await loadModules()
+})
+
 const {
   showSettingsPanel,
   settingsGroups,
@@ -366,12 +372,28 @@ useHorizontalSwipe(sidebarPanel, {
   onSwipeLeft: (): void => emit('toggle'),
 })
 
-/** The three product modules of DevLeadHunter (only websites is live today). */
-const modules: DlhModuleEntry[] = [
-  { key: 'websites', label: 'Sites web', icon: 'i-lucide-globe', locked: false },
-  { key: 'wallet-cards', label: 'Cartes Apple Wallet', icon: 'i-lucide-wallet-cards', locked: true },
+/** The product modules of DevLeadHunter (websites is the always-on base). */
+const MODULE_ENTRIES: DlhModuleEntry[] = [
+  { key: 'websites', label: 'Sites web', icon: 'i-lucide-globe', locked: false, apiModule: 'websites' },
+  {
+    key: 'wallet-cards',
+    label: 'Cartes Apple Wallet',
+    icon: 'i-lucide-wallet-cards',
+    locked: true,
+    apiModule: 'apple_wallet',
+  },
   { key: 'freelance-missions', label: 'Missions freelance', icon: 'i-lucide-briefcase-business', locked: true },
 ]
+
+/** Module switcher entries with their live locked state from activation. */
+const modules: ComputedRef<DlhModuleEntry[]> = computed((): DlhModuleEntry[] =>
+  MODULE_ENTRIES.map(
+    (entry: DlhModuleEntry): DlhModuleEntry => ({
+      ...entry,
+      locked: entry.apiModule ? !isModuleActive(entry.apiModule) : true,
+    }),
+  ),
+)
 
 const navGroups: UiSidebarGroup[] = [
   {
@@ -379,7 +401,12 @@ const navGroups: UiSidebarGroup[] = [
     links: [
       { to: '/dashboard', label: 'Tableau de bord', icon: 'i-lucide-layout-dashboard' },
       { to: '/dashboard/automations', label: 'Automatisations', icon: 'i-lucide-workflow' },
-      { to: '/dashboard/wallet', label: 'Cartes de fidélité', icon: 'i-lucide-wallet-cards' },
+      {
+        to: '/dashboard/wallet',
+        label: 'Cartes de fidélité',
+        icon: 'i-lucide-wallet-cards',
+        moduleKey: 'apple_wallet',
+      },
     ],
   },
   {
@@ -420,7 +447,7 @@ const activeNavPath: ComputedRef<string | null> = computed((): string | null => 
 
 /** Label of the currently active module. */
 const activeModuleLabel: ComputedRef<string> = computed((): string => {
-  return modules.find((moduleEntry: DlhModuleEntry): boolean => !moduleEntry.locked)?.label ?? 'Sites web'
+  return modules.value.find((moduleEntry: DlhModuleEntry): boolean => !moduleEntry.locked)?.label ?? 'Sites web'
 })
 
 /** User display name. */
@@ -469,11 +496,30 @@ const creditDotColor: ComputedRef<string> = computed((): string => {
  * Handle a click on a module entry: locked modules announce their arrival.
  * @param moduleEntry - The clicked module.
  */
-function handleModuleClick(moduleEntry: DlhModuleEntry): void {
+async function handleModuleClick(moduleEntry: DlhModuleEntry): Promise<void> {
   showModuleMenu.value = false
-  if (moduleEntry.locked) {
-    toast.info(`Le module « ${moduleEntry.label} » arrive bientôt.`)
+  if (!moduleEntry.locked) {
+    return
   }
+  if (!moduleEntry.apiModule) {
+    toast.info(`Le module « ${moduleEntry.label} » arrive bientôt.`)
+    return
+  }
+  try {
+    await activateModule(moduleEntry.apiModule)
+    toast.success(`Module « ${moduleEntry.label} » activé`)
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : 'Activation impossible')
+  }
+}
+
+/**
+ * Filter a group's links to those whose module (if any) is active.
+ * @param links - The group's links.
+ * @returns The links the user should see.
+ */
+function visibleLinks(links: UiSidebarLink[]): UiSidebarLink[] {
+  return links.filter((link: UiSidebarLink): boolean => !link.moduleKey || isModuleActive(link.moduleKey))
 }
 
 /**
