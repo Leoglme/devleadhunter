@@ -8,6 +8,8 @@ export type UiSidebarLink = {
   to: string
   label: string
   icon: string
+  /** When set, the link only shows if that API module (e.g. `apple_wallet`) is active. */
+  moduleKey?: string
 }
 
 /** A titled group of sidebar navigation entries. */
@@ -25,4 +27,6 @@ export type DlhModuleEntry = {
   label: string
   icon: string
   locked: boolean
+  /** The API module value (e.g. `apple_wallet`) this entry activates; absent for not-yet-built modules. */
+  apiModule?: string
 }
