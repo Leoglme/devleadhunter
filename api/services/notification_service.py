@@ -126,7 +126,7 @@ class NotificationService:
             level=level,
             title=f"{emoji} {prospect_name}",
             body=body,
-            url=_PROSPECTS_URL,
+            url=self._prospect_url(prospect_id),
             tag=tag,
         )
 
@@ -179,7 +179,7 @@ class NotificationService:
             level=level,
             title=f"{emoji} {prospect_name}",
             body=body,
-            url=_PROSPECTS_URL,
+            url=self._prospect_url(prospect_id),
         )
 
     async def notify_sale(
@@ -213,7 +213,7 @@ class NotificationService:
             level="success",
             title=f"💰 {prospect_name}",
             body=f"A payé {amount}",
-            url=_ORDERS_URL,
+            url=f"{_ORDERS_URL}?open={order_id}",
             tag=f"sale-{order_id}",
         )
 
@@ -377,6 +377,18 @@ class NotificationService:
             logger.warning("notification purge failed: %s", exc)
         finally:
             db.close()
+
+    @staticmethod
+    def _prospect_url(prospect_id: int | None) -> str:
+        """Deep link opening the prospect's drawer, or the list when unknown.
+
+        Args:
+            prospect_id: The prospect the notification is about, when known.
+
+        Returns:
+            ``/dashboard/my-prospects?open={id}`` (opens the drawer), else the list.
+        """
+        return f"{_PROSPECTS_URL}?open={prospect_id}" if prospect_id else _PROSPECTS_URL
 
     @staticmethod
     def _resolve_prospect_name(db: Session, prospect_id: int | None, fallback: str) -> str:
