@@ -325,6 +325,15 @@ class Settings(BaseSettings):
             "(e.g. reply.dibodev.fr). Empty disables reply capture."
         ),
     )
+    reply_inbox_forward_to: str = Field(
+        default="",
+        alias="REPLY_INBOX_FORWARD_TO",
+        description=(
+            "Optional override for the inbox that receives forwarded prospect replies "
+            "and BCC copies of conversation answers. Empty = each user's sending "
+            "identity ``from_email``."
+        ),
+    )
 
     # Web Push (VAPID) — mobile PWA notifications for the dashboard user
     vapid_public_key: str | None = Field(

@@ -348,9 +348,21 @@ class EmailSendingService:
                         exc_info=True,
                     )
             self._mark_prospect_contacted(prospect_id)
-            # A conversation reply is the user's own message — no funnel event, no
-            # self-notification.
-            if not is_conversation_reply:
+            if is_conversation_reply:
+                try:
+                    pid: int | None = int(prospect_id) if prospect_id else None
+                    await notification_service.notify_email_event(
+                        self.db,
+                        user_id=user_id,
+                        event_name="email_conversation_reply_sent",
+                        recipient_email=recipient_email,
+                        prospect_id=pid,
+                        subject=subject,
+                        email_log_id=email_log.id,
+                    )
+                except Exception as exc:
+                    logger.warning("Conversation reply notification failed (log=%s): %s", email_log.id, exc)
+            elif not is_transactional:
                 await self._capture_email_sent(
                     user_id=user_id,
                     prospect_id=prospect_id,

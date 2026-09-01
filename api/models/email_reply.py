@@ -59,6 +59,8 @@ class EmailReply(Base):
     # When the user dealt with the reply (answered from the app or marked handled).
     # A human reply with handled_at IS NULL is « à traiter ».
     handled_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    # When a readable copy was forwarded to the user's inbox (Gmail POP, etc.).
+    inbox_forwarded_at: Mapped[datetime | None] = mapped_column(nullable=True)
     # LLM verdict on what the prospect meant (interested / not_interested / later /
     # question / unsubscribe / other). Classified once, persisted forever.
     intent: Mapped[str | None] = mapped_column(String(20), nullable=True)

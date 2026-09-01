@@ -24,7 +24,10 @@ from models.email_log import EmailLog
 from models.email_reply import EmailReply
 from models.prospect_db import ProspectDB
 from services import reply_intent_service
+from services.email_signatures import render_default_signature_html
 from services.email_sending_service import EmailSendingService
+from services.reply_inbox_forward_service import inbox_copy_address
+from services.sending_identity import resolve_sending_identity
 
 _TAG_RE: re.Pattern[str] = re.compile(r"<[^>]+>")
 _BLOCK_BREAK_RE: re.Pattern[str] = re.compile(r"(?i)<\s*(?:br|/p|/div|/tr|/li|/h[1-6])[^>]*>")
@@ -322,15 +325,23 @@ class ConversationService:
         original: EmailLog | None = db.get(EmailLog, reply.email_log_id)
         subject = build_reply_subject(reply.subject or (original.subject if original else None))
 
+        signature_html = render_default_signature_html(db, user_id)
+        full_body_html = f"{body_html}{signature_html}" if signature_html else body_html
+
+        identity = resolve_sending_identity(db, user_id)
+        copy_to = inbox_copy_address(identity)
+        bcc: list[str] | None = [copy_to] if copy_to else None
+
         sending = EmailSendingService(db)
         result = await sending.send_via_user_identity(
             user_id=user_id,
             recipient_email=reply.from_email,
             subject=subject,
-            body_html=body_html,
+            body_html=full_body_html,
             prospect_id=str(reply.prospect_id) if reply.prospect_id else None,
             is_conversation_reply=True,
             thread_headers=thread_headers_for(reply),
+            bcc=bcc,
         )
 
         if result.get("success"):
