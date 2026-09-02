@@ -40,7 +40,7 @@ def test_wrap_forward_html_includes_prospect_and_body() -> None:
         body_html=None,
         body_text="Merci mais non merci.",
     )
-    html = rif._wrap_forward_html(reply)  # noqa: SLF001
+    html = rif._wrap_forward_html(reply)
     assert "prospect@example.fr" in html
     assert "Re: votre site" in html
     assert "Merci mais non merci." in html

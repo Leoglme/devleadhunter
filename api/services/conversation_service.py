@@ -24,8 +24,8 @@ from models.email_log import EmailLog
 from models.email_reply import EmailReply
 from models.prospect_db import ProspectDB
 from services import reply_intent_service
-from services.email_signatures import render_default_signature_html
 from services.email_sending_service import EmailSendingService
+from services.email_signatures import render_default_signature_html
 from services.reply_inbox_forward_service import inbox_copy_address
 from services.sending_identity import resolve_sending_identity
 
