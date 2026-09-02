@@ -21,10 +21,7 @@ def run_migration() -> None:
     print("Running migration: add_email_reply_inbox_forwarded_at")
     with engine.connect() as conn:
         conn.execute(
-            text(
-                "ALTER TABLE email_replies "
-                "ADD COLUMN IF NOT EXISTS inbox_forwarded_at DATETIME NULL AFTER handled_at"
-            )
+            text("ALTER TABLE email_replies ADD COLUMN IF NOT EXISTS inbox_forwarded_at DATETIME NULL AFTER handled_at")
         )
         conn.commit()
     print("  + email_replies.inbox_forwarded_at")

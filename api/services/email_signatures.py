@@ -17,9 +17,7 @@ from models.email_signature import EmailSignature
 def get_default_signature(db: Session, user_id: int) -> EmailSignature | None:
     """Return the user's default signature, if any."""
     return db.execute(
-        select(EmailSignature)
-        .where(EmailSignature.user_id == user_id, EmailSignature.is_default.is_(True))
-        .limit(1)
+        select(EmailSignature).where(EmailSignature.user_id == user_id, EmailSignature.is_default.is_(True)).limit(1)
     ).scalar_one_or_none()
 
 
