@@ -24,11 +24,42 @@ from models.email_log import EmailLog
 from models.email_reply import EmailReply
 from models.prospect_db import ProspectDB
 from services import reply_intent_service
+from services.email_signatures import render_default_signature_html
 from services.email_sending_service import EmailSendingService
+from services.reply_inbox_forward_service import inbox_copy_address
+from services.sending_identity import resolve_sending_identity
 
 _TAG_RE: re.Pattern[str] = re.compile(r"<[^>]+>")
 _BLOCK_BREAK_RE: re.Pattern[str] = re.compile(r"(?i)<\s*(?:br|/p|/div|/tr|/li|/h[1-6])[^>]*>")
 _SCRIPT_STYLE_RE: re.Pattern[str] = re.compile(r"(?is)<(script|style)[^>]*>.*?</\1>")
+
+# Markers that begin the quoted original in a reply — everything from the first
+# one on is the history we sent (with tracking URLs), not the prospect's words.
+_QUOTE_MARKERS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(?im)^\s*Le\s.+?a\s+écrit\s*:\s*$"),  # « Le 31 août 2026 à 16:01, X a écrit : »
+    re.compile(r"(?im)^\s*On\s.+?\bwrote\s*:\s*$"),  # « On Mon, …, X wrote: »
+    re.compile(r"(?im)^\s*-{2,}\s*(?:Original Message|Message d['’]origine)\s*-{2,}\s*$"),
+    re.compile(r"(?m)^_{5,}\s*$"),  # Outlook separator line
+    re.compile(r"(?m)^\s*>"),  # first quoted line
+)
+
+
+def strip_quoted_reply(text: str) -> str:
+    """Keep only the prospect's own words, dropping the quoted original + tracking URLs.
+
+    Args:
+        text: The full reply body (the prospect's text followed by our quoted email).
+
+    Returns:
+        The text up to the first quote marker, or the whole text when none is found.
+    """
+    cut = len(text)
+    for marker in _QUOTE_MARKERS:
+        match = marker.search(text)
+        if match:
+            cut = min(cut, match.start())
+    trimmed = text[:cut].rstrip()
+    return trimmed or text.strip()
 
 
 def html_to_text(raw_html: str) -> str:
@@ -52,11 +83,11 @@ def html_to_text(raw_html: str) -> str:
 
 
 def reply_display_text(reply: EmailReply) -> str:
-    """The reply's body as safe plain text (text part first, stripped HTML as fallback)."""
+    """The reply's own words as safe plain text (quoted history + tracking URLs removed)."""
     if reply.body_text and reply.body_text.strip():
-        return reply.body_text.strip()
+        return strip_quoted_reply(reply.body_text)
     if reply.body_html:
-        return html_to_text(reply.body_html)
+        return strip_quoted_reply(html_to_text(reply.body_html))
     return ""
 
 
@@ -294,15 +325,23 @@ class ConversationService:
         original: EmailLog | None = db.get(EmailLog, reply.email_log_id)
         subject = build_reply_subject(reply.subject or (original.subject if original else None))
 
+        signature_html = render_default_signature_html(db, user_id)
+        full_body_html = f"{body_html}{signature_html}" if signature_html else body_html
+
+        identity = resolve_sending_identity(db, user_id)
+        copy_to = inbox_copy_address(identity)
+        bcc: list[str] | None = [copy_to] if copy_to else None
+
         sending = EmailSendingService(db)
         result = await sending.send_via_user_identity(
             user_id=user_id,
             recipient_email=reply.from_email,
             subject=subject,
-            body_html=body_html,
+            body_html=full_body_html,
             prospect_id=str(reply.prospect_id) if reply.prospect_id else None,
             is_conversation_reply=True,
             thread_headers=thread_headers_for(reply),
+            bcc=bcc,
         )
 
         if result.get("success"):

@@ -14,6 +14,23 @@ from sqlalchemy.orm import Session
 from models.email_signature import EmailSignature
 
 
+def get_default_signature(db: Session, user_id: int) -> EmailSignature | None:
+    """Return the user's default signature, if any."""
+    return db.execute(
+        select(EmailSignature)
+        .where(EmailSignature.user_id == user_id, EmailSignature.is_default.is_(True))
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def render_default_signature_html(db: Session, user_id: int, variables: dict[str, str] | None = None) -> str:
+    """Append block for the user's default signature, or empty string."""
+    signature = get_default_signature(db, user_id)
+    if signature is None:
+        return ""
+    return render_signature_html(db, signature.id, variables=variables, user_id=user_id)
+
+
 def render_signature_html(
     db: Session,
     signature_id: int | None,

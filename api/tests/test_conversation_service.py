@@ -3,8 +3,45 @@
 from types import SimpleNamespace
 
 from services import lead_scoring as ls
-from services.conversation_service import build_reply_subject, html_to_text, thread_headers_for
+from services.conversation_service import (
+    build_reply_subject,
+    html_to_text,
+    strip_quoted_reply,
+    thread_headers_for,
+)
 from services.reply_intent_service import content_sha, normalize_verdict, replied_event_name
+
+
+def test_strip_quoted_reply_removes_gmail_history() -> None:
+    """Gmail « Le … a écrit : » and the quoted lines (+ tracking URL) are dropped."""
+    raw = (
+        "Bonjour,\n\n"
+        "Merci pour votre proposition mais pour l'instant nous n'avons pas besoin de site.\n\n"
+        "Bien cordialement\n\n"
+        "Le lun. 31 août 2026 à 16:01, Léo Guillaume <leo@mail.dibodev.fr> a écrit :\n"
+        "> Bonjour,\n"
+        "> Le site est toujours en ligne : demo.dibodev.fr/x\n"
+        "> <https://track.mail.dibodev.fr/CL0/https%3A%2F%2Fdemo...>\n"
+    )
+    trimmed = strip_quoted_reply(raw)
+    assert "Merci pour votre proposition" in trimmed
+    assert "Bien cordialement" in trimmed
+    assert "a écrit" not in trimmed
+    assert "track.mail.dibodev.fr" not in trimmed
+    assert ">" not in trimmed
+
+
+def test_strip_quoted_reply_handles_english_and_outlook() -> None:
+    """English « … wrote: » and the Outlook underscore separator both cut the history."""
+    english = "Thanks, not interested.\n\nOn Mon, 31 Aug 2026, Léo wrote:\n> original\n"
+    assert strip_quoted_reply(english).strip() == "Thanks, not interested."
+    outlook = "Pas intéressé.\n\n________________________________\nDe : Léo\n"
+    assert strip_quoted_reply(outlook).strip() == "Pas intéressé."
+
+
+def test_strip_quoted_reply_keeps_body_without_quote() -> None:
+    """A reply with no quoted history is returned unchanged."""
+    assert strip_quoted_reply("Ok, ça m'intéresse, rappelez-moi.") == "Ok, ça m'intéresse, rappelez-moi."
 
 
 def test_reply_subject_adds_single_re_prefix() -> None:

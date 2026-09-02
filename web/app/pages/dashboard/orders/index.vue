@@ -113,6 +113,7 @@ import { formatShortMonthDate } from '~/utils/date'
 import type { UseToastReturn } from '~/types/Composables'
 import { onMounted, ref, watch } from 'vue'
 import type { Ref } from 'vue'
+import type { LocationQueryValue } from 'vue-router'
 import type { OrderMutationNotice } from '~/types/DrawerStack'
 import type { Order, OrderListResponse, OrderStats } from '~/services/ordersService'
 import { OrdersService } from '~/services/ordersService'
@@ -229,7 +230,14 @@ async function refreshStats(): Promise<void> {
 
 watch((): number => drawerStack.orderMutationCounter, applyOrderMutation)
 
-onMounted((): void => {
-  void loadAll()
+onMounted(async (): Promise<void> => {
+  await loadAll()
+  // Deep-link from a sale notification: ?open=<orderId> opens the order drawer.
+  const openParam: LocationQueryValue | LocationQueryValue[] | undefined = useRoute().query.open
+  const openId: number = Number(Array.isArray(openParam) ? openParam[0] : openParam)
+  if (!Number.isNaN(openId) && openId > 0) {
+    const target: Order | undefined = orders.value.find((order: Order): boolean => order.id === openId)
+    if (target) openDrawer(target)
+  }
 })
 </script>

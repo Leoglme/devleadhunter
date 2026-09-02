@@ -99,6 +99,16 @@ export class NotificationsService {
   }
 
   /**
+   * Fetch a single notification by id (opened from a push tap).
+   *
+   * @param id - The notification id.
+   * @returns The notification.
+   */
+  static async getOne(id: number): Promise<NotificationItem> {
+    return ApiClient.get<NotificationItem>(`/api/v1/notifications/${id}`)
+  }
+
+  /**
    * Mark a single notification as read.
    *
    * @param id - The notification id.

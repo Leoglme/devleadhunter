@@ -56,6 +56,7 @@ _EMAIL_EVENT_NOTIFS: dict[str, tuple[str, str, str]] = {
     "email_replied": ("💬", "success", "T'a répondu !"),
     "email_replied_interested": ("🎯", "success", "T'a répondu — intéressé !"),
     "email_replied_negative": ("🙅", "warning", "T'a répondu — pas intéressé"),
+    "email_conversation_reply_sent": ("✅", "info", "Ta réponse est partie"),
 }
 
 # Live demo / video event → (emoji, level, body). Same title convention.
@@ -117,6 +118,7 @@ class NotificationService:
             "email_replied",
             "email_replied_interested",
             "email_replied_negative",
+            "email_conversation_reply_sent",
         ):
             body = f"{body} : « {subject} »"
         tag = f"email-{email_log_id}" if email_log_id else None
@@ -126,7 +128,7 @@ class NotificationService:
             level=level,
             title=f"{emoji} {prospect_name}",
             body=body,
-            url=_PROSPECTS_URL,
+            url=self._prospect_url(prospect_id),
             tag=tag,
         )
 
@@ -179,7 +181,7 @@ class NotificationService:
             level=level,
             title=f"{emoji} {prospect_name}",
             body=body,
-            url=_PROSPECTS_URL,
+            url=self._prospect_url(prospect_id),
         )
 
     async def notify_sale(
@@ -213,7 +215,7 @@ class NotificationService:
             level="success",
             title=f"💰 {prospect_name}",
             body=f"A payé {amount}",
-            url=_ORDERS_URL,
+            url=f"{_ORDERS_URL}?open={order_id}",
             tag=f"sale-{order_id}",
         )
 
@@ -318,11 +320,14 @@ class NotificationService:
             url: In-app deep link opened on tap.
             tag: Optional push tag (collapses same-tag notifications on the device).
         """
-        await asyncio.to_thread(self._persist, user_id, category, level, title, body, url)
-        await push_service.notify(user_id, title, body, url, tag)
+        notification_id = await asyncio.to_thread(self._persist, user_id, category, level, title, body, url)
+        # Tapping the push opens the notification's own page (full content + a link to
+        # the resource), not the generic deep link — the resource url stays on the row.
+        push_url = f"/dashboard/notifications/{notification_id}" if notification_id else url
+        await push_service.notify(user_id, title, body, push_url, tag)
 
     @staticmethod
-    def _persist(user_id: int, category: str, level: str, title: str, body: str, url: str) -> None:
+    def _persist(user_id: int, category: str, level: str, title: str, body: str, url: str) -> int | None:
         """
         Store a notification in the in-app log (own session; never raises).
 
@@ -333,22 +338,27 @@ class NotificationService:
             title: Notification title.
             body: Notification body.
             url: Deep link.
+
+        Returns:
+            The created notification id, or ``None`` when persistence failed.
         """
         db = SessionLocal()
         try:
-            db.add(
-                Notification(
-                    user_id=user_id,
-                    category=category,
-                    level=level,
-                    title=title,
-                    body=body,
-                    url=url,
-                )
+            notification = Notification(
+                user_id=user_id,
+                category=category,
+                level=level,
+                title=title,
+                body=body,
+                url=url,
             )
+            db.add(notification)
             db.commit()
+            db.refresh(notification)
+            return notification.id
         except Exception as exc:
             logger.warning("notification persist failed (user=%s): %s", user_id, exc)
+            return None
         finally:
             db.close()
 
@@ -369,6 +379,18 @@ class NotificationService:
             logger.warning("notification purge failed: %s", exc)
         finally:
             db.close()
+
+    @staticmethod
+    def _prospect_url(prospect_id: int | None) -> str:
+        """Deep link opening the prospect's drawer, or the list when unknown.
+
+        Args:
+            prospect_id: The prospect the notification is about, when known.
+
+        Returns:
+            ``/dashboard/my-prospects?open={id}`` (opens the drawer), else the list.
+        """
+        return f"{_PROSPECTS_URL}?open={prospect_id}" if prospect_id else _PROSPECTS_URL
 
     @staticmethod
     def _resolve_prospect_name(db: Session, prospect_id: int | None, fallback: str) -> str:

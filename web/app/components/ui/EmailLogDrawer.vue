@@ -105,8 +105,24 @@
                         </span>
                       </template>
                     </div>
-                    <p class="text-xs leading-relaxed whitespace-pre-wrap text-[var(--app-ink)]">
-                      {{ item.direction === 'inbound' ? item.body_text : outboundPreview(item) }}
+                    <p
+                      v-if="item.direction === 'inbound'"
+                      class="text-xs leading-relaxed [overflow-wrap:anywhere] break-words whitespace-pre-wrap text-[var(--app-ink)]"
+                    >
+                      {{ item.body_text }}
+                    </p>
+                    <!-- eslint-disable vue/no-v-html -- Outbound replies are our own HTML (message + signature) -->
+                    <div
+                      v-else-if="item.body_html"
+                      class="mt-0.5 overflow-hidden rounded-md border border-[var(--app-line)]/50 bg-white p-2 text-xs text-neutral-900"
+                      v-html="stripScriptTags(item.body_html)"
+                    />
+                    <!-- eslint-enable vue/no-v-html -->
+                    <p
+                      v-else
+                      class="text-xs leading-relaxed [overflow-wrap:anywhere] break-words whitespace-pre-wrap text-[var(--app-ink)]"
+                    >
+                      {{ outboundPreview(item) }}
                     </p>
                     <button
                       v-if="item.intent === 'unsubscribe' && item.pending"
@@ -383,7 +399,16 @@ const pendingTarget: ComputedRef<ConversationItem | null> = computed((): Convers
 })
 
 /**
- * Flatten an outbound answer's own HTML to a text preview for its bubble.
+ * Strip ``<script>`` tags before rendering trusted outbound HTML in the UI.
+ * @param html - Raw HTML body.
+ * @returns Sanitised HTML safe for ``v-html`` / iframe ``srcdoc``.
+ */
+function stripScriptTags(html: string): string {
+  return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+}
+
+/**
+ * Flatten an outbound answer's HTML to plain text when no HTML body is stored.
  * @param item - The outbound conversation item.
  * @returns The message as plain text.
  */
@@ -500,7 +525,7 @@ async function unsubscribeFromReply(replyId: number): Promise<void> {
 const sanitizedBodyHtml: ComputedRef<string | null> = computed((): string | null => {
   const html: string | null | undefined = props.log?.body_html
   if (!html) return null
-  return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+  return stripScriptTags(html)
 })
 
 /**

@@ -218,6 +218,12 @@ async def handle_received(db: Session, data: dict[str, Any]) -> None:
     # Webhook retries must not create duplicate replies.
     existing = db.execute(select(EmailReply).where(EmailReply.resend_email_id == email_id)).scalar_one_or_none()
     if existing is not None:
+        if existing.inbox_forwarded_at is None and not existing.is_auto_reply:
+            from services.reply_inbox_forward_service import forward_reply_to_inbox
+
+            original_log = db.get(EmailLog, existing.email_log_id)
+            if original_log is not None:
+                await forward_reply_to_inbox(db, existing, original_log)
         return
 
     from_email: str = parseaddr(str(data.get("from") or ""))[1].lower()
@@ -270,6 +276,10 @@ async def handle_received(db: Session, data: dict[str, Any]) -> None:
 
     if auto:
         return
+
+    from services.reply_inbox_forward_service import forward_reply_to_inbox
+
+    await forward_reply_to_inbox(db, reply, email_log)
 
     # One-shot LLM verdict on what the reply means (persisted — never re-asked).
     # Late imports: conversation_service → email_sending_service → this module.
