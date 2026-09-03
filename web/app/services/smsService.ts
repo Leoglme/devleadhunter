@@ -45,6 +45,7 @@ export type SmsMessage = {
   sender: string
   body: string
   status: SmsStatus
+  status_detail: string | null
   segments: number
   price_cents: number | null
   error: string | null

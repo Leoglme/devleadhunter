@@ -102,6 +102,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_demo_site_leads", "migrations.add_demo_site_leads"),
     ("add_sms_tables", "migrations.add_sms_tables"),
     ("add_sms_message_recipient_name", "migrations.add_sms_message_recipient_name"),
+    ("add_sms_message_status_detail", "migrations.add_sms_message_status_detail"),
     ("add_email_replies", "migrations.add_email_replies"),
     ("add_reply_conversations", "migrations.add_reply_conversations"),
     ("add_reply_intent", "migrations.add_reply_intent"),

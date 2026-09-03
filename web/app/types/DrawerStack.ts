@@ -1,5 +1,6 @@
 import type { EmailLog, EmailTemplate, Prospect, User } from '~/types'
 import type { Order } from '~/services/ordersService'
+import type { SmsMessage } from '~/services/smsService'
 import type { SearchProspectsPrefill } from '~/types/SearchProspectsDrawer'
 import type { CampaignDetailResponse } from '~/services/campaignService'
 
@@ -54,6 +55,11 @@ export type EmailLogDrawerEntry = {
   kind: 'email-log'
   log: EmailLog
   campaignName: string | undefined
+}
+
+export type SmsLogDrawerEntry = {
+  kind: 'sms-log'
+  message: SmsMessage
 }
 
 /** Sub-page of a failed email log: re-send the same message to a corrected address. */
@@ -156,6 +162,7 @@ export type DrawerStackEntry =
   | SendEmailDrawerEntry
   | SendSmsDrawerEntry
   | EmailLogDrawerEntry
+  | SmsLogDrawerEntry
   | EmailResendDrawerEntry
   | EmailTemplateDrawerEntry
   | EmailSignaturesDrawerEntry

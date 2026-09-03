@@ -21,6 +21,7 @@ class SmsMessage(Base):
         sender: Alphanumeric sender used
         body: Message body sent
         status: Lifecycle status (:class:`~enums.sms_status.SmsStatus` value)
+        status_detail: Human delivery reason from the DLR (e.g. ``Spam``), when known
         provider_message_id: Provider id, to match DLR callbacks
         price_cents: Cost of the send in cents, when known
         segments: Number of billed SMS segments
@@ -39,6 +40,7 @@ class SmsMessage(Base):
     sender: Mapped[str] = mapped_column(String(11), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", index=True)
+    status_detail: Mapped[str | None] = mapped_column(String(255), nullable=True)
     provider_message_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     price_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
     segments: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

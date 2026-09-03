@@ -33,6 +33,13 @@ from schemas.sms import (
 )
 from services.auth_service import get_current_user
 from services.notification_service import notification_service
+from services.sms.dlr import (
+    classify_dlr,
+    dlr_message_id,
+    dlr_ref_client,
+    dlr_status_detail,
+    dlr_status_value,
+)
 from services.sms.phone_normalizer import to_e164_fr
 from services.sms_config_service import sms_config_service
 from services.sms_relance_service import sms_relance_service
@@ -142,6 +149,7 @@ async def list_messages(
             sender=message.sender,
             body=message.body,
             status=message.status,
+            status_detail=message.status_detail,
             segments=message.segments,
             price_cents=message.price_cents,
             error=message.error,
@@ -195,24 +203,24 @@ async def receive_dlr_callback(request: Request, db: Session = Depends(get_db)) 
         payload = await request.json()
     except ValueError:
         return {"status": "ignored"}
-    message_id = str(payload.get("messageId") or "").strip()
-    if not message_id:
+    if not isinstance(payload, dict):
         return {"status": "ignored"}
-    message = db.query(SmsMessage).filter(SmsMessage.provider_message_id == message_id).first()
+    message = _match_dlr_message(db, payload)
     if message is None:
-        logger.info("SMS DLR for unknown messageId %s", message_id)
+        logger.info("SMS DLR unmatched: %s", str(payload)[:300])
         return {"status": "ok"}
-    status_value = ""
-    raw_status = payload.get("status")
-    if isinstance(raw_status, dict):
-        status_value = str(raw_status.get("value") or "").upper()
+
+    new_status = classify_dlr(dlr_status_value(payload))
+    detail = dlr_status_detail(payload)
     previous_status = message.status
-    if status_value in {"DELIVERED", "DELIVRED", "RECEIVED"}:
+    if new_status == SmsStatus.DELIVERED.value:
         message.status = SmsStatus.DELIVERED.value
         message.delivered_at = datetime.utcnow()
-    elif status_value in {"FAILED", "UNDELIVERED", "UNDELIVRED", "ERROR", "EXPIRED"}:
+    elif new_status == SmsStatus.FAILED.value:
         message.status = SmsStatus.FAILED.value
-        message.error = status_value
+        message.error = detail or dlr_status_value(payload) or "Non délivré"
+    if detail:
+        message.status_detail = detail
     db.commit()
     # Notify only on a real transition, so a provider re-sending the same DLR never double-pings.
     if message.status != previous_status and message.status in {SmsStatus.DELIVERED.value, SmsStatus.FAILED.value}:
@@ -222,8 +230,34 @@ async def receive_dlr_callback(request: Request, db: Session = Depends(get_db)) 
             event_name="sms_delivered" if message.status == SmsStatus.DELIVERED.value else "sms_failed",
             prospect_id=message.prospect_id,
             fallback_name=message.recipient_name or message.to_e164,
+            detail=detail if message.status == SmsStatus.FAILED.value else None,
         )
     return {"status": "ok"}
+
+
+def _match_dlr_message(db: Session, payload: dict[str, object]) -> SmsMessage | None:
+    """Find the SMS a DLR refers to, by provider id then by our ``dlh-<id>`` ref.
+
+    Args:
+        db: Active database session.
+        payload: The DLR JSON body.
+
+    Returns:
+        The matching SMS row, or ``None`` when neither key resolves.
+    """
+    message_id = dlr_message_id(payload)
+    if message_id:
+        matched = db.query(SmsMessage).filter(SmsMessage.provider_message_id == message_id).first()
+        if matched is not None:
+            return matched
+    ref = dlr_ref_client(payload)
+    if ref.startswith("dlh-"):
+        try:
+            row_id = int(ref[len("dlh-") :])
+        except ValueError:
+            return None
+        return db.query(SmsMessage).filter(SmsMessage.id == row_id).first()
+    return None
 
 
 @router.post("/callbacks/stop", status_code=status.HTTP_200_OK)

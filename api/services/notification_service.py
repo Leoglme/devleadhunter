@@ -201,6 +201,7 @@ class NotificationService:
         event_name: str,
         prospect_id: int | None = None,
         fallback_name: str = "",
+        detail: str | None = None,
     ) -> None:
         """
         Raise a notification for an SMS lifecycle event.
@@ -211,11 +212,14 @@ class NotificationService:
             event_name: Underscore event name (e.g. ``sms_delivered``).
             prospect_id: Prospect the SMS targets, when it is a saved prospect.
             fallback_name: Name shown when no prospect is known (the raw number for a manual send).
+            detail: Failure reason appended to the body (e.g. ``Spam``), when known.
         """
         mapping = _SMS_EVENT_NOTIFS.get(event_name)
         if mapping is None:
             return
         emoji, level, body = mapping
+        if detail and detail.strip():
+            body = f"{body} : {detail.strip()}"
         recipient_name = self._resolve_prospect_name(db, prospect_id, fallback_name)
         # Tapping opens the prospect when known, otherwise the SMS history page.
         url = self._prospect_url(prospect_id) if prospect_id else _SMS_URL

@@ -57,6 +57,7 @@ class SmsMessageResponse(BaseModel):
     sender: str
     body: str
     status: str
+    status_detail: str | None = None
     segments: int
     price_cents: int | None = None
     error: str | None = None

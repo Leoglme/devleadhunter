@@ -52,6 +52,15 @@
       @retry="handleOpenResend"
     />
 
+    <UiSmsLogDrawer
+      :open="smsLogEntry !== null"
+      :message="smsLogEntry?.message ?? null"
+      :show-back="hasPrevious"
+      @close="drawerStack.closeAll()"
+      @back="drawerStack.back()"
+      @resend="handleResendSms"
+    />
+
     <UiEmailResendDrawer
       :open="emailResendEntry !== null"
       :log="emailResendEntry?.log ?? null"
@@ -212,9 +221,11 @@ import type {
   SearchProspectsDrawerEntry,
   SendEmailDrawerEntry,
   SendSmsDrawerEntry,
+  SmsLogDrawerEntry,
   SendPolicyDrawerEntry,
   UserFormDrawerEntry,
 } from '~/types/DrawerStack'
+import type { SmsMessage } from '~/services/smsService'
 import type { EmailTemplate, Prospect } from '~/types'
 import type { Order } from '~/services/ordersService'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -248,6 +259,11 @@ const sendEmailEntry: ComputedRef<SendEmailDrawerEntry | null> = computed((): Se
 /** Top entry narrowed to the send-sms drawer. */
 const sendSmsEntry: ComputedRef<SendSmsDrawerEntry | null> = computed((): SendSmsDrawerEntry | null => {
   return drawerStack.topEntry?.kind === 'send-sms' ? drawerStack.topEntry : null
+})
+
+/** Top entry narrowed to the sms-log drawer. */
+const smsLogEntry: ComputedRef<SmsLogDrawerEntry | null> = computed((): SmsLogDrawerEntry | null => {
+  return drawerStack.topEntry?.kind === 'sms-log' ? drawerStack.topEntry : null
 })
 
 /** Top entry narrowed to the email-log drawer. */
@@ -595,6 +611,20 @@ function handleSmsSent(): void {
  */
 function handleSendSms(prospect: Prospect): void {
   drawerStack.push({ kind: 'send-sms', prospect })
+}
+
+/**
+ * « Renvoyer » from an SMS log — open the composer prefilled from the sent SMS.
+ * The mandatory STOP mention is stripped since the composer re-appends it.
+ * @param message - The SMS to resend.
+ */
+function handleResendSms(message: SmsMessage): void {
+  const text: string = message.body.replace(/\s*STOP au 36180\s*$/i, '').trim()
+  drawerStack.push({
+    kind: 'send-sms',
+    prospect: null,
+    prefill: { to: message.to_e164, recipient_name: message.recipient_name ?? '', text },
+  })
 }
 
 /** Refresh templates after save; back or close the stack. */

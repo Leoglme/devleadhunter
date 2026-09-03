@@ -2,6 +2,13 @@
 
 from datetime import datetime
 
+from services.sms.dlr import (
+    classify_dlr,
+    dlr_message_id,
+    dlr_ref_client,
+    dlr_status_detail,
+    dlr_status_value,
+)
 from services.sms.gsm_segments import is_gsm7, segment_count
 from services.sms.phone_normalizer import is_mobile_fr, to_e164_fr
 from services.sms.send_window import is_within_window, next_send_slot
@@ -120,3 +127,39 @@ class TestManualBody:
     def test_trims_surrounding_whitespace(self) -> None:
         body = sms_service.compose_manual_body("   Coucou   ")
         assert body.startswith("Coucou")
+
+
+class TestDlrParsing:
+    def test_delivered_maps_to_delivered(self) -> None:
+        assert classify_dlr("DELIVERED") == "delivered"
+        assert classify_dlr("14") == "delivered"
+
+    def test_undeliverable_maps_to_failed(self) -> None:
+        # The « NON LIVRABLE / spam » case — the regression that left rows on « Envoyé ».
+        assert classify_dlr("UNDELIVERABLE") == "failed"
+        assert classify_dlr("UNDELIVERED") == "failed"
+        assert classify_dlr("3524") == "failed"
+
+    def test_in_transit_leaves_unchanged(self) -> None:
+        assert classify_dlr("ENROUTE") is None
+        assert classify_dlr("UNKNOWN") is None
+        assert classify_dlr("") is None
+
+    def test_message_id_tolerates_field_names(self) -> None:
+        assert dlr_message_id({"messageId": "abc"}) == "abc"
+        assert dlr_message_id({"message_id": "xyz"}) == "xyz"
+        assert dlr_message_id({}) == ""
+
+    def test_status_value_from_dict_or_string(self) -> None:
+        assert dlr_status_value({"status": {"value": "UNDELIVERABLE"}}) == "UNDELIVERABLE"
+        assert dlr_status_value({"status": "DELIVERED"}) == "DELIVERED"
+        assert dlr_status_value({"statusCode": "3524"}) == "3524"
+
+    def test_status_detail_from_code_or_field(self) -> None:
+        assert dlr_status_detail({"status": "3524"}) == "Spam (filtre anti-spam opérateur)"
+        assert dlr_status_detail({"statusDetail": "Spam"}) == "Spam"
+        assert dlr_status_detail({"status": "DELIVERED"}) is None
+
+    def test_ref_client_fallback(self) -> None:
+        assert dlr_ref_client({"refClient": "dlh-3"}) == "dlh-3"
+        assert dlr_ref_client({}) == ""

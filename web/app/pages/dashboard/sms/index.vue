@@ -53,7 +53,7 @@
       </div>
       <div class="card text-center">
         <p class="text-muted text-xs font-medium">Coût total</p>
-        <p class="mt-1 text-2xl font-bold text-[var(--app-ink)]">{{ formatCost(stats.cost_cents) }}</p>
+        <p class="mt-1 text-2xl font-bold text-[var(--app-ink)]">{{ formatEuros(stats.cost_cents) }}</p>
       </div>
     </div>
 
@@ -97,7 +97,8 @@
             <tr
               v-for="message in messages"
               :key="message.id"
-              class="border-muted border-b transition-colors last:border-b-0 hover:bg-[var(--app-surface-2)]"
+              class="border-muted cursor-pointer border-b transition-colors last:border-b-0 hover:bg-[var(--app-surface-2)]"
+              @click="openDrawer(message)"
             >
               <td class="px-3 py-2.5">
                 <div class="text-sm font-medium text-[var(--app-ink)]">
@@ -109,11 +110,14 @@
                 {{ message.body }}
               </td>
               <td data-label="Statut" class="px-3 py-2.5">
-                <span :class="['app-badge', STATUS_BADGE_CLASS[message.status] ?? '']">
-                  {{ STATUS_LABELS[message.status] ?? message.status }}
+                <span :class="['app-badge', SMS_STATUS_BADGE_CLASS[message.status] ?? '']">
+                  {{ SMS_STATUS_LABELS[message.status] ?? message.status }}
                 </span>
-                <p v-if="message.status === 'failed' && message.error" class="mt-1 text-[11px] text-[var(--app-red)]">
-                  {{ message.error }}
+                <p
+                  v-if="message.status === 'failed' && (message.status_detail || message.error)"
+                  class="mt-1 text-[11px] text-[var(--app-red)]"
+                >
+                  {{ message.status_detail || message.error }}
                 </p>
               </td>
               <td data-label="SMS" class="text-muted px-3 py-2.5 text-sm tabular-nums">
@@ -133,8 +137,10 @@
 <script lang="ts" setup>
 import type { Ref } from 'vue'
 import { onMounted, ref, watch } from 'vue'
-import type { SmsMessage, SmsMessagesResponse, SmsStats, SmsStatus } from '~/services/smsService'
+import type { SmsMessage, SmsMessagesResponse, SmsStats } from '~/services/smsService'
 import { SmsService } from '~/services/smsService'
+import { SMS_STATUS_BADGE_CLASS, SMS_STATUS_LABELS } from '~/constants/smsStatus'
+import { formatEuros } from '~/utils/currency'
 import { formatCompactDateTime } from '~/utils/date'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 
@@ -156,28 +162,12 @@ const stats: Ref<SmsStats> = ref({
   cost_cents: 0,
 })
 
-const STATUS_LABELS: Record<SmsStatus, string> = {
-  pending: 'En attente',
-  sent: 'Envoyé',
-  delivered: 'Délivré',
-  failed: 'Échoué',
-}
-
-const STATUS_BADGE_CLASS: Record<SmsStatus, string> = {
-  pending: 'app-badge--progress',
-  sent: 'app-badge--info',
-  delivered: 'app-badge--success',
-  failed: 'app-badge--danger',
-}
-
 /**
- * Format an amount in cents as euros.
- * @param cents - Amount in cents.
- * @returns Formatted euro string.
+ * Open the SMS detail drawer for a row.
+ * @param message - The SMS to display.
  */
-function formatCost(cents: number): string {
-  const euros: number = cents / 100
-  return `${euros % 1 === 0 ? euros.toFixed(0) : euros.toFixed(2)} €`
+function openDrawer(message: SmsMessage): void {
+  drawerStack.push({ kind: 'sms-log', message })
 }
 
 /** Fetch the SMS history and stats. */
