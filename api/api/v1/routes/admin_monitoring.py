@@ -44,7 +44,7 @@ async def monitoring_overview(
 
 @router.get("/activity")
 async def activity_feed(
-    limit: int = Query(200, ge=1, le=1000),
+    limit: int = Query(500, ge=1, le=1000),
     activity_status: str | None = Query(None, alias="status", description="Filter by outcome (success/error/…)"),
     category: str | None = Query(None, description="Filter by domain (email/sms/demo/…)"),
     q: str | None = Query(None, description="Free-text search on title, detail or action"),

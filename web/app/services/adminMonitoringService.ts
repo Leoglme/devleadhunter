@@ -104,7 +104,7 @@ export class AdminMonitoringService {
   static async getActivityLog(filters: ActivityLogFilters = {}): Promise<ActivityLogResponse> {
     return ApiClient.get<ActivityLogResponse>('/api/v1/admin/monitoring/activity', {
       params: {
-        limit: filters.limit ?? 200,
+        limit: filters.limit ?? 500,
         status: filters.status || undefined,
         category: filters.category || undefined,
         q: filters.q?.trim() || undefined,

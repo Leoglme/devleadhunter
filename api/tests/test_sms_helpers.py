@@ -132,15 +132,15 @@ class TestManualBody:
 
 class TestPriceEstimate:
     def test_single_segment_uses_configured_rate(self) -> None:
-        # Default rate 0.045 €/segment → 4.5 cents, rounded.
-        assert estimate_price_cents(1) == round(0.045 * 100)
+        # Real FR rate 0.061 €/segment → 6.1 cents, rounded.
+        assert estimate_price_cents(1) == round(0.061 * 100)
 
     def test_multiple_segments_scale(self) -> None:
-        assert estimate_price_cents(3) == round(3 * 0.045 * 100)
+        assert estimate_price_cents(3) == round(3 * 0.061 * 100)
 
     def test_zero_segments_bills_one(self) -> None:
         # A send always bills at least one segment, never zero.
-        assert estimate_price_cents(0) == round(0.045 * 100)
+        assert estimate_price_cents(0) == round(0.061 * 100)
 
 
 class TestDlrParsing:
