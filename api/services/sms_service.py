@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -20,6 +21,7 @@ from models.prospect_db import ProspectDB
 from models.sms_config import SmsConfig
 from models.sms_message import SmsMessage
 from models.sms_suppression import SmsSuppression
+from services.notification_service import notification_service
 from services.sms.gsm_segments import segment_count
 from services.sms.phone_normalizer import is_mobile_fr, to_e164_fr
 from services.sms.sms_provider import SmsProvider, SmsSendResult
@@ -142,21 +144,101 @@ class SmsService:
         message = SmsMessage(
             user_id=user_id,
             prospect_id=prospect.id,
+            recipient_name=prospect.name,
             to_e164=to_e164,
             sender=config.sender,
             body=body,
             status=SmsStatus.PENDING.value,
             segments=segment_count(body),
         )
+        return await self._send_and_log(db, message=message)
+
+    def compose_manual_body(self, text: str) -> str:
+        """Append the mandatory STOP mention to a free-text manual SMS (idempotent).
+
+        Args:
+            text: The body typed by the user.
+
+        Returns:
+            The body with the ``STOP au 36180`` mention appended once.
+        """
+        cleaned = (text or "").strip()
+        if "36180" in cleaned:
+            return cleaned
+        return cleaned + _STOP_MENTION
+
+    async def send_manual(
+        self,
+        db: Session,
+        *,
+        user_id: int,
+        config: SmsConfig,
+        to_raw: str,
+        text: str,
+        prospect_id: int | None = None,
+        recipient_name: str | None = None,
+    ) -> SmsSendOutcome:
+        """Send one free-text SMS to a bare number (manual composer / self-test).
+
+        Args:
+            db: Active database session.
+            user_id: Sender.
+            config: The user's SMS config (sender + enabled).
+            to_raw: Recipient number as typed (any French format).
+            text: Free-text body (the STOP mention is appended automatically).
+            prospect_id: Prospect id, when the number belongs to a saved prospect.
+            recipient_name: Display label when there is no saved prospect.
+
+        Returns:
+            The send outcome (``sent`` + reason when skipped).
+        """
+        # A manual send is an explicit user action, so it only needs a configured sender —
+        # the ``enabled`` flag gates the automated relance, not one-off manual sends.
+        if not config.sender:
+            return SmsSendOutcome(sent=False, reason="Renseignez un nom d'expéditeur dans Paramètres → Relance SMS")
+        if not self._provider.is_configured:
+            return SmsSendOutcome(sent=False, reason="smsmode non configuré")
+
+        to_e164 = to_e164_fr(to_raw)
+        if not to_e164 or not is_mobile_fr(to_raw):
+            return SmsSendOutcome(sent=False, reason="Numéro invalide : un mobile français 06/07 est requis")
+        if self.is_suppressed(db, user_id, to_e164):
+            return SmsSendOutcome(sent=False, reason="Numéro désinscrit (STOP)")
+        body = self.compose_manual_body(text)
+        if not body:
+            return SmsSendOutcome(sent=False, reason="Message vide")
+
+        message = SmsMessage(
+            user_id=user_id,
+            prospect_id=prospect_id,
+            recipient_name=recipient_name,
+            to_e164=to_e164,
+            sender=config.sender,
+            body=body,
+            status=SmsStatus.PENDING.value,
+            segments=segment_count(body),
+        )
+        return await self._send_and_log(db, message=message)
+
+    async def _send_and_log(self, db: Session, *, message: SmsMessage) -> SmsSendOutcome:
+        """Persist the row, hand it to the provider, record the outcome, notify.
+
+        Args:
+            db: Active database session.
+            message: A ready-to-send SMS row (recipient, sender, body set).
+
+        Returns:
+            The send outcome.
+        """
         db.add(message)
         db.commit()
         db.refresh(message)
 
         callback_url = f"{settings.api_base_url}/api/v1/sms/callbacks/dlr" if settings.api_base_url else None
         result: SmsSendResult = await self._provider.send(
-            to_e164=to_e164,
-            sender=config.sender,
-            text=body,
+            to_e164=message.to_e164,
+            sender=message.sender,
+            text=message.body,
             ref_client=str(message.id),
             callback_url=callback_url,
         )
@@ -169,7 +251,74 @@ class SmsService:
             message.error = result.error
         db.commit()
         db.refresh(message)
+        await self._notify_send(db, message, success=result.success)
         return SmsSendOutcome(sent=result.success, reason=result.error, message=message)
+
+    async def _notify_send(self, db: Session, message: SmsMessage, *, success: bool) -> None:
+        """Raise the send/failure notification for a just-sent SMS (best-effort).
+
+        Args:
+            db: Active database session.
+            message: The persisted SMS row.
+            success: Whether the provider accepted the send.
+        """
+        await notification_service.notify_sms_event(
+            db,
+            user_id=message.user_id,
+            event_name="sms_sent" if success else "sms_failed",
+            prospect_id=message.prospect_id,
+            fallback_name=message.recipient_name or message.to_e164,
+        )
+
+    def list_messages(self, db: Session, user_id: int, *, limit: int = 500) -> list[tuple[SmsMessage, str | None]]:
+        """Return the user's sent SMS (newest first) with the prospect name resolved.
+
+        Args:
+            db: Active database session.
+            user_id: Owner.
+            limit: Max rows to return.
+
+        Returns:
+            ``(message, prospect_name)`` pairs; the name is ``None`` for a manual send.
+        """
+        rows = db.execute(
+            select(SmsMessage, ProspectDB.name)
+            .join(ProspectDB, ProspectDB.id == SmsMessage.prospect_id, isouter=True)
+            .where(SmsMessage.user_id == user_id)
+            .order_by(SmsMessage.created_at.desc())
+            .limit(limit)
+        ).all()
+        return [(row[0], row[1]) for row in rows]
+
+    def stats(self, db: Session, user_id: int) -> dict[str, int]:
+        """Aggregate counts + total cost of the user's SMS.
+
+        Args:
+            db: Active database session.
+            user_id: Owner.
+
+        Returns:
+            Totals keyed by ``total``, ``sent``, ``delivered``, ``failed``, ``pending``, ``cost_cents``.
+        """
+        counts = dict(
+            db.execute(
+                select(SmsMessage.status, func.count()).where(SmsMessage.user_id == user_id).group_by(SmsMessage.status)
+            ).all()
+        )
+        cost = db.execute(
+            select(func.coalesce(func.sum(SmsMessage.price_cents), 0)).where(SmsMessage.user_id == user_id)
+        ).scalar_one()
+        sent = int(counts.get(SmsStatus.SENT.value, 0))
+        delivered = int(counts.get(SmsStatus.DELIVERED.value, 0))
+        # « Envoyés » counts everything that reached the provider (sent + later delivered).
+        return {
+            "total": sum(int(v) for v in counts.values()),
+            "sent": sent + delivered,
+            "delivered": delivered,
+            "failed": int(counts.get(SmsStatus.FAILED.value, 0)),
+            "pending": int(counts.get(SmsStatus.PENDING.value, 0)),
+            "cost_cents": int(cost or 0),
+        }
 
 
 sms_service = SmsService()

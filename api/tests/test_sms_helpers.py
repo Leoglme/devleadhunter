@@ -6,6 +6,7 @@ from services.sms.gsm_segments import is_gsm7, segment_count
 from services.sms.phone_normalizer import is_mobile_fr, to_e164_fr
 from services.sms.send_window import is_within_window, next_send_slot
 from services.sms_config_service import SmsConfigService
+from services.sms_service import sms_service
 
 
 class TestPhoneNormalizer:
@@ -104,3 +105,18 @@ class TestSenderValidation:
 
     def test_symbols_rejected(self) -> None:
         assert SmsConfigService.is_valid_sender("Dibo-dev") is False
+
+
+class TestManualBody:
+    def test_appends_stop_mention(self) -> None:
+        body = sms_service.compose_manual_body("Bonjour, votre site est prêt")
+        assert body.endswith("STOP au 36180")
+
+    def test_stop_mention_not_duplicated(self) -> None:
+        # A user who already wrote the opt-out keeps a single mention.
+        body = sms_service.compose_manual_body("Offre limitée STOP au 36180")
+        assert body.count("36180") == 1
+
+    def test_trims_surrounding_whitespace(self) -> None:
+        body = sms_service.compose_manual_body("   Coucou   ")
+        assert body.startswith("Coucou")

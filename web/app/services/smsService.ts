@@ -35,6 +35,49 @@ export type SmsBulkSendResult = {
   skipped: number
 }
 
+/** Lifecycle status of a sent SMS. */
+export type SmsStatus = 'pending' | 'sent' | 'delivered' | 'failed'
+
+/** One sent SMS in the history (« Suivi des SMS »). */
+export type SmsMessage = {
+  id: number
+  prospect_id: number | null
+  recipient_name: string | null
+  to_e164: string
+  sender: string
+  body: string
+  status: SmsStatus
+  segments: number
+  price_cents: number | null
+  error: string | null
+  created_at: string
+  delivered_at: string | null
+}
+
+/** A page of the SMS history. */
+export type SmsMessagesResponse = {
+  total: number
+  messages: SmsMessage[]
+}
+
+/** Aggregate counters of the SMS channel. */
+export type SmsStats = {
+  total: number
+  sent: number
+  delivered: number
+  failed: number
+  pending: number
+  cost_cents: number
+}
+
+/** Payload to send one free-text SMS (manual composer / self-test). */
+export type SmsManualSendPayload = {
+  to: string
+  text: string
+  prospect_id?: number | null
+  recipient_name?: string | null
+}
+
 /** SMS relance channel — sender config, eligible prospects, sending. */
 export class SmsService {
   /**
@@ -79,5 +122,31 @@ export class SmsService {
    */
   static async sendRelanceBulk(limit: number = 20): Promise<SmsBulkSendResult> {
     return ApiClient.post<SmsBulkSendResult>(`/api/v1/sms/relance?limit=${limit}`, {})
+  }
+
+  /**
+   * Fetch the sent-SMS history (newest first).
+   * @param limit - Maximum rows to return.
+   * @returns The history page.
+   */
+  static async listMessages(limit: number = 500): Promise<SmsMessagesResponse> {
+    return ApiClient.get<SmsMessagesResponse>(`/api/v1/sms/messages?limit=${limit}`)
+  }
+
+  /**
+   * Fetch the aggregate counters of the SMS channel.
+   * @returns The stats.
+   */
+  static async getStats(): Promise<SmsStats> {
+    return ApiClient.get<SmsStats>('/api/v1/sms/stats')
+  }
+
+  /**
+   * Send one free-text SMS to a number (manual composer / self-test).
+   * @param payload - Recipient number, message, and optional prospect link.
+   * @returns The send result.
+   */
+  static async sendManual(payload: SmsManualSendPayload): Promise<SmsSendResult> {
+    return ApiClient.post<SmsSendResult>('/api/v1/sms/send', payload)
   }
 }

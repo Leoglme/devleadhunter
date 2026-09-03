@@ -15,7 +15,8 @@ class SmsMessage(Base):
     Attributes:
         id: Unique identifier (auto-increment)
         user_id: Sender (owner of the prospect)
-        prospect_id: Recipient prospect
+        prospect_id: Recipient prospect (``None`` for a manual send to a bare number)
+        recipient_name: Display label for a manual send (no saved prospect)
         to_e164: Normalised recipient number
         sender: Alphanumeric sender used
         body: Message body sent
@@ -33,6 +34,7 @@ class SmsMessage(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     prospect_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    recipient_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     to_e164: Mapped[str] = mapped_column(String(20), nullable=False)
     sender: Mapped[str] = mapped_column(String(11), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)

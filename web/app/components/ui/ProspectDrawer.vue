@@ -455,6 +455,14 @@
                 <UIcon name="i-lucide-mail" class="h-4 w-4 shrink-0" />Email
               </button>
               <button
+                v-if="prospect.phone"
+                class="btn-secondary min-w-0 flex-1 px-3 whitespace-nowrap"
+                title="Envoyer un SMS à ce prospect"
+                @click="$emit('sendSms', prospect)"
+              >
+                <UIcon name="i-lucide-message-square-text" class="h-4 w-4 shrink-0" />SMS
+              </button>
+              <button
                 class="btn-secondary min-w-0 flex-1 px-3 whitespace-nowrap"
                 title="Marquer ce prospect comme vendu"
                 @click="$emit('markAsSold', prospect)"

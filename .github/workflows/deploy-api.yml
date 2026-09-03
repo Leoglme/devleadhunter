@@ -196,6 +196,10 @@ jobs:
             VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }}
             VAPID_PRIVATE_KEY_B64=${{ secrets.VAPID_PRIVATE_KEY_B64 }}
             VAPID_SUBJECT=mailto:contact@dibodev.fr
+            # SMS de relance (smsmode) — compte plateforme unique, expéditeur par-user.
+            # Clé vide = canal inerte (aucun SMS ne part). L'URL n'est pas un secret.
+            SMSMODE_API_KEY=${{ secrets.SMSMODE_API_KEY }}
+            SMSMODE_BASE_URL=https://rest.smsmode.com/sms/v1/messages
             EOF
 
       - name: 🧬 Run database migrations (SSH)

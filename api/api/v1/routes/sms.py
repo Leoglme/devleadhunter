@@ -10,6 +10,7 @@ account is a single platform account. The DLR and STOP callbacks are public
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -23,10 +24,15 @@ from schemas.sms import (
     SmsBulkSendResponse,
     SmsConfigResponse,
     SmsConfigUpdate,
+    SmsManualSendRequest,
+    SmsMessageResponse,
+    SmsMessagesResponse,
     SmsRelanceCandidateResponse,
     SmsSendResponse,
+    SmsStatsResponse,
 )
 from services.auth_service import get_current_user
+from services.notification_service import notification_service
 from services.sms.phone_normalizer import to_e164_fr
 from services.sms_config_service import sms_config_service
 from services.sms_relance_service import sms_relance_service
@@ -122,6 +128,65 @@ async def send_relance_bulk(
     return SmsBulkSendResponse(sent=sent, skipped=len(candidates) - sent)
 
 
+@router.get("/messages", response_model=SmsMessagesResponse)
+async def list_messages(
+    limit: int = 500,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SmsMessagesResponse:
+    """Return the current user's sent SMS (newest first) — the « Suivi des SMS » history."""
+    rows = sms_service.list_messages(db, current_user.id, limit=limit)
+    messages = [
+        SmsMessageResponse(
+            id=message.id,
+            prospect_id=message.prospect_id,
+            recipient_name=prospect_name or message.recipient_name,
+            to_e164=message.to_e164,
+            sender=message.sender,
+            body=message.body,
+            status=message.status,
+            segments=message.segments,
+            price_cents=message.price_cents,
+            error=message.error,
+            created_at=message.created_at,
+            delivered_at=message.delivered_at,
+        )
+        for message, prospect_name in rows
+    ]
+    return SmsMessagesResponse(total=len(messages), messages=messages)
+
+
+@router.get("/stats", response_model=SmsStatsResponse)
+async def get_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> SmsStatsResponse:
+    """Return aggregate counters of the current user's SMS channel."""
+    return SmsStatsResponse(**sms_service.stats(db, current_user.id))
+
+
+@router.post("/send", response_model=SmsSendResponse)
+async def send_manual_sms(
+    payload: SmsManualSendRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SmsSendResponse:
+    """Send one free-text SMS to a number (manual composer / self-test)."""
+    config = sms_config_service.get(db, current_user.id)
+    if config is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Configurez d'abord votre expéditeur dans Paramètres → Relance SMS.",
+        )
+    outcome = await sms_service.send_manual(
+        db,
+        user_id=current_user.id,
+        config=config,
+        to_raw=payload.to,
+        text=payload.text,
+        prospect_id=payload.prospect_id,
+        recipient_name=payload.recipient_name,
+    )
+    return SmsSendResponse(sent=outcome.sent, reason=outcome.reason)
+
+
 @router.post("/callbacks/dlr", status_code=status.HTTP_200_OK)
 async def receive_dlr_callback(request: Request, db: Session = Depends(get_db)) -> dict[str, str]:
     """Delivery-receipt callback from smsmode (public).
@@ -144,12 +209,23 @@ async def receive_dlr_callback(request: Request, db: Session = Depends(get_db)) 
     raw_status = payload.get("status")
     if isinstance(raw_status, dict):
         status_value = str(raw_status.get("value") or "").upper()
+    previous_status = message.status
     if status_value in {"DELIVERED", "DELIVRED", "RECEIVED"}:
         message.status = SmsStatus.DELIVERED.value
+        message.delivered_at = datetime.utcnow()
     elif status_value in {"FAILED", "UNDELIVERED", "UNDELIVRED", "ERROR", "EXPIRED"}:
         message.status = SmsStatus.FAILED.value
         message.error = status_value
     db.commit()
+    # Notify only on a real transition, so a provider re-sending the same DLR never double-pings.
+    if message.status != previous_status and message.status in {SmsStatus.DELIVERED.value, SmsStatus.FAILED.value}:
+        await notification_service.notify_sms_event(
+            db,
+            user_id=message.user_id,
+            event_name="sms_delivered" if message.status == SmsStatus.DELIVERED.value else "sms_failed",
+            prospect_id=message.prospect_id,
+            fallback_name=message.recipient_name or message.to_e164,
+        )
     return {"status": "ok"}
 
 
@@ -171,4 +247,11 @@ async def receive_stop_callback(request: Request, db: Session = Depends(get_db))
     last = db.query(SmsMessage).filter(SmsMessage.to_e164 == phone_e164).order_by(SmsMessage.created_at.desc()).first()
     if last is not None:
         sms_service.suppress(db, last.user_id, phone_e164, reason="stop")
+        await notification_service.notify_sms_event(
+            db,
+            user_id=last.user_id,
+            event_name="sms_stop",
+            prospect_id=last.prospect_id,
+            fallback_name=last.recipient_name or phone_e164,
+        )
     return {"status": "ok"}

@@ -389,6 +389,7 @@ const navGroups: UiSidebarGroup[] = [
       { to: '/dashboard/demo-sites', label: 'Sites démo', icon: 'i-lucide-app-window' },
       { to: '/dashboard/campaigns', label: 'Campagnes', icon: 'i-lucide-megaphone' },
       { to: '/dashboard/emails', label: 'Suivi des emails', icon: 'i-lucide-send' },
+      { to: '/dashboard/sms', label: 'Suivi des SMS', icon: 'i-lucide-message-square-text' },
       { to: '/dashboard/orders', label: 'Ventes', icon: 'i-lucide-banknote' },
     ],
   },

@@ -30,6 +30,7 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
   const lastOrderMutation: Ref<OrderMutationNotice | null> = ref(null)
   const orderMutationCounter: Ref<number> = ref(0)
   const emailLogsRefreshCounter: Ref<number> = ref(0)
+  const smsMessagesRefreshCounter: Ref<number> = ref(0)
   const emailTemplatesRefreshCounter: Ref<number> = ref(0)
   const usersRefreshCounter: Ref<number> = ref(0)
   const campaignsRefreshCounter: Ref<number> = ref(0)
@@ -97,6 +98,9 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
       if (entry.kind === 'send-email' && entry.prospect?.id === prospect.id) {
         return { ...entry, prospect }
       }
+      if (entry.kind === 'send-sms' && entry.prospect?.id === prospect.id) {
+        return { ...entry, prospect }
+      }
       return entry
     })
     lastProspectMutation.value = { type: 'updated', prospect }
@@ -143,6 +147,11 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     emailLogsRefreshCounter.value++
   }
 
+  /** Signal that SMS messages changed (an SMS was sent from a drawer). */
+  function bumpSmsMessagesRefresh(): void {
+    smsMessagesRefreshCounter.value++
+  }
+
   /** Signal that email templates changed (created/edited/deleted from a drawer). */
   function bumpEmailTemplatesRefresh(): void {
     emailTemplatesRefreshCounter.value++
@@ -157,7 +166,8 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     stack.value = stack.value.filter((entry: DrawerStackEntry): boolean => {
       const isSameProspect: boolean =
         (entry.kind === 'prospect' && entry.prospect.id === prospectId) ||
-        (entry.kind === 'send-email' && entry.prospect?.id === prospectId)
+        (entry.kind === 'send-email' && entry.prospect?.id === prospectId) ||
+        (entry.kind === 'send-sms' && entry.prospect?.id === prospectId)
       return !isSameProspect
     })
     lastProspectMutation.value = { type: 'deleted', prospectId }
@@ -198,6 +208,7 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     lastOrderMutation,
     orderMutationCounter,
     emailLogsRefreshCounter,
+    smsMessagesRefreshCounter,
     emailTemplatesRefreshCounter,
     usersRefreshCounter,
     campaignsRefreshCounter,
@@ -213,6 +224,7 @@ export const useDrawerStackStore = defineStore('drawerStack', () => {
     notifyOrderUpdated,
     notifyOrderDeleted,
     bumpEmailLogsRefresh,
+    bumpSmsMessagesRefresh,
     bumpEmailTemplatesRefresh,
     bumpUsersRefresh,
     bumpCampaignsRefresh,

@@ -40,6 +40,50 @@ class SmsSendResponse(BaseModel):
     reason: str | None = None
 
 
+class SmsManualSendRequest(BaseModel):
+    """Payload to send one free-text SMS (manual composer / self-test)."""
+
+    to: str = Field(min_length=1, description="Recipient number, any French format")
+    text: str = Field(min_length=1, max_length=1000, description="Message body (STOP mention appended automatically)")
+    prospect_id: int | None = Field(default=None, description="Linked prospect, when the number belongs to one")
+    recipient_name: str | None = Field(default=None, max_length=255, description="Display label for a bare number")
+
+
+class SmsMessageResponse(BaseModel):
+    """One sent SMS in the history."""
+
+    id: int
+    prospect_id: int | None = None
+    recipient_name: str | None = None
+    to_e164: str
+    sender: str
+    body: str
+    status: str
+    segments: int
+    price_cents: int | None = None
+    error: str | None = None
+    created_at: datetime
+    delivered_at: datetime | None = None
+
+
+class SmsMessagesResponse(BaseModel):
+    """A page of the SMS history."""
+
+    total: int
+    messages: list[SmsMessageResponse]
+
+
+class SmsStatsResponse(BaseModel):
+    """Aggregate counters of the SMS channel."""
+
+    total: int = 0
+    sent: int = 0
+    delivered: int = 0
+    failed: int = 0
+    pending: int = 0
+    cost_cents: int = 0
+
+
 class SmsBulkSendResponse(BaseModel):
     """Outcome of a bulk relance send."""
 

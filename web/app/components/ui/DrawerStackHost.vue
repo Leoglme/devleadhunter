@@ -16,6 +16,7 @@
       @updated="handleProspectUpdated"
       @deleted="handleProspectDeleted"
       @send-email="handleSendEmail"
+      @send-sms="handleSendSms"
       @mark-as-sold="handleMarkAsSold"
       @toggle-contacted="handleToggleContacted"
     />
@@ -28,6 +29,16 @@
       @close="drawerStack.closeAll()"
       @back="drawerStack.back()"
       @sent="handleEmailSent"
+    />
+
+    <UiSendSmsDrawer
+      :open="sendSmsEntry !== null"
+      :prospect="sendSmsEntry?.prospect ?? null"
+      :prefill="sendSmsEntry?.prefill ?? null"
+      :show-back="hasPrevious"
+      @close="drawerStack.closeAll()"
+      @back="drawerStack.back()"
+      @sent="handleSmsSent"
     />
 
     <UiEmailLogDrawer
@@ -200,6 +211,7 @@ import type {
   ProspectDrawerEntry,
   SearchProspectsDrawerEntry,
   SendEmailDrawerEntry,
+  SendSmsDrawerEntry,
   SendPolicyDrawerEntry,
   UserFormDrawerEntry,
 } from '~/types/DrawerStack'
@@ -231,6 +243,11 @@ const prospectEntry: ComputedRef<ProspectDrawerEntry | null> = computed((): Pros
 /** Top entry narrowed to the send-email drawer. */
 const sendEmailEntry: ComputedRef<SendEmailDrawerEntry | null> = computed((): SendEmailDrawerEntry | null => {
   return drawerStack.topEntry?.kind === 'send-email' ? drawerStack.topEntry : null
+})
+
+/** Top entry narrowed to the send-sms drawer. */
+const sendSmsEntry: ComputedRef<SendSmsDrawerEntry | null> = computed((): SendSmsDrawerEntry | null => {
+  return drawerStack.topEntry?.kind === 'send-sms' ? drawerStack.topEntry : null
 })
 
 /** Top entry narrowed to the email-log drawer. */
@@ -560,6 +577,24 @@ function handleEmailSent(): void {
   } else {
     drawerStack.closeAll()
   }
+}
+
+/** Refresh the SMS history after send; back or close the stack. */
+function handleSmsSent(): void {
+  drawerStack.bumpSmsMessagesRefresh()
+  if (drawerStack.hasPrevious) {
+    drawerStack.back()
+  } else {
+    drawerStack.closeAll()
+  }
+}
+
+/**
+ * « SMS » action — stack the composer on top of the prospect drawer.
+ * @param prospect - The prospect used to prefill the composer.
+ */
+function handleSendSms(prospect: Prospect): void {
+  drawerStack.push({ kind: 'send-sms', prospect })
 }
 
 /** Refresh templates after save; back or close the stack. */

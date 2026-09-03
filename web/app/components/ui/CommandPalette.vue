@@ -106,6 +106,7 @@ const PAGES: { label: string; icon: string; to: string }[] = [
   { label: 'Sites démo', icon: 'i-lucide-app-window', to: '/dashboard/demo-sites' },
   { label: 'Campagnes', icon: 'i-lucide-megaphone', to: '/dashboard/campaigns' },
   { label: 'Suivi des emails', icon: 'i-lucide-send', to: '/dashboard/emails' },
+  { label: 'Suivi des SMS', icon: 'i-lucide-message-square-text', to: '/dashboard/sms' },
   { label: "Modèles d'email", icon: 'i-lucide-layout-template', to: '/dashboard/email-templates' },
   { label: 'Ventes', icon: 'i-lucide-banknote', to: '/dashboard/orders' },
   { label: 'Support', icon: 'i-lucide-life-buoy', to: '/dashboard/support' },

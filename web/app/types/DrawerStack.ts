@@ -37,6 +37,19 @@ export type SendEmailDrawerEntry = {
   prefill?: SendEmailPrefill
 }
 
+/** Prefilled values of the SMS composer (e.g. a self-test number). */
+export type SendSmsPrefill = {
+  to: string
+  recipient_name: string
+  text: string
+}
+
+export type SendSmsDrawerEntry = {
+  kind: 'send-sms'
+  prospect: Prospect | null
+  prefill?: SendSmsPrefill
+}
+
 export type EmailLogDrawerEntry = {
   kind: 'email-log'
   log: EmailLog
@@ -141,6 +154,7 @@ export type CoverageProspectsDrawerEntry = {
 export type DrawerStackEntry =
   | ProspectDrawerEntry
   | SendEmailDrawerEntry
+  | SendSmsDrawerEntry
   | EmailLogDrawerEntry
   | EmailResendDrawerEntry
   | EmailTemplateDrawerEntry

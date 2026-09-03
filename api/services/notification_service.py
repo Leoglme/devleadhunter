@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 # Deep links opened when a notification is tapped.
 _PROSPECTS_URL = "/dashboard/my-prospects"
 _ORDERS_URL = "/dashboard/orders"
+_SMS_URL = "/dashboard/sms"
 _DASHBOARD_URL = "/dashboard"
 
 # In-app notification log retention.
@@ -74,6 +75,14 @@ _DEMO_EVENT_NOTIFS: dict[str, tuple[str, str, str]] = {
     "demo_video_play": ("▶️", "success", "Lance ta vidéo"),
     "demo_video_complete": ("✅", "success", "A vu ta vidéo en entier"),
     "demo_video_replay": ("🔁", "success", "Revoit ta vidéo"),
+}
+
+# SMS lifecycle event → (emoji, level, body). Same title convention as emails.
+_SMS_EVENT_NOTIFS: dict[str, tuple[str, str, str]] = {
+    "sms_sent": ("📱", "info", "SMS envoyé"),
+    "sms_delivered": ("✅", "success", "SMS reçu sur le mobile"),
+    "sms_failed": ("❌", "error", "Échec de l'envoi du SMS"),
+    "sms_stop": ("🚫", "warning", "S'est désinscrit des SMS (STOP)"),
 }
 
 
@@ -182,6 +191,41 @@ class NotificationService:
             title=f"{emoji} {prospect_name}",
             body=body,
             url=self._prospect_url(prospect_id),
+        )
+
+    async def notify_sms_event(
+        self,
+        db: Session,
+        *,
+        user_id: int,
+        event_name: str,
+        prospect_id: int | None = None,
+        fallback_name: str = "",
+    ) -> None:
+        """
+        Raise a notification for an SMS lifecycle event.
+
+        Args:
+            db: Active database session (to resolve the prospect's name).
+            user_id: Owner of the SMS — the notification recipient.
+            event_name: Underscore event name (e.g. ``sms_delivered``).
+            prospect_id: Prospect the SMS targets, when it is a saved prospect.
+            fallback_name: Name shown when no prospect is known (the raw number for a manual send).
+        """
+        mapping = _SMS_EVENT_NOTIFS.get(event_name)
+        if mapping is None:
+            return
+        emoji, level, body = mapping
+        recipient_name = self._resolve_prospect_name(db, prospect_id, fallback_name)
+        # Tapping opens the prospect when known, otherwise the SMS history page.
+        url = self._prospect_url(prospect_id) if prospect_id else _SMS_URL
+        await self._dispatch(
+            user_id=user_id,
+            category="sms",
+            level=level,
+            title=f"{emoji} {recipient_name}",
+            body=body,
+            url=url,
         )
 
     async def notify_sale(
