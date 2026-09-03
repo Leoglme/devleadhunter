@@ -307,6 +307,11 @@ class Settings(BaseSettings):
         alias="SMSMODE_BASE_URL",
         description="smsmode REST v1 messages endpoint",
     )
+    smsmode_price_per_segment_eur: float = Field(
+        default=0.045,
+        alias="SMSMODE_PRICE_PER_SEGMENT_EUR",
+        description="Estimated smsmode price per SMS segment (euros), used when the send response carries no price",
+    )
 
     # Support / ticketing settings — les pièces jointes vivent sur R2 (voir
     # `support_storage_service`), identique en local et en production.

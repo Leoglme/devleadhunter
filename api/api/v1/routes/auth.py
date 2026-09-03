@@ -15,6 +15,7 @@ from enums.user_role import UserRole
 from models.credit_settings import CreditSettings
 from models.user import User
 from schemas.user import Token, UserLogin, UserResponse, UserSignup, UserUpdate
+from services.activity_log_service import CATEGORY_AUTH, STATUS_INFO, activity_log_service
 from services.auth_service import AuthService, get_current_active_user
 from services.credit_service import TransactionType, credit_service
 
@@ -98,6 +99,15 @@ async def signup(request: Request, user_data: UserSignup, db: Session = Depends(
             transaction_type=TransactionType.FREE_GIFT,
         )
 
+    activity_log_service.record(
+        category=CATEGORY_AUTH,
+        action="user_signup",
+        status=STATUS_INFO,
+        title=f"Inscription · {db_user.name}",
+        detail=db_user.email,
+        user_id=db_user.id,
+    )
+
     return _build_user_response(db, db_user)
 
 
@@ -127,6 +137,14 @@ async def login(request: Request, user_credentials: UserLogin, db: Session = Dep
 
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = AuthService.create_access_token(data={"sub": user.email}, expires_delta=access_token_expires)
+
+    activity_log_service.record(
+        category=CATEGORY_AUTH,
+        action="user_login",
+        status=STATUS_INFO,
+        title=f"Connexion · {user.name}",
+        user_id=user.id,
+    )
 
     return {"access_token": access_token, "token_type": "bearer"}
 

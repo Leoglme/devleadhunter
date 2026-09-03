@@ -11,6 +11,7 @@ from models.prospect_db import ProspectDB
 from models.prospect_enrichment import ProspectEnrichment
 from models.search import ProspectSearchRequest
 from models.user import User
+from services.activity_log_service import CATEGORY_PROSPECT, STATUS_INFO, activity_log_service
 from services.prospect_emails import sync_prospect_emails
 from services.validation_service import ValidationService
 
@@ -191,6 +192,7 @@ class ProspectService:
         prospect: ProspectCreate,
         user_id: int,
         organization_id: int | None = None,
+        record_activity: bool = True,
     ) -> Prospect:
         """
         Create a new prospect.
@@ -200,6 +202,7 @@ class ProspectService:
             prospect: Prospect data to create
             user_id: ID of the user creating the prospect
             organization_id: The creator's organization — the prospect is shared with it
+            record_activity: Whether to log a « prospect créé » entry (off for bulk imports, which log one summary)
 
         Returns:
             Created prospect with generated ID
@@ -233,6 +236,18 @@ class ProspectService:
         db.add(db_prospect)
         db.commit()
         db.refresh(db_prospect)
+
+        if record_activity:
+            location = f" · {db_prospect.city}" if db_prospect.city else ""
+            activity_log_service.record(
+                category=CATEGORY_PROSPECT,
+                action="prospect_created",
+                status=STATUS_INFO,
+                title=f"Prospect créé · {db_prospect.name}{location}",
+                user_id=user_id,
+                entity_type="prospect",
+                entity_id=db_prospect.id,
+            )
 
         return Prospect.model_validate(db_prospect)
 
@@ -305,9 +320,19 @@ class ProspectService:
                     skipped_count += 1
                     continue
 
-            # Create the prospect
-            created = await self.create_prospect(db, prospect_data, user_id)
+            # Create the prospect (no per-row log — the import logs one summary below).
+            created = await self.create_prospect(db, prospect_data, user_id, record_activity=False)
             created_prospects.append(created)
+
+        if created_prospects:
+            skipped_note = f" ({skipped_count} doublon(s) ignoré(s))" if skipped_count else ""
+            activity_log_service.record(
+                category=CATEGORY_PROSPECT,
+                action="prospects_imported",
+                status=STATUS_INFO,
+                title=f"Import de {len(created_prospects)} prospect(s){skipped_note}",
+                user_id=user_id,
+            )
 
         return created_prospects, skipped_count
 

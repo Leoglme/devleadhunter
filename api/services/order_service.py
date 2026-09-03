@@ -22,6 +22,7 @@ from enums.product_type import PRODUCT_DEFAULT_AMOUNT_CENTS, PRODUCT_LABELS, Pro
 from models.order import Order
 from models.prospect_db import ProspectDB
 from models.user import User
+from services.activity_log_service import CATEGORY_SALE, STATUS_INFO, STATUS_WARNING, activity_log_service
 from services.decision_maker.normalize import title_case_name
 from services.pricing_service import PricingService
 
@@ -187,6 +188,15 @@ class OrderService:
         db.add(order)
         db.commit()
         db.refresh(order)
+        activity_log_service.record(
+            category=CATEGORY_SALE,
+            action="order_created",
+            status=STATUS_INFO,
+            title=f"Vente créée · {order.business_name or 'sans nom'} · {format_amount(order.amount_cents, order.currency)}",
+            user_id=user_id,
+            entity_type="order",
+            entity_id=order.id,
+        )
         return order
 
     def update(self, db: Session, order: Order, updates: dict[str, Any]) -> Order:
@@ -529,6 +539,15 @@ class OrderService:
             order.status = OrderStatus.PAYMENT_PENDING.value
         db.commit()
         db.refresh(order)
+        activity_log_service.record(
+            category=CATEGORY_SALE,
+            action="invoice_issued",
+            status=STATUS_INFO,
+            title=f"Facture émise · {order.invoice_number or order.invoice_id} · {order.business_name or 'sans nom'}",
+            user_id=order.user_id,
+            entity_type="order",
+            entity_id=order.id,
+        )
         return order
 
     async def _fetch_invoice_pdf(self, db: Session, user: User, order: Order) -> bytes | None:
@@ -636,7 +655,17 @@ class OrderService:
         if provider is None:
             raise ValueError("Aucun moyen d'encaissement connecté pour rembourser cette vente.")
         await provider.refund(order.invoice_id)
-        return self.mark_refunded(db, order)
+        refunded = self.mark_refunded(db, order)
+        activity_log_service.record(
+            category=CATEGORY_SALE,
+            action="order_refunded",
+            status=STATUS_WARNING,
+            title=f"Vente remboursée · {order.business_name or 'sans nom'} · {format_amount(order.amount_cents, order.currency)}",
+            user_id=order.user_id,
+            entity_type="order",
+            entity_id=order.id,
+        )
+        return refunded
 
     # ------------------------------------------------------------------ #
     # Payment-link email (with preview)

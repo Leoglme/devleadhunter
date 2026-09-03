@@ -71,6 +71,7 @@ class _FakeProvider:
 def _order(**overrides: object) -> SimpleNamespace:
     base: dict[str, object] = {
         "id": 7,
+        "user_id": 1,
         "product_type": "website",
         "business_name": "Plomberie Durand",
         "customer_name": None,

@@ -41,6 +41,8 @@ def _verification(*, public_api_ok: bool, demo_url_live: bool) -> SimpleNamespac
 def _site() -> SimpleNamespace:
     return SimpleNamespace(
         id=1,
+        user_id=1,
+        business_name="Barbier d'Antan",
         slug="barbier-d-antan",
         template_id="barber",
         demo_url="https://demo.dibodev.fr/barbier-d-antan",

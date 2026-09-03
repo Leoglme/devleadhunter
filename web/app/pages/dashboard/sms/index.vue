@@ -51,8 +51,8 @@
         <p class="text-muted text-xs font-medium">Échecs</p>
         <p class="mt-1 text-2xl font-bold text-[var(--app-red)]">{{ stats.failed }}</p>
       </div>
-      <div class="card text-center">
-        <p class="text-muted text-xs font-medium">Coût total</p>
+      <div class="card text-center" title="Estimation : segments facturés × tarif smsmode par segment">
+        <p class="text-muted text-xs font-medium">Coût estimé</p>
         <p class="mt-1 text-2xl font-bold text-[var(--app-ink)]">{{ formatEuros(stats.cost_cents) }}</p>
       </div>
     </div>

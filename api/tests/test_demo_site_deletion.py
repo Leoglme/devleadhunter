@@ -49,6 +49,7 @@ class _FakeDB:
 def _site(status: str = DemoSiteStatus.ACTIVE.value) -> SimpleNamespace:
     return SimpleNamespace(
         id=1,
+        user_id=1,
         slug="barbier-d-antan",
         status=status,
         business_name="Barbier d'Antan",

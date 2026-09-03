@@ -16,6 +16,19 @@ from sqlalchemy.orm import Session
 
 from core.database import SessionLocal
 from models.scraper_diagnostic import ScraperDiagnostic
+from services.activity_log_service import (
+    CATEGORY_SCRAPING,
+    activity_log_service,
+)
+from services.activity_log_service import (
+    STATUS_ERROR as FEED_ERROR,
+)
+from services.activity_log_service import (
+    STATUS_SUCCESS as FEED_SUCCESS,
+)
+from services.activity_log_service import (
+    STATUS_WARNING as FEED_WARNING,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +41,15 @@ STATUS_ERROR: str = "error"
 
 # Statuses that indicate the source is degraded (drives the red/amber badges).
 DEGRADED_STATUSES: frozenset[str] = frozenset({STATUS_BLOCKED, STATUS_TIMEOUT, STATUS_ERROR})
+
+# Scraper outcome → activity-feed status (ok = success, empty = warning, the rest = error).
+_ACTIVITY_STATUS_BY_OUTCOME: dict[str, str] = {
+    STATUS_OK: FEED_SUCCESS,
+    STATUS_EMPTY: FEED_WARNING,
+    STATUS_BLOCKED: FEED_ERROR,
+    STATUS_TIMEOUT: FEED_ERROR,
+    STATUS_ERROR: FEED_ERROR,
+}
 
 # Keep incident history bounded so html_snapshot rows do not grow forever.
 _RETENTION_DAYS: int = 30
@@ -68,12 +90,67 @@ class ScraperDiagnosticsService:
             )
             db.add(row)
             db.commit()
+            diagnostic_id = row.id
             self._prune(db)
         except Exception as exc:
             logger.warning("Failed to record scraper diagnostic (%s/%s): %s", source, status, exc)
             db.rollback()
+            diagnostic_id = None
         finally:
             db.close()
+        if diagnostic_id is not None:
+            self._log_activity(
+                source=source,
+                status=status,
+                category=category,
+                city=city,
+                results_count=int(results_count or 0),
+                error_message=error_message,
+                has_html=bool(html_snapshot),
+                user_id=user_id,
+                diagnostic_id=diagnostic_id,
+            )
+
+    def _log_activity(
+        self,
+        *,
+        source: str,
+        status: str,
+        category: str | None,
+        city: str | None,
+        results_count: int,
+        error_message: str | None,
+        has_html: bool,
+        user_id: int | None,
+        diagnostic_id: int,
+    ) -> None:
+        """Mirror a source-run outcome into the activity feed (keeps the HTML drill-down link).
+
+        Args:
+            source: Scraping source key (``google`` / ``enrichment`` / …).
+            status: Outcome status (``ok`` / ``empty`` / ``blocked`` / …).
+            category: The searched business category, when any.
+            city: The searched city, when any.
+            results_count: Number of results the run returned.
+            error_message: Failure reason, when the run did not succeed.
+            has_html: Whether a page HTML snapshot was captured (blocked runs).
+            user_id: Who triggered the run (``None`` for a background run).
+            diagnostic_id: Id of the persisted diagnostic, for the « Voir le HTML » drill-down.
+        """
+        query = " ".join(part for part in (category, city) if part).strip()
+        title = f"{source} · {query}" if query else source
+        if status == STATUS_OK:
+            title = f"{title} — {results_count} résultat(s)"
+        activity_log_service.record(
+            category=CATEGORY_SCRAPING,
+            action=f"scraping_{status}",
+            status=_ACTIVITY_STATUS_BY_OUTCOME.get(status, FEED_WARNING),
+            title=title,
+            detail=error_message,
+            user_id=user_id,
+            entity_type="scraper_diagnostic" if has_html else None,
+            entity_id=diagnostic_id if has_html else None,
+        )
 
     def _prune(self, db: Session) -> None:
         """Delete diagnostics older than the retention window (keeps the table bounded)."""

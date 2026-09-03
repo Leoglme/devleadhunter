@@ -32,6 +32,7 @@ from models.demo_site import DemoSite
 from models.email_log import EmailLog
 from models.resend_config import ResendConfig
 from services import reply_capture_service
+from services.activity_log_service import CATEGORY_DEMO_SITE, STATUS_INFO, activity_log_service
 from services.bounce_fallback_service import bounce_fallback_service
 from services.demo_identity import posthog_distinct_id, resolve_demo_slug
 from services.encryption_service import encryption_service
@@ -648,3 +649,12 @@ async def storyblok_webhook(
     site.content_json = flat_content
     db.commit()
     logger.info("[Webhook] Demo site %d content_json synced from Storyblok space %s", site.id, space_id_raw)
+    activity_log_service.record(
+        category=CATEGORY_DEMO_SITE,
+        action="cms_published",
+        status=STATUS_INFO,
+        title=f"Contenu CMS publié · {site.business_name}",
+        user_id=site.user_id,
+        entity_type="demo_site",
+        entity_id=site.id,
+    )

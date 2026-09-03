@@ -8,10 +8,11 @@
         </p>
         <h1 class="app-page-title mt-2">Monitoring</h1>
         <p class="text-muted mt-1 text-sm">
-          Santé du système et des sources de scraping — capturé automatiquement lors des vraies exécutions.
+          Le journal complet du logiciel — chaque action (mail, SMS, démo, vente, scraping, erreur…) apparaît ici, en
+          temps réel.
         </p>
       </div>
-      <button type="button" class="btn-secondary h-9 shrink-0 px-3 text-xs" :disabled="isLoading" @click="load">
+      <button type="button" class="btn-secondary h-9 shrink-0 px-3 text-xs" :disabled="isLoading" @click="reloadAll">
         <UIcon name="i-lucide-refresh-cw" :class="['mr-1.5 h-3.5 w-3.5', isLoading ? 'animate-spin' : '']" />
         Rafraîchir
       </button>
@@ -42,7 +43,7 @@
         <p class="mt-1 text-sm font-semibold text-[var(--app-ink)] tabular-nums">{{ overview.sources.length }}</p>
       </div>
       <div class="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-3">
-        <p class="text-muted text-[10px] tracking-wide uppercase">Incidents (24 h)</p>
+        <p class="text-muted text-[10px] tracking-wide uppercase">Incidents scraping (24 h)</p>
         <p
           class="mt-1 text-sm font-semibold tabular-nums"
           :style="{ color: totalIncidents24h > 0 ? 'var(--app-red)' : 'var(--app-green)' }"
@@ -51,8 +52,8 @@
         </p>
       </div>
       <div class="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-3">
-        <p class="text-muted text-[10px] tracking-wide uppercase">Diagnostics stockés</p>
-        <p class="mt-1 text-sm font-semibold text-[var(--app-ink)] tabular-nums">{{ overview.diagnostics_total }}</p>
+        <p class="text-muted text-[10px] tracking-wide uppercase">Actions loguées</p>
+        <p class="mt-1 text-sm font-semibold text-[var(--app-ink)] tabular-nums">{{ overview.activity_total }}</p>
       </div>
     </div>
 
@@ -69,15 +70,18 @@
           v-for="s in overview.sources"
           :key="s.source"
           class="rounded-lg border bg-[var(--app-surface)] px-4 py-3"
-          :style="{ borderColor: statusColor(s.latest_status) }"
+          :style="{ borderColor: scraperStatusColor(s.latest_status) }"
         >
           <div class="flex items-center justify-between">
             <span class="text-sm font-semibold text-[var(--app-ink)]">{{ sourceLabel(s.source) }}</span>
             <span
               class="rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
-              :style="{ color: statusColor(s.latest_status), backgroundColor: statusSoft(s.latest_status) }"
+              :style="{
+                color: scraperStatusColor(s.latest_status),
+                backgroundColor: scraperStatusSoft(s.latest_status),
+              }"
             >
-              {{ statusLabel(s.latest_status) }}
+              {{ scraperStatusLabel(s.latest_status) }}
             </span>
           </div>
           <dl class="text-muted mt-3 space-y-1 text-xs">
@@ -103,66 +107,99 @@
     </section>
 
     <section>
-      <h2 class="mb-3 text-sm font-semibold text-[var(--app-ink)]">Journal des exécutions</h2>
+      <h2 class="mb-3 text-sm font-semibold text-[var(--app-ink)]">Journal d'activité</h2>
+
+      <!-- Barre d'outils : recherche à gauche, filtres statut + catégorie à droite (comme la page Sites démo). -->
+      <div class="mb-4 flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
+        <div class="relative w-full @2xl:max-w-xs">
+          <UIcon
+            name="i-lucide-search"
+            class="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-[var(--app-faint)]"
+          />
+          <input
+            v-model="searchQuery"
+            type="search"
+            placeholder="Rechercher une action, un prospect…"
+            aria-label="Rechercher dans le journal"
+            class="app-input pl-9"
+          />
+        </div>
+        <div class="flex flex-col gap-3 @sm:flex-row @2xl:items-center">
+          <div class="w-full @sm:w-44">
+            <UiSelectField v-model="selectedStatus" :options="statusFilterOptions" aria-label="Filtrer par statut" />
+          </div>
+          <div class="w-full @sm:w-52">
+            <UiSelectField
+              v-model="selectedCategory"
+              :options="categoryFilterOptions"
+              aria-label="Filtrer par catégorie"
+            />
+          </div>
+        </div>
+      </div>
+
       <div class="app-card overflow-hidden p-0">
         <BaseTable>
           <template #head>
             <BaseTableTh>Date</BaseTableTh>
-            <BaseTableTh>Source</BaseTableTh>
+            <BaseTableTh>Catégorie</BaseTableTh>
             <BaseTableTh>Statut</BaseTableTh>
-            <BaseTableTh>Recherche</BaseTableTh>
-            <BaseTableTh align="right">Résultats</BaseTableTh>
+            <BaseTableTh>Action</BaseTableTh>
             <BaseTableTh>Détail</BaseTableTh>
           </template>
 
-          <BaseTableTr v-if="incidents.length === 0">
-            <BaseTableTd colspan="6" class="py-8 text-center text-sm text-[var(--app-ink-soft)]">
-              Aucune exécution enregistrée.
+          <BaseTableTr v-if="isLoadingActivity">
+            <BaseTableTd colspan="5" class="py-8 text-center">
+              <UIcon name="i-lucide-loader-circle" class="mx-auto h-5 w-5 animate-spin text-[var(--app-ink-soft)]" />
             </BaseTableTd>
           </BaseTableTr>
 
-          <BaseTableTr v-for="incident in incidents" :key="incident.id">
-            <BaseTableTd class="font-label text-xs whitespace-nowrap text-[var(--app-ink-soft)] tabular-nums">
-              {{ incident.created_at ? formatNumericDayMonthTime(incident.created_at) : '—' }}
+          <BaseTableTr v-else-if="entries.length === 0">
+            <BaseTableTd colspan="5" class="py-8 text-center text-sm text-[var(--app-ink-soft)]">
+              {{ hasActiveFilters ? 'Aucune action ne correspond à ces filtres.' : 'Aucune action enregistrée.' }}
             </BaseTableTd>
-            <BaseTableTd label="Source" class="text-sm font-semibold text-[var(--app-ink)]">{{
-              sourceLabel(incident.source)
-            }}</BaseTableTd>
+          </BaseTableTr>
+
+          <BaseTableTr v-for="entry in entries" v-else :key="entry.id">
+            <BaseTableTd class="font-label text-xs whitespace-nowrap text-[var(--app-ink-soft)] tabular-nums">
+              {{ entry.created_at ? formatNumericDayMonthTime(entry.created_at) : '—' }}
+            </BaseTableTd>
+            <BaseTableTd label="Catégorie" class="text-sm font-semibold text-[var(--app-ink)]">
+              {{ categoryLabel(entry.category) }}
+            </BaseTableTd>
             <BaseTableTd label="Statut">
               <span
                 class="app-badge"
-                :style="{ color: statusColor(incident.status), backgroundColor: statusSoft(incident.status) }"
+                :style="{ color: feedStatusColor(entry.status), backgroundColor: feedStatusSoft(entry.status) }"
               >
-                {{ statusLabel(incident.status) }}
+                {{ feedStatusLabel(entry.status) }}
               </span>
             </BaseTableTd>
-            <BaseTableTd label="Recherche" class="text-sm text-[var(--app-ink-soft)]">
-              <span v-if="incident.category || incident.city">{{
-                [incident.category, incident.city].filter(Boolean).join(' · ')
-              }}</span>
-              <span v-else>—</span>
-            </BaseTableTd>
-            <BaseTableTd label="Résultats" align="right" class="text-sm text-[var(--app-ink)] tabular-nums">
-              {{ incident.results_count
-              }}<span v-if="incident.expected_count" class="text-[var(--app-faint)]">
-                / {{ incident.expected_count }}</span
+            <BaseTableTd label="Action" class="text-sm text-[var(--app-ink)]">
+              <NuxtLink
+                v-if="entryLink(entry)"
+                :to="entryLink(entry) ?? ''"
+                class="hover:text-[var(--app-accent-ink)] hover:underline"
               >
+                {{ entry.title }}
+              </NuxtLink>
+              <span v-else>{{ entry.title }}</span>
             </BaseTableTd>
             <BaseTableTd label="Détail">
               <button
-                v-if="incident.has_html"
+                v-if="entry.entity_type === 'scraper_diagnostic' && entry.entity_id"
                 type="button"
                 class="cursor-pointer text-xs font-medium text-[var(--app-accent-ink)] underline-offset-2 hover:underline"
-                @click="openHtml(incident)"
+                @click="openHtml(entry.entity_id, entry.title)"
               >
                 Voir le HTML
               </button>
               <span
-                v-else-if="incident.error_message"
-                class="block max-w-[200px] truncate text-xs text-[var(--app-ink-soft)]"
-                :title="incident.error_message"
+                v-else-if="entry.detail"
+                class="block max-w-[280px] truncate text-xs text-[var(--app-ink-soft)]"
+                :title="entry.detail"
               >
-                {{ incident.error_message }}
+                {{ entry.detail }}
               </span>
               <span v-else class="text-sm text-[var(--app-faint)]">—</span>
             </BaseTableTd>
@@ -179,7 +216,9 @@
         >
           <div class="flex items-center justify-between border-b border-[var(--app-line)] px-5 py-4">
             <div class="min-w-0">
-              <h2 class="text-sm font-semibold text-[var(--app-ink)]">HTML capturé — {{ htmlPanel.source }}</h2>
+              <h2 class="truncate text-sm font-semibold text-[var(--app-ink)]">
+                HTML capturé — {{ htmlPanel.source }}
+              </h2>
               <p class="text-muted mt-0.5 truncate text-[11px]">
                 Markup brut au moment du blocage — pour écrire le nouveau sélecteur.
               </p>
@@ -211,11 +250,17 @@
 import { formatNumericDayMonthTime } from '~/utils/date'
 import type { UseToastReturn } from '~/types/Composables'
 import type { HtmlPanelState } from '~/types/AdminMonitoringPage'
+import type { SelectFieldOption } from '~/types/SelectField'
 import type { ComputedRef, Ref } from 'vue'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useUserStore } from '~/stores/user'
 import { useToast } from '~/composables/useToast'
-import type { MonitoringOverview, ScraperIncident, ScraperSourceHealth } from '~/services/adminMonitoringService'
+import type {
+  ActivityLogEntry,
+  ActivityLogResponse,
+  MonitoringOverview,
+  ScraperSourceHealth,
+} from '~/services/adminMonitoringService'
 import { AdminMonitoringService } from '~/services/adminMonitoringService'
 import { isPlatformAdmin } from '~/utils/userRoles'
 
@@ -228,10 +273,23 @@ const userStore: ReturnType<typeof useUserStore> = useUserStore()
 const toast: UseToastReturn = useToast()
 const router: ReturnType<typeof useRouter> = useRouter()
 
+// The « all » sentinel value both selects use when no filter is applied.
+const ALL_FILTER_VALUE: string = 'all'
+// Debounce the free-text search so typing does not fire a request per keystroke.
+const SEARCH_DEBOUNCE_MS: number = 300
+
 const isLoading: Ref<boolean> = ref(false)
+const isLoadingActivity: Ref<boolean> = ref(false)
 const error: Ref<string | null> = ref(null)
 const overview: Ref<MonitoringOverview | null> = ref(null)
-const incidents: Ref<ScraperIncident[]> = ref([])
+const entries: Ref<ActivityLogEntry[]> = ref([])
+const availableCategories: Ref<string[]> = ref([])
+
+const searchQuery: Ref<string> = ref('')
+const selectedStatus: Ref<string> = ref(ALL_FILTER_VALUE)
+const selectedCategory: Ref<string> = ref(ALL_FILTER_VALUE)
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
 const htmlPanel: Ref<HtmlPanelState> = ref({
   open: false,
   loading: false,
@@ -239,47 +297,113 @@ const htmlPanel: Ref<HtmlPanelState> = ref({
   content: '',
 })
 
-/** Total incidents across all sources over the last 24 h. */
+/** Total scraping incidents across all sources over the last 24 h. */
 const totalIncidents24h: ComputedRef<number> = computed((): number =>
   (overview.value?.sources ?? []).reduce((sum: number, s: ScraperSourceHealth): number => sum + s.incidents_24h, 0),
 )
 
+/** Options for the status filter (outcome levels of the feed). */
+const statusFilterOptions: ComputedRef<SelectFieldOption[]> = computed((): SelectFieldOption[] => [
+  { value: ALL_FILTER_VALUE, label: 'Tous les statuts' },
+  { value: 'error', label: 'Erreurs' },
+  { value: 'warning', label: 'Alertes' },
+  { value: 'success', label: 'Succès' },
+  { value: 'pending', label: 'En attente' },
+  { value: 'info', label: 'Infos' },
+])
+
+/** Options for the category filter, built from the categories present in the feed. */
+const categoryFilterOptions: ComputedRef<SelectFieldOption[]> = computed((): SelectFieldOption[] => [
+  { value: ALL_FILTER_VALUE, label: 'Toutes les catégories' },
+  ...availableCategories.value.map(
+    (category: string): SelectFieldOption => ({
+      value: category,
+      label: categoryLabel(category),
+    }),
+  ),
+])
+
+/** Whether any filter narrows the feed. */
+const hasActiveFilters: ComputedRef<boolean> = computed(
+  (): boolean =>
+    searchQuery.value.trim() !== '' ||
+    selectedStatus.value !== ALL_FILTER_VALUE ||
+    selectedCategory.value !== ALL_FILTER_VALUE,
+)
+
 /**
- * Resolve the accent colour for a source/run status.
- * @param status - Outcome status.
- * @returns A CSS colour variable.
+ * Human label for an activity category.
+ * @param category - Raw category key.
+ * @returns The French label (falls back to a capitalized key).
  */
-function statusColor(status: string): string {
-  if (status === 'ok') return 'var(--app-green)'
-  if (status === 'blocked' || status === 'error') return 'var(--app-red)'
-  return 'var(--app-accent)' // empty / timeout
+function categoryLabel(category: string): string {
+  const labels: Record<string, string> = {
+    email: 'E-mail',
+    sms: 'SMS',
+    demo: 'Démo',
+    sale: 'Vente',
+    prospect: 'Prospect',
+    demo_site: 'Site démo',
+    campaign: 'Campagne',
+    scraping: 'Scraping',
+    auth: 'Connexion',
+    system: 'Système',
+  }
+  return labels[category] ?? category.charAt(0).toUpperCase() + category.slice(1)
 }
 
 /**
- * Resolve the soft background colour for a status badge.
+ * Accent colour for a feed outcome status.
  * @param status - Outcome status.
  * @returns A CSS colour variable.
  */
-function statusSoft(status: string): string {
-  if (status === 'ok') return 'var(--app-green-soft)'
-  if (status === 'blocked' || status === 'error') return 'var(--app-red-soft)'
-  return 'var(--app-accent-soft)'
+function feedStatusColor(status: string): string {
+  if (status === 'success') return 'var(--app-green)'
+  if (status === 'error') return 'var(--app-red)'
+  if (status === 'info') return 'var(--app-ink-soft)'
+  return 'var(--app-accent)' // warning / pending
 }
 
 /**
- * Human label for a status.
+ * Soft background colour for a feed status badge.
+ * @param status - Outcome status.
+ * @returns A CSS colour variable.
+ */
+function feedStatusSoft(status: string): string {
+  if (status === 'success') return 'var(--app-green-soft)'
+  if (status === 'error') return 'var(--app-red-soft)'
+  if (status === 'info') return 'var(--app-surface-2)'
+  return 'var(--app-accent-soft)' // warning / pending
+}
+
+/**
+ * Human label for a feed status.
  * @param status - Outcome status.
  * @returns The French label.
  */
-function statusLabel(status: string): string {
+function feedStatusLabel(status: string): string {
   const labels: Record<string, string> = {
-    ok: 'OK',
-    empty: 'Vide',
-    blocked: 'Bloqué',
-    timeout: 'Timeout',
+    success: 'Succès',
     error: 'Erreur',
+    warning: 'Alerte',
+    pending: 'En attente',
+    info: 'Info',
   }
   return labels[status] ?? status
+}
+
+/**
+ * Deep link to the resource an entry is about, when it is navigable.
+ * @param entry - The activity entry.
+ * @returns The in-app path, or ``null`` when there is no navigable resource.
+ */
+function entryLink(entry: ActivityLogEntry): string | null {
+  if (!entry.entity_id) return null
+  if (entry.entity_type === 'prospect') return `/dashboard/my-prospects?open=${entry.entity_id}`
+  if (entry.entity_type === 'demo_site') return `/dashboard/demo-sites/${entry.entity_id}`
+  if (entry.entity_type === 'order') return `/dashboard/orders?open=${entry.entity_id}`
+  if (entry.entity_type === 'campaign') return `/dashboard/campaigns/${entry.entity_id}`
+  return null
 }
 
 /**
@@ -303,41 +427,120 @@ function sourceLabel(source: string): string {
 }
 
 /**
- * Load the monitoring overview and the recent incidents.
+ * Accent colour for a scraper source status.
+ * @param status - Outcome status.
+ * @returns A CSS colour variable.
+ */
+function scraperStatusColor(status: string): string {
+  if (status === 'ok') return 'var(--app-green)'
+  if (status === 'blocked' || status === 'error') return 'var(--app-red)'
+  return 'var(--app-accent)' // empty / timeout
+}
+
+/**
+ * Soft background colour for a scraper status badge.
+ * @param status - Outcome status.
+ * @returns A CSS colour variable.
+ */
+function scraperStatusSoft(status: string): string {
+  if (status === 'ok') return 'var(--app-green-soft)'
+  if (status === 'blocked' || status === 'error') return 'var(--app-red-soft)'
+  return 'var(--app-accent-soft)'
+}
+
+/**
+ * Human label for a scraper source status.
+ * @param status - Outcome status.
+ * @returns The French label.
+ */
+function scraperStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    ok: 'OK',
+    empty: 'Vide',
+    blocked: 'Bloqué',
+    timeout: 'Timeout',
+    error: 'Erreur',
+  }
+  return labels[status] ?? status
+}
+
+/**
+ * Load the health overview (system + per-source scraping).
  * @returns A promise resolved once loaded.
  */
-async function load(): Promise<void> {
+async function loadOverview(): Promise<void> {
+  try {
+    overview.value = await AdminMonitoringService.getMonitoringOverview()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Impossible de charger le monitoring.'
+  }
+}
+
+/**
+ * Load the activity feed with the active filters applied.
+ * @returns A promise resolved once loaded.
+ */
+async function loadActivity(): Promise<void> {
+  isLoadingActivity.value = true
+  try {
+    const response: ActivityLogResponse = await AdminMonitoringService.getActivityLog({
+      status: selectedStatus.value === ALL_FILTER_VALUE ? undefined : selectedStatus.value,
+      category: selectedCategory.value === ALL_FILTER_VALUE ? undefined : selectedCategory.value,
+      q: searchQuery.value,
+    })
+    entries.value = response.items
+    // Keep the known categories growing so a filter never hides its own option.
+    availableCategories.value = Array.from(new Set([...availableCategories.value, ...response.categories])).sort()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Impossible de charger le journal.'
+  } finally {
+    isLoadingActivity.value = false
+  }
+}
+
+/**
+ * Reload both the overview and the activity feed.
+ * @returns A promise resolved once both are loaded.
+ */
+async function reloadAll(): Promise<void> {
   isLoading.value = true
   error.value = null
   try {
-    const [overviewData, incidentsData]: [MonitoringOverview, { items: ScraperIncident[] }] = await Promise.all([
-      AdminMonitoringService.getMonitoringOverview(),
-      AdminMonitoringService.getScraperIncidents(100),
-    ])
-    overview.value = overviewData
-    incidents.value = incidentsData.items
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Impossible de charger le monitoring.'
+    await Promise.all([loadOverview(), loadActivity()])
   } finally {
     isLoading.value = false
   }
 }
 
 /**
- * Open the slide-over and fetch the captured HTML for an incident.
- * @param incident - The incident to inspect.
+ * Open the slide-over and fetch the captured HTML for a scraper diagnostic.
+ * @param diagnosticId - The scraper diagnostic id.
+ * @param label - A short label for the panel header.
  * @returns A promise resolved once the HTML is loaded.
  */
-async function openHtml(incident: ScraperIncident): Promise<void> {
-  htmlPanel.value = { open: true, loading: true, source: incident.source, content: '' }
+async function openHtml(diagnosticId: number, label: string): Promise<void> {
+  htmlPanel.value = { open: true, loading: true, source: label, content: '' }
   try {
-    htmlPanel.value.content = await AdminMonitoringService.getScraperIncidentHtml(incident.id)
+    htmlPanel.value.content = await AdminMonitoringService.getScraperIncidentHtml(diagnosticId)
   } catch (err) {
     htmlPanel.value.content = err instanceof Error ? err.message : 'Impossible de charger le HTML.'
   } finally {
     htmlPanel.value.loading = false
   }
 }
+
+// Status / category changes refetch immediately.
+watch([selectedStatus, selectedCategory], (): void => {
+  void loadActivity()
+})
+
+// The free-text search refetches after a short debounce.
+watch(searchQuery, (): void => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout((): void => {
+    void loadActivity()
+  }, SEARCH_DEBOUNCE_MS)
+})
 
 onMounted((): void => {
   // Hidden admin page: only admins may view it.
@@ -346,7 +549,11 @@ onMounted((): void => {
     void router.replace('/dashboard')
     return
   }
-  void load()
+  void reloadAll()
+})
+
+onBeforeUnmount((): void => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
 })
 </script>
 

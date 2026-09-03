@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from models.user import User
+from services.activity_log_service import activity_log_service
 from services.auth_service import require_admin
 from services.scraper_diagnostics_service import scraper_diagnostics_service
 
@@ -36,7 +37,38 @@ async def monitoring_overview(
     return {
         "database": "healthy" if database_healthy else "unhealthy",
         "diagnostics_total": scraper_diagnostics_service.total_count(db),
+        "activity_total": activity_log_service.total_count(db),
         "sources": scraper_diagnostics_service.source_health(db),
+    }
+
+
+@router.get("/activity")
+async def activity_feed(
+    limit: int = Query(200, ge=1, le=1000),
+    activity_status: str | None = Query(None, alias="status", description="Filter by outcome (success/error/…)"),
+    category: str | None = Query(None, description="Filter by domain (email/sms/demo/…)"),
+    q: str | None = Query(None, description="Free-text search on title, detail or action"),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """The full activity feed — every logged action, filtered by status / category / free text."""
+    rows = activity_log_service.recent(db, limit=limit, status=activity_status, category=category, query=q)
+    return {
+        "categories": activity_log_service.categories(db),
+        "items": [
+            {
+                "id": row.id,
+                "category": row.category,
+                "action": row.action,
+                "status": row.status,
+                "title": row.title,
+                "detail": row.detail,
+                "entity_type": row.entity_type,
+                "entity_id": row.entity_id,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in rows
+        ],
     }
 
 

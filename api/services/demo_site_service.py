@@ -20,6 +20,14 @@ from models.acquisition_run_item import AcquisitionRunItem
 from models.demo_site import DemoSite
 from models.order import Order
 from models.user import User
+from services.activity_log_service import (
+    CATEGORY_DEMO_SITE,
+    STATUS_ERROR,
+    STATUS_INFO,
+    STATUS_SUCCESS,
+    STATUS_WARNING,
+    activity_log_service,
+)
 from services.brand_color_service import brand_color_service
 from services.demo_site_verification_service import (
     DemoSiteVerificationResult,
@@ -339,6 +347,7 @@ class DemoSiteService:
         self._apply_verification(demo_site, verification)
         db.commit()
         db.refresh(demo_site)
+        self._log_generation(demo_site, demo_site.user_id, action="demo_site_regenerated")
         return demo_site
 
     async def update_demo_site(
@@ -668,7 +677,33 @@ class DemoSiteService:
 
             demo_video_service.maybe_start_auto_generation(db, demo_site, user.id)
 
+        self._log_generation(demo_site, user.id, action="demo_site_generated")
         return demo_site
+
+    def _log_generation(self, demo_site: DemoSite, user_id: int, *, action: str) -> None:
+        """Record a demo-site generation/regeneration outcome in the activity feed.
+
+        Args:
+            demo_site: The persisted site, in its final status.
+            user_id: Owner of the site.
+            action: The activity action name (``demo_site_generated`` / ``demo_site_regenerated``).
+        """
+        if demo_site.status == DemoSiteStatus.ACTIVE.value:
+            status, verb = STATUS_SUCCESS, "généré" if action == "demo_site_generated" else "régénéré"
+        elif demo_site.status == DemoSiteStatus.FAILED.value:
+            status, verb = STATUS_ERROR, "en échec"
+        else:
+            status, verb = STATUS_WARNING, "indisponible"
+        activity_log_service.record(
+            category=CATEGORY_DEMO_SITE,
+            action=action,
+            status=status,
+            title=f"Site démo {verb} · {demo_site.business_name} ({demo_site.template_id})",
+            detail=demo_site.error_message,
+            user_id=user_id,
+            entity_type="demo_site",
+            entity_id=demo_site.id,
+        )
 
     def list_for_user(self, db: Session, user_id: int) -> list[DemoSite]:
         """List demo sites owned by a user."""
@@ -979,6 +1014,15 @@ class DemoSiteService:
                     logger.warning("Storyblok preview URL update failed for slug=%s", demo_site.slug, exc_info=True)
         db.commit()
         db.refresh(demo_site)
+        activity_log_service.record(
+            category=CATEGORY_DEMO_SITE,
+            action="demo_site_delivered",
+            status=STATUS_SUCCESS,
+            title=f"Site livré en production · {demo_site.business_name} → {normalized or demo_site.slug}",
+            user_id=demo_site.user_id,
+            entity_type="demo_site",
+            entity_id=demo_site.id,
+        )
         return demo_site
 
     async def delete_demo_site(self, db: Session, demo_site: DemoSite) -> None:
@@ -1009,11 +1053,23 @@ class DemoSiteService:
         # the orchestrator never campaigns a site that no longer exists.
         self._free_prospect_from_automation(db, demo_site.prospect_id)
 
+        deleted_user_id = demo_site.user_id
+        deleted_business_name = demo_site.business_name
+        deleted_id = demo_site.id
         if self._is_tied_to_sale(db, demo_site):
             self._soft_delete(demo_site)
         else:
             db.delete(demo_site)
         db.commit()
+        activity_log_service.record(
+            category=CATEGORY_DEMO_SITE,
+            action="demo_site_deleted",
+            status=STATUS_INFO,
+            title=f"Site démo supprimé · {deleted_business_name}",
+            user_id=deleted_user_id,
+            entity_type="demo_site",
+            entity_id=deleted_id,
+        )
 
     @staticmethod
     def _free_prospect_from_automation(db: Session, prospect_id: int | None) -> None:

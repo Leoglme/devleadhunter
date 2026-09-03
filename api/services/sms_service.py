@@ -24,6 +24,7 @@ from models.sms_suppression import SmsSuppression
 from services.notification_service import notification_service
 from services.sms.gsm_segments import segment_count
 from services.sms.phone_normalizer import is_mobile_fr, to_e164_fr
+from services.sms.pricing import estimate_price_cents
 from services.sms.sms_provider import SmsProvider, SmsSendResult
 from services.sms.smsmode_provider import smsmode_provider
 
@@ -246,7 +247,10 @@ class SmsService:
         if result.success:
             message.status = SmsStatus.SENT.value
             message.provider_message_id = result.provider_message_id
-            message.price_cents = result.price_cents
+            # smsmode returns no price for our account, so fall back to a segment-based estimate.
+            message.price_cents = (
+                result.price_cents if result.price_cents is not None else estimate_price_cents(message.segments)
+            )
         else:
             message.status = SmsStatus.FAILED.value
             message.error = result.error

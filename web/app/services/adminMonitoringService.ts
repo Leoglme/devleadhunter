@@ -21,7 +21,35 @@ export type ScraperSourceHealth = {
 export type MonitoringOverview = {
   database: string
   diagnostics_total: number
+  activity_total: number
   sources: ScraperSourceHealth[]
+}
+
+/** One logged action in the activity feed. */
+export type ActivityLogEntry = {
+  id: number
+  category: string
+  action: string
+  status: string
+  title: string
+  detail: string | null
+  entity_type: string | null
+  entity_id: number | null
+  created_at: string | null
+}
+
+/** A page of the activity feed, with the distinct categories present (for the filter). */
+export type ActivityLogResponse = {
+  categories: string[]
+  items: ActivityLogEntry[]
+}
+
+/** Filters applied to the activity feed query. */
+export type ActivityLogFilters = {
+  limit?: number
+  status?: string
+  category?: string
+  q?: string
 }
 
 /** One recorded source-run outcome. */
@@ -66,5 +94,21 @@ export class AdminMonitoringService {
    */
   static async getScraperIncidentHtml(incidentId: number): Promise<string> {
     return ApiClient.get<string>(`/api/v1/admin/monitoring/scrapers/incidents/${incidentId}/html`)
+  }
+
+  /**
+   * Fetch the activity feed, filtered by status / category / free text.
+   * @param filters - The active filters (all optional; empty strings are dropped).
+   * @returns The matching entries and the distinct categories present.
+   */
+  static async getActivityLog(filters: ActivityLogFilters = {}): Promise<ActivityLogResponse> {
+    return ApiClient.get<ActivityLogResponse>('/api/v1/admin/monitoring/activity', {
+      params: {
+        limit: filters.limit ?? 200,
+        status: filters.status || undefined,
+        category: filters.category || undefined,
+        q: filters.q?.trim() || undefined,
+      },
+    })
   }
 }

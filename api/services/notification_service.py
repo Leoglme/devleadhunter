@@ -29,6 +29,16 @@ from models.prospect_db import ProspectDB
 from models.push_subscription import PushSubscription
 from models.user import User
 from services import push_service
+from services.activity_log_service import (
+    CATEGORY_DEMO,
+    CATEGORY_EMAIL,
+    CATEGORY_SALE,
+    CATEGORY_SMS,
+    CATEGORY_SYSTEM,
+    STATUS_ERROR,
+    STATUS_SUCCESS,
+    activity_log_service,
+)
 from services.posthog_service import posthog_service
 
 logger = logging.getLogger(__name__)
@@ -131,6 +141,15 @@ class NotificationService:
         ):
             body = f"{body} : « {subject} »"
         tag = f"email-{email_log_id}" if email_log_id else None
+        activity_log_service.record(
+            category=CATEGORY_EMAIL,
+            action=event_name,
+            status=level,
+            title=f"{prospect_name} · {body}",
+            user_id=user_id,
+            entity_type="prospect" if prospect_id else None,
+            entity_id=prospect_id,
+        )
         await self._dispatch(
             user_id=user_id,
             category="email",
@@ -184,6 +203,15 @@ class NotificationService:
         if event_name == "demo_lead" and (message or "").strip():
             excerpt = message.strip()[:160]
             body = f"{body} « {excerpt} »"
+        activity_log_service.record(
+            category=CATEGORY_DEMO,
+            action=event_name,
+            status=level,
+            title=f"{prospect_name} · {body}",
+            user_id=user_id,
+            entity_type="prospect" if prospect_id else None,
+            entity_id=prospect_id,
+        )
         await self._dispatch(
             user_id=user_id,
             category="demo",
@@ -223,6 +251,15 @@ class NotificationService:
         recipient_name = self._resolve_prospect_name(db, prospect_id, fallback_name)
         # Tapping opens the prospect when known, otherwise the SMS history page.
         url = self._prospect_url(prospect_id) if prospect_id else _SMS_URL
+        activity_log_service.record(
+            category=CATEGORY_SMS,
+            action=event_name,
+            status=level,
+            title=f"{recipient_name} · {body}",
+            user_id=user_id,
+            entity_type="prospect" if prospect_id else None,
+            entity_id=prospect_id,
+        )
         await self._dispatch(
             user_id=user_id,
             category="sms",
@@ -257,6 +294,15 @@ class NotificationService:
         """
         prospect_name = self._resolve_prospect_name(db, prospect_id, fallback_name)
         amount = self._format_amount(amount_cents, currency)
+        activity_log_service.record(
+            category=CATEGORY_SALE,
+            action="sale_paid",
+            status=STATUS_SUCCESS,
+            title=f"{prospect_name} · A payé {amount}",
+            user_id=user_id,
+            entity_type="order",
+            entity_id=order_id,
+        )
         await self._dispatch(
             user_id=user_id,
             category="sale",
@@ -276,6 +322,14 @@ class NotificationService:
             message: Error detail, truncated in the body.
             tag: Optional tag to collapse repeated occurrences of the same error.
         """
+        # One log entry per error (system-wide), independent of how many admins are pinged.
+        activity_log_service.record(
+            category=CATEGORY_SYSTEM,
+            action="server_error",
+            status=STATUS_ERROR,
+            title=f"Erreur serveur · {context}",
+            detail=message,
+        )
         db = SessionLocal()
         try:
             admins = db.query(User).filter(User.is_active.is_(True)).all()

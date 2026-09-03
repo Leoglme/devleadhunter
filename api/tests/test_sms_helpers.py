@@ -11,6 +11,7 @@ from services.sms.dlr import (
 )
 from services.sms.gsm_segments import is_gsm7, segment_count
 from services.sms.phone_normalizer import is_mobile_fr, to_e164_fr
+from services.sms.pricing import estimate_price_cents
 from services.sms.send_window import is_within_window, next_send_slot
 from services.sms_config_service import SmsConfigService
 from services.sms_service import sms_service
@@ -127,6 +128,19 @@ class TestManualBody:
     def test_trims_surrounding_whitespace(self) -> None:
         body = sms_service.compose_manual_body("   Coucou   ")
         assert body.startswith("Coucou")
+
+
+class TestPriceEstimate:
+    def test_single_segment_uses_configured_rate(self) -> None:
+        # Default rate 0.045 €/segment → 4.5 cents, rounded.
+        assert estimate_price_cents(1) == round(0.045 * 100)
+
+    def test_multiple_segments_scale(self) -> None:
+        assert estimate_price_cents(3) == round(3 * 0.045 * 100)
+
+    def test_zero_segments_bills_one(self) -> None:
+        # A send always bills at least one segment, never zero.
+        assert estimate_price_cents(0) == round(0.045 * 100)
 
 
 class TestDlrParsing:
