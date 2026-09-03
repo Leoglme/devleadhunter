@@ -161,10 +161,58 @@
               />
             </div>
             <div>
-              <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
-                >Domaine (mise en ligne)</label
-              >
+              <div class="mb-1 flex items-center justify-between">
+                <label class="block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
+                  >Domaine (mise en ligne)</label
+                >
+                <button
+                  v-if="order?.prospect_id"
+                  type="button"
+                  class="flex items-center gap-1 text-[11px] font-medium text-[var(--app-accent-ink)] transition-colors hover:underline disabled:opacity-50"
+                  :disabled="isSuggestingDomain"
+                  @click="suggestDomain"
+                >
+                  <UIcon
+                    :name="isSuggestingDomain ? 'i-lucide-loader-circle' : 'i-lucide-wand-sparkles'"
+                    :class="['h-3 w-3', { 'animate-spin': isSuggestingDomain }]"
+                  />
+                  Suggérer
+                </button>
+              </div>
               <input v-model="editForm.domain" type="text" class="input-field" placeholder="monentreprise.fr" />
+              <div v-if="domainCandidates.length" class="mt-1.5 flex flex-wrap gap-1.5">
+                <button
+                  v-for="candidate in domainCandidates"
+                  :key="candidate.domain"
+                  type="button"
+                  :class="[
+                    'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors',
+                    editForm.domain === candidate.domain
+                      ? 'border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]'
+                      : 'border-[var(--app-line)] text-[var(--app-ink-soft)] hover:border-[var(--app-accent)]',
+                  ]"
+                  :title="
+                    candidate.available === true
+                      ? 'Disponible'
+                      : candidate.available === false
+                        ? 'Déjà pris'
+                        : 'Disponibilité inconnue'
+                  "
+                  @click="editForm.domain = candidate.domain"
+                >
+                  {{ candidate.domain }}
+                  <span
+                    :class="[
+                      'h-1.5 w-1.5 shrink-0 rounded-full',
+                      candidate.available === true
+                        ? 'bg-[var(--app-green)]'
+                        : candidate.available === false
+                          ? 'bg-[var(--app-red)]'
+                          : 'bg-[var(--app-faint)]',
+                    ]"
+                  />
+                </button>
+              </div>
             </div>
             <div>
               <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
@@ -264,6 +312,8 @@ import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
 import { ref, computed, watch } from 'vue'
 import type { Order, OrderPaymentCheckResult } from '~/services/ordersService'
 import { OrdersService } from '~/services/ordersService'
+import type { DomainCandidate, DomainSuggestions } from '~/services/domainsService'
+import { DomainsService } from '~/services/domainsService'
 import { useToast } from '~/composables/useToast'
 import { useUserStore } from '~/stores/user'
 
@@ -298,6 +348,8 @@ const editMode: Ref<boolean> = ref(false)
 const isBusy: Ref<boolean> = ref(false)
 const deleteConfirmModal: Ref<{ open: () => void } | null> = ref(null)
 const refundConfirmModal: Ref<{ open: () => void } | null> = ref(null)
+const isSuggestingDomain: Ref<boolean> = ref(false)
+const domainCandidates: Ref<DomainCandidate[]> = ref([])
 
 const editForm: Ref<OrderEditForm> = ref({
   amount_euros: 0,
@@ -437,6 +489,27 @@ async function runAction(fn: () => Promise<Order>, successMsg: string): Promise<
     toast.error(err instanceof Error ? err.message : 'Une erreur est survenue')
   } finally {
     isBusy.value = false
+  }
+}
+
+/**
+ * Suggest a .fr domain from the prospect (logical name + AI, availability-checked).
+ * Pre-fills the domain field with the best free candidate and lists the alternatives.
+ * @returns A promise resolved once the suggestions are loaded.
+ */
+async function suggestDomain(): Promise<void> {
+  const prospectId: number | null = props.order?.prospect_id ?? null
+  if (prospectId === null || isSuggestingDomain.value) return
+  isSuggestingDomain.value = true
+  try {
+    const result: DomainSuggestions = await DomainsService.suggestForProspect(prospectId)
+    domainCandidates.value = result.candidates
+    if (result.suggested) editForm.value.domain = result.suggested
+    else toast.info('Aucun domaine suggéré')
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Suggestion impossible')
+  } finally {
+    isSuggestingDomain.value = false
   }
 }
 

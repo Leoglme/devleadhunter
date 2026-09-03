@@ -246,6 +246,15 @@ class Settings(BaseSettings):
         description="Groq model id used for completions",
     )
 
+    # Estimated .fr registration price shown before purchase (TTC, year 1). The real
+    # price will come from the registrar catalog once the domain provider is wired;
+    # until then this is a display estimate, like the SMS segment price.
+    domain_fr_price_eur: float = Field(
+        default=5.99,
+        alias="DOMAIN_FR_PRICE_EUR",
+        description="Estimated .fr first-year price in EUR (TTC), shown before purchase",
+    )
+
     # Dev / testing — outbound email safety
     dev_email_redirect: str | None = Field(
         default=None,

@@ -148,6 +148,47 @@ class LLMService:
             return {"subject": base_subject, "body_html": base_body_html}
         return self._parse_subject_body(result, base_subject, base_body_html)
 
+    async def suggest_domain_names(self, *, business_name: str, city: str | None, category: str | None) -> list[str]:
+        """Propose a few short, brandable domain labels for a business (no extension).
+
+        Enriches the code-logic candidates when the exact business name is taken or ugly.
+        Returns bare labels (no ``.fr``, no accents), lowercase — the caller validates and
+        appends ``.fr``. Degrades to ``[]`` when Groq is off or the call fails, so the
+        suggestion still works on the rule-based candidates alone.
+
+        Args:
+            business_name: The prospect's business name.
+            city: The prospect's city, when known (helps disambiguate).
+            category: The prospect's trade, when known (e.g. « restaurant »).
+
+        Returns:
+            Up to five candidate labels, or ``[]``.
+        """
+        name = (business_name or "").strip()
+        if not name:
+            return []
+        context = f"Entreprise : {name}"
+        if city:
+            context += f"\nVille : {city}"
+        if category:
+            context += f"\nMétier : {category}"
+        prompt = (
+            "Propose 4 idées de nom de domaine pour le site de cette entreprise artisanale/commerçante "
+            "française. Contraintes STRICTES : court, mémorable, SANS accent, SANS espace, uniquement "
+            "lettres minuscules / chiffres / tirets, PAS d'extension (pas de .fr). Reste proche du nom de "
+            "l'entreprise, évite le générique. Réponds UNIQUEMENT par les 4 labels, un par ligne, rien d'autre.\n\n"
+            f"{context}"
+        )
+        result = await self._chat([{"role": "user", "content": prompt}], max_tokens=80, temperature=0.7)
+        if not result:
+            return []
+        labels: list[str] = []
+        for line in result.splitlines():
+            cleaned = line.strip().strip("-•*0123456789. ").lower()
+            if cleaned:
+                labels.append(cleaned)
+        return labels[:5]
+
     # ── Fallbacks / parsing ────────────────────────────────────────────────
 
     @staticmethod

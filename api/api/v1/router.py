@@ -18,6 +18,7 @@ from .routes import (
     dashboard,
     demo_events,
     demo_sites,
+    domains,
     email_accounts,
     email_health,
     email_signatures,
@@ -72,6 +73,7 @@ router.include_router(interactions.router)
 router.include_router(notifications.router)
 router.include_router(demo_events.router)
 router.include_router(demo_sites.router)
+router.include_router(domains.router)
 router.include_router(enrichment.router)
 router.include_router(orders.router)
 router.include_router(payment_accounts.router)
