@@ -12,12 +12,78 @@ from html import escape
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import HTMLResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from core.database import get_db
+from models.email_log import EmailLog
+from models.email_unsubscribe import EmailUnsubscribe
+from models.prospect_db import ProspectDB
+from services.notification_service import notification_service
 from services.unsubscribe_service import unsubscribe_service
 
 router = APIRouter(prefix="/unsubscribe", tags=["unsubscribe"])
+
+
+def _resolve_unsubscribe_target(db: Session, email: str, prospect_id: int | None) -> tuple[int | None, int | None]:
+    """Resolve the owner + prospect behind an unsubscribe, to notify the right user.
+
+    Uses the prospect id carried by the link first; otherwise the last email we sent
+    to this address (its owner + prospect), mirroring the SMS-STOP resolution.
+
+    Args:
+        db: Active database session.
+        email: The unsubscribing address.
+        prospect_id: Prospect id from the link, when present.
+
+    Returns:
+        ``(owner user id, prospect id)`` — either may be ``None`` when unresolved.
+    """
+    if prospect_id:
+        prospect = db.query(ProspectDB).filter(ProspectDB.id == prospect_id).first()
+        if prospect:
+            return prospect.user_id, prospect.id
+    log = (
+        db.query(EmailLog)
+        .filter(func.lower(EmailLog.recipient_email) == email.lower())
+        .order_by(EmailLog.id.desc())
+        .first()
+    )
+    if log:
+        return log.user_id, log.prospect_id
+    return None, None
+
+
+async def _process_unsubscribe(
+    db: Session, email: str, prospect_id: int | None, reason: str | None
+) -> EmailUnsubscribe:
+    """Record the opt-out and notify the owner — symmetric with the SMS STOP.
+
+    Notifies only on a NEW unsubscribe, so a re-clicked link never double-pings.
+
+    Args:
+        db: Active database session.
+        email: The unsubscribing address.
+        prospect_id: Prospect id from the link, when present.
+        reason: Optional reason.
+
+    Returns:
+        The unsubscribe record (created or existing).
+    """
+    already_unsubscribed = unsubscribe_service.is_unsubscribed(db, email)
+    owner_id, resolved_prospect_id = _resolve_unsubscribe_target(db, email, prospect_id)
+    record = unsubscribe_service.unsubscribe(
+        db=db, email=email, prospect_id=resolved_prospect_id, user_id=owner_id, reason=reason
+    )
+    if not already_unsubscribed and owner_id is not None:
+        await notification_service.notify_email_event(
+            db,
+            user_id=owner_id,
+            event_name="email_unsubscribed",
+            recipient_email=email,
+            prospect_id=resolved_prospect_id,
+        )
+    return record
 
 
 def _page(title: str, icon: str, body_html: str) -> str:
@@ -121,7 +187,7 @@ async def unsubscribe_get(
     if not unsubscribe_service.verify_token(email, token):
         return HTMLResponse(content=_invalid_link_page(), status_code=400)
 
-    unsubscribe_service.unsubscribe(db=db, email=email, prospect_id=prospect_id, reason=reason)
+    await _process_unsubscribe(db, email, prospect_id, reason)
 
     safe_email = escape(email)
     body_html = (
@@ -153,7 +219,7 @@ async def unsubscribe_post(
             detail="Invalid or missing unsubscribe token",
         )
 
-    unsubscribe_record = unsubscribe_service.unsubscribe(db=db, email=email, prospect_id=prospect_id, reason=reason)
+    unsubscribe_record = await _process_unsubscribe(db, email, prospect_id, reason)
 
     return {
         "success": True,

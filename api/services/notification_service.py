@@ -68,6 +68,7 @@ _EMAIL_EVENT_NOTIFS: dict[str, tuple[str, str, str]] = {
     "email_replied_interested": ("🎯", "success", "T'a répondu — intéressé !"),
     "email_replied_negative": ("🙅", "warning", "T'a répondu — pas intéressé"),
     "email_conversation_reply_sent": ("✅", "info", "Ta réponse est partie"),
+    "email_unsubscribed": ("🚫", "warning", "S'est désinscrit de tes emails"),
 }
 
 # Live demo / video event → (emoji, level, body). Same title convention.
