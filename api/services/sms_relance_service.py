@@ -26,6 +26,7 @@ from services.email_variables import EmailVariables
 from services.sms.phone_normalizer import is_mobile_fr, to_e164_fr
 from services.sms_config_service import sms_config_service
 from services.sms_service import sms_service
+from services.tracking_links import CHANNEL_SMS, append_query_param
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,11 @@ class SmsRelanceService:
         return candidates
 
     def _live_demo_url(self, db: Session, user_id: int, prospect_id: int) -> str | None:
-        """Public URL of the prospect's live demo, or ``None`` when there is none."""
+        """Public URL of the prospect's live demo tagged ``?src=sms``, or ``None`` when there is none.
+
+        The ``src=sms`` marker lets PostHog attribute the demo visit to the SMS channel
+        (vs the email link, which carries ``?src=email``).
+        """
         site = (
             db.query(DemoSite)
             .filter(
@@ -125,7 +130,7 @@ class SmsRelanceService:
         )
         if site is None or not site.slug:
             return None
-        return demo_site_service.demo_url_for_slug(site.slug)
+        return append_query_param(demo_site_service.demo_url_for_slug(site.slug), "src", CHANNEL_SMS)
 
     async def send_relance(self, db: Session, user_id: int, candidate: SmsRelanceCandidate) -> bool:
         """Send the relance SMS for one candidate.

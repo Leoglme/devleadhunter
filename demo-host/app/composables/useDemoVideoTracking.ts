@@ -19,7 +19,7 @@ const VIDEO_BEACON_EVENTS: Set<string> = new Set(['demo_video_play', 'demo_video
  * @returns `init` (call once with the slug) and `capture` (no-op until init).
  */
 export function useDemoVideoTracking(): {
-  init: (slug: string, variant: string | null) => Promise<void>
+  init: (slug: string, variant: string | null, channel: string) => Promise<void>
   capture: DemoVideoEventCapture
 } {
   const config: ReturnType<typeof useRuntimeConfig> = useRuntimeConfig()
@@ -28,8 +28,9 @@ export function useDemoVideoTracking(): {
    * Initialise PostHog for the player page (no-op when the key is missing).
    * @param slug - Demo slug (PostHog identity, shared with email/demo events).
    * @param variant - Optional A/B variant from the email link (`?v=`).
+   * @param channel - Marketing channel that brought the visit ('email' / 'sms' / 'direct').
    */
-  async function init(slug: string, variant: string | null): Promise<void> {
+  async function init(slug: string, variant: string | null, channel: string): Promise<void> {
     if (!import.meta.client || initialized) return
     // The owner's own visit (?internal=1 / ?_edit=1) must not track or notify.
     if (DemoBeaconUtils.isInternalVisit()) return
@@ -54,7 +55,7 @@ export function useDemoVideoTracking(): {
         maskAllInputs: true,
       },
     })
-    posthog.register({ surface: 'demo', demo_slug: slug, ...(variant ? { ab_variant: variant } : {}) })
+    posthog.register({ surface: 'demo', demo_slug: slug, channel, ...(variant ? { ab_variant: variant } : {}) })
     initialized = true
     instance = posthog
     beaconSlug = slug

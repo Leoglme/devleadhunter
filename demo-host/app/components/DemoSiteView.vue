@@ -25,6 +25,7 @@ import {
 import type { DemoSiteViewProps } from '~/types/DemoSiteView'
 import type { DemoSitePublic } from '~/types/demoSite'
 import type { SiteContent } from '@devleadhunter/website-content'
+import { DemoBeaconUtils } from '~/utils/DemoBeaconUtils'
 
 /**
  * Defines the component props.
@@ -51,7 +52,9 @@ const TEMPLATE_ROOTS: Record<string, Component> = {
 }
 
 const route: ReturnType<typeof useRoute> = useRoute()
-const { init: initDemoTracking }: { init: (slug: string, status: string, variant: string | null) => Promise<void> } =
+const {
+  init: initDemoTracking,
+}: { init: (slug: string, status: string, variant: string | null, channel: string) => Promise<void> } =
   useDemoTracking()
 
 const isVisualEditor: ComputedRef<boolean> = computed((): boolean => isStoryblokVisualEditor(route.query))
@@ -108,6 +111,6 @@ useStoryblokBridge(isVisualEditor, (content: Record<string, unknown>): void => {
 
 onMounted((): void => {
   const variant: string | null = typeof route.query.v === 'string' ? route.query.v : null
-  void initDemoTracking(props.site.slug, props.site.status, variant)
+  void initDemoTracking(props.site.slug, props.site.status, variant, DemoBeaconUtils.channelFromQuery(route.query.src))
 })
 </script>

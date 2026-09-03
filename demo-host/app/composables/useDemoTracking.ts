@@ -44,7 +44,9 @@ const POSTHOG_UI_HOST: string = 'https://eu.posthog.com'
  * Composable exposing the demo tracking initialiser.
  * @returns An object with the ``init`` method.
  */
-export function useDemoTracking(): { init: (slug: string, status: string, variant: string | null) => Promise<void> } {
+export function useDemoTracking(): {
+  init: (slug: string, status: string, variant: string | null, channel: string) => Promise<void>
+} {
   const config: ReturnType<typeof useRuntimeConfig> = useRuntimeConfig()
 
   /**
@@ -213,8 +215,9 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
    * @param slug - Demo slug (used as a super property for server-side querying).
    * @param status - Demo site status; tracking runs only when 'active'.
    * @param variant - Optional A/B variant from the email link.
+   * @param channel - Marketing channel that brought the visit ('email' / 'sms' / 'direct').
    */
-  async function init(slug: string, status: string, variant: string | null): Promise<void> {
+  async function init(slug: string, status: string, variant: string | null, channel: string): Promise<void> {
     if (!import.meta.client || initialized) return
     // The owner's own visit (?internal=1 / ?_edit=1) must not track or notify.
     if (DemoBeaconUtils.isInternalVisit()) return
@@ -248,7 +251,7 @@ export function useDemoTracking(): { init: (slug: string, status: string, varian
       },
     })
     // Ne jamais renommer : les noms demo_* sont lus côté API.
-    posthog.register({ surface: 'demo', demo_slug: slug, ...(variant ? { ab_variant: variant } : {}) })
+    posthog.register({ surface: 'demo', demo_slug: slug, channel, ...(variant ? { ab_variant: variant } : {}) })
     initialized = true
     const apiBase: string = String(config.public.apiBase ?? '')
     DemoBeaconUtils.send(apiBase, slug, 'demo_opened')

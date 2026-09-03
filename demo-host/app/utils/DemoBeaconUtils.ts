@@ -19,6 +19,17 @@ export class DemoBeaconUtils {
   }
 
   /**
+   * Marketing channel that brought the visit, from a ``?src=`` link value.
+   * Email and SMS links stamp their channel; anything else (bookmark, direct) reads as 'direct'.
+   * Pure (takes the value, reads no window) so it is safe during SSR.
+   * @param source - The raw ``src`` query value (e.g. route.query.src).
+   * @returns 'email' or 'sms' when tagged, else 'direct'.
+   */
+  static channelFromQuery(source: unknown): string {
+    return source === 'email' || source === 'sms' ? source : 'direct'
+  }
+
+  /**
    * Beacon a demo/video behavioural event to the notifications endpoint (best-effort).
    * @param apiBase - DevLeadHunter API base URL.
    * @param slug - Demo slug identifying the prospect.

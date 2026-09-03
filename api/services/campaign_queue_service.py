@@ -33,6 +33,7 @@ from models.prospect_db import ProspectDB
 from services.email_sending_service import EmailSendingService
 from services.email_variables import EmailVariables
 from services.pricing_service import PricingService
+from services.tracking_links import CHANNEL_EMAIL, append_query_param
 from services.unsubscribe_service import unsubscribe_service
 
 logger = logging.getLogger(__name__)
@@ -470,24 +471,25 @@ class CampaignQueueService:
 
     def _demo_link_for_prospect(self, prospect_id: int, user_id: int, variant: str | None) -> str:
         """
-        Resolve the ``{lien_demo}`` value: the prospect's active demo URL, with the
-        A/B variant appended (``?v=A``) so PostHog can attribute the demo visit to
-        the email variant. Returns "" when the prospect has no active demo.
+        Resolve the ``{lien_demo}`` value: the prospect's active demo URL, tagged with
+        the email channel (``?src=email``) and the A/B variant (``&v=A``) so PostHog can
+        attribute the demo visit to the channel and the variant. Returns "" when the
+        prospect has no active demo.
         """
         site: DemoSite | None = self._active_demo_for_prospect(prospect_id, user_id)
         if not site or not site.demo_url:
             return ""
-        url: str = site.demo_url
+        url: str = append_query_param(site.demo_url, "src", CHANNEL_EMAIL)
         if variant:
-            url = f"{url}{'&' if '?' in url else '?'}v={variant}"
+            url = append_query_param(url, "v", variant)
         return url
 
     def _video_for_prospect(self, prospect_id: int, user_id: int, variant: str | None) -> tuple[str, str]:
         """
         Resolve the ``{lien_video}``/``{vignette_video}`` values for a prospect.
 
-        The player-page link carries the A/B variant (``?v=A``) so PostHog can
-        attribute the video view to the email variant, like ``{lien_demo}``.
+        The player-page link carries the email channel (``?src=email``) and the A/B
+        variant (``&v=A``) so PostHog can attribute the video view like ``{lien_demo}``.
 
         Returns:
             ``(player page URL, thumbnail URL)`` — both "" when the prospect's active demo has no generated video.
@@ -497,9 +499,9 @@ class CampaignQueueService:
         site: DemoSite | None = self._active_demo_for_prospect(prospect_id, user_id)
         if not site or not has_ready_video(site):
             return "", ""
-        url: str = video_page_url(site.slug)
+        url: str = append_query_param(video_page_url(site.slug), "src", CHANNEL_EMAIL)
         if variant:
-            url = f"{url}{'&' if '?' in url else '?'}v={variant}"
+            url = append_query_param(url, "v", variant)
         return url, public_thumbnail_url(site.slug)
 
     async def _dispatch(self, item: EmailQueue) -> None:

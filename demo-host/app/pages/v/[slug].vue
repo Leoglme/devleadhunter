@@ -56,13 +56,14 @@
 import type { DemoVideoEventCapture } from '~/types/demoVideoTracking'
 import type { ComputedRef, Ref } from 'vue'
 import type { DemoSitePublic } from '~/types/demoSite'
+import { DemoBeaconUtils } from '~/utils/DemoBeaconUtils'
 
 const route: ReturnType<typeof useRoute> = useRoute()
 const config: ReturnType<typeof useRuntimeConfig> = useRuntimeConfig()
 const {
   init: initVideoTracking,
   capture,
-}: { init: (slug: string, variant: string | null) => Promise<void>; capture: DemoVideoEventCapture } =
+}: { init: (slug: string, variant: string | null, channel: string) => Promise<void>; capture: DemoVideoEventCapture } =
   useDemoVideoTracking()
 
 const playerRef: Ref<HTMLVideoElement | null> = ref(null)
@@ -73,6 +74,8 @@ const abVariant: ComputedRef<string | null> = computed((): string | null => {
   const value: unknown = route.query.v
   return typeof value === 'string' && value ? value : null
 })
+
+const channel: ComputedRef<string> = computed((): string => DemoBeaconUtils.channelFromQuery(route.query.src))
 
 const isOpenedFromDashboard: ComputedRef<boolean> = computed((): boolean => route.query.from === 'app')
 
@@ -99,9 +102,13 @@ const posterSrc: ComputedRef<string> = computed(
     `${config.public.apiBase}/api/v1/demo-sites/public/${slug.value}/video-thumbnail.jpg`,
 )
 
-/** Demo link keeping the A/B variant so PostHog attributes the visit (full reload on purpose). */
+/** Demo link keeping the A/B variant + channel so PostHog attributes the visit (full reload on purpose). */
 const demoHref: ComputedRef<string> = computed((): string => {
-  return abVariant.value ? `/${slug.value}?v=${encodeURIComponent(abVariant.value)}` : `/${slug.value}`
+  const params: URLSearchParams = new URLSearchParams()
+  if (abVariant.value) params.set('v', abVariant.value)
+  if (channel.value !== 'direct') params.set('src', channel.value)
+  const query: string = params.toString()
+  return query ? `/${slug.value}?${query}` : `/${slug.value}`
 })
 
 /** Track the demo link before the browser leaves the page. */
@@ -128,7 +135,7 @@ onMounted(async (): Promise<void> => {
     return
   }
   if (site.value) {
-    await initVideoTracking(slug.value, abVariant.value)
+    await initVideoTracking(slug.value, abVariant.value, channel.value)
   }
   if (playerRef.value) {
     new DemoVideoEngagementTracker(playerRef.value, capture).start()
