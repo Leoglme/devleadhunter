@@ -95,6 +95,12 @@
                 class="h-3.5 w-3.5 shrink-0 text-[var(--app-red)]"
                 title="Désinscrit de la liste d'emails"
               />
+              <UIcon
+                v-if="prospect.do_not_contact"
+                name="i-lucide-ban"
+                class="h-3.5 w-3.5 shrink-0 text-[var(--app-red)]"
+                title="Ne plus contacter — exclu des campagnes et des SMS"
+              />
             </span>
           </button>
         </BaseTableTd>

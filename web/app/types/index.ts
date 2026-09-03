@@ -48,6 +48,9 @@ export type Prospect = {
   has_pending_contact_proposal?: boolean
   sms_opted_out?: boolean
   email_unsubscribed?: boolean
+  do_not_contact?: boolean
+  do_not_contact_reason?: string | null
+  do_not_contact_at?: string | null
 }
 
 /**

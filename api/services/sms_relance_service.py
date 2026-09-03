@@ -159,6 +159,8 @@ class SmsRelanceService:
         """Turn a prospect into a candidate when it is SMS-reachable with a demo, else ``None``."""
         if not is_mobile_fr(prospect.phone):
             return None
+        if prospect.do_not_contact:
+            return None
         to_e164 = to_e164_fr(prospect.phone)
         if to_e164 and sms_service.is_suppressed(db, user_id, to_e164):
             return None

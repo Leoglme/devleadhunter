@@ -139,6 +139,18 @@ export class ProspectsService {
   }
 
   /**
+   * Stop (or resume) all outreach to a prospect (« ne plus contacter »).
+   * Blocks campaigns + SMS and holds back the prospect's pending sends.
+   * @param prospectId - Identifiant du prospect.
+   * @param enabled - true pour arrêter tout contact, false pour ré-autoriser.
+   * @param reason - Note optionnelle sur la raison de l'arrêt.
+   * @returns Le prospect mis à jour.
+   */
+  static async setDoNotContact(prospectId: number, enabled: boolean, reason?: string | null): Promise<Prospect> {
+    return ApiClient.post<Prospect>(`${BASE_URL}/${prospectId}/do-not-contact`, { enabled, reason: reason ?? null })
+  }
+
+  /**
    * Run a Lighthouse (PageSpeed Insights) audit on the prospect's existing website.
    * Slow call (30-60s) — the caller must show a loader.
    * @param prospectId - Identifiant du prospect à auditer.

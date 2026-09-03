@@ -58,6 +58,12 @@ class ProspectDB(Base):
     source: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     confidence: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     contacted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0", index=True)
+    # Operator decision "ne plus contacter ce prospect" (e.g. he said no by phone). Blocks EVERY
+    # outreach channel (campaign enqueue + dispatch, SMS relance/cold). Distinct from the
+    # prospect-driven opt-outs (STOP SMS / email unsubscribe), which are resolved server-side, not stored here.
+    do_not_contact: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0", index=True)
+    do_not_contact_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    do_not_contact_at: Mapped[datetime | None] = mapped_column(nullable=True)
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     # Team sharing: set while the creator belongs to an organization → the prospect
     # is visible to every member. Cleared when the creator leaves the org.

@@ -2,6 +2,8 @@
 Prospect data service.
 """
 
+from datetime import UTC, datetime
+
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
@@ -13,7 +15,7 @@ from models.prospect_enrichment import ProspectEnrichment
 from models.search import ProspectSearchRequest
 from models.sms_suppression import SmsSuppression
 from models.user import User
-from services.activity_log_service import CATEGORY_PROSPECT, STATUS_INFO, activity_log_service
+from services.activity_log_service import CATEGORY_PROSPECT, STATUS_INFO, STATUS_WARNING, activity_log_service
 from services.prospect_emails import sync_prospect_emails
 from services.sms.phone_normalizer import to_e164_fr
 from services.validation_service import ValidationService
@@ -449,6 +451,59 @@ class ProspectService:
 
         db.commit()
         db.refresh(db_prospect)
+
+        prospect = Prospect.model_validate(db_prospect)
+        self._set_opt_out_flags(prospect, db_prospect, self._resolve_opt_outs(db, [db_prospect]))
+        return prospect
+
+    async def set_do_not_contact(
+        self, db: Session, prospect_id: int, *, user_id: int, enabled: bool, reason: str | None = None
+    ) -> Prospect | None:
+        """Mark a prospect « ne plus contacter » (or lift it), and hold back its pending sends.
+
+        Turning it on blocks every future outreach (campaign enqueue + dispatch, SMS relance/cold)
+        and marks the prospect's pending queue items ``skipped`` so the campaign page shows the line
+        as held back — the trace the operator wants. Turning it off lifts the block; already held-back
+        rows stay as they are (re-queue them by hand if needed). The decision is logged to the feed.
+
+        Args:
+            db: Active database session.
+            prospect_id: The prospect to flag.
+            user_id: The operator making the decision (for the activity log).
+            enabled: ``True`` to stop all contact, ``False`` to re-allow it.
+            reason: Optional note kept with the flag and shown on the held-back queue lines.
+
+        Returns:
+            The updated prospect, or ``None`` when it does not exist.
+        """
+        from services.campaign_queue_service import CampaignQueueService
+
+        db_prospect = db.query(ProspectDB).filter(ProspectDB.id == prospect_id).first()
+        if db_prospect is None:
+            return None
+
+        clean_reason = (reason or "").strip()[:500] or None
+        db_prospect.do_not_contact = enabled
+        db_prospect.do_not_contact_reason = clean_reason if enabled else None
+        db_prospect.do_not_contact_at = datetime.now(UTC) if enabled else None
+        db.commit()
+        db.refresh(db_prospect)
+
+        if enabled:
+            CampaignQueueService(db).skip_pending_for_prospect(prospect_id, clean_reason)
+
+        activity_log_service.record(
+            category=CATEGORY_PROSPECT,
+            action="prospect_do_not_contact" if enabled else "prospect_contact_reenabled",
+            status=STATUS_WARNING if enabled else STATUS_INFO,
+            title=(
+                f"Ne plus contacter · {db_prospect.name}" if enabled else f"Contact ré-autorisé · {db_prospect.name}"
+            ),
+            detail=clean_reason if enabled else None,
+            user_id=user_id,
+            entity_type="prospect",
+            entity_id=db_prospect.id,
+        )
 
         prospect = Prospect.model_validate(db_prospect)
         self._set_opt_out_flags(prospect, db_prospect, self._resolve_opt_outs(db, [db_prospect]))

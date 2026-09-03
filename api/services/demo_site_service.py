@@ -1192,8 +1192,9 @@ class DemoSiteService:
     def _should_keep_dormant(self, db: Session, site: DemoSite) -> bool:
         """Whether an expiring demo should be kept dormant for a possible SMS relance.
 
-        Kept when the prospect can still be SMS-reached: a French mobile, not opted out
-        (STOP), and not already texted (the one-SMS touch is still available).
+        Kept when the prospect can still be SMS-reached: a French mobile, not marked
+        « ne plus contacter », not opted out (STOP), and not already texted (the one-SMS
+        touch is still available).
 
         Args:
             db: Active database session.
@@ -1206,6 +1207,8 @@ class DemoSiteService:
             return False
         prospect = db.query(ProspectDB).filter(ProspectDB.id == site.prospect_id).first()
         if prospect is None or not prospect.phone or not is_mobile_fr(prospect.phone):
+            return False
+        if prospect.do_not_contact:
             return False
         phone_e164 = to_e164_fr(prospect.phone)
         if phone_e164 and (

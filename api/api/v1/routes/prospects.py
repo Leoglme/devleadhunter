@@ -297,6 +297,13 @@ class FacebookExclusionRequest(BaseModel):
     reason: Literal["no_email", "has_website"] = Field(..., description="Why the page is unusable")
 
 
+class DoNotContactRequest(BaseModel):
+    """Payload for POST /prospects/{id}/do-not-contact."""
+
+    enabled: bool = Field(..., description="True to stop all outreach to this prospect, False to re-allow it")
+    reason: str | None = Field(None, max_length=500, description="Optional note on why contact is stopped")
+
+
 @router.post(
     "/facebook-exclusions",
     summary="Exclude a Facebook page from future discoveries",
@@ -529,6 +536,33 @@ async def release_prospect(
     except OrganizationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     return prospect_service._to_models_with_reservers(db, [row])[0]
+
+
+@router.post(
+    "/{prospect_id}/do-not-contact",
+    response_model=Prospect,
+    summary="Stop or resume outreach to a prospect",
+    description="Mark « ne plus contacter » (blocks campaigns + SMS and holds back pending sends), or lift it.",
+)
+async def set_prospect_do_not_contact(
+    prospect_id: int,
+    request: DoNotContactRequest,
+    current_user: User = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> Prospect:
+    """Stop (or resume) all outreach to a prospect.
+
+    Raises:
+        HTTPException: 404 when not visible, 403 when reserved by another member.
+    """
+    row = _get_visible_db_prospect(db, prospect_id, current_user)
+    _assert_not_reserved_by_other(db, current_user, row)
+    prospect = await prospect_service.set_do_not_contact(
+        db, prospect_id, user_id=current_user.id, enabled=request.enabled, reason=request.reason
+    )
+    if not prospect:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Prospect {prospect_id} not found")
+    return prospect
 
 
 @router.post(

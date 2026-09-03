@@ -133,11 +133,16 @@ class TestReviveDemoSite:
         assert result.status == DemoSiteStatus.ACTIVE.value
 
 
+def _reachable_prospect(**overrides: object) -> SimpleNamespace:
+    """An SMS-reachable prospect (French mobile, not marked « ne plus contacter »)."""
+    base: dict[str, object] = {"phone": "06 12 34 56 78", "do_not_contact": False}
+    base.update(overrides)
+    return SimpleNamespace(**base)
+
+
 class TestShouldKeepDormant:
     def test_kept_for_a_reachable_mobile(self) -> None:
-        db = _OrderedFirstDB(
-            [SimpleNamespace(phone="06 12 34 56 78"), None, None]
-        )  # prospect, not suppressed, not texted
+        db = _OrderedFirstDB([_reachable_prospect(), None, None])  # prospect, not suppressed, not texted
         site = SimpleNamespace(prospect_id=7, user_id=1)
         assert demo_site_service._should_keep_dormant(db, site) is True
 
@@ -146,17 +151,22 @@ class TestShouldKeepDormant:
         assert demo_site_service._should_keep_dormant(_OrderedFirstDB([]), site) is False
 
     def test_deleted_for_a_landline(self) -> None:
-        db = _OrderedFirstDB([SimpleNamespace(phone="01 42 68 53 00")])
+        db = _OrderedFirstDB([_reachable_prospect(phone="01 42 68 53 00")])
+        site = SimpleNamespace(prospect_id=7, user_id=1)
+        assert demo_site_service._should_keep_dormant(db, site) is False
+
+    def test_deleted_when_marked_do_not_contact(self) -> None:
+        db = _OrderedFirstDB([_reachable_prospect(do_not_contact=True)])
         site = SimpleNamespace(prospect_id=7, user_id=1)
         assert demo_site_service._should_keep_dormant(db, site) is False
 
     def test_deleted_when_opted_out(self) -> None:
-        db = _OrderedFirstDB([SimpleNamespace(phone="06 12 34 56 78"), SimpleNamespace(id=1)])  # suppressed
+        db = _OrderedFirstDB([_reachable_prospect(), SimpleNamespace(id=1)])  # suppressed
         site = SimpleNamespace(prospect_id=7, user_id=1)
         assert demo_site_service._should_keep_dormant(db, site) is False
 
     def test_deleted_when_already_texted(self) -> None:
-        db = _OrderedFirstDB([SimpleNamespace(phone="06 12 34 56 78"), None, SimpleNamespace(id=99)])  # texted
+        db = _OrderedFirstDB([_reachable_prospect(), None, SimpleNamespace(id=99)])  # texted
         site = SimpleNamespace(prospect_id=7, user_id=1)
         assert demo_site_service._should_keep_dormant(db, site) is False
 

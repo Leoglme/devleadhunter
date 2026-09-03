@@ -48,6 +48,9 @@ _STATUS_FAILED = "failed"
 # Reason stamped on a row the operator cancels by hand (shown on the campaign page).
 _MANUAL_CANCEL_REASON = "Annulé manuellement"
 
+# Reason stamped on a row held back because the prospect was marked « ne plus contacter ».
+_DO_NOT_CONTACT_SKIP_REASON = "Ne plus contacter"
+
 
 @dataclass
 class EnqueueResult:
@@ -174,6 +177,9 @@ class CampaignQueueService:
                 continue
             if unsubscribe_service.is_unsubscribed(self.db, prospect.email or ""):
                 logger.debug("[Queue] Skipping unsubscribed prospect %d", prospect.id)
+                continue
+            if prospect.do_not_contact:
+                logger.debug("[Queue] Skipping do-not-contact prospect %d", prospect.id)
                 continue
 
             if is_ab:
@@ -522,6 +528,14 @@ class CampaignQueueService:
             self.db.commit()
             return
 
+        # Guard: the operator marked the prospect « ne plus contacter » after it was enqueued.
+        if prospect.do_not_contact:
+            logger.info("[Queue] Skipping do-not-contact prospect %d", prospect.id)
+            item.status = _STATUS_SKIPPED
+            item.skip_reason = _DO_NOT_CONTACT_SKIP_REASON
+            self.db.commit()
+            return
+
         # A follow-up is NOT auto-skipped on an open/click: opens are a noisy
         # signal (bot/proxy prefetch inflates them), so a relance goes out unless
         # the prospect unsubscribed or the operator cancelled it by hand from the
@@ -865,6 +879,34 @@ class CampaignQueueService:
         item.skip_reason = _MANUAL_CANCEL_REASON
         self.db.commit()
         logger.info("[Queue] Item %d cancelled manually", item.id)
+
+    def skip_pending_for_prospect(self, prospect_id: int, reason: str | None = None) -> int:
+        """Hold back every pending queue item of a prospect just marked « ne plus contacter ».
+
+        The rows are marked ``skipped`` with a stop reason instead of being deleted, so the
+        campaign page keeps showing the line as *planned but held back* — the trace the operator
+        wants. Called by :meth:`ProspectService.set_do_not_contact` when the flag is turned on.
+
+        Args:
+            prospect_id: The prospect whose pending sends are cancelled.
+            reason: Optional operator note appended to the stop label.
+
+        Returns:
+            The number of queue items held back.
+        """
+        label = _DO_NOT_CONTACT_SKIP_REASON + (f" — {reason}" if reason else "")
+        items = (
+            self.db.query(EmailQueue)
+            .filter(EmailQueue.prospect_id == prospect_id, EmailQueue.status == _STATUS_PENDING)
+            .all()
+        )
+        for item in items:
+            item.status = _STATUS_SKIPPED
+            item.skip_reason = label[:160]  # EmailQueue.skip_reason is String(160)
+        if items:
+            self.db.commit()
+            logger.info("[Queue] Held back %d pending item(s) for do-not-contact prospect %d", len(items), prospect_id)
+        return len(items)
 
     def requeue_item(self, item: EmailQueue) -> None:
         """

@@ -198,3 +198,11 @@ class Prospect(ProspectBase):
         False,
         description="The prospect unsubscribed from the cold-email list (resolved server-side)",
     )
+    do_not_contact: bool = Field(
+        False,
+        description="Operator marked « ne plus contacter » — blocks every outreach channel (campaigns + SMS)",
+    )
+    do_not_contact_reason: str | None = Field(
+        None, description="Optional note on why contact was stopped (shown on the held-back queue lines)"
+    )
+    do_not_contact_at: datetime | None = Field(None, description="When « ne plus contacter » was set")
