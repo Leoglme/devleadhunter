@@ -11,15 +11,13 @@ class SmsConfigResponse(BaseModel):
     """The user's SMS sender configuration."""
 
     sender: str = ""
-    enabled: bool = False
     provider_ready: bool = Field(default=False, description="Whether the platform smsmode key is configured")
 
 
 class SmsConfigUpdate(BaseModel):
-    """Payload to set the SMS sender configuration."""
+    """Payload to set the SMS sender (a configured sender turns the channel on)."""
 
     sender: str = Field(default="", max_length=11)
-    enabled: bool = False
 
 
 class SmsRelanceCandidateResponse(BaseModel):

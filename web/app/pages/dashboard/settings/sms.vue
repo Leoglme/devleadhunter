@@ -13,8 +13,9 @@
     <section class="app-card p-5">
       <h2 class="text-sm font-semibold text-[var(--app-ink)]">Votre expéditeur</h2>
       <p class="mt-1 text-xs text-[var(--app-ink-soft)]">
-        Le nom affiché sur le téléphone du prospect (3 à 11 caractères, lettres et chiffres). Les prospects ne peuvent
-        pas répondre à un SMS : ils reviennent vers vous depuis le bandeau de leur site de démonstration.
+        Le nom affiché sur le téléphone du prospect (3 à 11 caractères, lettres et chiffres). Renseigner un expéditeur
+        active le canal SMS. Les prospects ne peuvent pas répondre à un SMS : ils reviennent vers vous depuis le bandeau
+        de leur site de démonstration.
       </p>
 
       <div
@@ -25,15 +26,17 @@
         expéditeur ; les envois seront possibles une fois la clé configurée.
       </div>
 
-      <div class="mt-4 flex flex-col gap-4 @lg:flex-row @lg:items-end">
-        <label class="flex-1">
+      <div class="mt-4">
+        <label class="block">
           <span class="mb-1 block text-xs font-medium text-[var(--app-ink)]">Nom d'expéditeur</span>
-          <input v-model="sender" type="text" maxlength="11" placeholder="Dibodev" class="input-field h-10 w-full" />
+          <input
+            v-model="sender"
+            type="text"
+            maxlength="11"
+            placeholder="Dibodev"
+            class="input-field h-10 w-full @lg:max-w-xs"
+          />
         </label>
-        <div class="flex items-center gap-3">
-          <span class="text-xs font-medium text-[var(--app-ink)]">Activer le canal SMS</span>
-          <UiSwitch :model-value="enabled" :disabled="isSaving" @update:model-value="enabled = $event" />
-        </div>
       </div>
 
       <div class="mt-4 flex items-center gap-3">
@@ -115,15 +118,14 @@ const toast: UseToastReturn = useToast()
 
 const config: Ref<SmsConfig | null> = ref(null)
 const sender: Ref<string> = ref('')
-const enabled: Ref<boolean> = ref(false)
 const isSaving: Ref<boolean> = ref(false)
 
 const rows: Ref<SmsCandidateRow[]> = ref([])
 const isLoadingCandidates: Ref<boolean> = ref(false)
 
-/** Whether sends are possible (channel enabled + server key ready). */
+/** Whether sends are possible (a sender is configured + the server key is ready). */
 const canSend: ComputedRef<boolean> = computed(
-  (): boolean => Boolean(config.value?.enabled) && Boolean(config.value?.provider_ready),
+  (): boolean => Boolean(config.value?.sender) && Boolean(config.value?.provider_ready),
 )
 
 /** Live preview of the sender name as it will appear. */
@@ -143,7 +145,6 @@ async function loadConfig(): Promise<void> {
   try {
     config.value = await SmsService.getConfig()
     sender.value = config.value.sender
-    enabled.value = config.value.enabled
   } catch {
     toast.error('Impossible de charger la configuration SMS')
   }
@@ -173,7 +174,7 @@ async function loadCandidates(): Promise<void> {
 async function save(): Promise<void> {
   isSaving.value = true
   try {
-    config.value = await SmsService.updateConfig({ sender: sender.value.trim(), enabled: enabled.value })
+    config.value = await SmsService.updateConfig({ sender: sender.value.trim() })
     toast.success('Configuration SMS enregistrée')
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : "Échec de l'enregistrement")

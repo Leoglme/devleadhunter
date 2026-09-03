@@ -51,7 +51,6 @@ async def get_sms_config(
     config = sms_config_service.get(db, current_user.id)
     return SmsConfigResponse(
         sender=config.sender if config else "",
-        enabled=bool(config.enabled) if config else False,
         provider_ready=bool(settings.smsmode_api_key),
     )
 
@@ -62,14 +61,12 @@ async def update_sms_config(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> SmsConfigResponse:
-    """Set the current user's SMS sender + enable flag."""
+    """Set the current user's SMS sender (a configured sender turns the channel on)."""
     try:
-        config = sms_config_service.upsert(db, current_user.id, sender=payload.sender, enabled=payload.enabled)
+        config = sms_config_service.upsert(db, current_user.id, sender=payload.sender)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return SmsConfigResponse(
-        sender=config.sender, enabled=bool(config.enabled), provider_ready=bool(settings.smsmode_api_key)
-    )
+    return SmsConfigResponse(sender=config.sender, provider_ready=bool(settings.smsmode_api_key))
 
 
 @router.get("/relance-candidates", response_model=list[SmsRelanceCandidateResponse])

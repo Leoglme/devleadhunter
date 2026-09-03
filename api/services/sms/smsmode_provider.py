@@ -83,7 +83,7 @@ class SmsModeProvider(SmsProvider):
 
         if response.status_code >= 400:
             logger.error("[smsmode] %s sending to %s: %s", response.status_code, to_e164, response.text[:500])
-            return SmsSendResult(success=False, error=f"{response.status_code}: {response.text[:200]}")
+            return SmsSendResult(success=False, error=self._extract_error(response))
 
         try:
             data = response.json()
@@ -103,6 +103,32 @@ class SmsModeProvider(SmsProvider):
             except (TypeError, ValueError):
                 price_cents = None
         return SmsSendResult(success=True, provider_message_id=message_id, price_cents=price_cents)
+
+    @staticmethod
+    def _extract_error(response: httpx.Response) -> str:
+        """Turn a smsmode 4xx/5xx body into a short human message.
+
+        smsmode returns ``{title, message, detail, errorCode}``; we surface
+        ``message`` (+ ``detail``) so the SMS log shows why it failed, not raw JSON.
+
+        Args:
+            response: The failed HTTP response.
+
+        Returns:
+            A readable one-line error.
+        """
+        try:
+            body = response.json()
+        except ValueError:
+            body = None
+        if isinstance(body, dict):
+            message = str(body.get("message") or body.get("title") or "").strip()
+            detail = str(body.get("detail") or "").strip()
+            if message and detail:
+                return f"{message} — {detail}"
+            if message:
+                return message
+        return f"Erreur smsmode ({response.status_code})"
 
 
 smsmode_provider = SmsModeProvider()

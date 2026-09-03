@@ -40,30 +40,32 @@ class SmsConfigService:
         """
         return bool(_SENDER_RE.match(sender or ""))
 
-    def upsert(self, db: Session, user_id: int, *, sender: str, enabled: bool) -> SmsConfig:
-        """Create or update the user's SMS config.
+    def upsert(self, db: Session, user_id: int, *, sender: str) -> SmsConfig:
+        """Create or update the user's SMS sender (the channel's only switch).
+
+        A non-empty, valid sender turns the channel on; an empty sender clears it.
 
         Args:
             db: Active database session.
             user_id: Owner.
-            sender: Alphanumeric sender id.
-            enabled: Whether the SMS channel is on.
+            sender: Alphanumeric sender id (empty to disable the channel).
 
         Returns:
             The persisted config.
 
         Raises:
-            ValueError: When *sender* is invalid (and the channel is enabled).
+            ValueError: When *sender* is non-empty and invalid.
         """
         cleaned = (sender or "").strip()
-        if enabled and not self.is_valid_sender(cleaned):
+        if cleaned and not self.is_valid_sender(cleaned):
             raise ValueError("Expéditeur invalide : 3 à 11 caractères, lettres/chiffres, au moins une lettre.")
         config = self.get(db, user_id)
         if config is None:
             config = SmsConfig(user_id=user_id)
             db.add(config)
         config.sender = cleaned
-        config.enabled = enabled
+        # A configured sender is the on/off switch; keep the legacy column consistent.
+        config.enabled = bool(cleaned)
         db.commit()
         db.refresh(config)
         return config

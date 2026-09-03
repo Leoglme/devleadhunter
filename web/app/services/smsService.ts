@@ -1,16 +1,14 @@
 import { ApiClient } from './api'
 
-/** The user's SMS sender configuration. */
+/** The user's SMS sender configuration (a configured sender = channel on). */
 export type SmsConfig = {
   sender: string
-  enabled: boolean
   provider_ready: boolean
 }
 
-/** Payload to update the SMS sender configuration. */
+/** Payload to update the SMS sender (empty sender disables the channel). */
 export type SmsConfigUpdate = {
   sender: string
-  enabled: boolean
 }
 
 /** A prospect eligible for an SMS relance. */

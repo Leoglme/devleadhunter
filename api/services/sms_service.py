@@ -117,15 +117,16 @@ class SmsService:
             db: Active database session.
             user_id: Sender.
             prospect: Recipient prospect.
-            config: The user's SMS config (sender + enabled).
+            config: The user's SMS config (sender).
             demo_url: Plain demo URL to push.
             greeting: Safe greeting for the body.
 
         Returns:
             The send outcome (``sent`` + reason when skipped).
         """
-        if not config.enabled or not config.sender:
-            return SmsSendOutcome(sent=False, reason="Canal SMS non configuré")
+        # A configured sender is the single switch: no separate « enabled » flag.
+        if not config.sender:
+            return SmsSendOutcome(sent=False, reason="Expéditeur SMS non configuré")
         if not self._provider.is_configured:
             return SmsSendOutcome(sent=False, reason="smsmode non configuré")
 
@@ -183,7 +184,7 @@ class SmsService:
         Args:
             db: Active database session.
             user_id: Sender.
-            config: The user's SMS config (sender + enabled).
+            config: The user's SMS config (sender).
             to_raw: Recipient number as typed (any French format).
             text: Free-text body (the STOP mention is appended automatically).
             prospect_id: Prospect id, when the number belongs to a saved prospect.
@@ -192,8 +193,7 @@ class SmsService:
         Returns:
             The send outcome (``sent`` + reason when skipped).
         """
-        # A manual send is an explicit user action, so it only needs a configured sender —
-        # the ``enabled`` flag gates the automated relance, not one-off manual sends.
+        # A configured sender is the channel's only switch.
         if not config.sender:
             return SmsSendOutcome(sent=False, reason="Renseignez un nom d'expéditeur dans Paramètres → Relance SMS")
         if not self._provider.is_configured:
@@ -239,7 +239,8 @@ class SmsService:
             to_e164=message.to_e164,
             sender=message.sender,
             text=message.body,
-            ref_client=str(message.id),
+            # smsmode requires refClient to be 3–140 chars, so a bare id ("1") is rejected.
+            ref_client=f"dlh-{message.id}",
             callback_url=callback_url,
         )
         if result.success:

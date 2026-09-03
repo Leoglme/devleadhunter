@@ -59,6 +59,27 @@ class TestSmsModeProvider:
         assert result.success is False
         assert "422" in (result.error or "")
 
+    @pytest.mark.asyncio
+    async def test_json_error_surfaces_message_and_detail(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        body = {
+            "title": "Bad Request",
+            "message": "Request body: refClient invalid",
+            "detail": "Size must be between 3 and 140 characters",
+        }
+        transport = httpx.MockTransport(lambda req: httpx.Response(400, json=body))
+        original = httpx.AsyncClient
+        monkeypatch.setattr(
+            httpx,
+            "AsyncClient",
+            lambda *a, **k: original(*a, **{**k, "transport": transport}),
+        )
+        provider = SmsModeProvider()
+        provider._api_key = "test-key"
+        result = await provider.send(to_e164="+33629345899", sender="Dibodev", text="x", ref_client="dlh-1")
+        assert result.success is False
+        assert "refClient invalid" in (result.error or "")
+        assert "3 and 140" in (result.error or "")
+
     def test_not_configured_without_key(self) -> None:
         provider = SmsModeProvider()
         provider._api_key = ""
