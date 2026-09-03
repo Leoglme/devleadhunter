@@ -83,6 +83,18 @@
                 class="h-3 w-3 text-[var(--app-accent)]"
                 title="Vous avez réservé ce prospect"
               />
+              <UIcon
+                v-if="prospect.sms_opted_out"
+                name="i-lucide-message-square-off"
+                class="h-3.5 w-3.5 shrink-0 text-[var(--app-red)]"
+                title="A répondu STOP — ne plus envoyer de SMS"
+              />
+              <UIcon
+                v-if="prospect.email_unsubscribed"
+                name="i-lucide-mail-x"
+                class="h-3.5 w-3.5 shrink-0 text-[var(--app-red)]"
+                title="Désinscrit de la liste d'emails"
+              />
             </span>
           </button>
         </BaseTableTd>

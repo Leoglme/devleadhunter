@@ -190,3 +190,11 @@ class Prospect(ProspectBase):
         False,
         description="A decision-maker name awaits confirm/reject in the drawer (resolved server-side)",
     )
+    sms_opted_out: bool = Field(
+        False,
+        description="The prospect replied STOP to an SMS — no more SMS can be sent (resolved server-side)",
+    )
+    email_unsubscribed: bool = Field(
+        False,
+        description="The prospect unsubscribed from the cold-email list (resolved server-side)",
+    )

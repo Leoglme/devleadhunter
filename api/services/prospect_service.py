@@ -6,13 +6,16 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from enums.contact_name_status import ProposedContactState
+from models.email_unsubscribe import EmailUnsubscribe
 from models.prospect import Prospect, ProspectCreate, ProspectUpdate
 from models.prospect_db import ProspectDB
 from models.prospect_enrichment import ProspectEnrichment
 from models.search import ProspectSearchRequest
+from models.sms_suppression import SmsSuppression
 from models.user import User
 from services.activity_log_service import CATEGORY_PROSPECT, STATUS_INFO, activity_log_service
 from services.prospect_emails import sync_prospect_emails
+from services.sms.phone_normalizer import to_e164_fr
 from services.validation_service import ValidationService
 
 
@@ -138,14 +141,78 @@ class ProspectService:
             ).all()
             pending_proposal_ids = {row[0] for row in pending_rows}
 
+        resolved_opt_outs = ProspectService._resolve_opt_outs(db, db_prospects)
+
         prospects: list[Prospect] = []
         for db_prospect in db_prospects:
             prospect = Prospect.model_validate(db_prospect)
             if prospect.reserved_by_user_id:
                 prospect.reserved_by_name = names.get(prospect.reserved_by_user_id)
             prospect.has_pending_contact_proposal = db_prospect.id in pending_proposal_ids
+            ProspectService._set_opt_out_flags(prospect, db_prospect, resolved_opt_outs)
             prospects.append(prospect)
         return prospects
+
+    @staticmethod
+    def _resolve_opt_outs(
+        db: Session, db_prospects: list[ProspectDB]
+    ) -> tuple[set[tuple[int, str]], set[str], dict[int, str]]:
+        """Batch-resolve the SMS-STOP and email-unsubscribe state of a prospect list.
+
+        SMS STOP is scoped per owner (a suppression blocks that owner's sends); email
+        unsubscribe is global by address (mirrors the send-time guard).
+
+        Args:
+            db: Active database session.
+            db_prospects: The prospect rows being serialized.
+
+        Returns:
+            ``(suppressed (owner_id, e164) pairs, unsubscribed lowercased emails, prospect_id → e164)``.
+        """
+        prospect_phone: dict[int, str] = {}
+        phones: set[str] = set()
+        emails: set[str] = set()
+        for db_prospect in db_prospects:
+            phone_e164 = to_e164_fr(db_prospect.phone) if db_prospect.phone else None
+            if phone_e164 and db_prospect.user_id:
+                prospect_phone[db_prospect.id] = phone_e164
+                phones.add(phone_e164)
+            if db_prospect.email:
+                emails.add(db_prospect.email.lower())
+
+        suppressed_pairs: set[tuple[int, str]] = set()
+        if phones:
+            rows = db.execute(
+                select(SmsSuppression.user_id, SmsSuppression.phone_e164).where(SmsSuppression.phone_e164.in_(phones))
+            ).all()
+            suppressed_pairs = {(row[0], row[1]) for row in rows}
+
+        unsubscribed_emails: set[str] = set()
+        if emails:
+            rows = db.execute(select(EmailUnsubscribe.email).where(EmailUnsubscribe.email.in_(emails))).all()
+            unsubscribed_emails = {str(row[0]).lower() for row in rows}
+
+        return suppressed_pairs, unsubscribed_emails, prospect_phone
+
+    @staticmethod
+    def _set_opt_out_flags(
+        prospect: Prospect,
+        db_prospect: ProspectDB,
+        resolved: tuple[set[tuple[int, str]], set[str], dict[int, str]],
+    ) -> None:
+        """Stamp the SMS-STOP and email-unsubscribe flags on a serialized prospect.
+
+        Args:
+            prospect: The serialized model to flag.
+            db_prospect: The source row (owner + id + email).
+            resolved: The batch result from :meth:`_resolve_opt_outs`.
+        """
+        suppressed_pairs, unsubscribed_emails, prospect_phone = resolved
+        phone_e164 = prospect_phone.get(db_prospect.id)
+        prospect.sms_opted_out = bool(
+            phone_e164 and db_prospect.user_id and (db_prospect.user_id, phone_e164) in suppressed_pairs
+        )
+        prospect.email_unsubscribed = bool(db_prospect.email and db_prospect.email.lower() in unsubscribed_emails)
 
     async def get_prospect(self, db: Session, prospect_id: int) -> Prospect | None:
         """
@@ -159,9 +226,11 @@ class ProspectService:
             Prospect object if found, None otherwise
         """
         db_prospect = db.query(ProspectDB).filter(ProspectDB.id == prospect_id).first()
-        if db_prospect:
-            return Prospect.model_validate(db_prospect)
-        return None
+        if not db_prospect:
+            return None
+        prospect = Prospect.model_validate(db_prospect)
+        self._set_opt_out_flags(prospect, db_prospect, self._resolve_opt_outs(db, [db_prospect]))
+        return prospect
 
     @staticmethod
     def _demote_social_website(
@@ -381,7 +450,9 @@ class ProspectService:
         db.commit()
         db.refresh(db_prospect)
 
-        return Prospect.model_validate(db_prospect)
+        prospect = Prospect.model_validate(db_prospect)
+        self._set_opt_out_flags(prospect, db_prospect, self._resolve_opt_outs(db, [db_prospect]))
+        return prospect
 
     async def delete_prospect(self, db: Session, prospect_id: int) -> bool:
         """

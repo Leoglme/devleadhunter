@@ -40,6 +40,7 @@ from services.sms.dlr import (
     dlr_status_detail,
     dlr_status_value,
 )
+from services.sms.mo import mo_is_stop, mo_origin_message_id, mo_ref_client, mo_sender_number
 from services.sms.phone_normalizer import to_e164_fr
 from services.sms_config_service import sms_config_service
 from services.sms_relance_service import sms_relance_service
@@ -270,27 +271,70 @@ def _match_dlr_message(db: Session, payload: dict[str, object]) -> SmsMessage | 
 
 @router.post("/callbacks/stop", status_code=status.HTTP_200_OK)
 async def receive_stop_callback(request: Request, db: Session = Depends(get_db)) -> dict[str, str]:
-    """STOP opt-out callback from smsmode (public).
+    """Incoming-message (MO) callback from smsmode — the STOP opt-out (public).
 
-    Adds the number to the sender's suppression list. The user is resolved from
-    the last SMS sent to that number. Always answers 200.
+    smsmode POSTs every reply here (the ``callbackUrlMo`` we set on each send). We
+    act only on a STOP (``body.stop`` or a STOP keyword): the number is suppressed
+    for its sender so no further SMS goes out, and the owner is notified. The sent
+    SMS is resolved by ``originMessageId`` / ``refClient`` first (precise), the
+    number last. Always answers 200 so smsmode never retries in a loop.
     """
     try:
         payload = await request.json()
     except ValueError:
         return {"status": "ignored"}
-    raw_number = str(payload.get("from") or payload.get("to") or payload.get("recipient") or "").strip()
-    phone_e164 = to_e164_fr(raw_number) or (raw_number if raw_number.startswith("+") else None)
-    if not phone_e164:
+    if not isinstance(payload, dict):
         return {"status": "ignored"}
-    last = db.query(SmsMessage).filter(SmsMessage.to_e164 == phone_e164).order_by(SmsMessage.created_at.desc()).first()
-    if last is not None:
-        sms_service.suppress(db, last.user_id, phone_e164, reason="stop")
+    if not mo_is_stop(payload):
+        # A non-STOP reply (rare with a one-way alphanumeric sender) — nothing to suppress.
+        return {"status": "ok"}
+    message = _match_stop_message(db, payload)
+    if message is None:
+        logger.info("SMS STOP unmatched: %s", str(payload)[:300])
+        return {"status": "ok"}
+    # Notify only on a NEW opt-out, so a re-sent STOP webhook never double-pings.
+    already_suppressed = sms_service.is_suppressed(db, message.user_id, message.to_e164)
+    sms_service.suppress(db, message.user_id, message.to_e164, reason="stop")
+    if not already_suppressed:
         await notification_service.notify_sms_event(
             db,
-            user_id=last.user_id,
+            user_id=message.user_id,
             event_name="sms_stop",
-            prospect_id=last.prospect_id,
-            fallback_name=last.recipient_name or phone_e164,
+            prospect_id=message.prospect_id,
+            fallback_name=message.recipient_name or message.to_e164,
         )
     return {"status": "ok"}
+
+
+def _match_stop_message(db: Session, payload: dict[str, object]) -> SmsMessage | None:
+    """Find the sent SMS a STOP refers to, by origin id then our ``dlh-<id>`` ref, then the number.
+
+    Args:
+        db: Active database session.
+        payload: The MO callback JSON body.
+
+    Returns:
+        The matching sent SMS row, or ``None`` when nothing resolves.
+    """
+    origin_id = mo_origin_message_id(payload)
+    if origin_id:
+        matched = db.query(SmsMessage).filter(SmsMessage.provider_message_id == origin_id).first()
+        if matched is not None:
+            return matched
+    ref = mo_ref_client(payload)
+    if ref.startswith("dlh-"):
+        try:
+            row_id = int(ref[len("dlh-") :])
+        except ValueError:
+            row_id = None
+        if row_id is not None:
+            matched = db.query(SmsMessage).filter(SmsMessage.id == row_id).first()
+            if matched is not None:
+                return matched
+    number = mo_sender_number(payload)
+    phone_e164 = to_e164_fr(number) or (number if number.startswith("+") else None)
+    if phone_e164:
+        return (
+            db.query(SmsMessage).filter(SmsMessage.to_e164 == phone_e164).order_by(SmsMessage.created_at.desc()).first()
+        )
+    return None

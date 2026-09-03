@@ -46,6 +46,7 @@ class SmsProvider(ABC):
         text: str,
         ref_client: str | None = None,
         callback_url: str | None = None,
+        callback_url_mo: str | None = None,
     ) -> SmsSendResult:
         """Send *text* to *to_e164* from the alphanumeric *sender*.
 
@@ -53,8 +54,9 @@ class SmsProvider(ABC):
             to_e164: Recipient in E.164 format (``+33…``).
             sender: Alphanumeric sender id (≤11 chars, e.g. ``Dibodev``).
             text: Message body.
-            ref_client: Our own reference echoed back on the DLR callback.
+            ref_client: Our own reference echoed back on the callbacks.
             callback_url: Public URL the provider POSTs delivery receipts to.
+            callback_url_mo: Public URL the provider POSTs incoming replies (STOP) to.
 
         Returns:
             The send outcome.

@@ -44,6 +44,7 @@ class SmsModeProvider(SmsProvider):
         text: str,
         ref_client: str | None = None,
         callback_url: str | None = None,
+        callback_url_mo: str | None = None,
     ) -> SmsSendResult:
         """Send one SMS through smsmode.
 
@@ -51,8 +52,9 @@ class SmsModeProvider(SmsProvider):
             to_e164: Recipient in E.164 format.
             sender: Alphanumeric sender id.
             text: Message body.
-            ref_client: Reference echoed back on the DLR callback.
-            callback_url: Delivery-receipt callback URL.
+            ref_client: Reference echoed back on the callbacks.
+            callback_url: Delivery-receipt (DLR) callback URL.
+            callback_url_mo: Incoming-message (MO / STOP opt-out) callback URL.
 
         Returns:
             The send outcome, ``success=False`` on any transport or API error.
@@ -69,6 +71,8 @@ class SmsModeProvider(SmsProvider):
             payload["refClient"] = ref_client
         if callback_url:
             payload["callbackUrlStatus"] = callback_url
+        if callback_url_mo:
+            payload["callbackUrlMo"] = callback_url_mo
 
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:

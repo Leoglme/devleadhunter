@@ -12,6 +12,7 @@ from services.sms.dlr import (
     dlr_status_value,
 )
 from services.sms.gsm_segments import is_gsm7, segment_count
+from services.sms.mo import mo_is_stop, mo_origin_message_id, mo_ref_client, mo_sender_number
 from services.sms.phone_normalizer import is_mobile_fr, to_e164_fr
 from services.sms.pricing import estimate_price_cents
 from services.sms.send_window import is_within_window, next_send_slot
@@ -164,6 +165,26 @@ class TestLegalWindowGuard:
 
         monkeypatch.setattr(sms_module, "now_in_paris", lambda: datetime(2026, 8, 31, 10, 0))  # Monday 10:00
         assert sms_module.sms_service.legal_window_refusal() is None
+
+
+class TestMoStopParsing:
+    def test_stop_flagged_by_body_stop(self) -> None:
+        # smsmode flags a STOP opt-out with body.stop = true.
+        assert mo_is_stop({"direction": "MO", "body": {"text": "STOP", "stop": True}}) is True
+
+    def test_stop_detected_from_keyword_text(self) -> None:
+        assert mo_is_stop({"body": {"text": "stop"}}) is True
+        assert mo_is_stop({"body": {"text": "Désabonnement"}}) is True
+
+    def test_non_stop_reply_is_not_stop(self) -> None:
+        assert mo_is_stop({"body": {"text": "Oui ça m'intéresse", "stop": False}}) is False
+
+    def test_sender_number_from_nested_recipient(self) -> None:
+        assert mo_sender_number({"recipient": {"to": "33612345678"}}) == "33612345678"
+
+    def test_origin_message_id_and_ref_client(self) -> None:
+        assert mo_origin_message_id({"originMessageId": "abc-123"}) == "abc-123"
+        assert mo_ref_client({"refClient": "dlh-42"}) == "dlh-42"
 
 
 class TestDlrParsing:

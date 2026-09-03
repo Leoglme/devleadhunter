@@ -150,6 +150,14 @@
                     {{ prospect.phone }}
                   </p>
                   <p v-else class="text-sm text-[var(--app-faint)]">—</p>
+                  <span
+                    v-if="prospect.sms_opted_out"
+                    class="app-badge app-badge--danger mt-1"
+                    title="A répondu STOP — plus aucun SMS ne peut lui être envoyé"
+                  >
+                    <UIcon name="i-lucide-message-square-off" class="h-3 w-3" />
+                    STOP SMS
+                  </span>
                 </div>
                 <a
                   v-if="prospect.phone"
@@ -171,6 +179,14 @@
                     :editable="canEditEmails"
                     @updated="$emit('updated', $event)"
                   />
+                  <span
+                    v-if="prospect.email_unsubscribed"
+                    class="app-badge app-badge--danger mt-1"
+                    title="S'est désinscrit de la liste d'emails — exclu des campagnes"
+                  >
+                    <UIcon name="i-lucide-mail-x" class="h-3 w-3" />
+                    Désinscrit email
+                  </span>
                 </div>
               </div>
 

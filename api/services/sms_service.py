@@ -284,7 +284,10 @@ class SmsService:
         db.commit()
         db.refresh(message)
 
-        callback_url = f"{settings.api_base_url}/api/v1/sms/callbacks/dlr" if settings.api_base_url else None
+        base_url = settings.api_base_url
+        callback_url = f"{base_url}/api/v1/sms/callbacks/dlr" if base_url else None
+        # Tell smsmode where to POST an incoming reply (STOP opt-out), so désinscriptions reach us.
+        callback_url_mo = f"{base_url}/api/v1/sms/callbacks/stop" if base_url else None
         result: SmsSendResult = await self._provider.send(
             to_e164=message.to_e164,
             sender=message.sender,
@@ -292,6 +295,7 @@ class SmsService:
             # smsmode requires refClient to be 3–140 chars, so a bare id ("1") is rejected.
             ref_client=f"dlh-{message.id}",
             callback_url=callback_url,
+            callback_url_mo=callback_url_mo,
         )
         if result.success:
             message.status = SmsStatus.SENT.value

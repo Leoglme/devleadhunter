@@ -46,6 +46,8 @@ export type Prospect = {
   lighthouse_json?: ProspectLighthouseAudit | null
   lighthouse_at?: string | null
   has_pending_contact_proposal?: boolean
+  sms_opted_out?: boolean
+  email_unsubscribed?: boolean
 }
 
 /**
