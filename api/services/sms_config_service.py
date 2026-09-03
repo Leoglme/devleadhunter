@@ -70,5 +70,37 @@ class SmsConfigService:
         db.refresh(config)
         return config
 
+    def set_automation(
+        self,
+        db: Session,
+        user_id: int,
+        *,
+        cold_sms_enabled: bool,
+        auto_relance_enabled: bool,
+        auto_relance_after_days: int,
+    ) -> SmsConfig:
+        """Update the user's SMS automation opt-ins (get-or-create the config row).
+
+        Args:
+            db: Active database session.
+            user_id: Owner.
+            cold_sms_enabled: Cold-SMS prospects who have a mobile but no email.
+            auto_relance_enabled: Auto-relance emailed prospects who never reacted.
+            auto_relance_after_days: Delay (days) before the auto-relance fires (clamped 7–120).
+
+        Returns:
+            The persisted config.
+        """
+        config = self.get(db, user_id)
+        if config is None:
+            config = SmsConfig(user_id=user_id)
+            db.add(config)
+        config.cold_sms_enabled = cold_sms_enabled
+        config.auto_relance_enabled = auto_relance_enabled
+        config.auto_relance_after_days = max(7, min(int(auto_relance_after_days), 120))
+        db.commit()
+        db.refresh(config)
+        return config
+
 
 sms_config_service = SmsConfigService()

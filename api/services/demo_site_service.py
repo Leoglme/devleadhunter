@@ -19,6 +19,9 @@ from models.acquisition_run import AcquisitionRun
 from models.acquisition_run_item import AcquisitionRunItem
 from models.demo_site import DemoSite
 from models.order import Order
+from models.prospect_db import ProspectDB
+from models.sms_message import SmsMessage
+from models.sms_suppression import SmsSuppression
 from models.user import User
 from services.activity_log_service import (
     CATEGORY_DEMO_SITE,
@@ -34,6 +37,7 @@ from services.demo_site_verification_service import (
     demo_site_verification_service,
 )
 from services.enrichment_service import enrichment_service
+from services.sms.phone_normalizer import is_mobile_fr, to_e164_fr
 from services.storyblok_service import (
     StoryblokProvisionError,
     StoryblokProvisionResult,
@@ -732,15 +736,18 @@ class DemoSiteService:
 
         Served while the demo lives (pending/provisioning/active/unavailable…), so
         post-provisioning verification and the demo-host render work. A **sold**
-        site (status DELIVERED) or a deleted one is taken down here (404) — a sold
-        site then lives only on the client's own domain.
+        site (status DELIVERED), a deleted one, or a **dormant** one (EXPIRED, kept
+        for a possible SMS relance) is taken down here (404) until it is sold or
+        revived — a sold site then lives only on the client's own domain.
         """
         now: datetime = datetime.now(UTC)
         site: DemoSite | None = (
             db.query(DemoSite)
             .filter(
                 DemoSite.slug == slug,
-                DemoSite.status.notin_([DemoSiteStatus.DELETED.value, DemoSiteStatus.DELIVERED.value]),
+                DemoSite.status.notin_(
+                    [DemoSiteStatus.DELETED.value, DemoSiteStatus.DELIVERED.value, DemoSiteStatus.EXPIRED.value]
+                ),
                 DemoSite.content_json.isnot(None),
             )
             .first()
@@ -802,6 +809,25 @@ class DemoSiteService:
             site.expires_at.isoformat(),
         )
         return True
+
+    def restart_demo_ttl(self, db: Session, site: DemoSite, sent_at: datetime) -> None:
+        """Reset the demo TTL to a fresh window from *sent_at* (an SMS relance revival).
+
+        Unlike :meth:`start_demo_ttl` (which only starts once), this always resets the
+        clock — a relance one month later gives the prospect a brand-new 21-day demo.
+
+        Args:
+            db: Active database session.
+            site: The demo site being relanced.
+            sent_at: When the relance SMS was sent.
+        """
+        if site.status == DemoSiteStatus.DELIVERED.value:
+            return
+        sent_utc: datetime = self._as_utc(sent_at)
+        site.demo_link_sent_at = sent_utc
+        site.expires_at = sent_utc + timedelta(days=settings.demo_site_ttl_days)
+        db.commit()
+        logger.info("Demo TTL restarted for slug=%s expires_at=%s", site.slug, site.expires_at.isoformat())
 
     def maybe_start_ttl_after_demo_email(
         self,
@@ -1131,9 +1157,85 @@ class DemoSiteService:
         demo_site.video_error = None
         demo_site.video_generated_at = None
 
-    async def expire_due_sites(self, db: Session) -> int:
+    async def revive_demo_site(self, db: Session, site: DemoSite) -> DemoSite:
+        """Wake a dormant (EXPIRED) demo so an SMS relance can push it again.
+
+        The public demo renders from ``content_json`` (Storyblok is only needed at
+        sale), so reviving rebuilds the content when it was cleared, restores the URL
+        and flips the status back to ACTIVE — no re-scrape, no Storyblok re-provision.
+
+        Args:
+            db: Active database session.
+            site: The dormant demo site.
+
+        Returns:
+            The revived site (ACTIVE), or the site unchanged when it is not dormant.
         """
-        Mark expired demo sites and delete their Storyblok spaces.
+        if site.status != DemoSiteStatus.EXPIRED.value:
+            return site
+        if not site.content_json:
+            site.content_json = self._build_content_for_site(db, site)
+        site.demo_url = site.demo_url or self.demo_url_for_slug(site.slug)
+        site.vercel_deployment_url = site.demo_url
+        site.error_message = None
+        site.demo_url_live = True
+        site.status = DemoSiteStatus.ACTIVE.value
+        db.commit()
+        db.refresh(site)
+        logger.info("Demo site revived for slug=%s", site.slug)
+        return site
+
+    def _should_keep_dormant(self, db: Session, site: DemoSite) -> bool:
+        """Whether an expiring demo should be kept dormant for a possible SMS relance.
+
+        Kept when the prospect can still be SMS-reached: a French mobile, not opted out
+        (STOP), and not already texted (the one-SMS touch is still available).
+
+        Args:
+            db: Active database session.
+            site: The demo site reaching its TTL.
+
+        Returns:
+            ``True`` to keep the site dormant (EXPIRED), ``False`` to hard-delete it.
+        """
+        if not site.prospect_id:
+            return False
+        prospect = db.query(ProspectDB).filter(ProspectDB.id == site.prospect_id).first()
+        if prospect is None or not prospect.phone or not is_mobile_fr(prospect.phone):
+            return False
+        phone_e164 = to_e164_fr(prospect.phone)
+        if phone_e164 and (
+            db.query(SmsSuppression.id)
+            .filter(SmsSuppression.user_id == site.user_id, SmsSuppression.phone_e164 == phone_e164)
+            .first()
+            is not None
+        ):
+            return False
+        already_texted = (
+            db.query(SmsMessage.id)
+            .filter(SmsMessage.user_id == site.user_id, SmsMessage.prospect_id == site.prospect_id)
+            .first()
+            is not None
+        )
+        return not already_texted
+
+    @staticmethod
+    def _purge_demo_video(site: DemoSite) -> None:
+        """Delete the site's generated prospection video (its link dies with the demo)."""
+        from services.demo_video_service import delete_files_for_slug
+
+        delete_files_for_slug(site.slug)
+        site.video_status = None
+        site.video_error = None
+        site.video_generated_at = None
+
+    async def expire_due_sites(self, db: Session) -> int:
+        """Expire demo sites past their TTL: keep the SMS-reachable ones dormant, delete the rest.
+
+        The Storyblok space is freed in every case (only needed at sale). A prospect who can
+        still receive an SMS keeps a dormant (EXPIRED) demo — ``content_json`` retained — so an
+        auto-relance can revive it with a fresh TTL; everyone else is hard-deleted. Dormant demos
+        nobody relanced are hard-deleted once past the retention window.
 
         Returns:
             Number of sites cleaned up.
@@ -1142,12 +1244,7 @@ class DemoSiteService:
         due_sites: list[DemoSite] = (
             db.query(DemoSite)
             .filter(
-                DemoSite.status.in_(
-                    [
-                        DemoSiteStatus.ACTIVE.value,
-                        DemoSiteStatus.UNAVAILABLE.value,
-                    ]
-                ),
+                DemoSite.status.in_([DemoSiteStatus.ACTIVE.value, DemoSiteStatus.UNAVAILABLE.value]),
                 DemoSite.demo_link_sent_at.isnot(None),
                 DemoSite.expires_at <= now,
             )
@@ -1156,6 +1253,7 @@ class DemoSiteService:
 
         cleaned: int = 0
         for site in due_sites:
+            # The Storyblok space is only needed at sale, never for a dormant/dead demo.
             try:
                 await storyblok_service.delete_demo_space(
                     space_id=site.storyblok_space_id,
@@ -1165,22 +1263,32 @@ class DemoSiteService:
                 )
             except Exception as exc:
                 logger.warning("Failed to delete Storyblok space for slug=%s: %s", site.slug, exc)
-
             site.storyblok_space_id = None
             site.storyblok_public_token = None
             site.storyblok_preview_token = None
             site.storyblok_editor_url = None
+            self._purge_demo_video(site)
+
+            if self._should_keep_dormant(db, site):
+                # Dormant: keep content_json so an auto-relance can revive it instantly.
+                site.status = DemoSiteStatus.EXPIRED.value
+            else:
+                site.content_json = None
+                site.status = DemoSiteStatus.DELETED.value
+                site.deleted_at = now
+            cleaned += 1
+
+        # Dormant demos nobody relanced within the window are finally hard-deleted.
+        dormant_cutoff: datetime = now - timedelta(days=settings.demo_dormant_retention_days)
+        stale_dormant: list[DemoSite] = (
+            db.query(DemoSite)
+            .filter(DemoSite.status == DemoSiteStatus.EXPIRED.value, DemoSite.expires_at < dormant_cutoff)
+            .all()
+        )
+        for site in stale_dormant:
             site.content_json = None
             site.status = DemoSiteStatus.DELETED.value
             site.deleted_at = now
-
-            # La vidéo de prospection suit le TTL de la démo (lien mort sinon).
-            from services.demo_video_service import delete_files_for_slug
-
-            delete_files_for_slug(site.slug)
-            site.video_status = None
-            site.video_error = None
-            site.video_generated_at = None
             cleaned += 1
 
         if cleaned:

@@ -48,6 +48,50 @@
     </section>
 
     <section class="app-card p-5">
+      <h2 class="text-sm font-semibold text-[var(--app-ink)]">Automatisations</h2>
+      <p class="mt-1 text-xs text-[var(--app-ink-soft)]">
+        Désactivées par défaut : vous gardez la main en manuel. Activez-les pour laisser DevLeadHunter envoyer tout
+        seul, toujours dans la fenêtre légale (lun–ven 8h–20h, sam 10h–19h).
+      </p>
+
+      <div class="mt-4 flex items-start gap-3">
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-[var(--app-ink)]">Relance SMS automatique</p>
+          <p class="mt-0.5 text-xs text-[var(--app-ink-soft)]">
+            Relance par SMS les prospects emailés il y a {{ autoRelanceAfterDays }} jours sans aucune réaction. Leur
+            site de démonstration est réveillé et repart pour 21 jours.
+          </p>
+        </div>
+        <UiSwitch id="sms-auto-relance" :model-value="autoRelanceEnabled" @update:model-value="onToggleAutoRelance" />
+      </div>
+
+      <div v-if="autoRelanceEnabled" class="mt-3">
+        <label class="block">
+          <span class="mb-1 block text-xs font-medium text-[var(--app-ink)]">Délai avant relance (jours)</span>
+          <input
+            v-model.number="autoRelanceAfterDays"
+            type="number"
+            min="7"
+            max="120"
+            class="input-field h-10 w-full @lg:max-w-[8rem]"
+            @change="saveAutomation"
+          />
+        </label>
+      </div>
+
+      <div class="mt-5 flex items-start gap-3 border-t border-[var(--app-line-soft)] pt-4">
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-[var(--app-ink)]">Prospection SMS des prospects sans email</p>
+          <p class="mt-0.5 text-xs text-[var(--app-ink-soft)]">
+            Contacte par SMS les prospects qui ont un mobile 06/07 mais pas d'email — le SMS devient le premier contact,
+            avec leur site de démonstration.
+          </p>
+        </div>
+        <UiSwitch id="sms-cold" :model-value="coldSmsEnabled" @update:model-value="onToggleColdSms" />
+      </div>
+    </section>
+
+    <section class="app-card p-5">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 class="text-sm font-semibold text-[var(--app-ink)]">Prospects à relancer</h2>
@@ -120,6 +164,10 @@ const config: Ref<SmsConfig | null> = ref(null)
 const sender: Ref<string> = ref('')
 const isSaving: Ref<boolean> = ref(false)
 
+const coldSmsEnabled: Ref<boolean> = ref(false)
+const autoRelanceEnabled: Ref<boolean> = ref(false)
+const autoRelanceAfterDays: Ref<number> = ref(30)
+
 const rows: Ref<SmsCandidateRow[]> = ref([])
 const isLoadingCandidates: Ref<boolean> = ref(false)
 
@@ -140,14 +188,49 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-/** Load the SMS config. */
+/** Load the SMS config (sender + automation opt-ins). */
 async function loadConfig(): Promise<void> {
   try {
     config.value = await SmsService.getConfig()
     sender.value = config.value.sender
+    coldSmsEnabled.value = config.value.cold_sms_enabled
+    autoRelanceEnabled.value = config.value.auto_relance_enabled
+    autoRelanceAfterDays.value = config.value.auto_relance_after_days
   } catch {
     toast.error('Impossible de charger la configuration SMS')
   }
+}
+
+/** Persist the SMS automation opt-ins. */
+async function saveAutomation(): Promise<void> {
+  try {
+    config.value = await SmsService.updateAutomation({
+      cold_sms_enabled: coldSmsEnabled.value,
+      auto_relance_enabled: autoRelanceEnabled.value,
+      auto_relance_after_days: autoRelanceAfterDays.value,
+    })
+    toast.success('Automatisations enregistrées')
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : "Échec de l'enregistrement")
+  }
+}
+
+/**
+ * Toggle the auto-relance and persist.
+ * @param value - The new state.
+ */
+async function onToggleAutoRelance(value: boolean): Promise<void> {
+  autoRelanceEnabled.value = value
+  await saveAutomation()
+}
+
+/**
+ * Toggle the cold-SMS and persist.
+ * @param value - The new state.
+ */
+async function onToggleColdSms(value: boolean): Promise<void> {
+  coldSmsEnabled.value = value
+  await saveAutomation()
 }
 
 /** Load the relance candidates. */

@@ -1,14 +1,24 @@
 import { ApiClient } from './api'
 
-/** The user's SMS sender configuration (a configured sender = channel on). */
+/** The user's SMS sender configuration (a configured sender = channel on) + automation opt-ins. */
 export type SmsConfig = {
   sender: string
   provider_ready: boolean
+  cold_sms_enabled: boolean
+  auto_relance_enabled: boolean
+  auto_relance_after_days: number
 }
 
 /** Payload to update the SMS sender (empty sender disables the channel). */
 export type SmsConfigUpdate = {
   sender: string
+}
+
+/** Payload to toggle the SMS automations (cold-SMS + auto-relance). */
+export type SmsAutomationUpdate = {
+  cold_sms_enabled: boolean
+  auto_relance_enabled: boolean
+  auto_relance_after_days: number
 }
 
 /** A prospect eligible for an SMS relance. */
@@ -94,6 +104,15 @@ export class SmsService {
    */
   static async updateConfig(payload: SmsConfigUpdate): Promise<SmsConfig> {
     return ApiClient.put<SmsConfig>('/api/v1/sms/config', payload)
+  }
+
+  /**
+   * Toggle the SMS automations (cold-SMS + auto-relance).
+   * @param payload - The automation opt-ins.
+   * @returns The saved configuration.
+   */
+  static async updateAutomation(payload: SmsAutomationUpdate): Promise<SmsConfig> {
+    return ApiClient.put<SmsConfig>('/api/v1/sms/config/automation', payload)
   }
 
   /**

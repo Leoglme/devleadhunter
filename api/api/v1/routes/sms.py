@@ -18,9 +18,11 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.database import get_db
 from enums.sms_status import SmsStatus
+from models.sms_config import SmsConfig
 from models.sms_message import SmsMessage
 from models.user import User
 from schemas.sms import (
+    SmsAutomationUpdate,
     SmsBulkSendResponse,
     SmsConfigResponse,
     SmsConfigUpdate,
@@ -51,16 +53,30 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sms", tags=["sms"])
 
 
+def _config_response(config: SmsConfig | None) -> SmsConfigResponse:
+    """Serialize a user's SMS config (sender + automation opt-ins), defaults when unset.
+
+    Args:
+        config: The user's config row, or ``None`` when never set.
+
+    Returns:
+        The response carrying the sender, provider readiness and automation flags.
+    """
+    return SmsConfigResponse(
+        sender=config.sender if config else "",
+        provider_ready=bool(settings.smsmode_api_key),
+        cold_sms_enabled=bool(config.cold_sms_enabled) if config else False,
+        auto_relance_enabled=bool(config.auto_relance_enabled) if config else False,
+        auto_relance_after_days=config.auto_relance_after_days if config else 30,
+    )
+
+
 @router.get("/config", response_model=SmsConfigResponse)
 async def get_sms_config(
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> SmsConfigResponse:
-    """Return the current user's SMS sender configuration."""
-    config = sms_config_service.get(db, current_user.id)
-    return SmsConfigResponse(
-        sender=config.sender if config else "",
-        provider_ready=bool(settings.smsmode_api_key),
-    )
+    """Return the current user's SMS sender + automation configuration."""
+    return _config_response(sms_config_service.get(db, current_user.id))
 
 
 @router.put("/config", response_model=SmsConfigResponse)
@@ -74,7 +90,24 @@ async def update_sms_config(
         config = sms_config_service.upsert(db, current_user.id, sender=payload.sender)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return SmsConfigResponse(sender=config.sender, provider_ready=bool(settings.smsmode_api_key))
+    return _config_response(config)
+
+
+@router.put("/config/automation", response_model=SmsConfigResponse)
+async def update_sms_automation(
+    payload: SmsAutomationUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SmsConfigResponse:
+    """Toggle the current user's SMS automations (cold-SMS + auto-relance)."""
+    config = sms_config_service.set_automation(
+        db,
+        current_user.id,
+        cold_sms_enabled=payload.cold_sms_enabled,
+        auto_relance_enabled=payload.auto_relance_enabled,
+        auto_relance_after_days=payload.auto_relance_after_days,
+    )
+    return _config_response(config)
 
 
 @router.get("/relance-candidates", response_model=list[SmsRelanceCandidateResponse])

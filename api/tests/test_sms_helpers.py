@@ -118,6 +118,21 @@ class TestSenderValidation:
         assert SmsConfigService.is_valid_sender("Dibo-dev") is False
 
 
+class TestColdBody:
+    def test_cold_body_has_no_email_wording_but_link_and_stop(self) -> None:
+        body = sms_service.compose_cold_body(
+            greeting="Bonjour Marc",
+            business_name="Garage Central",
+            sender="Dibodev",
+            demo_url="demo.dibodev.fr/garage-central?src=sms",
+        )
+        # A cold SMS is a first contact — it must NOT claim a prior email.
+        assert "par email" not in body
+        assert "Garage Central" in body
+        assert "demo.dibodev.fr/garage-central?src=sms" in body
+        assert body.endswith("STOP au 36180")
+
+
 class TestManualBody:
     def test_appends_stop_mention(self) -> None:
         body = sms_service.compose_manual_body("Bonjour, votre site est prêt")

@@ -1,18 +1,21 @@
-"""Find prospects eligible for an SMS relance, and send it.
+"""Find prospects to SMS (relance or cold) and send, reviving the demo if dormant.
 
-The SMS channel is a RELANCE, never a cold first touch: a prospect qualifies
-only when they were emailed a while ago and did NOT react (no human open, no
-click, no reply), still have a live demo to point at, own a mobile, and have not
-already been texted or opted out. This keeps the SMS squarely a « second touch »
-— more natural and more defensible than a cold SMS.
+The SMS pushes a prospect back to their demo site. Two selections:
+- **Relance**: a prospect emailed a while ago who did NOT react (no human open, click
+  or reply), owns a mobile, was never texted or opted out. More natural than a cold SMS.
+- **Cold**: a prospect with a mobile but NO email — the SMS is the first touch.
+
+A prospect's demo may have gone dormant (EXPIRED) since its 21-day TTL lapsed; the send
+revives it (from ``content_json``, no re-scrape) and restarts a fresh 21-day TTL, so the
+prospect always gets a live link.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from enums.demo_site_status import DemoSiteStatus
@@ -33,18 +36,31 @@ logger = logging.getLogger(__name__)
 # A prospect qualifies for a relance this many *calendar* days after the email.
 DEFAULT_RELANCE_AFTER_DAYS: int = 30
 
+# A demo the SMS can point at: live, or dormant (revivable on send).
+_REACHABLE_DEMO_STATUSES: list[str] = [DemoSiteStatus.ACTIVE.value, DemoSiteStatus.EXPIRED.value]
+
 
 class SmsRelanceCandidate:
-    """A prospect eligible for an SMS relance, with the demo link to push."""
+    """A prospect to SMS, with the (possibly dormant) demo to push."""
 
-    def __init__(self, *, prospect: ProspectDB, demo_url: str, emailed_at: datetime) -> None:
+    def __init__(
+        self,
+        *,
+        prospect: ProspectDB,
+        demo_site: DemoSite,
+        demo_url: str,
+        emailed_at: datetime | None = None,
+        cold: bool = False,
+    ) -> None:
         self.prospect = prospect
+        self.demo_site = demo_site
         self.demo_url = demo_url
         self.emailed_at = emailed_at
+        self.cold = cold
 
 
 class SmsRelanceService:
-    """Select relance-eligible prospects and send their SMS."""
+    """Select prospects to SMS (relance + cold) and send, reviving dormant demos."""
 
     def find_candidates(
         self,
@@ -54,7 +70,7 @@ class SmsRelanceService:
         after_days: int = DEFAULT_RELANCE_AFTER_DAYS,
         limit: int = 50,
     ) -> list[SmsRelanceCandidate]:
-        """Return the user's prospects eligible for an SMS relance.
+        """Return the user's prospects eligible for an SMS relance (emailed, no reaction).
 
         Args:
             db: Active database session.
@@ -81,7 +97,6 @@ class SmsRelanceService:
             .group_by(EmailLog.prospect_id)
             .subquery()
         )
-        # Prospects already texted (any status) — never text twice in v1.
         already_texted = select(SmsMessage.prospect_id).where(SmsMessage.user_id == user_id).subquery()
 
         rows = db.execute(
@@ -98,42 +113,79 @@ class SmsRelanceService:
 
         candidates: list[SmsRelanceCandidate] = []
         for prospect, emailed_at in rows:
-            if not is_mobile_fr(prospect.phone):
-                continue
-            to_e164 = to_e164_fr(prospect.phone)
-            if to_e164 and sms_service.is_suppressed(db, user_id, to_e164):
-                continue
-            demo_url = self._live_demo_url(db, user_id, prospect.id)
-            if not demo_url:
-                continue
-            candidates.append(SmsRelanceCandidate(prospect=prospect, demo_url=demo_url, emailed_at=emailed_at))
+            candidate = self._build_candidate(db, user_id, prospect, emailed_at=emailed_at, cold=False)
+            if candidate is not None:
+                candidates.append(candidate)
             if len(candidates) >= limit:
                 break
         return candidates
 
-    def _live_demo_url(self, db: Session, user_id: int, prospect_id: int) -> str | None:
-        """Public URL of the prospect's live demo tagged ``?src=sms``, or ``None`` when there is none.
+    def find_cold_candidates(self, db: Session, user_id: int, *, limit: int = 50) -> list[SmsRelanceCandidate]:
+        """Return the user's prospects for a cold SMS (a mobile but no email).
 
-        The ``src=sms`` marker lets PostHog attribute the demo visit to the SMS channel
-        (vs the email link, which carries ``?src=email``).
+        Args:
+            db: Active database session.
+            user_id: Owner.
+            limit: Max candidates to return.
+
+        Returns:
+            Eligible cold candidates.
         """
-        site = (
+        already_texted = select(SmsMessage.prospect_id).where(SmsMessage.user_id == user_id).subquery()
+        rows = db.execute(
+            select(ProspectDB)
+            .where(
+                ProspectDB.user_id == user_id,
+                ProspectDB.phone.isnot(None),
+                or_(ProspectDB.email.is_(None), ProspectDB.email == ""),
+                ProspectDB.id.notin_(select(already_texted.c.prospect_id)),
+            )
+            .order_by(ProspectDB.created_at.asc())
+            .limit(limit * 3)
+        ).all()
+
+        candidates: list[SmsRelanceCandidate] = []
+        for (prospect,) in rows:
+            candidate = self._build_candidate(db, user_id, prospect, emailed_at=None, cold=True)
+            if candidate is not None:
+                candidates.append(candidate)
+            if len(candidates) >= limit:
+                break
+        return candidates
+
+    def _build_candidate(
+        self, db: Session, user_id: int, prospect: ProspectDB, *, emailed_at: datetime | None, cold: bool
+    ) -> SmsRelanceCandidate | None:
+        """Turn a prospect into a candidate when it is SMS-reachable with a demo, else ``None``."""
+        if not is_mobile_fr(prospect.phone):
+            return None
+        to_e164 = to_e164_fr(prospect.phone)
+        if to_e164 and sms_service.is_suppressed(db, user_id, to_e164):
+            return None
+        site = self._demo_for_prospect(db, user_id, prospect.id)
+        if site is None:
+            return None
+        demo_url = append_query_param(demo_site_service.demo_url_for_slug(site.slug), "src", CHANNEL_SMS)
+        return SmsRelanceCandidate(
+            prospect=prospect, demo_site=site, demo_url=demo_url, emailed_at=emailed_at, cold=cold
+        )
+
+    def _demo_for_prospect(self, db: Session, user_id: int, prospect_id: int) -> DemoSite | None:
+        """The prospect's newest reachable demo (ACTIVE, else dormant EXPIRED), or ``None``."""
+        return (
             db.query(DemoSite)
             .filter(
                 DemoSite.user_id == user_id,
                 DemoSite.prospect_id == prospect_id,
-                DemoSite.status == DemoSiteStatus.ACTIVE.value,
+                DemoSite.status.in_(_REACHABLE_DEMO_STATUSES),
                 DemoSite.slug.isnot(None),
             )
             .order_by(DemoSite.created_at.desc())
             .first()
         )
-        if site is None or not site.slug:
-            return None
-        return append_query_param(demo_site_service.demo_url_for_slug(site.slug), "src", CHANNEL_SMS)
 
     async def send_relance(self, db: Session, user_id: int, candidate: SmsRelanceCandidate) -> bool:
-        """Send the relance SMS for one candidate.
+        """Send one SMS (relance or cold) — revive a dormant demo first, then restart its TTL.
 
         Args:
             db: Active database session.
@@ -146,6 +198,8 @@ class SmsRelanceService:
         config = sms_config_service.get(db, user_id)
         if config is None:
             return False
+        if candidate.demo_site.status == DemoSiteStatus.EXPIRED.value:
+            await demo_site_service.revive_demo_site(db, candidate.demo_site)
         first, last, gender = EmailVariables.resolved_contact(db, candidate.prospect.id)
         greeting = build_greeting(first, last, gender)
         outcome = await sms_service.send_to_prospect(
@@ -155,7 +209,11 @@ class SmsRelanceService:
             config=config,
             demo_url=candidate.demo_url,
             greeting=greeting,
+            cold=candidate.cold,
         )
+        if outcome.sent:
+            # A fresh 21-day TTL from the SMS send — the prospect gets a live link again.
+            demo_site_service.restart_demo_ttl(db, candidate.demo_site, datetime.now(UTC))
         return outcome.sent
 
 

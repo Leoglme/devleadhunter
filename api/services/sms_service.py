@@ -141,6 +141,23 @@ class SmsService:
         )
         return core + _STOP_MENTION
 
+    def compose_cold_body(self, *, greeting: str, business_name: str, sender: str, demo_url: str) -> str:
+        """Build a sober cold-SMS body (first contact, no « par email ») with the STOP mention.
+
+        Used for prospects with a mobile but no email, where the SMS IS the first touch.
+
+        Args:
+            greeting: Safe greeting (``Bonjour`` / ``Bonjour Prénom``).
+            business_name: Prospect's business name.
+            sender: The user's sender id, signed at the end.
+            demo_url: Plain demo URL (no shortener).
+
+        Returns:
+            The message body.
+        """
+        core = f"{greeting}, j'ai realise un apercu de site web pour {business_name} : {demo_url} — {sender}."
+        return core + _STOP_MENTION
+
     async def send_to_prospect(
         self,
         db: Session,
@@ -150,8 +167,9 @@ class SmsService:
         config: SmsConfig,
         demo_url: str,
         greeting: str,
+        cold: bool = False,
     ) -> SmsSendOutcome:
-        """Send one relance SMS to *prospect*, logging the outcome.
+        """Send one relance (or cold) SMS to *prospect*, logging the outcome.
 
         Args:
             db: Active database session.
@@ -160,6 +178,7 @@ class SmsService:
             config: The user's SMS config (sender).
             demo_url: Plain demo URL to push.
             greeting: Safe greeting for the body.
+            cold: Whether this is a cold first contact (no « par email » wording).
 
         Returns:
             The send outcome (``sent`` + reason when skipped).
@@ -180,7 +199,8 @@ class SmsService:
         if self.is_suppressed(db, user_id, to_e164):
             return SmsSendOutcome(sent=False, reason="Numéro désinscrit (STOP)")
 
-        body = self.compose_body(
+        compose = self.compose_cold_body if cold else self.compose_body
+        body = compose(
             greeting=greeting,
             business_name=prospect.name or "votre entreprise",
             sender=config.sender,

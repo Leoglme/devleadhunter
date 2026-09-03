@@ -58,6 +58,7 @@ from services.order_fulfillment_recovery_service import run_order_fulfillment_re
 from services.order_payment_reconciliation_service import run_order_payment_reconciliation_loop
 from services.scraper_service import scraper_service
 from services.send_queue_watchdog_service import run_send_queue_watchdog_loop
+from services.sms_automation_service import run_sms_automation_loop
 
 ensure_proactor_event_loop()
 
@@ -172,6 +173,7 @@ async def startup_event() -> None:
         _warmup_maps_autocomplete(),
         run_daily_recap_loop(),
         run_send_queue_watchdog_loop(),
+        run_sms_automation_loop(),
     ):
         task = asyncio.create_task(coro)
         _background_tasks.add(task)

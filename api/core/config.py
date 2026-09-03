@@ -86,6 +86,11 @@ class Settings(BaseSettings):
         alias="DEMO_SITE_TTL_DAYS",
         description="Number of days a demo site stays online after its link is first emailed",
     )
+    demo_dormant_retention_days: int = Field(
+        default=60,
+        alias="DEMO_DORMANT_RETENTION_DAYS",
+        description="Days an expired demo of an SMS-reachable prospect stays dormant (revivable) before hard-deletion",
+    )
     storyblok_trial_days: int = Field(
         default=45,
         alias="STORYBLOK_TRIAL_DAYS",
@@ -311,6 +316,16 @@ class Settings(BaseSettings):
         default=0.061,
         alias="SMSMODE_PRICE_PER_SEGMENT_EUR",
         description="smsmode price per SMS segment (euros), used when the send response carries no price (real FR rate)",
+    )
+    sms_auto_daily_cap: int = Field(
+        default=20,
+        alias="SMS_AUTO_DAILY_CAP",
+        description="Max automated SMS (relance + cold) sent per user per day (warm-up throttle)",
+    )
+    sms_auto_per_run: int = Field(
+        default=3,
+        alias="SMS_AUTO_PER_RUN",
+        description="Max automated SMS sent per user on each background pass (spreads the daily cap)",
     )
 
     # Support / ticketing settings — les pièces jointes vivent sur R2 (voir
