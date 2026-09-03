@@ -581,8 +581,12 @@ class DemoSiteService:
         Returns:
             Persisted demo site record in ACTIVE or FAILED status.
         """
-        if not email or not email.strip():
-            raise ValueError("Client email is required for the demo site record.")
+        # A client email is only required to invite them to the CMS right away (a sale); a
+        # cold-SMS demo (prospect with a mobile but no email) generates without one, rendering
+        # from content_json — the email is captured later at the sale.
+        normalized_email: str | None = email.strip() if email and email.strip() else None
+        if invite_client_to_cms and not normalized_email:
+            raise ValueError("Client email is required to invite them to the CMS.")
 
         slug: str = self.unique_slug(db, business_name)
         expires_at: datetime = self._pending_ttl_expires_at()
@@ -594,7 +598,7 @@ class DemoSiteService:
             template_id=template_id,
             business_name=business_name,
             phone=phone,
-            email=email,
+            email=normalized_email,
             city=city,
             description=description,
             status=DemoSiteStatus.PROVISIONING.value,
@@ -615,11 +619,11 @@ class DemoSiteService:
                 business_name=business_name,
                 slug=slug,
                 phone=phone,
-                email=email,
+                email=normalized_email or "",
                 city=city,
                 description=description,
                 template_id=template_id,
-                collaborator_email=email.strip(),
+                collaborator_email=normalized_email or "",
                 preview_url=self.demo_url_for_slug(slug),
                 invite_client=invite_client_to_cms,
                 theme=palette,

@@ -43,6 +43,7 @@ from services.demo_video_service import (
 from services.presenter_video_service import presenter_video_service
 from services.r2_storage_service import r2_storage
 from services.site_export_service import site_export_service
+from services.sms.phone_normalizer import is_mobile_fr
 from services.storyblok_service import storyblok_service
 
 logger = logging.getLogger(__name__)
@@ -224,7 +225,7 @@ async def create_demo_site(
             business_name=payload.business_name,
             template_id=payload.template_id,
             phone=payload.phone,
-            email=str(payload.email),
+            email=str(payload.email) if payload.email else None,
             city=payload.city,
             description=payload.description,
             invite_client_to_cms=payload.invite_client_to_cms,
@@ -267,7 +268,10 @@ async def create_demo_sites_bulk(
             results.append({"prospect_id": prospect_id, "status": "failed", "error": "Prospect introuvable"})
             failed += 1
             continue
-        if not prospect.email or not prospect.email.strip():
+        # Generate for anyone reachable — by email, or by SMS (a mobile 06/07 for a cold SMS).
+        # Only a prospect with neither is skipped (there is no way to send them the link).
+        has_email = bool(prospect.email and prospect.email.strip())
+        if not has_email and not is_mobile_fr(prospect.phone):
             skipped_no_email.append({"id": prospect_id, "name": prospect.name or ""})
             continue
 
