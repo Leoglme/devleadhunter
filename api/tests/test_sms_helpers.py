@@ -2,6 +2,8 @@
 
 from datetime import datetime
 
+import pytest
+
 from services.sms.dlr import (
     classify_dlr,
     dlr_message_id,
@@ -141,6 +143,27 @@ class TestPriceEstimate:
     def test_zero_segments_bills_one(self) -> None:
         # A send always bills at least one segment, never zero.
         assert estimate_price_cents(0) == round(0.061 * 100)
+
+
+class TestLegalWindowGuard:
+    def test_refuses_on_sunday(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import services.sms_service as sms_module
+
+        monkeypatch.setattr(sms_module, "now_in_paris", lambda: datetime(2026, 8, 30, 12, 0))  # Sunday noon
+        refusal = sms_module.sms_service.legal_window_refusal()
+        assert refusal is not None and "fenêtre légale" in refusal
+
+    def test_refuses_before_opening(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import services.sms_service as sms_module
+
+        monkeypatch.setattr(sms_module, "now_in_paris", lambda: datetime(2026, 8, 31, 7, 0))  # Monday 07:00
+        assert sms_module.sms_service.legal_window_refusal() is not None
+
+    def test_allows_inside_window(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import services.sms_service as sms_module
+
+        monkeypatch.setattr(sms_module, "now_in_paris", lambda: datetime(2026, 8, 31, 10, 0))  # Monday 10:00
+        assert sms_module.sms_service.legal_window_refusal() is None
 
 
 class TestDlrParsing:

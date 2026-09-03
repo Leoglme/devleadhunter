@@ -25,6 +25,7 @@ from services.notification_service import notification_service
 from services.sms.gsm_segments import segment_count
 from services.sms.phone_normalizer import is_mobile_fr, to_e164_fr
 from services.sms.pricing import estimate_price_cents
+from services.sms.send_window import is_within_window, next_send_slot, now_in_paris
 from services.sms.sms_provider import SmsProvider, SmsSendResult
 from services.sms.smsmode_provider import smsmode_provider
 
@@ -84,6 +85,24 @@ class SmsService:
         db.commit()
         logger.info("SMS suppression added for user %s (%s)", user_id, reason)
 
+    def legal_window_refusal(self) -> str | None:
+        """Refusal reason when the current Paris time is outside the legal SMS window.
+
+        Marketing SMS is only legal Mon–Fri 8h–20h, Sat 10h–19h, never Sunday or a
+        French public holiday — a HARD guardrail, whatever the user configured.
+
+        Returns:
+            A human refusal naming the next legal slot, or ``None`` when a send may go out now.
+        """
+        now = now_in_paris()
+        if is_within_window(now):
+            return None
+        slot = next_send_slot(now)
+        return (
+            "Hors de la fenêtre légale d'envoi SMS (lun–ven 8h–20h, sam 10h–19h, jamais dimanche ni jour férié). "
+            f"Prochain créneau : {slot.strftime('%d/%m à %Hh%M')}."
+        )
+
     def compose_body(self, *, greeting: str, business_name: str, sender: str, demo_url: str) -> str:
         """Build a sober one-segment relance body with the mandatory STOP mention.
 
@@ -130,6 +149,9 @@ class SmsService:
             return SmsSendOutcome(sent=False, reason="Expéditeur SMS non configuré")
         if not self._provider.is_configured:
             return SmsSendOutcome(sent=False, reason="smsmode non configuré")
+        refusal = self.legal_window_refusal()
+        if refusal:
+            return SmsSendOutcome(sent=False, reason=refusal)
 
         to_e164 = to_e164_fr(prospect.phone)
         if not to_e164 or not is_mobile_fr(prospect.phone):
@@ -199,6 +221,11 @@ class SmsService:
             return SmsSendOutcome(sent=False, reason="Renseignez un nom d'expéditeur dans Paramètres → Relance SMS")
         if not self._provider.is_configured:
             return SmsSendOutcome(sent=False, reason="smsmode non configuré")
+        # The legal window guards marketing to a saved prospect; a bare-number self-test stays free.
+        if prospect_id is not None:
+            refusal = self.legal_window_refusal()
+            if refusal:
+                return SmsSendOutcome(sent=False, reason=refusal)
 
         to_e164 = to_e164_fr(to_raw)
         if not to_e164 or not is_mobile_fr(to_raw):

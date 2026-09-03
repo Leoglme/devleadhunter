@@ -9,7 +9,30 @@ deferred to the next legal slot. Public holidays are the French national ones
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
+
+try:  # Timezone-aware « now » when the tz database is present (prod always is).
+    from zoneinfo import ZoneInfo
+
+    _PARIS_TZ: ZoneInfo | None = ZoneInfo("Europe/Paris")
+except Exception:
+    _PARIS_TZ = None
+
+
+def now_in_paris() -> datetime:
+    """Current Europe/Paris local time, as a naive datetime for the window check.
+
+    The window hours are French local time, but the server runs in UTC — so the
+    check must be made in Paris time, not UTC.
+
+    Returns:
+        The current local (Paris) time; naive-UTC as a best-effort fallback when
+        the timezone database is unavailable.
+    """
+    if _PARIS_TZ is not None:
+        return datetime.now(_PARIS_TZ).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
+
 
 # Weekday (0 = Monday … 6 = Sunday) → (open, close) local time; missing = closed.
 _WINDOWS: dict[int, tuple[time, time]] = {
