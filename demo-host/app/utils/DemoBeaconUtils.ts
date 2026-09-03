@@ -40,10 +40,11 @@ export class DemoBeaconUtils {
     if (!import.meta.client || !apiBase || !slug) {
       return
     }
+    const channel: string = DemoBeaconUtils.channelFromQuery(new URLSearchParams(window.location.search).get('src'))
     fetch(`${apiBase}/api/v1/demo-events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ demo_slug: slug, event, ...extra }),
+      body: JSON.stringify({ demo_slug: slug, event, channel, ...extra }),
       keepalive: true,
     }).catch((): void => {})
   }

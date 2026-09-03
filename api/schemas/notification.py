@@ -57,6 +57,8 @@ class DemoEventIn(BaseModel):
     max_scroll: int | None = None
     # Free-text left by the prospect through the demo CTA banner (``demo_lead`` event).
     message: str | None = Field(default=None, max_length=1000)
+    # Marketing channel that brought the visit ('email' / 'sms' / 'direct'), from the ``?src=`` link.
+    channel: str | None = Field(default=None, max_length=16)
 
 
 class NotificationOut(BaseModel):

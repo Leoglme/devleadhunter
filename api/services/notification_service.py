@@ -87,6 +87,10 @@ _DEMO_EVENT_NOTIFS: dict[str, tuple[str, str, str]] = {
     "demo_video_replay": ("🔁", "success", "Revoit ta vidéo"),
 }
 
+# Marketing channel that brought a demo visit → short label appended to the body
+# (so the push and the activity log say « via SMS » / « via Email »); 'direct' shows nothing.
+_DEMO_CHANNEL_LABELS: dict[str, str] = {"sms": "SMS", "email": "Email"}
+
 # SMS lifecycle event → (emoji, level, body). Same title convention as emails.
 _SMS_EVENT_NOTIFS: dict[str, tuple[str, str, str]] = {
     "sms_sent": ("📱", "info", "SMS envoyé"),
@@ -173,6 +177,7 @@ class NotificationService:
         seconds: int | None = None,
         max_scroll: int | None = None,
         message: str | None = None,
+        channel: str | None = None,
     ) -> None:
         """
         Raise a notification for a live demo/video behavioural event.
@@ -188,6 +193,7 @@ class NotificationService:
             seconds: Engaged seconds, for the end-of-visit summary.
             max_scroll: Max scroll depth (%), for the end-of-visit summary.
             message: Free text left by the prospect, for ``demo_lead``.
+            channel: Marketing channel that brought the visit ('email' / 'sms' / 'direct').
         """
         mapping = _DEMO_EVENT_NOTIFS.get(event_name)
         if mapping is None:
@@ -203,6 +209,9 @@ class NotificationService:
         if event_name == "demo_lead" and (message or "").strip():
             excerpt = message.strip()[:160]
             body = f"{body} « {excerpt} »"
+        channel_label = _DEMO_CHANNEL_LABELS.get((channel or "").lower())
+        if channel_label:
+            body = f"{body} · {channel_label}"
         activity_log_service.record(
             category=CATEGORY_DEMO,
             action=event_name,

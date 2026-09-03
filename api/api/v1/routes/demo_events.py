@@ -72,4 +72,5 @@ async def ingest_demo_event(payload: DemoEventIn, db: Session = Depends(get_db))
         seconds=payload.seconds,
         max_scroll=payload.max_scroll,
         message=payload.message,
+        channel=payload.channel,
     )

@@ -21,6 +21,7 @@ from models.prospect_db import ProspectDB
 from models.sms_config import SmsConfig
 from models.sms_message import SmsMessage
 from models.sms_suppression import SmsSuppression
+from services.activity_log_service import CATEGORY_SMS, STATUS_WARNING, activity_log_service
 from services.notification_service import notification_service
 from services.sms.gsm_segments import segment_count
 from services.sms.phone_normalizer import is_mobile_fr, to_e164_fr
@@ -103,6 +104,25 @@ class SmsService:
             f"Prochain créneau : {slot.strftime('%d/%m à %Hh%M')}."
         )
 
+    def log_window_block(self, user_id: int, *, prospect_id: int | None = None, detail: str | None = None) -> None:
+        """Record in the activity feed that a relance was blocked by the legal window.
+
+        Args:
+            user_id: Owner of the blocked send.
+            prospect_id: Prospect the relance targeted, when known.
+            detail: The refusal reason (names the next legal slot).
+        """
+        activity_log_service.record(
+            category=CATEGORY_SMS,
+            action="sms_window_blocked",
+            status=STATUS_WARNING,
+            title="Relance SMS bloquée · hors fenêtre légale d'envoi",
+            detail=detail,
+            user_id=user_id,
+            entity_type="prospect" if prospect_id else None,
+            entity_id=prospect_id,
+        )
+
     def compose_body(self, *, greeting: str, business_name: str, sender: str, demo_url: str) -> str:
         """Build a sober one-segment relance body with the mandatory STOP mention.
 
@@ -151,6 +171,7 @@ class SmsService:
             return SmsSendOutcome(sent=False, reason="smsmode non configuré")
         refusal = self.legal_window_refusal()
         if refusal:
+            self.log_window_block(user_id, prospect_id=prospect.id, detail=refusal)
             return SmsSendOutcome(sent=False, reason=refusal)
 
         to_e164 = to_e164_fr(prospect.phone)
@@ -225,6 +246,7 @@ class SmsService:
         if prospect_id is not None:
             refusal = self.legal_window_refusal()
             if refusal:
+                self.log_window_block(user_id, prospect_id=prospect_id, detail=refusal)
                 return SmsSendOutcome(sent=False, reason=refusal)
 
         to_e164 = to_e164_fr(to_raw)

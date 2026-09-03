@@ -107,6 +107,7 @@ async def send_relance(
     """Send a relance SMS to one eligible prospect."""
     refusal = sms_service.legal_window_refusal()
     if refusal:
+        sms_service.log_window_block(current_user.id, prospect_id=prospect_id, detail=refusal)
         return SmsSendResponse(sent=False, reason=refusal)
     candidates = sms_relance_service.find_candidates(db, current_user.id, limit=200)
     candidate = next((c for c in candidates if c.prospect.id == prospect_id), None)
@@ -128,7 +129,9 @@ async def send_relance_bulk(
 ) -> SmsBulkSendResponse:
     """Send relance SMS to the eligible prospects, up to *limit*."""
     candidates = sms_relance_service.find_candidates(db, current_user.id, after_days=after_days, limit=limit)
-    if sms_service.legal_window_refusal() is not None:
+    refusal = sms_service.legal_window_refusal()
+    if refusal is not None:
+        sms_service.log_window_block(current_user.id, detail=refusal)
         return SmsBulkSendResponse(sent=0, skipped=len(candidates))
     sent = 0
     for candidate in candidates:
