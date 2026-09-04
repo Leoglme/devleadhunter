@@ -205,7 +205,12 @@ class OvhDomainProvider:
         return True
 
     async def point_to_vercel(self, domain: str, *, ip: str | None = None) -> None:
-        """Point the domain's apex ``A`` record at the Vercel demo-host, then refresh the zone.
+        """Point the domain's apex at the Vercel demo-host **only**, then refresh the zone.
+
+        OVH seeds a freshly-registered ``.fr`` with default apex records pointing at its own
+        parking (an ``A`` to ``213.186.33.5``, sometimes an ``AAAA``). Left in place, the apex
+        round-robins between OVH and Vercel and Vercel refuses to issue the TLS certificate. So
+        we delete every existing apex ``A``/``AAAA`` before adding the single Vercel ``A``.
 
         Args:
             domain: The registered domain whose zone to edit.
@@ -218,6 +223,13 @@ class OvhDomainProvider:
             raise DomainProviderError("OVH n'est pas configuré (clés API manquantes)")
         target = ip or settings.vercel_apex_ip
         async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
+            # Remove OVH's default apex parking records (empty subDomain = the apex itself).
+            for field_type in ("A", "AAAA"):
+                record_ids = await self._request(
+                    client, "GET", f"/domain/zone/{domain}/record?fieldType={field_type}&subDomain="
+                )
+                for record_id in record_ids or []:
+                    await self._request(client, "DELETE", f"/domain/zone/{domain}/record/{record_id}")
             await self._request(
                 client,
                 "POST",
@@ -225,7 +237,7 @@ class OvhDomainProvider:
                 {"fieldType": "A", "subDomain": "", "target": target},
             )
             await self._request(client, "POST", f"/domain/zone/{domain}/refresh")
-        logger.info("OVH DNS apex A record for %s → %s", domain, target)
+        logger.info("OVH DNS apex A record for %s → %s (parking removed)", domain, target)
 
 
 ovh_domain_provider = OvhDomainProvider()

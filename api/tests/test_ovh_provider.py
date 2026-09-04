@@ -122,13 +122,23 @@ class TestRegister:
 
 
 class TestPointToVercel:
-    def test_sets_apex_a_record_then_refreshes(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        fake = _FakeClient({("POST", "/record"): None, ("POST", "/refresh"): None})
+    def test_replaces_parking_records_with_vercel_apex(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        fake = _FakeClient(
+            {
+                ("GET", "fieldType=A&subDomain="): [101],  # OVH's default parking A record
+                ("GET", "fieldType=AAAA&subDomain="): [],
+                ("DELETE", "/record/101"): None,
+                ("POST", "/record"): None,
+                ("POST", "/refresh"): None,
+            }
+        )
         monkeypatch.setattr(ovh_module.httpx, "AsyncClient", lambda **_kw: fake)
 
         asyncio.run(_provider().point_to_vercel("tacos-maru.fr", ip="76.76.21.21"))
 
-        record_call = next(c for c in fake.calls if c[1].endswith("/record"))
+        # OVH's default parking A record is deleted before the single Vercel apex A is added.
+        assert any(c[0] == "DELETE" and c[1].endswith("/record/101") for c in fake.calls)
+        record_call = next(c for c in fake.calls if c[0] == "POST" and c[1].endswith("/record"))
         assert '"fieldType": "A"' in (record_call[2] or "")
         assert '"target": "76.76.21.21"' in (record_call[2] or "")
         assert any(c[1].endswith("/refresh") for c in fake.calls)
