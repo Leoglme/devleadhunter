@@ -108,42 +108,46 @@ class OvhDomainProvider:
         """
         if not self.is_configured:
             raise DomainProviderError("OVH n'est pas configuré (clés API manquantes)")
-        async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
-            cart = await self._request(client, "POST", "/order/cart", {"ovhSubsidiary": self._subsidiary})
-            cart_id = cart["cartId"]
-            await self._request(client, "POST", f"/order/cart/{cart_id}/assign")
+        try:
+            async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
+                cart = await self._request(client, "POST", "/order/cart", {"ovhSubsidiary": self._subsidiary})
+                cart_id = cart["cartId"]
+                await self._request(client, "POST", f"/order/cart/{cart_id}/assign")
 
-            offers = await self._request(client, "GET", f"/order/cart/{cart_id}/domain?domain={domain}")
-            offer = self._pick_create_offer(offers, domain)
-            item = await self._request(
-                client,
-                "POST",
-                f"/order/cart/{cart_id}/domain",
-                {
-                    "domain": domain,
-                    "duration": duration,
-                    "planCode": offer["planCode"],
-                    "pricingMode": offer["pricingMode"],
-                },
-            )
-            item_id = item["itemId"]
+                offers = await self._request(client, "GET", f"/order/cart/{cart_id}/domain?domain={domain}")
+                logger.info("OVH cart offers for %s: %s", domain, offers)
+                offer = self._pick_create_offer(offers, domain)
+                # Only `domain` is required; planCode / pricingMode / duration refine it when the offer carries them.
+                item_config: dict[str, Any] = {"domain": domain, "duration": offer.get("duration") or duration}
+                for key in ("planCode", "pricingMode"):
+                    if offer.get(key):
+                        item_config[key] = offer[key]
+                item = await self._request(client, "POST", f"/order/cart/{cart_id}/domain", item_config)
+                item_id = item["itemId"]
 
-            await self._apply_required_configuration(client, cart_id, item_id)
+                await self._apply_required_configuration(client, cart_id, item_id)
 
-            order = await self._request(
-                client,
-                "POST",
-                f"/order/cart/{cart_id}/checkout",
-                {"autoPayWithPreferredPaymentMethod": True, "waiveRetractationPeriod": True},
-            )
+                order = await self._request(
+                    client,
+                    "POST",
+                    f"/order/cart/{cart_id}/checkout",
+                    {"autoPayWithPreferredPaymentMethod": True, "waiveRetractationPeriod": True},
+                )
+        except DomainProviderError:
+            raise
+        except Exception as exc:
+            # Any unexpected OVH response shape becomes a clean error (never a 500) — with context to debug.
+            raise DomainProviderError(f"Commande OVH échouée pour {domain} : {exc!r}") from exc
         logger.info("OVH domain order placed for %s (orderId=%s)", domain, (order or {}).get("orderId"))
         return order or {}
 
     @staticmethod
     def _pick_create_offer(offers: list[dict[str, Any]] | None, domain: str) -> dict[str, Any]:
-        """Pick the standard 'create' offer, refusing premium/aftermarket (surprise pricing)."""
+        """Pick a standard registration offer, refusing premium/aftermarket (surprise pricing)."""
         for offer in offers or []:
-            if offer.get("action") == "create" and not offer.get("premium"):
+            if offer.get("premium") or offer.get("orderable") is False:
+                continue
+            if offer.get("action") in (None, "create"):
                 return offer
         raise DomainProviderError(f"Aucune offre d'enregistrement standard pour {domain} (premium/indisponible ?)")
 
