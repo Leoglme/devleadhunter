@@ -186,6 +186,7 @@
                 placeholder="monentreprise.fr"
                 autocapitalize="off"
                 autocomplete="off"
+                @input="domainCandidates = []"
               />
               <div v-if="editForm.domain.trim()" class="mt-1 flex items-center gap-1.5 text-[11px]">
                 <UIcon
@@ -222,7 +223,7 @@
                     }}
                   </span>
                   <span v-if="domainStatus.price_eur" class="text-[var(--app-faint)]"
-                    >· {{ domainStatus.price_eur }} € HT/an</span
+                    >· {{ domainStatus.price_eur }} € TTC/an</span
                   >
                 </template>
               </div>
@@ -274,7 +275,7 @@
                   :name="isProvisioning ? 'i-lucide-loader-circle' : 'i-lucide-globe'"
                   :class="['mr-1.5 h-4 w-4', { 'animate-spin': isProvisioning }]"
                 />
-                Réserver et mettre en ligne{{ domainStatus?.price_eur ? ` (${domainStatus.price_eur} € HT)` : '' }}
+                Réserver et mettre en ligne{{ domainStatus?.price_eur ? ` (${domainStatus.price_eur} € TTC)` : '' }}
               </button>
             </div>
             <div>

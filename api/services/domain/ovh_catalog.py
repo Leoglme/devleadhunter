@@ -20,6 +20,8 @@ _CATALOG_URL = "https://api.ovh.com/1.0/order/catalog/public/domain"
 _TIMEOUT_SECONDS = 8.0
 # OVH stores catalog prices as an integer scaled by 1e8 (499000000 → 4.99 €).
 _PRICE_SCALE = 1e8
+# OVH bills a French business HT + VAT, so the operator actually pays TTC — that is what we show.
+_VAT_RATE = 0.20
 
 # tld -> first-year price in EUR (HT), or None when OVH does not sell it. Cached per process.
 _cache: dict[str, float | None] = {}
@@ -53,30 +55,31 @@ def tld_of(domain: str) -> str:
 
 
 async def first_year_price_eur(tld: str) -> float | None:
-    """The OVH first-year price (HT, EUR) for a TLD, live from the public catalog and cached.
+    """The OVH first-year price (TTC, EUR) for a TLD, live from the public catalog and cached.
 
     Args:
         tld: The TLD without a dot (e.g. ``"fr"``).
 
     Returns:
-        The live price, ``settings.domain_fr_price_eur`` as a ``.fr`` fallback when the catalog is
-        unreachable, or ``None`` when OVH does not sell the TLD.
+        The live price VAT-included, ``settings.domain_fr_price_eur`` (+ VAT) as a ``.fr`` fallback
+        when the catalog is unreachable, or ``None`` when OVH does not sell the TLD.
     """
     tld = tld.lower().lstrip(".")
     if tld in _cache:
         return _cache[tld]
-    price: float | None = None
+    ht_price: float | None = None
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
             response = await client.get(_CATALOG_URL, params={"ovhSubsidiary": settings.ovh_subsidiary})
             response.raise_for_status()
-            price = extract_create_price(response.json(), tld)
+            ht_price = extract_create_price(response.json(), tld)
     except (httpx.HTTPError, ValueError) as exc:
         logger.debug("OVH catalog price fetch failed for .%s, using fallback: %s", tld, exc)
-    if price is None and tld == "fr":
-        price = settings.domain_fr_price_eur
-    _cache[tld] = price
-    return price
+    if ht_price is None and tld == "fr":
+        ht_price = settings.domain_fr_price_eur
+    ttc_price = round(ht_price * (1 + _VAT_RATE), 2) if ht_price is not None else None
+    _cache[tld] = ttc_price
+    return ttc_price
 
 
 async def price_for_domain(domain: str) -> float | None:

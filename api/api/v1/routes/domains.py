@@ -30,7 +30,7 @@ class DomainAvailability(BaseModel):
 
     domain: str = Field(..., description="Full domain, e.g. « tacos-maru.fr »")
     available: bool | None = Field(..., description="True = free, False = taken, null = could not check")
-    price_eur: float | None = Field(..., description="OVH first-year price (HT), null when OVH does not sell the TLD")
+    price_eur: float | None = Field(..., description="OVH first-year price (TTC), null when OVH does not sell the TLD")
 
 
 class DomainSuggestionsResponse(BaseModel):
