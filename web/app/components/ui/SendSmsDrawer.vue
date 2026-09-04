@@ -85,6 +85,9 @@
                 </span>
               </span>
             </div>
+            <p v-if="isTooLong" class="mt-1 text-[11px] font-medium text-[var(--app-red)]">
+              Message trop long — il partirait en {{ segmentInfo.segments }} SMS. Raccourcissez-le pour tenir en 1 seul.
+            </p>
             <p class="text-muted mt-1 text-[11px]">
               La mention « STOP au 36180 » est ajoutée automatiquement (obligatoire).
             </p>
@@ -99,7 +102,7 @@
             type="submit"
             form="send-sms-form"
             class="btn-primary flex-1 disabled:cursor-not-allowed disabled:opacity-50"
-            :disabled="isSending"
+            :disabled="isSending || isTooLong"
           >
             <UIcon v-if="isSending" name="i-lucide-loader-circle" class="mr-1.5 h-4 w-4 animate-spin" />
             {{ isSending ? 'Envoi…' : 'Envoyer' }}
@@ -128,6 +131,69 @@ const STOP_MENTION: string = ' STOP au 36180'
 const GSM7_CHARS: string =
   '@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞ ÆæßÉ !"#¤%&\'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà' +
   '^{}\\[~]|€'
+
+/**
+ * Closest GSM-7 equivalent for the common non-GSM-7 characters (mirrors the API's `to_gsm7`).
+ * The GSM-7 accents (é è à ù…) are kept; the circumflex letters, the lowercase cedilla (ç,
+ * absent from GSM-7) and typographic punctuation that would halve the per-SMS budget are
+ * simplified, so a normal French message stays one segment.
+ */
+const GSM7_TRANSLITERATIONS: Record<string, string> = {
+  â: 'a',
+  ê: 'e',
+  î: 'i',
+  ô: 'o',
+  û: 'u',
+  Â: 'A',
+  Ê: 'E',
+  Î: 'I',
+  Ô: 'O',
+  Û: 'U',
+  ë: 'e',
+  ï: 'i',
+  Ë: 'E',
+  Ï: 'I',
+  ÿ: 'y',
+  Ÿ: 'Y',
+  ç: 'c',
+  á: 'a',
+  í: 'i',
+  ó: 'o',
+  ú: 'u',
+  ã: 'a',
+  õ: 'o',
+  Á: 'A',
+  Í: 'I',
+  Ó: 'O',
+  Ú: 'U',
+  Ã: 'A',
+  Õ: 'O',
+  œ: 'oe',
+  Œ: 'OE',
+  '’': "'",
+  '‘': "'",
+  '“': '"',
+  '”': '"',
+  '«': '"',
+  '»': '"',
+  '–': '-',
+  '—': '-',
+  '…': '...',
+  '•': '-',
+  '\u00a0': ' ',
+  '\u202f': ' ',
+}
+
+/**
+ * Simplify the non-GSM-7 characters of a body to their closest GSM-7 equivalent.
+ * @param text - The raw message body.
+ * @returns The body with circumflex letters and typographic punctuation transliterated.
+ */
+function normalizeToGsm7(text: string): string {
+  let out: string = ''
+  for (const char of text) out += GSM7_TRANSLITERATIONS[char] ?? char
+  return out
+}
 
 const props: UiSendSmsDrawerProps = defineProps({
   open: {
@@ -168,9 +234,12 @@ const form: Ref<SendSmsForm> = ref({
   text: '',
 })
 
-/** Live character + segment estimate of the full body (message + STOP mention). */
+/**
+ * Live character + segment estimate of the full body (message + STOP mention), counted on the
+ * GSM-7-normalized text so the preview matches what the API actually sends.
+ */
 const segmentInfo: ComputedRef<{ chars: number; segments: number; encoding: 'gsm' | 'unicode' }> = computed(() => {
-  const trimmed: string = form.value.text.trim()
+  const trimmed: string = normalizeToGsm7(form.value.text.trim())
   if (!trimmed) {
     return { chars: 0, segments: 0, encoding: 'gsm' }
   }
@@ -182,6 +251,9 @@ const segmentInfo: ComputedRef<{ chars: number; segments: number; encoding: 'gsm
   const segments: number = chars <= single ? 1 : Math.ceil(chars / multi)
   return { chars, segments, encoding: isUnicode ? 'unicode' : 'gsm' }
 })
+
+/** A message that would bill (and send) more than one SMS is blocked. */
+const isTooLong: ComputedRef<boolean> = computed((): boolean => segmentInfo.value.segments > 1)
 
 /**
  * Load the SMS config to know whether the server key is ready.
@@ -201,6 +273,10 @@ async function loadConfig(): Promise<void> {
  * @returns A promise that resolves once the SMS has been dispatched.
  */
 async function handleSend(): Promise<void> {
+  if (isTooLong.value) {
+    toast.error('Message trop long : il tient sur plusieurs SMS. Raccourcissez-le.')
+    return
+  }
   isSending.value = true
   try {
     const result: SmsSendResult = await SmsService.sendManual({

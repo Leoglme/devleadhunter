@@ -11,7 +11,7 @@ from services.sms.dlr import (
     dlr_status_detail,
     dlr_status_value,
 )
-from services.sms.gsm_segments import is_gsm7, segment_count
+from services.sms.gsm_segments import is_gsm7, segment_count, to_gsm7
 from services.sms.mo import mo_is_stop, mo_origin_message_id, mo_ref_client, mo_sender_number
 from services.sms.phone_normalizer import is_mobile_fr, to_e164_fr
 from services.sms.pricing import estimate_price_cents
@@ -66,6 +66,25 @@ class TestGsmSegments:
 
     def test_empty(self) -> None:
         assert segment_count("") == 0
+
+
+class TestToGsm7:
+    def test_keeps_gsm7_accents_but_lowers_cedilla(self) -> None:
+        # é è à ù stay (GSM-7); ç is NOT GSM-7 in lowercase → simplified to c; ô → o.
+        assert to_gsm7("café à côté ça") == "café à coté ca"
+
+    def test_simplifies_circumflex_and_ligatures(self) -> None:
+        assert to_gsm7("prêt château cœur hôtel") == "pret chateau coeur hotel"
+
+    def test_simplifies_typographic_punctuation(self) -> None:
+        assert to_gsm7("l’été — « oui »… ") == 'l\'été - " oui "... '
+
+    def test_normalized_french_message_is_one_segment(self) -> None:
+        # A circumflex-laden message that would be UCS-2 collapses to a single GSM-7 segment.
+        raw = "Bonjour, votre aperçu est prêt : demo.dibodev.fr/chateau-burger — Dibodev"
+        assert is_gsm7(raw) is False
+        assert is_gsm7(to_gsm7(raw)) is True
+        assert segment_count(to_gsm7(raw)) == 1
 
 
 class TestSendWindow:

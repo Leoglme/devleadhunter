@@ -21,6 +21,40 @@ _GSM_MULTI: int = 153
 _UCS2_SINGLE: int = 70
 _UCS2_MULTI: int = 67
 
+# Closest GSM-7 equivalent for the common characters that would otherwise force UCS-2.
+# The GSM-7 accents (é è à ù ì ò ä ö ñ ü…) are deliberately absent — they are kept as-is.
+# Note: lowercase « ç » is NOT in GSM-7 (only « Ç » is), so it is simplified to « c ».
+_TRANSLITERATIONS: dict[str, str] = {
+    "â": "a", "ê": "e", "î": "i", "ô": "o", "û": "u",
+    "Â": "A", "Ê": "E", "Î": "I", "Ô": "O", "Û": "U",
+    "ë": "e", "ï": "i", "Ë": "E", "Ï": "I", "ÿ": "y", "Ÿ": "Y",
+    "ç": "c", "á": "a", "í": "i", "ó": "o", "ú": "u", "ã": "a", "õ": "o",
+    "Á": "A", "Í": "I", "Ó": "O", "Ú": "U", "Ã": "A", "Õ": "O",
+    "œ": "oe", "Œ": "OE",
+    "’": "'", "‘": "'", "“": '"', "”": '"', "«": '"', "»": '"',
+    "–": "-", "—": "-", "…": "...", "•": "-",
+    "\u00a0": " ", "\u202f": " ",
+}  # fmt: skip
+
+
+def to_gsm7(text: str) -> str:
+    """Simplify the non-GSM-7 characters of *text* to their closest GSM-7 equivalent.
+
+    Keeps every accent that is already GSM-7 (é, è, à, ù…): only the characters that would
+    force the whole message into UCS-2 — circumflex letters (â, ê…), the lowercase cedilla
+    (ç, absent from GSM-7) and typographic punctuation (curly quotes, long dashes, ellipsis)
+    — are replaced, so a normal French message stays one segment. Anything else is untouched.
+
+    Args:
+        text: The raw message body.
+
+    Returns:
+        The body with non-GSM-7 characters transliterated.
+    """
+    if not text:
+        return text
+    return "".join(_TRANSLITERATIONS.get(ch, ch) for ch in text)
+
 
 def is_gsm7(text: str) -> bool:
     """Whether *text* fits the GSM-7 alphabet (else it is sent as UCS-2).

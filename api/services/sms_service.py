@@ -23,7 +23,7 @@ from models.sms_message import SmsMessage
 from models.sms_suppression import SmsSuppression
 from services.activity_log_service import CATEGORY_SMS, STATUS_WARNING, activity_log_service
 from services.notification_service import notification_service
-from services.sms.gsm_segments import segment_count
+from services.sms.gsm_segments import segment_count, to_gsm7
 from services.sms.phone_normalizer import is_mobile_fr, to_e164_fr
 from services.sms.pricing import estimate_price_cents
 from services.sms.send_window import is_within_window, next_send_slot, now_in_paris
@@ -139,7 +139,7 @@ class SmsService:
             f"{greeting}, je vous ai envoye par email un apercu de site web pour {business_name} : "
             f"{demo_url} — {sender}."
         )
-        return core + _STOP_MENTION
+        return to_gsm7(core + _STOP_MENTION)
 
     def compose_cold_body(self, *, greeting: str, business_name: str, sender: str, demo_url: str) -> str:
         """Build a sober cold-SMS body (first contact, no « par email ») with the STOP mention.
@@ -156,7 +156,7 @@ class SmsService:
             The message body.
         """
         core = f"{greeting}, j'ai realise un apercu de site web pour {business_name} : {demo_url} — {sender}."
-        return core + _STOP_MENTION
+        return to_gsm7(core + _STOP_MENTION)
 
     async def send_to_prospect(
         self,
@@ -227,7 +227,7 @@ class SmsService:
         Returns:
             The body with the ``STOP au 36180`` mention appended once.
         """
-        cleaned = (text or "").strip()
+        cleaned = to_gsm7((text or "").strip())
         if "36180" in cleaned:
             return cleaned
         return cleaned + _STOP_MENTION
@@ -277,6 +277,13 @@ class SmsService:
         body = self.compose_manual_body(text)
         if not body:
             return SmsSendOutcome(sent=False, reason="Message vide")
+        # Hard cap at one segment: a longer body would silently bill (and send) several SMS.
+        segments = segment_count(body)
+        if segments > 1:
+            return SmsSendOutcome(
+                sent=False,
+                reason=f"Message trop long : il partirait en {segments} SMS. Raccourcissez-le pour tenir en 1 seul.",
+            )
 
         message = SmsMessage(
             user_id=user_id,
@@ -286,7 +293,7 @@ class SmsService:
             sender=config.sender,
             body=body,
             status=SmsStatus.PENDING.value,
-            segments=segment_count(body),
+            segments=segments,
         )
         return await self._send_and_log(db, message=message)
 
