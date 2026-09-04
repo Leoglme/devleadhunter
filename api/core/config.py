@@ -253,11 +253,29 @@ class Settings(BaseSettings):
         alias="DOMAIN_FR_PRICE_EUR",
         description="Fallback .fr first-year price in EUR (HT), used when the OVH catalog is unreachable",
     )
-    # OVH subsidiary for the order catalog + (later) domain purchase — drives .fr pricing/eligibility.
+    # OVH subsidiary for the order catalog + domain purchase — drives .fr pricing/eligibility.
     ovh_subsidiary: str = Field(
         default="FR",
         alias="OVH_SUBSIDIARY",
         description="OVH subsidiary code (FR, etc.) for the order catalog and domain orders",
+    )
+    # OVH API credentials for buying the client's domain + writing its DNS after the sale.
+    # All three empty = the registrar is inert (no purchase attempted); the manual domain flow stays.
+    ovh_application_key: str | None = Field(default=None, alias="OVH_APPLICATION_KEY", description="OVH API app key")
+    ovh_application_secret: str | None = Field(
+        default=None, alias="OVH_APPLICATION_SECRET", description="OVH API app secret"
+    )
+    ovh_consumer_key: str | None = Field(default=None, alias="OVH_CONSUMER_KEY", description="OVH API consumer key")
+    ovh_endpoint: str = Field(
+        default="https://eu.api.ovh.com/1.0",
+        alias="OVH_ENDPOINT",
+        description="OVH API base URL (EU by default)",
+    )
+    # Vercel's apex A-record target — where a client's registered domain points to reach the demo-host.
+    vercel_apex_ip: str = Field(
+        default="76.76.21.21",
+        alias="VERCEL_APEX_IP",
+        description="Vercel apex A-record IP the client domain points to",
     )
 
     # Dev / testing — outbound email safety

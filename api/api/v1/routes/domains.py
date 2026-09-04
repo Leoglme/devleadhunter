@@ -14,9 +14,10 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from models.prospect_db import ProspectDB
 from models.user import User
-from services.auth_service import require_auth
+from services.auth_service import require_auth, require_super_admin
 from services.domain.availability import is_fr_available
 from services.domain.ovh_catalog import fr_first_year_price_eur
+from services.domain.ovh_provider import DomainProviderError, ovh_domain_provider
 from services.domain.suggestion_service import domain_suggestion_service
 from services.organization_service import organization_service
 
@@ -101,3 +102,67 @@ async def suggest_domains(
             for c in suggestion.candidates
         ],
     )
+
+
+class DomainActionRequest(BaseModel):
+    """Payload naming a single .fr domain for a registrar action."""
+
+    domain: str = Field(..., description="Full .fr domain, e.g. « tacos-maru.fr »")
+
+
+class DomainRegisterResult(BaseModel):
+    """Outcome of a registrar purchase."""
+
+    domain: str = Field(..., description="The domain ordered")
+    ovh_order_id: int | None = Field(None, description="OVH order id, when returned")
+
+
+@router.post(
+    "/register",
+    response_model=DomainRegisterResult,
+    summary="Buy a .fr domain on the operator's OVH account (spends money)",
+    description="Super-admin, deliberate action. Registration is async at OVH — point the DNS once the domain is active.",
+)
+async def register_domain(
+    request: DomainActionRequest,
+    current_user: User = Depends(require_super_admin),
+) -> DomainRegisterResult:
+    """Register a ``.fr`` domain via OVH (real purchase). Super-admin only.
+
+    Raises:
+        HTTPException: 503 when OVH is not configured, 502 when the OVH order fails.
+    """
+    del current_user
+    domain = _normalize_fr(request.domain)
+    if not ovh_domain_provider.is_configured:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OVH n'est pas configuré")
+    try:
+        order = await ovh_domain_provider.register(domain)
+    except DomainProviderError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return DomainRegisterResult(domain=domain, ovh_order_id=order.get("orderId"))
+
+
+@router.post(
+    "/point-dns",
+    summary="Point a domain's apex DNS at the Vercel demo-host",
+    description="Super-admin. Run once the domain is active at OVH (registration is async).",
+)
+async def point_domain_dns(
+    request: DomainActionRequest,
+    current_user: User = Depends(require_super_admin),
+) -> dict[str, str]:
+    """Set the domain's apex ``A`` record to Vercel and refresh the zone. Super-admin only.
+
+    Raises:
+        HTTPException: 503 when OVH is not configured, 502 when the DNS update fails.
+    """
+    del current_user
+    domain = _normalize_fr(request.domain)
+    if not ovh_domain_provider.is_configured:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OVH n'est pas configuré")
+    try:
+        await ovh_domain_provider.point_to_vercel(domain)
+    except DomainProviderError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return {"status": "ok", "domain": domain}
