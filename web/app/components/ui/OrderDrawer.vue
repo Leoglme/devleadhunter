@@ -117,7 +117,10 @@
               </p>
             </div>
 
-            <div v-if="order.status === 'paid'" class="border-t border-[var(--app-surface-2)] px-5 py-4">
+            <div
+              v-if="order.status === 'paid' || order.status === 'deploying'"
+              class="border-t border-[var(--app-surface-2)] px-5 py-4"
+            >
               <div class="mb-1 flex items-center justify-between">
                 <p class="text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">
                   Mise en ligne du site

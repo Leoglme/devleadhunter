@@ -127,6 +127,9 @@ class OvhDomainProvider:
 
                 await self._apply_required_configuration(client, cart_id, item_id)
 
+                # Dry-run first (GET checkout validates the cart WITHOUT ordering) — a misconfigured
+                # cart fails here, so we never place a paid order we cannot complete.
+                await self._request(client, "GET", f"/order/cart/{cart_id}/checkout")
                 order = await self._request(
                     client,
                     "POST",
