@@ -19,5 +19,7 @@ jobs:
             sudo systemctl status devleadhunter-api.service --no-pager -l || true
             echo "===== last 120 journal lines ====="
             sudo journalctl -u devleadhunter-api.service -n 120 --no-pager || true
+            echo "===== domain/recovery lines, last 30 min ====="
+            sudo journalctl -u devleadhunter-api.service --since "30 min ago" --no-pager 2>/dev/null | grep -iE "apex re-point|removed apex|DNS re-point|point_to_vercel|domain_provision|recovery|kept in DEPLOYING|devleadhunter|ovh" | tail -60 || true
             echo "===== local port check ====="
             curl -s -o /dev/null -w "localhost:8005 -> %{http_code}\n" http://127.0.0.1:8005/docs || true
