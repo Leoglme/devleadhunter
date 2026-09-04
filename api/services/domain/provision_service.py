@@ -61,8 +61,16 @@ class DomainProvisionService:
         return order
 
     async def _finalize(self, domain: str, user_id: int | None) -> None:
-        """Wait for the zone to exist, then point the apex DNS at Vercel (background, best-effort)."""
+        """Bring the domain online: attach it to Vercel, then point the apex DNS once the zone exists."""
+        from services.vercel_service import vercel_service
+
         try:
+            # Tell Vercel « this domain → the demo-host project » so it routes + issues SSL once the DNS lands.
+            try:
+                await vercel_service.attach_domain(domain)
+            except Exception as exc:
+                # Best-effort: an unconfigured or transient Vercel must not stop the DNS pointing.
+                logger.warning("Vercel attach for %s failed: %s", domain, exc)
             for _ in range(_POLL_ATTEMPTS):
                 await asyncio.sleep(_POLL_INTERVAL_SECONDS)
                 if await ovh_domain_provider.zone_ready(domain):

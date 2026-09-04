@@ -38,7 +38,9 @@ class TestProvision:
         assert any(entry["action"] == "domain_registered" for entry in recorded)
 
     def test_finalize_points_dns_once_the_zone_is_ready(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        state = {"polls": 0, "pointed": False}
+        import services.vercel_service as vercel_module
+
+        state = {"polls": 0, "pointed": False, "attached": False}
         recorded: list[dict[str, object]] = []
 
         async def _sleep(_seconds: float) -> None:
@@ -51,12 +53,18 @@ class TestProvision:
         async def _point(_domain: str, **_kw: object) -> None:
             state["pointed"] = True
 
+        async def _attach(_domain: str) -> dict[str, object]:
+            state["attached"] = True
+            return {}
+
         monkeypatch.setattr(ps_module.asyncio, "sleep", _sleep)
         monkeypatch.setattr(ps_module.ovh_domain_provider, "zone_ready", _zone_ready)
         monkeypatch.setattr(ps_module.ovh_domain_provider, "point_to_vercel", _point)
+        monkeypatch.setattr(vercel_module.vercel_service, "attach_domain", _attach)
         monkeypatch.setattr(ps_module.activity_log_service, "record", lambda **kw: recorded.append(kw))
 
         asyncio.run(domain_provision_service._finalize("tacos-maru.fr", 1))
 
+        assert state["attached"] is True
         assert state["pointed"] is True
         assert any(entry["action"] == "domain_live" for entry in recorded)
