@@ -7,6 +7,8 @@ ideally-available domain" step of the post-sale go-live. The actual registration
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -20,7 +22,10 @@ from services.domain.ovh_catalog import price_for_domain
 from services.domain.ovh_provider import DomainProviderError, ovh_domain_provider
 from services.domain.provision_service import domain_provision_service
 from services.domain.suggestion_service import domain_suggestion_service
+from services.order_service import order_service
 from services.organization_service import organization_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/domains", tags=["domains"])
 
@@ -143,6 +148,15 @@ async def registrar_status(current_user: User = Depends(require_super_admin)) ->
     return RegistrarStatus(configured=True, account=await ovh_domain_provider.account_id())
 
 
+class DomainProvisionRequest(BaseModel):
+    """Payload to buy a domain and bring a paid sale's site online."""
+
+    domain: str = Field(..., description="Full domain to register, e.g. « devleadhunter.fr »")
+    order_id: int | None = Field(
+        None, description="When given, the domain is saved on that sale and its linked demo is deployed to it"
+    )
+
+
 class DomainRegisterResult(BaseModel):
     """Outcome of a registrar purchase."""
 
@@ -153,26 +167,45 @@ class DomainRegisterResult(BaseModel):
 @router.post(
     "/provision",
     response_model=DomainRegisterResult,
-    summary="Buy a .fr domain and bring it online (register + DNS → Vercel)",
-    description="Super-admin, one action. Registers now (spends money) and points the DNS to Vercel once OVH activates the domain.",
+    summary="Buy the domain and put the paid sale's site online (register + DNS + deploy)",
+    description="Super-admin, one action. Registers the domain (spends money), points its DNS to Vercel, and — when order_id is given — deploys the sale's linked demo to it.",
 )
 async def provision_domain(
-    request: DomainActionRequest,
+    request: DomainProvisionRequest,
     current_user: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
 ) -> DomainRegisterResult:
-    """Register a ``.fr`` domain and schedule its go-live (DNS → Vercel). Super-admin only.
+    """Register a domain and, for a paid sale, deploy its linked site to it. Super-admin only.
 
     Raises:
-        HTTPException: 503 when OVH is not configured, 502 when the order fails.
+        HTTPException: 404 when the order is not visible, 503 when OVH is not configured, 502 when the order fails.
     """
     domain = _normalize_domain(request.domain)
     if not ovh_domain_provider.is_configured:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OVH n'est pas configuré")
+
+    sale = None
+    if request.order_id is not None:
+        sale = order_service.get_for_user(db, current_user.id, request.order_id)
+        if sale is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Vente {request.order_id} introuvable")
+        sale.domain = domain
+        db.commit()
+
     try:
-        order = await domain_provision_service.provision(domain, user_id=current_user.id)
+        ovh_order = await domain_provision_service.provision(domain, user_id=current_user.id)
     except DomainProviderError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    return DomainRegisterResult(domain=domain, ovh_order_id=order.get("orderId"))
+
+    # Deploy the sale's linked demo onto the freshly-ordered domain (best-effort — DNS lands in the background).
+    if sale is not None:
+        try:
+            await order_service.fulfill_order(db, sale)
+        except Exception:
+            # Deployment is best-effort; the domain order already succeeded, so don't fail the call.
+            logger.warning("fulfill_order failed after provisioning domain for order %s", sale.id, exc_info=True)
+
+    return DomainRegisterResult(domain=domain, ovh_order_id=ovh_order.get("orderId"))
 
 
 @router.post(

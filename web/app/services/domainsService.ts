@@ -66,13 +66,14 @@ export class DomainsService {
   }
 
   /**
-   * Buy a .fr domain and bring it online in one action: register + DNS → Vercel. Super-admin.
-   * Registration is async at OVH, so the DNS is pointed in the background once the domain is active.
-   * @param domain - The full .fr domain to provision.
+   * Buy a domain and put a paid sale's site online in one action: register + DNS + deploy. Super-admin.
+   * When orderId is given, the domain is saved on that sale and its linked demo is deployed to it.
+   * @param domain - The full domain to provision.
+   * @param orderId - The paid sale to bring online, when applicable.
    * @returns The order result.
    */
-  static async provisionDomain(domain: string): Promise<DomainRegisterResult> {
-    return ApiClient.post<DomainRegisterResult>('/api/v1/domains/provision', { domain })
+  static async provisionDomain(domain: string, orderId?: number | null): Promise<DomainRegisterResult> {
+    return ApiClient.post<DomainRegisterResult>('/api/v1/domains/provision', { domain, order_id: orderId ?? null })
   }
 
   /**

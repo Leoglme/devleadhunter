@@ -117,56 +117,13 @@
               </p>
             </div>
 
-            <div v-if="order.notes" class="border-t border-[var(--app-surface-2)] px-5 py-4">
-              <p class="mb-1 text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">Notes</p>
-              <p class="text-sm whitespace-pre-line text-[var(--app-ink)]">{{ order.notes }}</p>
-            </div>
-          </template>
-
-          <form v-else id="order-edit-form" class="space-y-4 p-5" @submit.prevent="handleSave">
-            <p
-              v-if="isCreateMode"
-              class="text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase"
-            >
-              Informations de la vente
-            </p>
-            <div>
-              <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
-                >Montant (€)</label
-              >
-              <input
-                v-model.number="editForm.amount_euros"
-                type="number"
-                min="0"
-                step="1"
-                class="input-field"
-                placeholder="500"
-              />
-            </div>
-            <div>
-              <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
-                >Nom de l'entreprise</label
-              >
-              <input v-model="editForm.business_name" type="text" class="input-field" placeholder="Plomberie Martin" />
-            </div>
-            <div>
-              <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
-                >Email client</label
-              >
-              <input
-                v-model="editForm.customer_email"
-                type="email"
-                class="input-field"
-                placeholder="contact@plomberie-martin.fr"
-              />
-            </div>
-            <div>
+            <div v-if="order.status === 'paid'" class="border-t border-[var(--app-surface-2)] px-5 py-4">
               <div class="mb-1 flex items-center justify-between">
-                <label class="block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
-                  >Domaine (mise en ligne)</label
-                >
+                <p class="text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">
+                  Mise en ligne du site
+                </p>
                 <button
-                  v-if="order?.prospect_id || editForm.business_name.trim()"
+                  v-if="order.prospect_id || order.business_name"
                   type="button"
                   class="flex items-center gap-1 text-[11px] font-medium text-[var(--app-accent-ink)] transition-colors hover:underline disabled:opacity-50"
                   :disabled="isSuggestingDomain"
@@ -179,15 +136,18 @@
                   Suggérer
                 </button>
               </div>
+              <p class="mb-2 text-[11px] text-[var(--app-ink-soft)]">
+                Le client a payé — choisis son nom de domaine et mets son site en ligne.
+              </p>
               <input
-                v-model="editForm.domain"
+                v-model="goLiveDomain"
                 type="text"
                 class="input-field"
-                placeholder="monentreprise.fr"
+                placeholder="sonentreprise.fr"
                 autocapitalize="off"
                 autocomplete="off"
               />
-              <div v-if="editForm.domain.trim()" class="mt-1 flex items-center gap-1.5 text-[11px]">
+              <div v-if="goLiveDomain.trim()" class="mt-1 flex items-center gap-1.5 text-[11px]">
                 <UIcon
                   v-if="isCheckingDomain"
                   name="i-lucide-loader-circle"
@@ -233,7 +193,7 @@
                   type="button"
                   :class="[
                     'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors',
-                    editForm.domain === candidate.domain
+                    goLiveDomain === candidate.domain
                       ? 'border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]'
                       : 'border-[var(--app-line)] text-[var(--app-ink-soft)] hover:border-[var(--app-accent)]',
                   ]"
@@ -244,7 +204,7 @@
                         ? 'Déjà pris'
                         : 'Disponibilité inconnue'
                   "
-                  @click="editForm.domain = candidate.domain"
+                  @click="goLiveDomain = candidate.domain"
                 >
                   {{ candidate.domain }}
                   <span
@@ -262,20 +222,66 @@
               <button
                 type="button"
                 class="btn-primary mt-2 w-full"
-                :disabled="isProvisioning || !editForm.domain.trim() || domainStatus?.available === false"
+                :disabled="isProvisioning || !goLiveDomain.trim() || domainStatus?.available === false"
                 :title="
                   domainStatus?.available === false
                     ? 'Ce domaine est déjà pris'
-                    : 'Achat réel (~6 €) puis mise en ligne automatique'
+                    : 'Achat réel (~6 €) puis mise en ligne du site du client'
                 "
                 @click="provisionDomain"
               >
                 <UIcon
-                  :name="isProvisioning ? 'i-lucide-loader-circle' : 'i-lucide-globe'"
+                  :name="isProvisioning ? 'i-lucide-loader-circle' : 'i-lucide-rocket'"
                   :class="['mr-1.5 h-4 w-4', { 'animate-spin': isProvisioning }]"
                 />
-                Réserver et mettre en ligne{{ domainStatus?.price_eur ? ` (${domainStatus.price_eur} € TTC)` : '' }}
+                Acheter le domaine et mettre en ligne{{
+                  domainStatus?.price_eur ? ` (${domainStatus.price_eur} € TTC)` : ''
+                }}
               </button>
+            </div>
+
+            <div v-if="order.notes" class="border-t border-[var(--app-surface-2)] px-5 py-4">
+              <p class="mb-1 text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">Notes</p>
+              <p class="text-sm whitespace-pre-line text-[var(--app-ink)]">{{ order.notes }}</p>
+            </div>
+          </template>
+
+          <form v-else id="order-edit-form" class="space-y-4 p-5" @submit.prevent="handleSave">
+            <p
+              v-if="isCreateMode"
+              class="text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase"
+            >
+              Informations de la vente
+            </p>
+            <div>
+              <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
+                >Montant (€)</label
+              >
+              <input
+                v-model.number="editForm.amount_euros"
+                type="number"
+                min="0"
+                step="1"
+                class="input-field"
+                placeholder="500"
+              />
+            </div>
+            <div>
+              <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
+                >Nom de l'entreprise</label
+              >
+              <input v-model="editForm.business_name" type="text" class="input-field" placeholder="Plomberie Martin" />
+            </div>
+            <div>
+              <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
+                >Email client</label
+              >
+              <input
+                v-model="editForm.customer_email"
+                type="email"
+                class="input-field"
+                placeholder="contact@plomberie-martin.fr"
+              />
             </div>
             <div>
               <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
@@ -417,6 +423,8 @@ const isCheckingDomain: Ref<boolean> = ref(false)
 const domainStatus: Ref<DomainCandidate | null> = ref(null)
 const isProvisioning: Ref<boolean> = ref(false)
 const domainCheckTimer: Ref<ReturnType<typeof setTimeout> | null> = ref(null)
+// The go-live domain input lives in the PAID view (buy + deploy in one action), seeded from the order.
+const goLiveDomain: Ref<string> = ref('')
 
 const editForm: Ref<OrderEditForm> = ref({
   amount_euros: 0,
@@ -508,9 +516,18 @@ watch(
   },
 )
 
-// Any change to the domain (typing, a suggestion chip, the « Suggérer » prefill) re-checks availability + price.
+// Seed the go-live domain from the order (and reset it when the drawer switches order).
 watch(
-  (): string => editForm.value.domain,
+  (): string | null | undefined => props.order?.domain,
+  (domain: string | null | undefined): void => {
+    goLiveDomain.value = domain ?? ''
+  },
+  { immediate: true },
+)
+
+// Any change to the go-live domain (typing, a suggestion chip, « Suggérer ») re-checks availability + price.
+watch(
+  (): string => goLiveDomain.value,
   (): void => scheduleDomainCheck(),
 )
 
@@ -573,7 +590,7 @@ async function runAction(fn: () => Promise<Order>, successMsg: string): Promise<
 async function suggestDomain(): Promise<void> {
   if (isSuggestingDomain.value) return
   const prospectId: number | null = props.order?.prospect_id ?? null
-  const businessName: string = editForm.value.business_name.trim()
+  const businessName: string = props.order?.business_name?.trim() ?? ''
   if (prospectId === null && !businessName) return
   isSuggestingDomain.value = true
   try {
@@ -582,7 +599,7 @@ async function suggestDomain(): Promise<void> {
         ? await DomainsService.suggestForProspect(prospectId)
         : await DomainsService.suggestForName(businessName)
     domainCandidates.value = result.candidates
-    if (result.suggested) editForm.value.domain = result.suggested
+    if (result.suggested) goLiveDomain.value = result.suggested
     else toast.info('Aucun domaine suggéré')
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : 'Suggestion impossible')
@@ -592,12 +609,12 @@ async function suggestDomain(): Promise<void> {
 }
 
 /**
- * Live-check the typed domain's availability + price (debounced), so the operator sees « disponible / déjà pris ».
+ * Live-check the typed go-live domain's availability + price (debounced), so « disponible / déjà pris » shows.
  * @returns {void}
  */
 function scheduleDomainCheck(): void {
   if (domainCheckTimer.value) clearTimeout(domainCheckTimer.value)
-  const value: string = editForm.value.domain.trim()
+  const value: string = goLiveDomain.value.trim()
   domainStatus.value = null
   if (!value) {
     domainCandidates.value = []
@@ -623,9 +640,9 @@ async function runDomainCheck(domain: string): Promise<void> {
   isCheckingDomain.value = true
   try {
     const result: DomainCandidate = await DomainsService.checkAvailability(domain)
-    if (editForm.value.domain.trim() === domain) domainStatus.value = result
+    if (goLiveDomain.value.trim() === domain) domainStatus.value = result
   } catch {
-    if (editForm.value.domain.trim() === domain) domainStatus.value = null
+    if (goLiveDomain.value.trim() === domain) domainStatus.value = null
   } finally {
     isCheckingDomain.value = false
   }
@@ -640,7 +657,7 @@ async function suggestFromLabel(label: string): Promise<void> {
   isCheckingDomain.value = true
   try {
     const result: DomainSuggestions = await DomainsService.suggestForName(label, false)
-    if (editForm.value.domain.trim() === label) domainCandidates.value = result.candidates
+    if (goLiveDomain.value.trim() === label) domainCandidates.value = result.candidates
   } catch {
     // best-effort: keep whatever chips are shown
   } finally {
@@ -649,16 +666,17 @@ async function suggestFromLabel(label: string): Promise<void> {
 }
 
 /**
- * Buy the current domain and bring it online in one action (register + DNS → Vercel). A REAL purchase.
+ * Buy the domain and deploy the paid sale's linked site onto it — one REAL purchase (~6 €).
  * @returns A promise resolved once the order is placed.
  */
 async function provisionDomain(): Promise<void> {
-  const domain: string = editForm.value.domain.trim()
+  const domain: string = goLiveDomain.value.trim()
   if (!domain || isProvisioning.value || domainStatus.value?.available === false) return
   isProvisioning.value = true
   try {
-    const result: DomainRegisterResult = await DomainsService.provisionDomain(domain)
-    toast.success(`Domaine commandé — ${result.domain}. Mise en ligne automatique en cours (quelques minutes).`)
+    const result: DomainRegisterResult = await DomainsService.provisionDomain(domain, props.order?.id ?? null)
+    if (props.order) emit('updated', { ...props.order, domain: result.domain, status: 'deploying' })
+    toast.success(`Domaine commandé — ${result.domain}. Le site du client se met en ligne (quelques minutes).`)
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : 'Réservation impossible')
   } finally {
