@@ -246,13 +246,18 @@ class Settings(BaseSettings):
         description="Groq model id used for completions (llama-3.3-70b-versatile was decommissioned 2026-06-17)",
     )
 
-    # Estimated .fr registration price shown before purchase (TTC, year 1). The real
-    # price will come from the registrar catalog once the domain provider is wired;
-    # until then this is a display estimate, like the SMS segment price.
+    # Fallback .fr first-year price (HT, EUR) shown before purchase when the live OVH public
+    # catalog is unreachable. The catalog (services/domain/ovh_catalog.py) is the source of truth.
     domain_fr_price_eur: float = Field(
-        default=5.99,
+        default=4.99,
         alias="DOMAIN_FR_PRICE_EUR",
-        description="Estimated .fr first-year price in EUR (TTC), shown before purchase",
+        description="Fallback .fr first-year price in EUR (HT), used when the OVH catalog is unreachable",
+    )
+    # OVH subsidiary for the order catalog + (later) domain purchase — drives .fr pricing/eligibility.
+    ovh_subsidiary: str = Field(
+        default="FR",
+        alias="OVH_SUBSIDIARY",
+        description="OVH subsidiary code (FR, etc.) for the order catalog and domain orders",
     )
 
     # Dev / testing — outbound email safety

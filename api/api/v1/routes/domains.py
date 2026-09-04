@@ -11,12 +11,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from core.config import settings
 from core.database import get_db
 from models.prospect_db import ProspectDB
 from models.user import User
 from services.auth_service import require_auth
 from services.domain.availability import is_fr_available
+from services.domain.ovh_catalog import fr_first_year_price_eur
 from services.domain.suggestion_service import domain_suggestion_service
 from services.organization_service import organization_service
 
@@ -64,7 +64,7 @@ async def check_availability(name: str, current_user: User = Depends(require_aut
     return DomainAvailability(
         domain=domain,
         available=await is_fr_available(domain),
-        price_eur=settings.domain_fr_price_eur,
+        price_eur=await fr_first_year_price_eur(),
     )
 
 

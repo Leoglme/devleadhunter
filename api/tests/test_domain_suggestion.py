@@ -12,6 +12,7 @@ import pytest
 import services.domain.availability as availability_module
 from services.domain import suggestion_service as suggestion_module
 from services.domain.availability import is_fr_available
+from services.domain.ovh_catalog import extract_fr_create_price
 from services.domain.suggestion_service import DomainCandidate, domain_suggestion_service
 
 
@@ -87,6 +88,29 @@ class TestAvailability:
         assert asyncio.run(is_fr_available("example.com")) is None
 
 
+class TestOvhCatalogPrice:
+    def test_extracts_the_fr_first_year_price(self) -> None:
+        catalog = {
+            "plans": [
+                {
+                    "planCode": "com",
+                    "pricings": [{"mode": "create-default", "capacities": ["installation"], "price": 900000000}],
+                },
+                {
+                    "planCode": "fr",
+                    "pricings": [
+                        {"mode": "create-default", "capacities": ["installation", "renew"], "price": 499000000},
+                        {"mode": "create-default", "capacities": ["renew"], "price": 779000000},
+                    ],
+                },
+            ]
+        }
+        assert extract_fr_create_price(catalog) == pytest.approx(4.99)
+
+    def test_returns_none_when_fr_absent(self) -> None:
+        assert extract_fr_create_price({"plans": [{"planCode": "com", "pricings": []}]}) is None
+
+
 class TestSuggest:
     @staticmethod
     def _run_suggest(monkeypatch: pytest.MonkeyPatch, *, availability: dict[str, bool | None], ai: list[str]):
@@ -96,8 +120,12 @@ class TestSuggest:
         async def _fake_ai(*, business_name: str, city: str | None, category: str | None) -> list[str]:
             return ai
 
+        async def _fake_price() -> float:
+            return 4.99
+
         monkeypatch.setattr(suggestion_module, "availability_map", _fake_map)
         monkeypatch.setattr(suggestion_module.llm_service, "suggest_domain_names", _fake_ai)
+        monkeypatch.setattr(suggestion_module, "fr_first_year_price_eur", _fake_price)
         return asyncio.run(domain_suggestion_service.suggest(name="Chez Mimon", city="Poitiers", category="restaurant"))
 
     def test_prefers_the_first_available_candidate(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -113,7 +141,7 @@ class TestSuggest:
         result = self._run_suggest(monkeypatch, availability={"chezmimon.fr": False}, ai=[])
         assert result.suggested == "chez-mimon.fr"
         assert result.candidates[0] == DomainCandidate(
-            domain="chezmimon.fr", available=False, price_eur=pytest.approx(5.99)
+            domain="chezmimon.fr", available=False, price_eur=pytest.approx(4.99)
         )
 
     def test_appends_only_valid_ai_labels(self, monkeypatch: pytest.MonkeyPatch) -> None:
