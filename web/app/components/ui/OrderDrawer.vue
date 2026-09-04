@@ -166,7 +166,7 @@
                   >Domaine (mise en ligne)</label
                 >
                 <button
-                  v-if="order?.prospect_id"
+                  v-if="order?.prospect_id || editForm.business_name.trim()"
                   type="button"
                   class="flex items-center gap-1 text-[11px] font-medium text-[var(--app-accent-ink)] transition-colors hover:underline disabled:opacity-50"
                   :disabled="isSuggestingDomain"
@@ -222,7 +222,7 @@
                     }}
                   </span>
                   <span v-if="domainStatus.price_eur" class="text-[var(--app-faint)]"
-                    >· ~{{ domainStatus.price_eur }} €</span
+                    >· {{ domainStatus.price_eur }} € HT/an</span
                   >
                 </template>
               </div>
@@ -274,7 +274,7 @@
                   :name="isProvisioning ? 'i-lucide-loader-circle' : 'i-lucide-globe'"
                   :class="['mr-1.5 h-4 w-4', { 'animate-spin': isProvisioning }]"
                 />
-                Réserver et mettre en ligne{{ domainStatus?.price_eur ? ` (~${domainStatus.price_eur} €)` : '' }}
+                Réserver et mettre en ligne{{ domainStatus?.price_eur ? ` (${domainStatus.price_eur} € HT)` : '' }}
               </button>
             </div>
             <div>
@@ -571,11 +571,16 @@ async function runAction(fn: () => Promise<Order>, successMsg: string): Promise<
  * @returns A promise resolved once the suggestions are loaded.
  */
 async function suggestDomain(): Promise<void> {
+  if (isSuggestingDomain.value) return
   const prospectId: number | null = props.order?.prospect_id ?? null
-  if (prospectId === null || isSuggestingDomain.value) return
+  const businessName: string = editForm.value.business_name.trim()
+  if (prospectId === null && !businessName) return
   isSuggestingDomain.value = true
   try {
-    const result: DomainSuggestions = await DomainsService.suggestForProspect(prospectId)
+    const result: DomainSuggestions =
+      prospectId !== null
+        ? await DomainsService.suggestForProspect(prospectId)
+        : await DomainsService.suggestForName(businessName)
     domainCandidates.value = result.candidates
     if (result.suggested) editForm.value.domain = result.suggested
     else toast.info('Aucun domaine suggéré')

@@ -13,7 +13,7 @@ import unicodedata
 from dataclasses import dataclass
 
 from services.domain.availability import availability_map
-from services.domain.ovh_catalog import fr_first_year_price_eur
+from services.domain.ovh_catalog import first_year_price_eur
 from services.llm_service import llm_service
 
 # A registrable domain label: 1-63 chars, letters/digits/hyphens, no leading/trailing hyphen.
@@ -110,7 +110,7 @@ class DomainSuggestionService:
 
         domains = [f"{label}.fr" for label in labels]
         available = await availability_map(domains)
-        price = await fr_first_year_price_eur()
+        price = await first_year_price_eur("fr")
 
         candidates = [DomainCandidate(domain=d, available=available.get(d), price_eur=price) for d in domains]
         return DomainSuggestion(suggested=self._pick_suggested(candidates), candidates=candidates)

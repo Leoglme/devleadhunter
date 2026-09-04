@@ -15,8 +15,8 @@ from core.database import get_db
 from models.prospect_db import ProspectDB
 from models.user import User
 from services.auth_service import require_auth, require_super_admin
-from services.domain.availability import is_fr_available
-from services.domain.ovh_catalog import fr_first_year_price_eur
+from services.domain.availability import is_available
+from services.domain.ovh_catalog import price_for_domain
 from services.domain.ovh_provider import DomainProviderError, ovh_domain_provider
 from services.domain.provision_service import domain_provision_service
 from services.domain.suggestion_service import domain_suggestion_service
@@ -26,11 +26,11 @@ router = APIRouter(prefix="/domains", tags=["domains"])
 
 
 class DomainAvailability(BaseModel):
-    """Availability + estimated price for one ``.fr`` domain."""
+    """Availability + real first-year price for one domain."""
 
-    domain: str = Field(..., description="Full .fr domain, e.g. « tacos-maru.fr »")
+    domain: str = Field(..., description="Full domain, e.g. « tacos-maru.fr »")
     available: bool | None = Field(..., description="True = free, False = taken, null = could not check")
-    price_eur: float | None = Field(..., description="Estimated first-year price (TTC), null when unknown")
+    price_eur: float | None = Field(..., description="OVH first-year price (HT), null when OVH does not sell the TLD")
 
 
 class DomainSuggestionsResponse(BaseModel):
@@ -40,62 +40,70 @@ class DomainSuggestionsResponse(BaseModel):
     candidates: list[DomainAvailability] = Field(default_factory=list, description="All candidates, best first")
 
 
-def _normalize_fr(name: str) -> str:
-    """Coerce raw input to a single ``<label>.fr`` (accepts « chezmimon » or « chezmimon.fr »)."""
-    cleaned = (name or "").strip().lower().rstrip(".")
+def _normalize_domain(name: str) -> str:
+    """Clean raw input to a full domain, defaulting to ``.fr`` when the operator typed no TLD.
+
+    « chezmimon » → « chezmimon.fr » ; « chezmimon.com » stays « chezmimon.com ».
+    """
+    cleaned = (name or "").strip().lower().strip(".")
     if not cleaned:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nom de domaine vide")
-    if cleaned.endswith(".fr"):
-        cleaned = cleaned[:-3]
-    label = cleaned.split(".")[0]
-    if not label:
+    domain = cleaned if "." in cleaned else f"{cleaned}.fr"
+    if not domain.split(".")[0]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nom de domaine invalide")
-    return f"{label}.fr"
+    return domain
 
 
 @router.get(
     "/availability",
     response_model=DomainAvailability,
-    summary="Check whether a .fr domain is free",
-    description="Query the AFNIC registry (RDAP) for a single .fr domain.",
+    summary="Check whether a domain is free, with its real price",
+    description="Query RDAP (AFNIC for .fr, the bootstrap otherwise) + the OVH catalog for the real TLD price.",
 )
 async def check_availability(name: str, current_user: User = Depends(require_auth)) -> DomainAvailability:
-    """Return the availability of one ``.fr`` domain (best-effort)."""
+    """Return the availability + real first-year price of one domain (best-effort)."""
     del current_user
-    domain = _normalize_fr(name)
+    domain = _normalize_domain(name)
     return DomainAvailability(
         domain=domain,
-        available=await is_fr_available(domain),
-        price_eur=await fr_first_year_price_eur(),
+        available=await is_available(domain),
+        price_eur=await price_for_domain(domain),
     )
 
 
 @router.get(
     "/suggestions",
     response_model=DomainSuggestionsResponse,
-    summary="Suggest a .fr domain for a prospect",
-    description="Build logical .fr candidates from the prospect (name/city/trade), enrich with AI, check availability.",
+    summary="Suggest a .fr domain from a prospect or a business name",
+    description="Build logical .fr candidates (name/city/trade), enrich with AI, check availability. Pass prospect_id, or name.",
 )
 async def suggest_domains(
-    prospect_id: int,
+    prospect_id: int | None = None,
+    name: str | None = None,
+    city: str | None = None,
+    category: str | None = None,
     current_user: User = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> DomainSuggestionsResponse:
-    """Suggest a pre-fillable ``.fr`` domain for a prospect the caller can see.
+    """Suggest a pre-fillable ``.fr`` domain from a visible prospect or a raw business name.
 
     Raises:
-        HTTPException: 404 when the prospect does not exist or is not visible to the caller.
+        HTTPException: 404 when a given prospect is not visible; 400 when neither prospect_id nor name is given.
     """
-    # Visibility: the prospect must belong to the caller or their organization (no cross-org leak).
-    row = db.query(ProspectDB).filter(ProspectDB.id == prospect_id).first()
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Prospect {prospect_id} not found")
-    if row.user_id != current_user.id:
-        org_id = organization_service.user_org_id(db, current_user.id)
-        if org_id is None or row.organization_id != org_id:
+    if prospect_id is not None:
+        # Visibility: the prospect must belong to the caller or their organization (no cross-org leak).
+        row = db.query(ProspectDB).filter(ProspectDB.id == prospect_id).first()
+        if row is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Prospect {prospect_id} not found")
+        if row.user_id != current_user.id:
+            org_id = organization_service.user_org_id(db, current_user.id)
+            if org_id is None or row.organization_id != org_id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Prospect {prospect_id} not found")
+        name, city, category = row.name, row.city, row.category
+    if not (name or "").strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="prospect_id ou name requis")
 
-    suggestion = await domain_suggestion_service.suggest(name=row.name, city=row.city, category=row.category)
+    suggestion = await domain_suggestion_service.suggest(name=name, city=city, category=category)
     return DomainSuggestionsResponse(
         suggested=suggestion.suggested,
         candidates=[
@@ -154,7 +162,7 @@ async def provision_domain(
     Raises:
         HTTPException: 503 when OVH is not configured, 502 when the order fails.
     """
-    domain = _normalize_fr(request.domain)
+    domain = _normalize_domain(request.domain)
     if not ovh_domain_provider.is_configured:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OVH n'est pas configuré")
     try:
@@ -180,7 +188,7 @@ async def register_domain(
         HTTPException: 503 when OVH is not configured, 502 when the OVH order fails.
     """
     del current_user
-    domain = _normalize_fr(request.domain)
+    domain = _normalize_domain(request.domain)
     if not ovh_domain_provider.is_configured:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OVH n'est pas configuré")
     try:
@@ -205,7 +213,7 @@ async def point_domain_dns(
         HTTPException: 503 when OVH is not configured, 502 when the DNS update fails.
     """
     del current_user
-    domain = _normalize_fr(request.domain)
+    domain = _normalize_domain(request.domain)
     if not ovh_domain_provider.is_configured:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OVH n'est pas configuré")
     try:

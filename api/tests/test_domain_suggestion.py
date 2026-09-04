@@ -11,8 +11,8 @@ import pytest
 
 import services.domain.availability as availability_module
 from services.domain import suggestion_service as suggestion_module
-from services.domain.availability import is_fr_available
-from services.domain.ovh_catalog import extract_fr_create_price
+from services.domain.availability import is_available
+from services.domain.ovh_catalog import extract_create_price
 from services.domain.suggestion_service import DomainCandidate, domain_suggestion_service
 
 
@@ -68,24 +68,28 @@ class TestCandidateLabels:
 class TestAvailability:
     def test_404_means_available(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _patch_client(monkeypatch, status=404)
-        assert asyncio.run(is_fr_available("tacos-maru.fr")) is True
+        assert asyncio.run(is_available("tacos-maru.fr")) is True
 
     def test_200_means_taken(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _patch_client(monkeypatch, status=200)
-        assert asyncio.run(is_fr_available("google.fr")) is False
+        assert asyncio.run(is_available("google.fr")) is False
+
+    def test_a_com_is_checked_too(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_client(monkeypatch, status=200)
+        assert asyncio.run(is_available("google.com")) is False
 
     def test_unexpected_status_is_inconclusive(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _patch_client(monkeypatch, status=500)
-        assert asyncio.run(is_fr_available("whatever.fr")) is None
+        assert asyncio.run(is_available("whatever.fr")) is None
 
     def test_network_error_is_inconclusive(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import httpx
 
         _patch_client(monkeypatch, exc=httpx.ConnectError("boom"))
-        assert asyncio.run(is_fr_available("whatever.fr")) is None
+        assert asyncio.run(is_available("whatever.fr")) is None
 
-    def test_non_fr_is_not_checked(self) -> None:
-        assert asyncio.run(is_fr_available("example.com")) is None
+    def test_no_dot_is_not_checked(self) -> None:
+        assert asyncio.run(is_available("example")) is None
 
 
 class TestOvhCatalogPrice:
@@ -105,10 +109,11 @@ class TestOvhCatalogPrice:
                 },
             ]
         }
-        assert extract_fr_create_price(catalog) == pytest.approx(4.99)
+        assert extract_create_price(catalog, "fr") == pytest.approx(4.99)
+        assert extract_create_price(catalog, "com") == pytest.approx(9.0)  # per-TLD, not always .fr
 
-    def test_returns_none_when_fr_absent(self) -> None:
-        assert extract_fr_create_price({"plans": [{"planCode": "com", "pricings": []}]}) is None
+    def test_returns_none_when_tld_absent(self) -> None:
+        assert extract_create_price({"plans": [{"planCode": "com", "pricings": []}]}, "fr") is None
 
 
 class TestSuggest:
@@ -120,12 +125,12 @@ class TestSuggest:
         async def _fake_ai(*, business_name: str, city: str | None, category: str | None) -> list[str]:
             return ai
 
-        async def _fake_price() -> float:
+        async def _fake_price(_tld: str) -> float:
             return 4.99
 
         monkeypatch.setattr(suggestion_module, "availability_map", _fake_map)
         monkeypatch.setattr(suggestion_module.llm_service, "suggest_domain_names", _fake_ai)
-        monkeypatch.setattr(suggestion_module, "fr_first_year_price_eur", _fake_price)
+        monkeypatch.setattr(suggestion_module, "first_year_price_eur", _fake_price)
         return asyncio.run(domain_suggestion_service.suggest(name="Chez Mimon", city="Poitiers", category="restaurant"))
 
     def test_prefers_the_first_available_candidate(self, monkeypatch: pytest.MonkeyPatch) -> None:
