@@ -1,0 +1,58 @@
+name: 🚀 Run go-live for an order (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      order_id:
+        description: "Order id to (re)fulfil — resets its retry budget and redeploys it"
+        required: true
+        default: "16"
+
+jobs:
+  go-live:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ▶️ Reset retry budget and run fulfilment (SSH)
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /var/www/api.devleadhunter.dibodev.fr/html/api
+            ORDER_ID="${{ github.event.inputs.order_id }}" ../.venv/bin/python - <<'PY'
+            import asyncio
+            import os
+            import traceback
+
+            from core.database import SessionLocal
+            from services.domain.ovh_provider import ovh_domain_provider
+            from services.order_service import order_service
+
+            order_id = int(os.environ.get("ORDER_ID", "16"))
+
+
+            async def main() -> None:
+                print("ovh_configured=", ovh_domain_provider.is_configured)
+                db = SessionLocal()
+                try:
+                    order = order_service.get_by_id(db, order_id)
+                    if order is None:
+                        print("ORDER_NOT_FOUND", order_id)
+                        return
+                    print("before status=", order.status, "domain=", order.domain)
+                    order.fulfillment_attempts = 0
+                    order.fulfillment_last_error = None
+                    db.commit()
+                    await order_service.fulfill_order(db, order)
+                    db.refresh(order)
+                    print("after status=", order.status, "domain=", order.domain, "delivered_at=", order.delivered_at)
+                except Exception:
+                    traceback.print_exc()
+                finally:
+                    db.close()
+
+
+            asyncio.run(main())
+            PY
