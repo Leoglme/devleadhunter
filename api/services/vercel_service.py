@@ -96,6 +96,11 @@ class VercelService:
             except Exception:
                 logger.exception("Vercel domain attach failed for %s", target_domain)
                 raise
+            # Attach www too so Vercel serves/redirects it (best-effort — apex is what matters).
+            try:
+                await self.attach_domain(f"www.{target_domain}")
+            except Exception:
+                logger.warning("Vercel www attach failed for %s", target_domain, exc_info=True)
         elif not self.is_configured:
             logger.warning("Vercel not configured — recording prod URL only for slug=%s", demo_site.slug)
 

@@ -122,14 +122,17 @@ class TestRegister:
 
 
 class TestPointToVercel:
-    def test_replaces_parking_records_with_vercel_apex(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_replaces_apex_and_www_parking_with_vercel(self, monkeypatch: pytest.MonkeyPatch) -> None:
         fake = _FakeClient(
             {
                 ("GET", "/record?fieldType=AAAA"): [],
-                ("GET", "/record?fieldType=A"): [101, 102],  # 101 = apex parking, 102 = a subdomain
+                ("GET", "/record?fieldType=CNAME"): [201],  # 201 = www CNAME to OVH parking
+                ("GET", "/record?fieldType=A"): [101, 199],  # 101 = apex parking, 199 = a real subdomain
                 ("GET", "/record/101"): {"subDomain": "", "target": "213.186.33.5"},
-                ("GET", "/record/102"): {"subDomain": "www", "target": "1.2.3.4"},
+                ("GET", "/record/199"): {"subDomain": "blog", "target": "1.2.3.4"},
+                ("GET", "/record/201"): {"subDomain": "www", "target": "cluster.ovh.net."},
                 ("DELETE", "/record/101"): None,
+                ("DELETE", "/record/201"): None,
                 ("POST", "/record"): None,
                 ("POST", "/refresh"): None,
             }
@@ -138,10 +141,12 @@ class TestPointToVercel:
 
         asyncio.run(_provider().point_to_vercel("tacos-maru.fr", ip="76.76.21.21"))
 
-        # The apex parking A record is deleted; the non-apex (www) record is left untouched.
-        assert any(c[0] == "DELETE" and c[1].endswith("/record/101") for c in fake.calls)
-        assert not any(c[0] == "DELETE" and c[1].endswith("/record/102") for c in fake.calls)
-        record_call = next(c for c in fake.calls if c[0] == "POST" and c[1].endswith("/record"))
-        assert '"fieldType": "A"' in (record_call[2] or "")
-        assert '"target": "76.76.21.21"' in (record_call[2] or "")
+        deletes = [c[1] for c in fake.calls if c[0] == "DELETE"]
+        # Apex (101) and www (201) parking records are removed; the unrelated subdomain (199) is kept.
+        assert any(d.endswith("/record/101") for d in deletes)
+        assert any(d.endswith("/record/201") for d in deletes)
+        assert not any(d.endswith("/record/199") for d in deletes)
+        adds = [c[2] or "" for c in fake.calls if c[0] == "POST" and c[1].endswith("/record")]
+        assert any('"fieldType": "A"' in a and '"target": "76.76.21.21"' in a for a in adds)
+        assert any('"fieldType": "CNAME"' in a and '"subDomain": "www"' in a for a in adds)
         assert any(c[1].endswith("/refresh") for c in fake.calls)

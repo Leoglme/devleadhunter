@@ -68,6 +68,7 @@ class DomainProvisionService:
             # Tell Vercel « this domain → the demo-host project » so it routes + issues SSL once the DNS lands.
             try:
                 await vercel_service.attach_domain(domain)
+                await vercel_service.attach_domain(f"www.{domain}")
             except Exception as exc:
                 # Best-effort: an unconfigured or transient Vercel must not stop the DNS pointing.
                 logger.warning("Vercel attach for %s failed: %s", domain, exc)

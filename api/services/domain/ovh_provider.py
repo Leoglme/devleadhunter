@@ -205,12 +205,13 @@ class OvhDomainProvider:
         return True
 
     async def point_to_vercel(self, domain: str, *, ip: str | None = None) -> None:
-        """Point the domain's apex at the Vercel demo-host **only**, then refresh the zone.
+        """Point the apex **and** ``www`` at the Vercel demo-host only, then refresh the zone.
 
-        OVH seeds a freshly-registered ``.fr`` with default apex records pointing at its own
-        parking (an ``A`` to ``213.186.33.5``, sometimes an ``AAAA``). Left in place, the apex
-        round-robins between OVH and Vercel and Vercel refuses to issue the TLS certificate. So
-        we delete every existing apex ``A``/``AAAA`` before adding the single Vercel ``A``.
+        OVH seeds a freshly-registered ``.fr`` with default records pointing at its own parking
+        (an apex ``A`` to ``213.186.33.5`` + a ``www`` record). Left in place, the apex
+        round-robins between OVH and Vercel, Vercel refuses to issue the TLS certificate, and
+        ``www`` still shows the OVH page. So we delete every existing apex/``www`` A/AAAA/CNAME
+        record, then set the apex ``A`` to Vercel and ``www`` as a CNAME to Vercel.
 
         Args:
             domain: The registered domain whose zone to edit.
@@ -222,26 +223,31 @@ class OvhDomainProvider:
         if not self.is_configured:
             raise DomainProviderError("OVH n'est pas configuré (clés API manquantes)")
         target = ip or settings.vercel_apex_ip
+        cname = settings.vercel_cname
         removed: list[int] = []
         async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
-            # List every A/AAAA record and delete the ones at the apex. We inspect each record's
-            # own subDomain rather than trusting OVH's ``?subDomain=`` empty-string filter, which
-            # does not reliably match the default parking record (leaving it in place blocks SSL).
-            for field_type in ("A", "AAAA"):
+            # Delete every apex ("") and www A/AAAA/CNAME. We inspect each record's own subDomain
+            # rather than trusting OVH's ``?subDomain=`` filter, which does not reliably match the
+            # default parking records (leaving them in place blocks SSL and keeps www on OVH).
+            for field_type in ("A", "AAAA", "CNAME"):
                 record_ids = await self._request(client, "GET", f"/domain/zone/{domain}/record?fieldType={field_type}")
                 for record_id in record_ids or []:
                     record = await self._request(client, "GET", f"/domain/zone/{domain}/record/{record_id}")
-                    if (record or {}).get("subDomain", "") == "":
+                    if (record or {}).get("subDomain", "") in ("", "www"):
                         await self._request(client, "DELETE", f"/domain/zone/{domain}/record/{record_id}")
                         removed.append(record_id)
+            # Apex → Vercel A record; www → Vercel CNAME (Vercel's recommended pair).
+            await self._request(
+                client, "POST", f"/domain/zone/{domain}/record", {"fieldType": "A", "subDomain": "", "target": target}
+            )
             await self._request(
                 client,
                 "POST",
                 f"/domain/zone/{domain}/record",
-                {"fieldType": "A", "subDomain": "", "target": target},
+                {"fieldType": "CNAME", "subDomain": "www", "target": f"{cname}."},
             )
             await self._request(client, "POST", f"/domain/zone/{domain}/refresh")
-        logger.warning("OVH apex re-point %s → %s (removed apex records: %s)", domain, target, removed)
+        logger.warning("OVH re-point %s → apex %s / www %s (removed records: %s)", domain, target, cname, removed)
 
 
 ovh_domain_provider = OvhDomainProvider()
