@@ -117,10 +117,7 @@
               </p>
             </div>
 
-            <div
-              v-if="order.status === 'paid' || order.status === 'deploying'"
-              class="border-t border-[var(--app-surface-2)] px-5 py-4"
-            >
+            <div v-if="order.status === 'paid'" class="border-t border-[var(--app-surface-2)] px-5 py-4">
               <div class="mb-1 flex items-center justify-between">
                 <p class="text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">
                   Mise en ligne du site
@@ -241,6 +238,38 @@
                   domainStatus?.price_eur ? ` (${domainStatus.price_eur} € TTC)` : ''
                 }}
               </button>
+            </div>
+
+            <div
+              v-if="order.domain && (order.status === 'deploying' || order.status === 'delivered')"
+              class="border-t border-[var(--app-surface-2)] px-5 py-4"
+            >
+              <p class="mb-2 text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">
+                Mise en ligne du site
+              </p>
+              <div v-if="order.status === 'delivered'" class="flex items-center gap-2 text-sm">
+                <span class="h-2 w-2 shrink-0 rounded-full bg-[var(--app-green)]" />
+                <span class="text-[var(--app-ink)]"
+                  >En ligne sur <span class="font-medium">{{ order.domain }}</span></span
+                >
+                <a
+                  :href="`https://${order.domain}`"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="ml-auto text-[11px] font-medium text-[var(--app-accent-ink)] hover:underline"
+                  >Ouvrir →</a
+                >
+              </div>
+              <div v-else class="flex items-start gap-2 text-sm">
+                <UIcon
+                  name="i-lucide-loader-circle"
+                  class="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-[var(--app-accent-ink)]"
+                />
+                <span class="text-[var(--app-ink-soft)]">
+                  Domaine <span class="font-medium text-[var(--app-ink)]">{{ order.domain }}</span> acheté — mise en
+                  ligne en cours (propagation DNS, quelques minutes). Suivi dans Paramètres → Monitoring.
+                </span>
+              </div>
             </div>
 
             <div v-if="order.notes" class="border-t border-[var(--app-surface-2)] px-5 py-4">
