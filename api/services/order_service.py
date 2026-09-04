@@ -164,6 +164,23 @@ class OrderService:
                 business_name = business_name or prospect.name
                 customer_email = customer_email or prospect.email
 
+        # A sale from a prospect goes live on that prospect's demo — link it so fulfilment deploys it.
+        if prospect_id and demo_site_id is None:
+            from models.demo_site import DemoSite
+
+            demo = (
+                db.query(DemoSite)
+                .filter(
+                    DemoSite.prospect_id == prospect_id,
+                    DemoSite.user_id == user_id,
+                    DemoSite.deleted_at.is_(None),
+                )
+                .order_by(DemoSite.created_at.desc())
+                .first()
+            )
+            if demo:
+                demo_site_id = demo.id
+
         if amount_cents is not None:
             resolved_amount = amount_cents
         elif product_type == ProductType.WEBSITE.value:
