@@ -19,6 +19,19 @@ from core.config import settings
 logger = logging.getLogger(__name__)
 
 _GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+# gpt-oss / qwen3 models reason before answering, and the reasoning tokens count against
+# ``max_tokens`` — a tiny budget (e.g. 10 for a one-word verdict) is entirely consumed by
+# reasoning, leaving the content empty. Force a low reasoning effort and a floor that leaves
+# room for the answer. Non-reasoning models (a future llama override) reject the param, so it
+# is only sent when the model id looks like a reasoning model.
+_MIN_MAX_TOKENS = 512
+_REASONING_MODEL_HINTS = ("gpt-oss", "qwen3")
+
+
+def _uses_reasoning(model: str) -> bool:
+    """Whether the model id is a reasoning model that needs ``reasoning_effort``."""
+    lowered = model.lower()
+    return any(hint in lowered for hint in _REASONING_MODEL_HINTS)
 
 
 def _format_sender_identity(*, sender_name: str, company_name: str | None) -> str:
@@ -42,17 +55,21 @@ class LLMService:
         """Call Groq chat completions. Returns the text, or None on failure."""
         if not self.is_configured:
             return None
+        model = settings.groq_model
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max(max_tokens, _MIN_MAX_TOKENS),
+        }
+        if _uses_reasoning(model):
+            payload["reasoning_effort"] = "low"
         try:
             async with httpx.AsyncClient(timeout=40.0) as client:
                 response = await client.post(
                     _GROQ_URL,
                     headers={"Authorization": f"Bearer {settings.groq_api_key}"},
-                    json={
-                        "model": settings.groq_model,
-                        "messages": messages,
-                        "temperature": temperature,
-                        "max_tokens": max_tokens,
-                    },
+                    json=payload,
                 )
                 response.raise_for_status()
                 data: dict[str, Any] = response.json()

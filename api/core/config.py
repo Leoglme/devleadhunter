@@ -241,9 +241,9 @@ class Settings(BaseSettings):
         description="Groq API key (OpenAI-compatible) for AI summary / personalised relance",
     )
     groq_model: str = Field(
-        default="llama-3.3-70b-versatile",
+        default="openai/gpt-oss-120b",
         alias="GROQ_MODEL",
-        description="Groq model id used for completions",
+        description="Groq model id used for completions (llama-3.3-70b-versatile was decommissioned 2026-06-17)",
     )
 
     # Estimated .fr registration price shown before purchase (TTC, year 1). The real
