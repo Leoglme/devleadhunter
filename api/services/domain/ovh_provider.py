@@ -222,14 +222,18 @@ class OvhDomainProvider:
         if not self.is_configured:
             raise DomainProviderError("OVH n'est pas configuré (clés API manquantes)")
         target = ip or settings.vercel_apex_ip
+        removed: list[int] = []
         async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
-            # Remove OVH's default apex parking records (empty subDomain = the apex itself).
+            # List every A/AAAA record and delete the ones at the apex. We inspect each record's
+            # own subDomain rather than trusting OVH's ``?subDomain=`` empty-string filter, which
+            # does not reliably match the default parking record (leaving it in place blocks SSL).
             for field_type in ("A", "AAAA"):
-                record_ids = await self._request(
-                    client, "GET", f"/domain/zone/{domain}/record?fieldType={field_type}&subDomain="
-                )
+                record_ids = await self._request(client, "GET", f"/domain/zone/{domain}/record?fieldType={field_type}")
                 for record_id in record_ids or []:
-                    await self._request(client, "DELETE", f"/domain/zone/{domain}/record/{record_id}")
+                    record = await self._request(client, "GET", f"/domain/zone/{domain}/record/{record_id}")
+                    if (record or {}).get("subDomain", "") == "":
+                        await self._request(client, "DELETE", f"/domain/zone/{domain}/record/{record_id}")
+                        removed.append(record_id)
             await self._request(
                 client,
                 "POST",
@@ -237,7 +241,7 @@ class OvhDomainProvider:
                 {"fieldType": "A", "subDomain": "", "target": target},
             )
             await self._request(client, "POST", f"/domain/zone/{domain}/refresh")
-        logger.info("OVH DNS apex A record for %s → %s (parking removed)", domain, target)
+        logger.warning("OVH apex re-point %s → %s (removed apex records: %s)", domain, target, removed)
 
 
 ovh_domain_provider = OvhDomainProvider()

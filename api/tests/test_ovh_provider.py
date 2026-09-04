@@ -125,8 +125,10 @@ class TestPointToVercel:
     def test_replaces_parking_records_with_vercel_apex(self, monkeypatch: pytest.MonkeyPatch) -> None:
         fake = _FakeClient(
             {
-                ("GET", "fieldType=A&subDomain="): [101],  # OVH's default parking A record
-                ("GET", "fieldType=AAAA&subDomain="): [],
+                ("GET", "/record?fieldType=AAAA"): [],
+                ("GET", "/record?fieldType=A"): [101, 102],  # 101 = apex parking, 102 = a subdomain
+                ("GET", "/record/101"): {"subDomain": "", "target": "213.186.33.5"},
+                ("GET", "/record/102"): {"subDomain": "www", "target": "1.2.3.4"},
                 ("DELETE", "/record/101"): None,
                 ("POST", "/record"): None,
                 ("POST", "/refresh"): None,
@@ -136,8 +138,9 @@ class TestPointToVercel:
 
         asyncio.run(_provider().point_to_vercel("tacos-maru.fr", ip="76.76.21.21"))
 
-        # OVH's default parking A record is deleted before the single Vercel apex A is added.
+        # The apex parking A record is deleted; the non-apex (www) record is left untouched.
         assert any(c[0] == "DELETE" and c[1].endswith("/record/101") for c in fake.calls)
+        assert not any(c[0] == "DELETE" and c[1].endswith("/record/102") for c in fake.calls)
         record_call = next(c for c in fake.calls if c[0] == "POST" and c[1].endswith("/record"))
         assert '"fieldType": "A"' in (record_call[2] or "")
         assert '"target": "76.76.21.21"' in (record_call[2] or "")
