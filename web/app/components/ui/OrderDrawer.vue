@@ -179,7 +179,53 @@
                   Suggérer
                 </button>
               </div>
-              <input v-model="editForm.domain" type="text" class="input-field" placeholder="monentreprise.fr" />
+              <input
+                v-model="editForm.domain"
+                type="text"
+                class="input-field"
+                placeholder="monentreprise.fr"
+                autocapitalize="off"
+                autocomplete="off"
+              />
+              <div v-if="editForm.domain.trim()" class="mt-1 flex items-center gap-1.5 text-[11px]">
+                <UIcon
+                  v-if="isCheckingDomain"
+                  name="i-lucide-loader-circle"
+                  class="h-3 w-3 animate-spin text-[var(--app-faint)]"
+                />
+                <template v-else-if="domainStatus">
+                  <span
+                    :class="[
+                      'h-1.5 w-1.5 shrink-0 rounded-full',
+                      domainStatus.available === true
+                        ? 'bg-[var(--app-green)]'
+                        : domainStatus.available === false
+                          ? 'bg-[var(--app-red)]'
+                          : 'bg-[var(--app-faint)]',
+                    ]"
+                  />
+                  <span
+                    :class="
+                      domainStatus.available === true
+                        ? 'text-[var(--app-green)]'
+                        : domainStatus.available === false
+                          ? 'text-[var(--app-red)]'
+                          : 'text-[var(--app-faint)]'
+                    "
+                  >
+                    {{
+                      domainStatus.available === true
+                        ? 'disponible'
+                        : domainStatus.available === false
+                          ? 'déjà pris'
+                          : 'disponibilité inconnue'
+                    }}
+                  </span>
+                  <span v-if="domainStatus.price_eur" class="text-[var(--app-faint)]"
+                    >· ~{{ domainStatus.price_eur }} €</span
+                  >
+                </template>
+              </div>
               <div v-if="domainCandidates.length" class="mt-1.5 flex flex-wrap gap-1.5">
                 <button
                   v-for="candidate in domainCandidates"
@@ -213,47 +259,23 @@
                   />
                 </button>
               </div>
-              <div class="mt-2 flex flex-wrap items-center gap-1.5 border-t border-[var(--app-line-soft)] pt-2">
-                <span class="text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase">OVH</span>
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-1 rounded border border-[var(--app-line)] px-2 py-1 text-[11px] text-[var(--app-ink-soft)] transition-colors hover:border-[var(--app-accent)] disabled:opacity-50"
-                  :disabled="isCheckingRegistrar"
-                  @click="checkRegistrar"
-                >
-                  <UIcon
-                    :name="isCheckingRegistrar ? 'i-lucide-loader-circle' : 'i-lucide-plug'"
-                    :class="['h-3 w-3', { 'animate-spin': isCheckingRegistrar }]"
-                  />
-                  Vérifier
-                </button>
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-1 rounded border border-[var(--app-line)] px-2 py-1 text-[11px] text-[var(--app-ink-soft)] transition-colors hover:border-[var(--app-red)] hover:text-[var(--app-red)] disabled:opacity-50"
-                  :disabled="isRegisteringDomain || !editForm.domain.trim()"
-                  title="Achat réel du domaine (~6 €) sur le compte OVH"
-                  @click="registerDomainOvh"
-                >
-                  <UIcon
-                    :name="isRegisteringDomain ? 'i-lucide-loader-circle' : 'i-lucide-shopping-cart'"
-                    :class="['h-3 w-3', { 'animate-spin': isRegisteringDomain }]"
-                  />
-                  Réserver (~6 €)
-                </button>
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-1 rounded border border-[var(--app-line)] px-2 py-1 text-[11px] text-[var(--app-ink-soft)] transition-colors hover:border-[var(--app-accent)] disabled:opacity-50"
-                  :disabled="isPointingDns || !editForm.domain.trim()"
-                  title="Pointer le DNS vers Vercel (une fois le domaine actif)"
-                  @click="pointDnsOvh"
-                >
-                  <UIcon
-                    :name="isPointingDns ? 'i-lucide-loader-circle' : 'i-lucide-milestone'"
-                    :class="['h-3 w-3', { 'animate-spin': isPointingDns }]"
-                  />
-                  Pointer DNS
-                </button>
-              </div>
+              <button
+                type="button"
+                class="btn-primary mt-2 w-full"
+                :disabled="isProvisioning || !editForm.domain.trim() || domainStatus?.available === false"
+                :title="
+                  domainStatus?.available === false
+                    ? 'Ce domaine est déjà pris'
+                    : 'Achat réel (~6 €) puis mise en ligne automatique'
+                "
+                @click="provisionDomain"
+              >
+                <UIcon
+                  :name="isProvisioning ? 'i-lucide-loader-circle' : 'i-lucide-globe'"
+                  :class="['mr-1.5 h-4 w-4', { 'animate-spin': isProvisioning }]"
+                />
+                Réserver et mettre en ligne{{ domainStatus?.price_eur ? ` (~${domainStatus.price_eur} €)` : '' }}
+              </button>
             </div>
             <div>
               <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
@@ -353,12 +375,7 @@ import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
 import { ref, computed, watch } from 'vue'
 import type { Order, OrderPaymentCheckResult } from '~/services/ordersService'
 import { OrdersService } from '~/services/ordersService'
-import type {
-  DomainCandidate,
-  DomainSuggestions,
-  RegistrarStatus,
-  DomainRegisterResult,
-} from '~/services/domainsService'
+import type { DomainCandidate, DomainSuggestions, DomainRegisterResult } from '~/services/domainsService'
 import { DomainsService } from '~/services/domainsService'
 import { useToast } from '~/composables/useToast'
 import { useUserStore } from '~/stores/user'
@@ -396,9 +413,10 @@ const deleteConfirmModal: Ref<{ open: () => void } | null> = ref(null)
 const refundConfirmModal: Ref<{ open: () => void } | null> = ref(null)
 const isSuggestingDomain: Ref<boolean> = ref(false)
 const domainCandidates: Ref<DomainCandidate[]> = ref([])
-const isCheckingRegistrar: Ref<boolean> = ref(false)
-const isRegisteringDomain: Ref<boolean> = ref(false)
-const isPointingDns: Ref<boolean> = ref(false)
+const isCheckingDomain: Ref<boolean> = ref(false)
+const domainStatus: Ref<DomainCandidate | null> = ref(null)
+const isProvisioning: Ref<boolean> = ref(false)
+const domainCheckTimer: Ref<ReturnType<typeof setTimeout> | null> = ref(null)
 
 const editForm: Ref<OrderEditForm> = ref({
   amount_euros: 0,
@@ -490,6 +508,12 @@ watch(
   },
 )
 
+// Any change to the domain (typing, a suggestion chip, the « Suggérer » prefill) re-checks availability + price.
+watch(
+  (): string => editForm.value.domain,
+  (): void => scheduleDomainCheck(),
+)
+
 /**
  * Prefill the create form with the user's default sale price.
  */
@@ -563,59 +587,54 @@ async function suggestDomain(): Promise<void> {
 }
 
 /**
- * Check the OVH registrar connection (no spend) and toast the result. Super-admin.
+ * Live-check the typed domain's availability + price (debounced), so the operator sees « disponible / déjà pris ».
+ * @returns {void}
+ */
+function scheduleDomainCheck(): void {
+  if (domainCheckTimer.value) clearTimeout(domainCheckTimer.value)
+  const domain: string = editForm.value.domain.trim()
+  if (!domain) {
+    domainStatus.value = null
+    return
+  }
+  domainStatus.value = null
+  domainCheckTimer.value = setTimeout((): void => {
+    void runDomainCheck(domain)
+  }, 450)
+}
+
+/**
+ * Query the AFNIC availability + price for one domain and keep it only if it is still the typed one.
+ * @param domain - The domain to check.
  * @returns A promise resolved once the check runs.
  */
-async function checkRegistrar(): Promise<void> {
-  if (isCheckingRegistrar.value) return
-  isCheckingRegistrar.value = true
+async function runDomainCheck(domain: string): Promise<void> {
+  isCheckingDomain.value = true
   try {
-    const status: RegistrarStatus = await DomainsService.registrarStatus()
-    if (status.configured && status.account) toast.success(`OVH connecté — compte ${status.account}`)
-    else if (status.configured) toast.warning('OVH configuré mais auth KO (vérifier les clés)')
-    else toast.error('OVH non configuré (secrets manquants)')
-  } catch (err: unknown) {
-    toast.error(err instanceof Error ? err.message : 'Vérification impossible')
+    const result: DomainCandidate = await DomainsService.checkAvailability(domain)
+    if (editForm.value.domain.trim() === domain) domainStatus.value = result
+  } catch {
+    if (editForm.value.domain.trim() === domain) domainStatus.value = null
   } finally {
-    isCheckingRegistrar.value = false
+    isCheckingDomain.value = false
   }
 }
 
 /**
- * Register the current domain on OVH — a REAL purchase (~6 €). Super-admin.
+ * Buy the current domain and bring it online in one action (register + DNS → Vercel). A REAL purchase.
  * @returns A promise resolved once the order is placed.
  */
-async function registerDomainOvh(): Promise<void> {
+async function provisionDomain(): Promise<void> {
   const domain: string = editForm.value.domain.trim()
-  if (!domain || isRegisteringDomain.value) return
-  isRegisteringDomain.value = true
+  if (!domain || isProvisioning.value || domainStatus.value?.available === false) return
+  isProvisioning.value = true
   try {
-    const result: DomainRegisterResult = await DomainsService.registerDomain(domain)
-    toast.success(
-      `Domaine commandé — ${result.domain}${result.ovh_order_id ? ` (commande ${result.ovh_order_id})` : ''}`,
-    )
+    const result: DomainRegisterResult = await DomainsService.provisionDomain(domain)
+    toast.success(`Domaine commandé — ${result.domain}. Mise en ligne automatique en cours (quelques minutes).`)
   } catch (err: unknown) {
-    toast.error(err instanceof Error ? err.message : 'Achat impossible')
+    toast.error(err instanceof Error ? err.message : 'Réservation impossible')
   } finally {
-    isRegisteringDomain.value = false
-  }
-}
-
-/**
- * Point the current domain's apex DNS at Vercel — run once the domain is active. Super-admin.
- * @returns A promise resolved once the DNS is set.
- */
-async function pointDnsOvh(): Promise<void> {
-  const domain: string = editForm.value.domain.trim()
-  if (!domain || isPointingDns.value) return
-  isPointingDns.value = true
-  try {
-    await DomainsService.pointDns(domain)
-    toast.success(`DNS pointé vers Vercel — ${domain}`)
-  } catch (err: unknown) {
-    toast.error(err instanceof Error ? err.message : 'DNS impossible')
-  } finally {
-    isPointingDns.value = false
+    isProvisioning.value = false
   }
 }
 

@@ -178,6 +178,24 @@ class OvhDomainProvider:
                 {"label": label, "value": value},
             )
 
+    async def zone_ready(self, domain: str) -> bool:
+        """Whether the domain's DNS zone exists yet (OVH creates it once the order is active).
+
+        Args:
+            domain: The domain whose zone to probe.
+
+        Returns:
+            ``True`` when the zone responds, ``False`` while the registration is still processing.
+        """
+        if not self.is_configured:
+            return False
+        try:
+            async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
+                await self._request(client, "GET", f"/domain/zone/{domain}")
+        except DomainProviderError:
+            return False
+        return True
+
     async def point_to_vercel(self, domain: str, *, ip: str | None = None) -> None:
         """Point the domain's apex ``A`` record at the Vercel demo-host, then refresh the zone.
 

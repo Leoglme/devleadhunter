@@ -18,6 +18,7 @@ from services.auth_service import require_auth, require_super_admin
 from services.domain.availability import is_fr_available
 from services.domain.ovh_catalog import fr_first_year_price_eur
 from services.domain.ovh_provider import DomainProviderError, ovh_domain_provider
+from services.domain.provision_service import domain_provision_service
 from services.domain.suggestion_service import domain_suggestion_service
 from services.organization_service import organization_service
 
@@ -139,10 +140,35 @@ class DomainRegisterResult(BaseModel):
 
 
 @router.post(
+    "/provision",
+    response_model=DomainRegisterResult,
+    summary="Buy a .fr domain and bring it online (register + DNS → Vercel)",
+    description="Super-admin, one action. Registers now (spends money) and points the DNS to Vercel once OVH activates the domain.",
+)
+async def provision_domain(
+    request: DomainActionRequest,
+    current_user: User = Depends(require_super_admin),
+) -> DomainRegisterResult:
+    """Register a ``.fr`` domain and schedule its go-live (DNS → Vercel). Super-admin only.
+
+    Raises:
+        HTTPException: 503 when OVH is not configured, 502 when the order fails.
+    """
+    domain = _normalize_fr(request.domain)
+    if not ovh_domain_provider.is_configured:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OVH n'est pas configuré")
+    try:
+        order = await domain_provision_service.provision(domain, user_id=current_user.id)
+    except DomainProviderError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return DomainRegisterResult(domain=domain, ovh_order_id=order.get("orderId"))
+
+
+@router.post(
     "/register",
     response_model=DomainRegisterResult,
     summary="Buy a .fr domain on the operator's OVH account (spends money)",
-    description="Super-admin, deliberate action. Registration is async at OVH — point the DNS once the domain is active.",
+    description="Super-admin fallback. Registration is async at OVH — point the DNS once the domain is active.",
 )
 async def register_domain(
     request: DomainActionRequest,
