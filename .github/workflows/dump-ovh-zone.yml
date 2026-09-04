@@ -1,0 +1,45 @@
+name: 🔎 Dump OVH zone records (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: "Domain whose OVH zone to dump"
+        required: true
+        default: "devleadhunter.fr"
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📜 List every zone record (SSH)
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /var/www/api.devleadhunter.dibodev.fr/html/api
+            DOMAIN="${{ github.event.inputs.domain }}" ../.venv/bin/python - <<'PY'
+            import asyncio
+            import os
+
+            import httpx
+
+            from services.domain.ovh_provider import ovh_domain_provider as p
+
+            domain = os.environ.get("DOMAIN", "devleadhunter.fr")
+
+
+            async def main() -> None:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    for field_type in ("A", "AAAA", "CNAME", "TXT"):
+                        ids = await p._request(client, "GET", f"/domain/zone/{domain}/record?fieldType={field_type}")
+                        for record_id in ids or []:
+                            rec = await p._request(client, "GET", f"/domain/zone/{domain}/record/{record_id}")
+                            print(field_type, record_id, "sub=", repr((rec or {}).get("subDomain")), "->", (rec or {}).get("target"))
+
+
+            asyncio.run(main())
+            PY
