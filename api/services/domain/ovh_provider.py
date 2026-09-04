@@ -117,8 +117,9 @@ class OvhDomainProvider:
                 offers = await self._request(client, "GET", f"/order/cart/{cart_id}/domain?domain={domain}")
                 logger.info("OVH cart offers for %s: %s", domain, offers)
                 offer = self._pick_create_offer(offers, domain)
-                # Only `domain` is required; planCode / pricingMode / duration refine it when the offer carries them.
-                item_config: dict[str, Any] = {"domain": domain, "duration": offer.get("duration") or duration}
+                # `duration` must be ISO8601 (P1Y) — the offer's own value is a plain string, so use the param.
+                # planCode / pricingMode refine the plan when the offer carries them.
+                item_config: dict[str, Any] = {"domain": domain, "duration": duration}
                 for key in ("planCode", "pricingMode"):
                     if offer.get(key):
                         item_config[key] = offer[key]
