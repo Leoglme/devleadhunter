@@ -30,6 +30,8 @@ export type Order = {
   delivered_at: string | null
   created_at: string
   updated_at: string | null
+  /** Follow-up warning shown in the drawer (e.g. site live but CMS not handed over). */
+  delivery_warning?: string | null
 }
 
 /** Billing counterpart of the invoice, reviewed before it is issued. */

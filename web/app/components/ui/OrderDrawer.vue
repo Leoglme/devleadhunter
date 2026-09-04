@@ -272,6 +272,15 @@
               </div>
             </div>
 
+            <div v-if="order.delivery_warning" class="border-t border-[var(--app-surface-2)] px-5 py-4">
+              <div
+                class="flex items-start gap-2 rounded-lg border border-[var(--app-blue)]/30 bg-[var(--app-blue-soft)] px-3 py-2"
+              >
+                <UIcon name="i-lucide-info" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--app-blue)]" />
+                <p class="text-[12px] text-[var(--app-ink)]">{{ order.delivery_warning }}</p>
+              </div>
+            </div>
+
             <div v-if="order.notes" class="border-t border-[var(--app-surface-2)] px-5 py-4">
               <p class="mb-1 text-[10px] font-semibold tracking-wider text-[var(--app-ink-soft)] uppercase">Notes</p>
               <p class="text-sm whitespace-pre-line text-[var(--app-ink)]">{{ order.notes }}</p>

@@ -108,6 +108,8 @@ class OrderResponse(BaseModel):
     delivered_at: datetime | None = None
     created_at: datetime
     updated_at: datetime | None = None
+    # Non-persisted: a follow-up warning for the drawer (e.g. site live but CMS not handed over).
+    delivery_warning: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.database import get_db
+from models.order import Order
 from models.user import User
 from schemas.order import (
     OrderBillingResponse,
@@ -22,6 +23,13 @@ from services.order_service import order_service
 router = APIRouter(prefix="/orders", tags=["orders"])
 
 
+def _order_to_response(db: Session, order: Order) -> OrderResponse:
+    """Serialize an order, attaching the CMS-handover warning shown in the sale drawer."""
+    response = OrderResponse.model_validate(order)
+    response.delivery_warning = order_service.cms_handover_warning(db, order)
+    return response
+
+
 @router.get("", response_model=OrderListResponse)
 async def list_orders(
     current_user: User = Depends(get_current_active_user),
@@ -30,7 +38,7 @@ async def list_orders(
     """List the current user's orders."""
     items = order_service.list_for_user(db, current_user.id)
     return OrderListResponse(
-        items=[OrderResponse.model_validate(o) for o in items],
+        items=[_order_to_response(db, o) for o in items],
         total=len(items),
     )
 
@@ -64,7 +72,7 @@ async def create_order(
         domain=payload.domain,
         notes=payload.notes,
     )
-    return OrderResponse.model_validate(order)
+    return _order_to_response(db, order)
 
 
 def _get_order_or_404(db: Session, user_id: int, order_id: int):
@@ -81,7 +89,7 @@ async def get_order(
     db: Session = Depends(get_db),
 ) -> OrderResponse:
     """Fetch a single order."""
-    return OrderResponse.model_validate(_get_order_or_404(db, current_user.id, order_id))
+    return _order_to_response(db, _get_order_or_404(db, current_user.id, order_id))
 
 
 @router.patch("/{order_id}", response_model=OrderResponse)
@@ -99,7 +107,7 @@ async def update_order(
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
     order = order_service.update(db, order, updates)
-    return OrderResponse.model_validate(order)
+    return _order_to_response(db, order)
 
 
 @router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -127,7 +135,7 @@ async def create_order_payment_link(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    return OrderResponse.model_validate(order)
+    return _order_to_response(db, order)
 
 
 @router.get("/{order_id}/billing", response_model=OrderBillingResponse)
@@ -164,7 +172,7 @@ async def finalize_order(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    return OrderResponse.model_validate(order)
+    return _order_to_response(db, order)
 
 
 @router.get("/{order_id}/payment-email/preview", response_model=OrderPaymentEmailPreview)
@@ -197,7 +205,7 @@ async def send_order_payment_email(
             detail=result.get("error", "Échec de l'envoi de l'email"),
         )
     db.refresh(order)
-    return OrderResponse.model_validate(order)
+    return _order_to_response(db, order)
 
 
 @router.post("/{order_id}/mark-paid", response_model=OrderResponse)
@@ -210,7 +218,7 @@ async def mark_order_paid(
     order = _get_order_or_404(db, current_user.id, order_id)
     order = order_service.mark_paid(db, order)
     await order_service.capture_sale_event(db, order.id)
-    return OrderResponse.model_validate(order)
+    return _order_to_response(db, order)
 
 
 @router.post("/{order_id}/check-payment", response_model=OrderPaymentCheckResponse)
@@ -228,7 +236,7 @@ async def check_order_payment(
     if newly_paid:
         await order_service.capture_sale_event(db, order.id)
     db.refresh(order)
-    return OrderPaymentCheckResponse(newly_paid=newly_paid, order=OrderResponse.model_validate(order))
+    return OrderPaymentCheckResponse(newly_paid=newly_paid, order=_order_to_response(db, order))
 
 
 @router.post("/{order_id}/refund", response_model=OrderResponse)
@@ -245,7 +253,7 @@ async def refund_order(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    return OrderResponse.model_validate(refunded)
+    return _order_to_response(db, refunded)
 
 
 @router.post("/{order_id}/deploy", response_model=OrderResponse)
@@ -262,4 +270,4 @@ async def deploy_order(
     order.fulfillment_last_error = None
     db.commit()
     order = await order_service.fulfill_order(db, order)
-    return OrderResponse.model_validate(order)
+    return _order_to_response(db, order)

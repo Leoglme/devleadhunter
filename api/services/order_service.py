@@ -949,41 +949,60 @@ class OrderService:
 
     async def _verify_delivery(self, order: Order, demo_site: DemoSite) -> tuple[bool, str]:
         """
-        Verify the client truly has a working site on their domain AND CMS access.
+        Verify the client truly has a working site on their domain.
 
-        Returns ``(ok, message)``. ``ok`` is True only when the custom domain
-        serves a page (HTTP < 400) and the Storyblok CMS handover is real — a
-        space exists and the invite was sent (not mock mode).
+        Delivery hinges on the **domain being live** — that is what the client paid for.
+        The Storyblok CMS handover is a follow-up the operator can complete afterwards, so a
+        missing or mock CMS no longer blocks delivery; it is surfaced as a warning instead
+        (see :meth:`cms_handover_warning`).
 
         Args:
             order: The paid order being fulfilled (provides the domain).
-            demo_site: The linked demo site (provides CMS state).
+            demo_site: The linked demo site (provides CMS state, for the message).
 
         Returns:
             Tuple of (delivered_ok, human-readable reason).
         """
         from services.demo_site_verification_service import demo_site_verification_service
 
-        problems: list[str] = []
-
         if not order.domain:
-            domain_live = False
-            problems.append("aucun domaine défini")
-        else:
-            domain_live = await demo_site_verification_service.check_domain_live(order.domain)
-            if not domain_live:
-                problems.append(f"le domaine {order.domain} ne répond pas encore (DNS/Vercel)")
+            return False, "Livraison incomplète : aucun domaine défini"
+        if not await demo_site_verification_service.check_domain_live(order.domain):
+            return False, f"Livraison incomplète : le domaine {order.domain} ne répond pas encore (DNS/Vercel)"
 
         cms_ready: bool = bool(demo_site.storyblok_space_id) and bool(demo_site.storyblok_invite_sent)
-        if not cms_ready:
-            if not demo_site.storyblok_space_id:
-                problems.append("espace CMS Storyblok non créé (mode mock ?)")
-            else:
-                problems.append("invitation CMS non envoyée au client")
-
-        if domain_live and cms_ready:
+        if cms_ready:
             return True, "Site en ligne sur le domaine client et accès CMS transmis."
-        return False, "Livraison incomplète : " + " ; ".join(problems)
+        if not demo_site.storyblok_space_id:
+            return True, "Site en ligne. CMS Storyblok absent (mode mock) — accès à transmettre manuellement."
+        return True, "Site en ligne. Invitation CMS pas encore envoyée au client."
+
+    def cms_handover_warning(self, db: Session, order: Order) -> str | None:
+        """A short warning when a sale's site is (being) delivered without its CMS handover.
+
+        Powers the info bubble in the sale drawer. Returns ``None`` when the sale is not yet in
+        a delivery phase, has no linked demo, or the Storyblok space exists and the client
+        invite was sent.
+
+        Args:
+            db: Database session.
+            order: The sale to inspect.
+
+        Returns:
+            A human-readable warning, or ``None`` when nothing needs surfacing.
+        """
+        if order.status not in (OrderStatus.PAID.value, OrderStatus.DEPLOYING.value, OrderStatus.DELIVERED.value):
+            return None
+        if not order.demo_site_id:
+            return None
+        from models.demo_site import DemoSite
+
+        demo_site = db.query(DemoSite).filter(DemoSite.id == order.demo_site_id).first()
+        if demo_site is None or (demo_site.storyblok_space_id and demo_site.storyblok_invite_sent):
+            return None
+        if not demo_site.storyblok_space_id:
+            return "CMS Storyblok absent : le client n'a pas encore d'espace d'édition (à créer et transmettre)."
+        return "Invitation CMS non envoyée : le client n'a pas encore accès à l'édition Storyblok."
 
     async def fulfill_order_async(self, order_id: int) -> None:
         """
