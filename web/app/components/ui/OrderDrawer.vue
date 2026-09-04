@@ -186,7 +186,6 @@
                 placeholder="monentreprise.fr"
                 autocapitalize="off"
                 autocomplete="off"
-                @input="domainCandidates = []"
               />
               <div v-if="editForm.domain.trim()" class="mt-1 flex items-center gap-1.5 text-[11px]">
                 <UIcon
@@ -598,20 +597,26 @@ async function suggestDomain(): Promise<void> {
  */
 function scheduleDomainCheck(): void {
   if (domainCheckTimer.value) clearTimeout(domainCheckTimer.value)
-  const domain: string = editForm.value.domain.trim()
-  if (!domain) {
-    domainStatus.value = null
+  const value: string = editForm.value.domain.trim()
+  domainStatus.value = null
+  if (!value) {
+    domainCandidates.value = []
     return
   }
-  domainStatus.value = null
   domainCheckTimer.value = setTimeout((): void => {
-    void runDomainCheck(domain)
+    // A full domain (has a dot) → check that exact one; a bare label → suggest domains from it.
+    if (value.includes('.')) {
+      domainCandidates.value = []
+      void runDomainCheck(value)
+    } else {
+      void suggestFromLabel(value)
+    }
   }, 450)
 }
 
 /**
- * Query the AFNIC availability + price for one domain and keep it only if it is still the typed one.
- * @param domain - The domain to check.
+ * Query the availability + real price for one domain and keep it only if it is still the typed one.
+ * @param domain - The full domain to check.
  * @returns A promise resolved once the check runs.
  */
 async function runDomainCheck(domain: string): Promise<void> {
@@ -621,6 +626,23 @@ async function runDomainCheck(domain: string): Promise<void> {
     if (editForm.value.domain.trim() === domain) domainStatus.value = result
   } catch {
     if (editForm.value.domain.trim() === domain) domainStatus.value = null
+  } finally {
+    isCheckingDomain.value = false
+  }
+}
+
+/**
+ * As-you-type suggestions: build .fr candidates from a bare label (no AI, snappy).
+ * @param label - The bare name typed (no dot).
+ * @returns A promise resolved once the suggestions load.
+ */
+async function suggestFromLabel(label: string): Promise<void> {
+  isCheckingDomain.value = true
+  try {
+    const result: DomainSuggestions = await DomainsService.suggestForName(label, false)
+    if (editForm.value.domain.trim() === label) domainCandidates.value = result.candidates
+  } catch {
+    // best-effort: keep whatever chips are shown
   } finally {
     isCheckingDomain.value = false
   }

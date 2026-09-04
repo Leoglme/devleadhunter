@@ -92,21 +92,26 @@ class DomainSuggestionService:
                 out.append(label)
         return out
 
-    async def suggest(self, *, name: str, city: str | None, category: str | None) -> DomainSuggestion:
+    async def suggest(
+        self, *, name: str, city: str | None, category: str | None, use_ai: bool = True
+    ) -> DomainSuggestion:
         """Propose a ``.fr`` domain for a prospect, ranked by logic then availability.
 
         Args:
             name: Business name (drives the logical candidates).
             city: City, when known (adds ``nom-ville`` variants).
             category: Trade, when known (adds a ``nom-metier`` variant).
+            use_ai: Enrich with Groq (the « Suggérer » button); off for snappy as-you-type suggestions.
 
         Returns:
             A :class:`DomainSuggestion` — the best pre-fill plus the checked alternatives.
         """
         labels = self._candidate_labels(name, city, category)
-        # Groq enriches the pool (best-effort) — validated and appended after the logical ones.
-        ai_labels = await llm_service.suggest_domain_names(business_name=name, city=city, category=category)
-        labels = self._dedupe_valid(labels + ai_labels)[:_MAX_CANDIDATES]
+        if use_ai:
+            # Groq enriches the pool (best-effort) — validated and appended after the logical ones.
+            ai_labels = await llm_service.suggest_domain_names(business_name=name, city=city, category=category)
+            labels = self._dedupe_valid(labels + ai_labels)
+        labels = labels[:_MAX_CANDIDATES]
 
         domains = [f"{label}.fr" for label in labels]
         available = await availability_map(domains)

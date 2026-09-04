@@ -39,18 +39,12 @@ export class DomainsService {
   /**
    * Suggest a .fr domain from a business name (when the sale is not linked to a prospect).
    * @param name - The business name to derive candidates from.
-   * @param city - Optional city, adds « nom-ville » variants.
-   * @param category - Optional trade, adds a « nom-metier » variant.
+   * @param useAi - Enrich with AI (« Suggérer » button); false for snappy as-you-type suggestions.
    * @returns The best pre-fill and the candidate list.
    */
-  static async suggestForName(
-    name: string,
-    city?: string | null,
-    category?: string | null,
-  ): Promise<DomainSuggestions> {
+  static async suggestForName(name: string, useAi: boolean = true): Promise<DomainSuggestions> {
     const params: URLSearchParams = new URLSearchParams({ name })
-    if (city) params.set('city', city)
-    if (category) params.set('category', category)
+    if (!useAi) params.set('ai', 'false')
     return ApiClient.get<DomainSuggestions>(`/api/v1/domains/suggestions?${params.toString()}`)
   }
 

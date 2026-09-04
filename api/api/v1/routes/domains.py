@@ -82,10 +82,13 @@ async def suggest_domains(
     name: str | None = None,
     city: str | None = None,
     category: str | None = None,
+    ai: bool = True,
     current_user: User = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> DomainSuggestionsResponse:
     """Suggest a pre-fillable ``.fr`` domain from a visible prospect or a raw business name.
+
+    Pass ``ai=false`` for snappy as-you-type suggestions (skips Groq).
 
     Raises:
         HTTPException: 404 when a given prospect is not visible; 400 when neither prospect_id nor name is given.
@@ -103,7 +106,7 @@ async def suggest_domains(
     if not (name or "").strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="prospect_id ou name requis")
 
-    suggestion = await domain_suggestion_service.suggest(name=name, city=city, category=category)
+    suggestion = await domain_suggestion_service.suggest(name=name, city=city, category=category, use_ai=ai)
     return DomainSuggestionsResponse(
         suggested=suggestion.suggested,
         candidates=[
