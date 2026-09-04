@@ -1070,6 +1070,19 @@ class OrderService:
         except Exception:
             logger.exception("Vercel deployment failed for order_id=%s", order.id)
 
+        # 1b) Re-assert that the apex points ONLY at Vercel. OVH seeds a new .fr with default
+        #     parking records that block Vercel's SSL issuance; the initial pointing runs in a
+        #     background task, so re-doing it here lets the recovery loop self-heal a domain
+        #     stuck without a certificate (idempotent; skipped when OVH is not this user's zone).
+        if order.domain:
+            try:
+                from services.domain.ovh_provider import ovh_domain_provider
+
+                if ovh_domain_provider.is_configured and await ovh_domain_provider.zone_ready(order.domain):
+                    await ovh_domain_provider.point_to_vercel(order.domain)
+            except Exception:
+                logger.warning("DNS re-point to Vercel failed for order_id=%s", order.id, exc_info=True)
+
         # 2) Take the demo offline (demo.dibodev.fr 404) and promote the site to
         #    the client's production domain (served via host→slug, permanent).
         if order.domain:
