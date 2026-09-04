@@ -126,13 +126,16 @@ class TestPointToVercel:
         fake = _FakeClient(
             {
                 ("GET", "/record?fieldType=AAAA"): [],
-                ("GET", "/record?fieldType=CNAME"): [201],  # 201 = www CNAME to OVH parking
+                ("GET", "/record?fieldType=CNAME"): [301],  # 301 = ftp CNAME (non-apex → kept)
+                ("GET", "/record?fieldType=TXT"): [401, 402],  # 401 = www parking marker, 402 = apex SPF
                 ("GET", "/record?fieldType=A"): [101, 199],  # 101 = apex parking, 199 = a real subdomain
                 ("GET", "/record/101"): {"subDomain": "", "target": "213.186.33.5"},
                 ("GET", "/record/199"): {"subDomain": "blog", "target": "1.2.3.4"},
-                ("GET", "/record/201"): {"subDomain": "www", "target": "cluster.ovh.net."},
+                ("GET", "/record/301"): {"subDomain": "ftp", "target": "tacos-maru.fr."},
+                ("GET", "/record/401"): {"subDomain": "www", "target": '"3|welcome"'},
+                ("GET", "/record/402"): {"subDomain": "", "target": '"v=spf1 include:foo -all"'},
                 ("DELETE", "/record/101"): None,
-                ("DELETE", "/record/201"): None,
+                ("DELETE", "/record/401"): None,
                 ("POST", "/record"): None,
                 ("POST", "/refresh"): None,
             }
@@ -142,11 +145,14 @@ class TestPointToVercel:
         asyncio.run(_provider().point_to_vercel("tacos-maru.fr", ip="76.76.21.21"))
 
         deletes = [c[1] for c in fake.calls if c[0] == "DELETE"]
-        # Apex (101) and www (201) parking records are removed; the unrelated subdomain (199) is kept.
+        # Apex A parking (101) and the www OVH redirect TXT (401) are removed; the real subdomain
+        # (199), the ftp CNAME (301) and the apex SPF TXT (402) are all kept.
         assert any(d.endswith("/record/101") for d in deletes)
-        assert any(d.endswith("/record/201") for d in deletes)
-        assert not any(d.endswith("/record/199") for d in deletes)
+        assert any(d.endswith("/record/401") for d in deletes)
+        assert not any(d.endswith(("/record/199", "/record/301", "/record/402")) for d in deletes)
+        # Both apex and www are set as A records to the Vercel IP (www as A avoids a CNAME/TXT clash).
         adds = [c[2] or "" for c in fake.calls if c[0] == "POST" and c[1].endswith("/record")]
-        assert any('"fieldType": "A"' in a and '"target": "76.76.21.21"' in a for a in adds)
-        assert any('"fieldType": "CNAME"' in a and '"subDomain": "www"' in a for a in adds)
+        assert any('"subDomain": ""' in a and '"target": "76.76.21.21"' in a for a in adds)
+        assert any('"subDomain": "www"' in a and '"target": "76.76.21.21"' in a for a in adds)
+        assert all('"fieldType": "A"' in a for a in adds)
         assert any(c[1].endswith("/refresh") for c in fake.calls)

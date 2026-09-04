@@ -275,12 +275,7 @@ class Settings(BaseSettings):
     vercel_apex_ip: str = Field(
         default="76.76.21.21",
         alias="VERCEL_APEX_IP",
-        description="Vercel apex A-record IP the client domain points to",
-    )
-    vercel_cname: str = Field(
-        default="cname.vercel-dns.com",
-        alias="VERCEL_CNAME",
-        description="Vercel CNAME target the www subdomain points to",
+        description="Vercel apex A-record IP the client domain (apex + www) points to",
     )
 
     # Dev / testing — outbound email safety
