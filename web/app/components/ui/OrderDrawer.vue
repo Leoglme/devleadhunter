@@ -213,6 +213,47 @@
                   />
                 </button>
               </div>
+              <div class="mt-2 flex flex-wrap items-center gap-1.5 border-t border-[var(--app-line-soft)] pt-2">
+                <span class="text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase">OVH</span>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded border border-[var(--app-line)] px-2 py-1 text-[11px] text-[var(--app-ink-soft)] transition-colors hover:border-[var(--app-accent)] disabled:opacity-50"
+                  :disabled="isCheckingRegistrar"
+                  @click="checkRegistrar"
+                >
+                  <UIcon
+                    :name="isCheckingRegistrar ? 'i-lucide-loader-circle' : 'i-lucide-plug'"
+                    :class="['h-3 w-3', { 'animate-spin': isCheckingRegistrar }]"
+                  />
+                  Vérifier
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded border border-[var(--app-line)] px-2 py-1 text-[11px] text-[var(--app-ink-soft)] transition-colors hover:border-[var(--app-red)] hover:text-[var(--app-red)] disabled:opacity-50"
+                  :disabled="isRegisteringDomain || !editForm.domain.trim()"
+                  title="Achat réel du domaine (~6 €) sur le compte OVH"
+                  @click="registerDomainOvh"
+                >
+                  <UIcon
+                    :name="isRegisteringDomain ? 'i-lucide-loader-circle' : 'i-lucide-shopping-cart'"
+                    :class="['h-3 w-3', { 'animate-spin': isRegisteringDomain }]"
+                  />
+                  Réserver (~6 €)
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded border border-[var(--app-line)] px-2 py-1 text-[11px] text-[var(--app-ink-soft)] transition-colors hover:border-[var(--app-accent)] disabled:opacity-50"
+                  :disabled="isPointingDns || !editForm.domain.trim()"
+                  title="Pointer le DNS vers Vercel (une fois le domaine actif)"
+                  @click="pointDnsOvh"
+                >
+                  <UIcon
+                    :name="isPointingDns ? 'i-lucide-loader-circle' : 'i-lucide-milestone'"
+                    :class="['h-3 w-3', { 'animate-spin': isPointingDns }]"
+                  />
+                  Pointer DNS
+                </button>
+              </div>
             </div>
             <div>
               <label class="mb-1 block text-[10px] font-medium tracking-wider text-[var(--app-ink-soft)] uppercase"
@@ -312,7 +353,12 @@ import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
 import { ref, computed, watch } from 'vue'
 import type { Order, OrderPaymentCheckResult } from '~/services/ordersService'
 import { OrdersService } from '~/services/ordersService'
-import type { DomainCandidate, DomainSuggestions } from '~/services/domainsService'
+import type {
+  DomainCandidate,
+  DomainSuggestions,
+  RegistrarStatus,
+  DomainRegisterResult,
+} from '~/services/domainsService'
 import { DomainsService } from '~/services/domainsService'
 import { useToast } from '~/composables/useToast'
 import { useUserStore } from '~/stores/user'
@@ -350,6 +396,9 @@ const deleteConfirmModal: Ref<{ open: () => void } | null> = ref(null)
 const refundConfirmModal: Ref<{ open: () => void } | null> = ref(null)
 const isSuggestingDomain: Ref<boolean> = ref(false)
 const domainCandidates: Ref<DomainCandidate[]> = ref([])
+const isCheckingRegistrar: Ref<boolean> = ref(false)
+const isRegisteringDomain: Ref<boolean> = ref(false)
+const isPointingDns: Ref<boolean> = ref(false)
 
 const editForm: Ref<OrderEditForm> = ref({
   amount_euros: 0,
@@ -510,6 +559,63 @@ async function suggestDomain(): Promise<void> {
     toast.error(err instanceof Error ? err.message : 'Suggestion impossible')
   } finally {
     isSuggestingDomain.value = false
+  }
+}
+
+/**
+ * Check the OVH registrar connection (no spend) and toast the result. Super-admin.
+ * @returns A promise resolved once the check runs.
+ */
+async function checkRegistrar(): Promise<void> {
+  if (isCheckingRegistrar.value) return
+  isCheckingRegistrar.value = true
+  try {
+    const status: RegistrarStatus = await DomainsService.registrarStatus()
+    if (status.configured && status.account) toast.success(`OVH connecté — compte ${status.account}`)
+    else if (status.configured) toast.warning('OVH configuré mais auth KO (vérifier les clés)')
+    else toast.error('OVH non configuré (secrets manquants)')
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Vérification impossible')
+  } finally {
+    isCheckingRegistrar.value = false
+  }
+}
+
+/**
+ * Register the current domain on OVH — a REAL purchase (~6 €). Super-admin.
+ * @returns A promise resolved once the order is placed.
+ */
+async function registerDomainOvh(): Promise<void> {
+  const domain: string = editForm.value.domain.trim()
+  if (!domain || isRegisteringDomain.value) return
+  isRegisteringDomain.value = true
+  try {
+    const result: DomainRegisterResult = await DomainsService.registerDomain(domain)
+    toast.success(
+      `Domaine commandé — ${result.domain}${result.ovh_order_id ? ` (commande ${result.ovh_order_id})` : ''}`,
+    )
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Achat impossible')
+  } finally {
+    isRegisteringDomain.value = false
+  }
+}
+
+/**
+ * Point the current domain's apex DNS at Vercel — run once the domain is active. Super-admin.
+ * @returns A promise resolved once the DNS is set.
+ */
+async function pointDnsOvh(): Promise<void> {
+  const domain: string = editForm.value.domain.trim()
+  if (!domain || isPointingDns.value) return
+  isPointingDns.value = true
+  try {
+    await DomainsService.pointDns(domain)
+    toast.success(`DNS pointé vers Vercel — ${domain}`)
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'DNS impossible')
+  } finally {
+    isPointingDns.value = false
   }
 }
 

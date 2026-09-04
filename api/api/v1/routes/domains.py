@@ -104,10 +104,31 @@ async def suggest_domains(
     )
 
 
+class RegistrarStatus(BaseModel):
+    """Whether the OVH registrar is wired, and which account it points at."""
+
+    configured: bool = Field(..., description="True when the OVH credentials are present")
+    account: str | None = Field(None, description="OVH account id (nichandle) when the signed check succeeds")
+
+
 class DomainActionRequest(BaseModel):
     """Payload naming a single .fr domain for a registrar action."""
 
     domain: str = Field(..., description="Full .fr domain, e.g. « tacos-maru.fr »")
+
+
+@router.get(
+    "/registrar-status",
+    response_model=RegistrarStatus,
+    summary="Check the OVH registrar connection (no spend)",
+    description="Super-admin. Does a signed GET /me to prove the keys + signature work, without ordering anything.",
+)
+async def registrar_status(current_user: User = Depends(require_super_admin)) -> RegistrarStatus:
+    """Return whether OVH is configured and reachable (a safe, no-spend auth check)."""
+    del current_user
+    if not ovh_domain_provider.is_configured:
+        return RegistrarStatus(configured=False, account=None)
+    return RegistrarStatus(configured=True, account=await ovh_domain_provider.account_id())
 
 
 class DomainRegisterResult(BaseModel):

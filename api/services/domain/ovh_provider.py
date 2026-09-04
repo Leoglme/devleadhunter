@@ -77,6 +77,22 @@ class OvhDomainProvider:
             raise DomainProviderError(f"OVH {method} {path} → {response.status_code}: {response.text[:300]}")
         return response.json() if response.content else None
 
+    async def account_id(self) -> str | None:
+        """The OVH account id (nichandle) behind the credentials — a free, no-spend auth check.
+
+        Returns:
+            The nichandle when the signed call succeeds, else ``None`` (unconfigured or auth failed).
+        """
+        if not self.is_configured:
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
+                me = await self._request(client, "GET", "/me")
+        except (httpx.HTTPError, DomainProviderError) as exc:
+            logger.warning("OVH auth check failed: %s", exc)
+            return None
+        return (me or {}).get("nichandle")
+
     async def register(self, domain: str, *, duration: str = "P1Y") -> dict[str, Any]:
         """Buy a domain on the operator's OVH account (cart → configure → checkout, auto-paid).
 

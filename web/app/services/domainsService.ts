@@ -13,6 +13,18 @@ export type DomainSuggestions = {
   candidates: DomainCandidate[]
 }
 
+/** Whether the OVH registrar is wired, and which account it points at. */
+export type RegistrarStatus = {
+  configured: boolean
+  account: string | null
+}
+
+/** Outcome of a domain registration. */
+export type DomainRegisterResult = {
+  domain: string
+  ovh_order_id: number | null
+}
+
 /** Domain suggestion + availability for the post-sale go-live. */
 export class DomainsService {
   /**
@@ -31,5 +43,31 @@ export class DomainsService {
    */
   static async checkAvailability(name: string): Promise<DomainCandidate> {
     return ApiClient.get<DomainCandidate>(`/api/v1/domains/availability?name=${encodeURIComponent(name)}`)
+  }
+
+  /**
+   * Check the OVH registrar connection (no spend — a signed GET /me). Super-admin.
+   * @returns Whether OVH is configured and which account it reaches.
+   */
+  static async registrarStatus(): Promise<RegistrarStatus> {
+    return ApiClient.get<RegistrarStatus>('/api/v1/domains/registrar-status')
+  }
+
+  /**
+   * Register a .fr domain on the operator's OVH account (real purchase). Super-admin.
+   * @param domain - The full .fr domain to buy.
+   * @returns The order result.
+   */
+  static async registerDomain(domain: string): Promise<DomainRegisterResult> {
+    return ApiClient.post<DomainRegisterResult>('/api/v1/domains/register', { domain })
+  }
+
+  /**
+   * Point a domain's apex DNS at the Vercel demo-host. Super-admin. Run once the domain is active.
+   * @param domain - The registered domain.
+   * @returns A minimal acknowledgement.
+   */
+  static async pointDns(domain: string): Promise<{ status: string; domain: string }> {
+    return ApiClient.post<{ status: string; domain: string }>('/api/v1/domains/point-dns', { domain })
   }
 }
