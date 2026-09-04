@@ -23,8 +23,18 @@ jobs:
             cd /var/www/api.devleadhunter.dibodev.fr/html/api
             ORDER_ID="${{ github.event.inputs.order_id }}" ../.venv/bin/python - <<'PY'
             import asyncio
+            import importlib
             import os
+            import pkgutil
             import traceback
+
+            import models
+            from sqlalchemy.orm import configure_mappers
+
+            # Register every mapped class (a partial import leaves SQLAlchemy relationships unresolved).
+            for _module in pkgutil.iter_modules(models.__path__):
+                importlib.import_module(f"models.{_module.name}")
+            configure_mappers()
 
             from core.database import SessionLocal
             from services.domain.ovh_provider import ovh_domain_provider
