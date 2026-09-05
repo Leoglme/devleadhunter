@@ -1,0 +1,101 @@
+name: 🔎 Dump prospects (manual, read-only)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📇 Categorize prospects for wave-2 sourcing (SSH)
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /var/www/api.devleadhunter.dibodev.fr/html/api
+            ../.venv/bin/python - <<'PY'
+            import importlib
+            import pkgutil
+
+            import models
+            from sqlalchemy.orm import configure_mappers
+
+            for _m in pkgutil.iter_modules(models.__path__):
+                importlib.import_module(f"models.{_m.name}")
+            configure_mappers()
+
+            from core.database import SessionLocal
+            from models.prospect_db import ProspectDB
+            from services.sms.phone_normalizer import is_mobile_fr
+
+            BUCKETS = {
+                "barbier": ("barbier", "coiff", "barber"),
+                "electricien": ("electric", "élec", "elec"),
+                "food": ("food", "resto", "restaur", "truck", "kebab", "pizz", "burger", "traiteur", "snack", "tacos"),
+                "paysagiste": ("paysag", "jardin", "espace vert", "landscap", "fleur"),
+                "garage": ("garage", "mecani", "mécani", "mechanic", "auto ", "carross"),
+            }
+            BZH = ("rennes", "brest", "quimper", "vannes", "lorient", "saint-malo", "st-malo", "st malo",
+                   "lanester", "fougeres", "fougères", "bruz", "cesson", "dinard", "concarneau", "morlaix")
+
+            def bucket_of(cat):
+                c = (cat or "").lower()
+                for name, kws in BUCKETS.items():
+                    if any(k in c for k in kws):
+                        return name
+                return "autre"
+
+            def has_email(p):
+                if (p.email or "").strip():
+                    return True
+                return bool(p.emails) and any((e or "").strip() for e in p.emails)
+
+            def has_site(p):
+                return bool((p.website or "").strip()) and (p.website_status not in ("dead", "placeholder"))
+
+            db = SessionLocal()
+            try:
+                rows = db.query(ProspectDB).all()
+                cats = {}
+                summary = {b: {"total": 0, "contacted": 0, "dnc": 0, "site": 0, "av_email": [], "av_sms": []} for b in list(BUCKETS) + ["autre"]}
+                for p in rows:
+                    if (p.name or "").strip().lower() == "le salon de théo":
+                        continue
+                    cats[p.category] = cats.get(p.category, 0) + 1
+                    b = bucket_of(p.category)
+                    s = summary[b]
+                    s["total"] += 1
+                    if p.contacted:
+                        s["contacted"] += 1
+                    if p.do_not_contact:
+                        s["dnc"] += 1
+                    if has_site(p):
+                        s["site"] += 1
+                    available = (not p.contacted) and (not p.do_not_contact)
+                    bzh = any(x in (p.city or "").lower() for x in BZH)
+                    label = f"#{p.id} {p.name} [{p.city or '?'}{' ⚠BZH' if bzh else ''}]{' 🌐site' if has_site(p) else ''}"
+                    if available and has_email(p):
+                        s["av_email"].append(label + f" <{(p.email or (p.emails or ['?'])[0])}>")
+                    elif available and (not has_email(p)) and is_mobile_fr(p.phone):
+                        s["av_sms"].append(label + f" ☎{p.phone}")
+
+                print("=== RAW CATEGORIES (count) ===")
+                for c, n in sorted(cats.items(), key=lambda kv: -kv[1]):
+                    print(f"  {n:>3}  {c}")
+                print()
+                print("=== BY WAVE-2 MÉTIER (available = not contacted & not do-not-contact) ===")
+                for b in list(BUCKETS) + ["autre"]:
+                    s = summary[b]
+                    print(f"\n### {b.upper()} — total {s['total']} (déjà contactés {s['contacted']}, ne-plus-contacter {s['dnc']}, avec site {s['site']})")
+                    print(f"  DISPO emailables: {len(s['av_email'])}")
+                    for x in s["av_email"][:25]:
+                        print("    ·", x)
+                    print(f"  DISPO téléphone-seul (mobile, sans email): {len(s['av_sms'])}")
+                    for x in s["av_sms"][:25]:
+                        print("    ·", x)
+            finally:
+                db.close()
+            PY
