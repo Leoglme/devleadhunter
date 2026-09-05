@@ -33,7 +33,7 @@ from models.prospect_db import ProspectDB
 from services.email_sending_service import EmailSendingService
 from services.email_variables import EmailVariables
 from services.pricing_service import PricingService
-from services.tracking_links import CHANNEL_EMAIL, append_query_param
+from services.tracking_links import CHANNEL_EMAIL, CHANNEL_SMS, append_query_param
 from services.unsubscribe_service import unsubscribe_service
 
 logger = logging.getLogger(__name__)
@@ -107,7 +107,7 @@ class CampaignQueueService:
     def enqueue_campaign(
         self,
         campaign: Campaign,
-        template_id: int,
+        template_id: int | None = None,
         ab_template_id_b: int | None = None,
     ) -> EnqueueResult:
         """
@@ -135,6 +135,11 @@ class CampaignQueueService:
             An :class:`EnqueueResult` with the enqueued count and the list of
             prospects skipped for lacking a demo site.
         """
+        # SMS campaigns reuse the whole queue/worker/SendPolicy engine but carry no email template
+        # and compose their body at dispatch — handled by a dedicated, isolated path.
+        if campaign.channel == "sms":
+            return self._enqueue_sms(campaign)
+
         now = _utcnow()
         is_ab = ab_template_id_b is not None
 
@@ -295,6 +300,143 @@ class CampaignQueueService:
         delay = timedelta(minutes=max(campaign.send_delay_minutes, 1))
         start = latest + delay if (latest is not None and latest > now) else now
         return [start + delay * i for i in range(count)]
+
+    def _enqueue_sms(self, campaign: Campaign) -> EnqueueResult:
+        """Enqueue cold-SMS items for an SMS-channel campaign (reuses the email queue + scheduler).
+
+        Mirrors :meth:`enqueue_campaign` but with no template / A-B: the reachability guard is
+        "French mobile + not opted-out + active demo" (the SMS always ships the demo link). Rows are
+        plain :class:`EmailQueue` items with ``template_id=None``, drained by the same worker and sent
+        through :meth:`_dispatch_sms`. Prospects are iterated in ``campaign.prospects`` order (explicit
+        ``position``), so with ``max_emails_per_day=1`` the send is one group per day.
+        """
+        from services.sms.phone_normalizer import is_mobile_fr, to_e164_fr
+        from services.sms_service import sms_service
+
+        now = _utcnow()
+        latest: datetime | None = self.db.execute(
+            select(func.max(EmailQueue.scheduled_at)).where(
+                EmailQueue.campaign_id == campaign.id,
+                EmailQueue.status == _STATUS_PENDING,
+            )
+        ).scalar()
+        self._purge_skipped_initial_items(campaign.id)
+        already_queued: set[int] = {
+            row[0]
+            for row in self.db.execute(
+                select(EmailQueue.prospect_id).where(
+                    EmailQueue.campaign_id == campaign.id,
+                    EmailQueue.queue_type == "initial",
+                )
+            ).all()
+        }
+
+        result = EnqueueResult()
+        to_enqueue: list[int] = []
+        for prospect in campaign.prospects:
+            if prospect.id in already_queued:
+                continue
+            if prospect.do_not_contact:
+                continue
+            if not is_mobile_fr(prospect.phone):
+                continue  # not SMS-reachable — no 06/07 mobile
+            to_e164 = to_e164_fr(prospect.phone)
+            if to_e164 and sms_service.is_suppressed(self.db, campaign.user_id, to_e164):
+                continue
+            if not self._active_demo_for_prospect(prospect.id, campaign.user_id):
+                result.skipped_no_demo.append({"id": prospect.id, "name": prospect.name or ""})
+                continue
+            to_enqueue.append(prospect.id)
+
+        slots: list[datetime] = self._schedule_slots(campaign, len(to_enqueue), now, latest)
+        for prospect_id, slot in zip(to_enqueue, slots):
+            self.db.add(
+                EmailQueue(
+                    user_id=campaign.user_id,
+                    campaign_id=campaign.id,
+                    prospect_id=prospect_id,
+                    template_id=None,
+                    email_account_id=None,
+                    queue_type="initial",
+                    ab_variant=None,
+                    follow_up_index=0,
+                    scheduled_at=slot,
+                    status=_STATUS_PENDING,
+                )
+            )
+            result.enqueued += 1
+
+        self.db.commit()
+        logger.info(
+            "[Queue] Enqueued %d SMS items for campaign %d (%d skipped no-demo)",
+            result.enqueued,
+            campaign.id,
+            len(result.skipped_no_demo),
+        )
+        return result
+
+    async def _dispatch_sms(self, item: EmailQueue) -> None:
+        """Compose and send one cold SMS for an SMS-channel queue item.
+
+        Reuses :meth:`sms_service.send_to_prospect` (all SMS guards: sender / provider / legal window /
+        mobile / STOP-suppression, plus compose + provider send + log). Outside the SMS legal window the
+        item is pushed forward and left ``pending`` so the worker retries when the window opens, instead
+        of being burned as skipped.
+        """
+        from services.decision_maker.greeting import build_greeting
+        from services.demo_site_service import demo_site_service
+        from services.sms_config_service import sms_config_service
+        from services.sms_service import sms_service
+
+        prospect: ProspectDB = item.prospect
+        campaign: Campaign = item.campaign
+
+        if prospect.do_not_contact:
+            item.status = _STATUS_SKIPPED
+            item.skip_reason = _DO_NOT_CONTACT_SKIP_REASON
+            self.db.commit()
+            return
+
+        config = sms_config_service.get(self.db, campaign.user_id)
+        if config is None or not config.sender:
+            item.status = _STATUS_SKIPPED
+            item.skip_reason = "Expéditeur SMS non configuré"
+            self.db.commit()
+            return
+
+        # Outside the legal SMS window → wait, don't burn the item: re-arm it pending a bit later.
+        if sms_service.legal_window_refusal():
+            item.status = _STATUS_PENDING
+            item.scheduled_at = _utcnow() + timedelta(minutes=60)
+            self.db.commit()
+            return
+
+        site: DemoSite | None = self._active_demo_for_prospect(prospect.id, campaign.user_id)
+        if not site or not site.slug:
+            item.status = _STATUS_SKIPPED
+            item.skip_reason = "Pas de site démo actif"
+            self.db.commit()
+            return
+
+        demo_url: str = append_query_param(demo_site_service.demo_url_for_slug(site.slug), "src", CHANNEL_SMS)
+        first, last, gender = EmailVariables.resolved_contact(self.db, prospect.id)
+        greeting: str = build_greeting(first, last, gender)
+        outcome = await sms_service.send_to_prospect(
+            self.db,
+            user_id=campaign.user_id,
+            prospect=prospect,
+            config=config,
+            demo_url=demo_url,
+            greeting=greeting,
+            cold=True,
+        )
+        if outcome.sent:
+            item.status = _STATUS_SENT
+            demo_site_service.restart_demo_ttl(self.db, site, datetime.now(UTC))
+        else:
+            item.status = _STATUS_SKIPPED
+            item.skip_reason = (outcome.reason or "Échec SMS")[:160]
+        self.db.commit()
 
     def reclaim_orphaned_sending(self) -> int:
         """
@@ -518,8 +660,14 @@ class CampaignQueueService:
             item: The queue item to process.
         """
         prospect: ProspectDB = item.prospect
-        template: EmailTemplate = item.template
         campaign: Campaign = item.campaign
+
+        # SMS-channel items compose + send through the SMS path (no email template / rendering).
+        if campaign.channel == "sms":
+            await self._dispatch_sms(item)
+            return
+
+        template: EmailTemplate | None = item.template
 
         # Guard: prospect may have unsubscribed after being enqueued.
         if not prospect.email or unsubscribe_service.is_unsubscribed(self.db, prospect.email):

@@ -64,9 +64,11 @@ class EmailQueue(Base):
         ForeignKey("prospects.id", ondelete="CASCADE"),
         nullable=False,
     )
-    template_id: Mapped[int] = mapped_column(
+    # Nullable: SMS-channel queue items carry no email template (the SMS body is composed
+    # from the prospect + demo link at dispatch time). Email-channel items always set it.
+    template_id: Mapped[int | None] = mapped_column(
         ForeignKey("email_templates.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
     )
     # Nullable: campaigns now send via the user's ResendConfig, not an EmailAccount.
     email_account_id: Mapped[int | None] = mapped_column(
@@ -93,7 +95,7 @@ class EmailQueue(Base):
     user: Mapped[User] = relationship("User")
     campaign: Mapped[Campaign] = relationship("Campaign")
     prospect: Mapped[ProspectDB] = relationship("ProspectDB")
-    template: Mapped[EmailTemplate] = relationship("EmailTemplate")
+    template: Mapped[EmailTemplate | None] = relationship("EmailTemplate")
     email_account: Mapped[EmailAccount | None] = relationship("EmailAccount")
     email_log: Mapped[EmailLog | None] = relationship("EmailLog")
 
