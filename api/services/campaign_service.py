@@ -3,9 +3,10 @@ Campaign service for managing email campaigns.
 """
 
 from fastapi import HTTPException, status
+from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
-from models.campaign import Campaign, CampaignStatus
+from models.campaign import Campaign, CampaignStatus, campaign_prospects
 from models.email_log import EmailLog
 from models.prospect_db import ProspectDB
 from schemas.campaign import (
@@ -48,22 +49,36 @@ class CampaignService:
             name=campaign_data.name,
             description=campaign_data.description,
             status=campaign_data.status or CampaignStatus.DRAFT.value,
+            channel=campaign_data.channel,
             template_id=campaign_data.template_id,
             ab_template_id_b=campaign_data.ab_template_id_b,
             send_delay_minutes=campaign_data.send_delay_minutes,
             max_emails_per_day=campaign_data.max_emails_per_day,
         )
+        db.add(campaign)
 
-        # Add prospects if provided
+        # Add prospects, preserving the request order as an explicit ``position`` so the send queue
+        # dispatches them in that order (1 métier/jour with max_emails_per_day=1). Bulk inserts share
+        # one ``added_at`` second, so only ``position`` gives a stable, operator-controlled order.
         if campaign_data.prospect_ids:
-            prospects = (
-                db.query(ProspectDB)
+            owned: set[int] = {
+                row[0]
+                for row in db.query(ProspectDB.id)
                 .filter(ProspectDB.id.in_(campaign_data.prospect_ids), ProspectDB.user_id == user_id)
                 .all()
-            )
-            campaign.prospects = prospects
+            }
+            seen: set[int] = set()
+            ordered_ids: list[int] = []
+            for pid in campaign_data.prospect_ids:
+                if pid in owned and pid not in seen:
+                    seen.add(pid)
+                    ordered_ids.append(pid)
+            db.flush()  # assign campaign.id
+            for position, pid in enumerate(ordered_ids):
+                db.execute(
+                    campaign_prospects.insert().values(campaign_id=campaign.id, prospect_id=pid, position=position)
+                )
 
-        db.add(campaign)
         db.commit()
         db.refresh(campaign)
 
@@ -237,10 +252,21 @@ class CampaignService:
         # Get existing prospect IDs
         existing_ids = {p.id for p in campaign.prospects}
 
-        # Add only new prospects
-        for prospect in prospects:
-            if prospect.id not in existing_ids:
-                campaign.prospects.append(prospect)
+        # Append new prospects after the current max position, preserving the request order, so they
+        # keep the "one group per day" sequence going after those already queued.
+        max_pos = (
+            db.query(sa_func.max(campaign_prospects.c.position))
+            .filter(campaign_prospects.c.campaign_id == campaign.id)
+            .scalar()
+        )
+        next_pos = (max_pos + 1) if max_pos is not None else 0
+        seen: set[int] = set()
+        for pid in prospect_ids:  # request order, not the query's id order
+            if pid in existing_ids or pid in seen:
+                continue
+            seen.add(pid)
+            db.execute(campaign_prospects.insert().values(campaign_id=campaign.id, prospect_id=pid, position=next_pos))
+            next_pos += 1
 
         db.commit()
         db.refresh(campaign)

@@ -3,6 +3,7 @@ Pydantic schemas for campaign management.
 """
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -44,6 +45,9 @@ class CampaignBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
     status: str = Field(default="draft")
+    # Send channel. "email" (default) uses the email templates / Resend; "sms" reuses the same
+    # queue + SendPolicy scheduling but dispatches a cold SMS (smsmode) with the demo link.
+    channel: Literal["email", "sms"] = Field(default="email")
 
 
 class CampaignCreate(CampaignBase):

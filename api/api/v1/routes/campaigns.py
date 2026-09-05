@@ -461,6 +461,31 @@ async def launch_campaign(
     """
     campaign = _get_or_404(db, campaign_id, current_user.id)
 
+    # SMS campaigns reuse the same queue/scheduler but need an SMS sender, not Resend or a template.
+    if campaign.channel == "sms":
+        from services.sms_config_service import sms_config_service
+
+        sms_config = sms_config_service.get(db, current_user.id)
+        if sms_config is None or not sms_config.sender:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Expéditeur SMS manquant — Paramètres → Relance SMS",
+            )
+        campaign.status = CampaignStatus.ACTIVE.value
+        campaign.started_at = datetime.now(UTC).replace(tzinfo=None)
+        db.commit()
+        result = CampaignQueueService(db).enqueue_campaign(campaign)
+        message = f"{result.enqueued} SMS mis en file"
+        if result.skipped_no_demo:
+            message += f" · {len(result.skipped_no_demo)} prospect(s) ignoré(s) faute de site de démo"
+        return {
+            "success": True,
+            "enqueued": result.enqueued,
+            "skipped_no_demo": result.skipped_no_demo,
+            "skipped_no_video": [],
+            "message": message,
+        }
+
     if not _has_resend_config(db, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -548,6 +573,27 @@ async def resume_campaign(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Seules les campagnes en pause ou brouillon peuvent être relancées",
         )
+
+    # SMS campaigns need an SMS sender, not a template / Resend.
+    if campaign.channel == "sms":
+        from services.sms_config_service import sms_config_service
+
+        sms_config = sms_config_service.get(db, current_user.id)
+        if sms_config is None or not sms_config.sender:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Expéditeur SMS manquant — Paramètres → Relance SMS",
+            )
+        campaign.status = CampaignStatus.ACTIVE.value
+        db.commit()
+        result = CampaignQueueService(db).enqueue_campaign(campaign)
+        return {
+            "success": True,
+            "enqueued": result.enqueued,
+            "skipped_no_demo": result.skipped_no_demo,
+            "skipped_no_video": [],
+        }
+
     if not campaign.template_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

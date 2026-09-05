@@ -37,6 +37,11 @@ campaign_prospects = Table(
     Column("campaign_id", Integer, ForeignKey("campaigns.id", ondelete="CASCADE"), primary_key=True),
     Column("prospect_id", Integer, ForeignKey("prospects.id", ondelete="CASCADE"), primary_key=True),
     Column("added_at", DateTime, nullable=False, server_default=func.now()),
+    # Explicit send order within the campaign (0-based, set from the order prospects are added).
+    # The queue pairs ascending time-slots to prospects in this order, so with max_emails_per_day=1
+    # the operator fully controls which group goes on which day (1 métier/jour). Bulk inserts share
+    # the same ``added_at`` second, so ``added_at`` alone can't order them — hence this column.
+    Column("position", Integer, nullable=False, server_default="0"),
 )
 
 
@@ -65,6 +70,9 @@ class Campaign(Base):
     status: Mapped[str] = mapped_column(
         SQLEnum(CampaignStatus), default=CampaignStatus.DRAFT.value, nullable=False, index=True
     )
+    # Send channel: "email" (default, email templates via Resend) or "sms" (cold SMS via smsmode).
+    # SMS campaigns reuse the exact same queue + SendPolicy scheduling; only enqueue/dispatch branch.
+    channel: Mapped[str] = mapped_column(String(10), default="email", nullable=False)
     # Campaign configuration — stored here so the detail page can edit anytime.
     template_id: Mapped[int | None] = mapped_column(
         ForeignKey("email_templates.id", ondelete="SET NULL"), nullable=True
@@ -98,8 +106,14 @@ class Campaign(Base):
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="campaigns")
+    # Ordered by the association's ``added_at`` so enqueue is deterministic: the send queue pairs
+    # ascending slots to this list in order, so "prospect added first → sent first". Combined with
+    # ``max_emails_per_day=1`` this yields a controlled one-group-per-day sequence (1 métier/jour).
     prospects: Mapped[list["ProspectDB"]] = relationship(
-        "ProspectDB", secondary=campaign_prospects, back_populates="campaigns"
+        "ProspectDB",
+        secondary=campaign_prospects,
+        back_populates="campaigns",
+        order_by=(campaign_prospects.c.position, campaign_prospects.c.added_at, campaign_prospects.c.prospect_id),
     )
     email_logs: Mapped[list["EmailLog"]] = relationship(
         "EmailLog", back_populates="campaign", cascade="all, delete-orphan"

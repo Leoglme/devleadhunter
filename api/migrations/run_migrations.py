@@ -118,6 +118,9 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("reseed_email_template_library", "migrations.reseed_email_template_library"),
     ("add_super_admin_and_shared_templates", "migrations.add_super_admin_and_shared_templates"),
     ("add_email_template_forks", "migrations.add_email_template_forks"),
+    ("add_campaign_channel", "migrations.add_campaign_channel"),
+    ("add_campaign_prospect_position", "migrations.add_campaign_prospect_position"),
+    ("nullable_queue_template_id", "migrations.nullable_queue_template_id"),
 ]
 
 # Modules of this package that are not migrations and must not be registered.
