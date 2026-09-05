@@ -216,7 +216,7 @@
             </ol>
             <div class="space-y-4 rounded-lg bg-[var(--app-bg)] p-4">
               <p class="text-[11px] font-semibold tracking-wide text-[var(--app-ink-soft)] uppercase">
-                Le speech à lire (~30 s)
+                Le speech à lire (~45 s)
               </p>
               <div v-for="segment in speechSegments" :key="segment.timing" class="flex items-start gap-3">
                 <span
@@ -368,7 +368,7 @@ const isRecordedClip: ComputedRef<boolean> = computed((): boolean => info.value?
 /** Speech segments aligned with the in-app teleprompter script. */
 const speechSegments: ComputedRef<Array<{ timing: string; role: string; text: string }>> = computed(
   (): Array<{ timing: string; role: string; text: string }> =>
-    buildDefaultScript(user.value?.name ?? '').map(
+    buildDefaultScript(user.value?.name ?? '', user.value?.company_name ?? '').map(
       (segment: ProspectionScriptSegment): { timing: string; role: string; text: string } => ({
         timing: `~${segment.targetSeconds} s`,
         role: segment.title,
@@ -381,7 +381,7 @@ const speechSegments: ComputedRef<Array<{ timing: string; role: string; text: st
 const workflowSteps: ComputedRef<Array<{ title: string; detail: string }>> = computed(
   (): Array<{ title: string; detail: string }> => [
     {
-      title: 'Filmez-vous ~30 s, une seule fois',
+      title: 'Filmez-vous ~45 s, une seule fois',
       detail:
         captureMode.value === 'import'
           ? 'Webcam + micro, face caméra, en lisant le speech ci-dessous.'

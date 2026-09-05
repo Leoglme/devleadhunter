@@ -361,7 +361,7 @@ const script: {
   isCustomised: Ref<boolean, boolean>
   updateSegmentText: (id: ProspectionScriptSegmentId, text: string) => void
   resetToDefault: () => void
-} = useProspectionScript(user.value?.name ?? '')
+} = useProspectionScript(user.value?.name ?? '', user.value?.company_name ?? '')
 
 const phase: Ref<RecorderPhase> = ref('permission')
 const currentIndex: Ref<number> = ref(0)

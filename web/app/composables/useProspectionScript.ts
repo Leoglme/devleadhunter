@@ -18,51 +18,57 @@ export type ProspectionScriptSegment = {
   text: string
 }
 
+/** One edited take as saved on this machine, with the recommended text it was written from. */
+export type ProspectionScriptSavedSegment = {
+  text: string
+  defaultText: string
+}
+
 /** localStorage key holding the user's edited script. */
 const SCRIPT_STORAGE_KEY: string = 'dlh-prospection-script'
 
 /**
- * Default script, written to be *spoken*: short sentences, one idea each, no
- * subordinate clauses. A paragraph that reads well on screen collapses when
- * read aloud by someone who is already uncomfortable being filmed.
- *
- * It stays 100 % generic — one recording is reused for every prospect, so it
- * must never name a company or describe a specific section of the site.
- *
- * @param presenterName - The connected user's name, woven into the greeting.
+ * Default spoken script: generic (never names the prospect) and, for the middle take, in the fixed order of the rendered background — the site scrolls, then the Storyblok editor appears.
+ * @param presenterName - The connected user's full name, woven into the greeting.
+ * @param companyName - The user's optional business name, appended to the greeting when set.
  * @returns The three default takes.
  */
-export function buildDefaultScript(presenterName: string): ProspectionScriptSegment[] {
+export function buildDefaultScript(presenterName: string, companyName: string): ProspectionScriptSegment[] {
   const name: string = presenterName.trim()
+  const company: string = companyName.trim()
+  const presenter: string = company ? `${name} de ${company}` : name
   return [
     {
       id: 'intro',
       title: 'Intro',
       staging: 'Vous, en plein écran. Le prénom du prospect s’affiche à côté de vous.',
-      targetSeconds: 5,
+      targetSeconds: 6,
       text: name
-        ? `Bonjour ! Moi c'est ${name}, développeur web. Trente secondes, pas plus, et vous allez comprendre pourquoi je vous écris.`
-        : 'Bonjour ! Je suis développeur web. Trente secondes, pas plus, et vous allez comprendre pourquoi je vous écris.',
+        ? `Bonjour, moi c'est ${presenter}, je suis développeur web à Rennes.`
+        : 'Bonjour, je suis développeur web à Rennes.',
     },
     {
       id: 'middle',
-      title: 'Le site apparaît',
-      staging: 'Son site défile à l’écran. Vous passez en petite pastille ronde, en bas à gauche.',
-      targetSeconds: 25,
+      title: 'Le site, puis l’espace d’administration',
+      staging:
+        'Son site défile pendant les premières secondes, puis son espace d’administration apparaît à l’écran. ' +
+        'Vous passez en petite pastille ronde, en bas à gauche.',
+      targetSeconds: 29,
       text:
-        "Si je vous contacte, c'est que je vous ai déjà créé un site. " +
-        'Celui que vous voyez là, c’est le vôtre. ' +
-        'Il est déjà en ligne, à votre nom, avec vos vraies informations. ' +
-        'Et surtout, vous pouvez tout changer vous-même. ' +
-        'Les textes, les photos, les horaires. ' +
-        'Sans développeur, et sans rien y connaître.',
+        'Je me suis permis de vous créer votre site internet, celui que vous avez actuellement sous les yeux. ' +
+        'Il est déjà en ligne, avec vos photos, vos horaires, vos coordonnées. ' +
+        "Et ça, c'est votre espace d'administration. " +
+        "C'est là que vous gérez tout vous-même : vous changez un texte, une photo, vous ajoutez une page. " +
+        'Pas besoin de développeur, pas besoin de moi.',
     },
     {
       id: 'outro',
       title: 'Outro',
       staging: 'Retour sur vous en plein écran, pour l’appel à l’action.',
-      targetSeconds: 6,
-      text: 'Le lien est juste en dessous. Jetez-y un œil, ça vaut vraiment le coup. À tout de suite !',
+      targetSeconds: 13,
+      text:
+        'Le lien pour voir votre site par vous-même est juste en dessous de la vidéo. ' +
+        "N'hésitez pas à y jeter un coup d'œil, et dites-moi ce que vous en pensez. Bonne journée !",
     },
   ]
 }
@@ -96,6 +102,18 @@ export function estimateBeatSeconds(beat: string): number {
 }
 
 /**
+ * Whether a stored entry has the saved-segment shape.
+ * @param entry - A value read back from localStorage.
+ * @returns True for `{ text, defaultText }`; entries written before that shape existed fail and fall back to the default.
+ */
+function isSavedSegment(entry: unknown): entry is ProspectionScriptSavedSegment {
+  if (typeof entry !== 'object' || entry === null) return false
+  return (
+    'text' in entry && typeof entry.text === 'string' && 'defaultText' in entry && typeof entry.defaultText === 'string'
+  )
+}
+
+/**
  * The editable prospection script, persisted on this machine.
  *
  * Kept in ``localStorage`` rather than in the database on purpose: it is an
@@ -103,28 +121,43 @@ export function estimateBeatSeconds(beat: string): number {
  * clip) is stored server-side, and the defaults are good enough that losing
  * an edit costs nothing.
  *
- * @param presenterName - The connected user's name, used to seed the defaults.
+ * @param presenterName - The connected user's full name, used to seed the defaults.
+ * @param companyName - The user's optional business name, used to seed the defaults.
  * @returns The script plus its edit helpers.
  */
-export function useProspectionScript(presenterName: string): {
+export function useProspectionScript(
+  presenterName: string,
+  companyName: string,
+): {
   segments: Ref<ProspectionScriptSegment[]>
   isCustomised: Ref<boolean>
   updateSegmentText: (id: ProspectionScriptSegmentId, text: string) => void
   resetToDefault: () => void
 } {
-  const defaults: ProspectionScriptSegment[] = buildDefaultScript(presenterName)
+  const defaults: ProspectionScriptSegment[] = buildDefaultScript(presenterName, companyName)
   const segments: Ref<ProspectionScriptSegment[]> = ref(defaults)
   const isCustomised: Ref<boolean> = ref(false)
 
-  /** Persist the current texts (only the texts — the staging is app-owned). */
+  /**
+   * The recommended text of one take, which an edit is checked against on restore.
+   * @param id - Which take.
+   * @returns Its default text.
+   */
+  function defaultTextOf(id: ProspectionScriptSegmentId): string {
+    return defaults.find((segment: ProspectionScriptSegment): boolean => segment.id === id)?.text ?? ''
+  }
+
+  /** Persist the current texts with the default each was written from (the staging is app-owned). */
   function persist(): void {
     if (!import.meta.client) return
-    const payload: Record<string, string> = {}
-    for (const segment of segments.value) payload[segment.id] = segment.text
+    const payload: Record<string, ProspectionScriptSavedSegment> = {}
+    for (const segment of segments.value) {
+      payload[segment.id] = { text: segment.text, defaultText: defaultTextOf(segment.id) }
+    }
     localStorage.setItem(SCRIPT_STORAGE_KEY, JSON.stringify(payload))
   }
 
-  /** Restore the saved texts over the defaults, ignoring anything malformed. */
+  /** Restore the saved texts over the defaults; an edit of a default that has since changed is dropped. */
   function restore(): void {
     if (!import.meta.client) return
     const raw: string | null = localStorage.getItem(SCRIPT_STORAGE_KEY)
@@ -135,10 +168,11 @@ export function useProspectionScript(presenterName: string): {
       const saved: Record<string, unknown> = parsed as Record<string, unknown>
       let touched: boolean = false
       segments.value = segments.value.map((segment: ProspectionScriptSegment): ProspectionScriptSegment => {
-        const text: unknown = saved[segment.id]
-        if (typeof text !== 'string' || text.trim().length === 0) return segment
-        if (text !== segment.text) touched = true
-        return { ...segment, text }
+        const entry: unknown = saved[segment.id]
+        if (!isSavedSegment(entry) || entry.defaultText !== segment.text) return segment
+        if (entry.text.trim().length === 0) return segment
+        if (entry.text !== segment.text) touched = true
+        return { ...segment, text: entry.text }
       })
       isCustomised.value = touched
     } catch {
@@ -162,7 +196,7 @@ export function useProspectionScript(presenterName: string): {
 
   /** Drop the edits and go back to the recommended script. */
   function resetToDefault(): void {
-    segments.value = buildDefaultScript(presenterName)
+    segments.value = buildDefaultScript(presenterName, companyName)
     isCustomised.value = false
     if (import.meta.client) localStorage.removeItem(SCRIPT_STORAGE_KEY)
   }
