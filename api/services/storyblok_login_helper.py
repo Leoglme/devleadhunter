@@ -22,7 +22,9 @@ logger = logging.getLogger(__name__)
 
 _SPACES_URL = "https://app.storyblok.com/#/me/spaces"
 _LOGIN_POLL_INTERVAL_SEC = 3.0
-_LOGIN_POLL_MAX_SEC = 300.0
+# Keep watching for a long time: the window stays open until the user signs in or
+# closes it — we never close it from under them. This is only a zombie-task ceiling.
+_LOGIN_POLL_MAX_SEC = 1800.0
 
 
 class StoryblokLoginHelper:
@@ -58,13 +60,25 @@ class StoryblokLoginHelper:
                 executable_path=executable_path,
                 args=["--start-maximized", "--no-first-run", "--no-default-browser-check"],
             )
+            # If the user closes the window before signing in, stop watching at once
+            # (rather than polling a dead context until the ceiling).
+            self._context.on("close", self._on_window_closed)
             page = self._context.pages[0] if self._context.pages else await self._context.new_page()
             await page.goto(_SPACES_URL, wait_until="domcontentloaded")
             self._poll_task = asyncio.create_task(self._poll_until_logged_in())
         return {"opened": True, "already_open": False}
 
+    def _on_window_closed(self, *_: Any) -> None:
+        """The user closed the login window themselves → drop the handle so the poll ends."""
+        self._context = None
+
     async def _poll_until_logged_in(self) -> None:
-        """Watch the login window; persist + close as soon as it is authenticated."""
+        """Watch the login window; persist + close as soon as it is authenticated.
+
+        Never closes the window itself while the user is signing in: it exits only
+        on a detected login (then closes to flush the profile), on the user closing
+        the window, or at the zombie-task ceiling.
+        """
         loop = asyncio.get_event_loop()
         started = loop.time()
         try:
@@ -72,6 +86,8 @@ class StoryblokLoginHelper:
                 if loop.time() - started > _LOGIN_POLL_MAX_SEC:
                     return
                 await asyncio.sleep(_LOGIN_POLL_INTERVAL_SEC)
+                if self._context is None:  # user closed the window mid-wait
+                    break
                 if not await self._probe_authenticated():
                     continue
                 storyblok_session_service.write_persisted_state(logged_in=True)
@@ -82,6 +98,15 @@ class StoryblokLoginHelper:
             raise
         except Exception as exc:
             logger.debug("storyblok login poll: %s", exc)
+        finally:
+            # Window gone (user closed it) but playwright still running → release it.
+            if self._context is None and self._playwright is not None:
+                try:
+                    await self._playwright.stop()
+                except Exception as exc:
+                    logger.debug("storyblok playwright stop (poll end): %s", exc)
+                self._playwright = None
+                self._poll_task = None
 
     async def _probe_authenticated(self) -> bool:
         """True when the live window shows an authenticated Storyblok (no login form)."""
