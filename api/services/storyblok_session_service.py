@@ -22,6 +22,8 @@ Playwright). Values (tokens) are never logged.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import glob
 import json
 import logging
@@ -46,6 +48,58 @@ _SAFE_LOCALSTORAGE_KEYS: tuple[str, ...] = ("token", "d0_session")
 _STORYBLOK_LS_ORIGIN_DIR = "https+++app.storyblok.com"
 _SESSION_STATE_FILE = "storyblok-session.json"
 
+# A token expiring within this margin is treated as stale: better to prompt a
+# reconnect than to start a capture that dies on Storyblok's login page.
+_TOKEN_EXPIRY_MARGIN_SEC = 120
+
+
+def _jwt_expiry(token: str) -> int | None:
+    """
+    Read the ``exp`` (unix seconds) claim of a JWT without verifying its signature.
+
+    Args:
+        token: The raw ``app.storyblok.com`` auth token.
+
+    Returns:
+        The expiry timestamp, or None when the token is not a decodable JWT with
+        an ``exp`` claim (older/opaque tokens fall through to presence-only checks).
+    """
+    parts = token.split(".")
+    if len(parts) < 2:
+        return None
+    payload_b64 = parts[1] + "=" * (-len(parts[1]) % 4)
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+    except (binascii.Error, ValueError, json.JSONDecodeError):
+        return None
+    exp = payload.get("exp") if isinstance(payload, dict) else None
+    try:
+        return int(exp) if exp is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _token_is_fresh(token: str) -> bool:
+    """
+    True when a token is present and not (about to be) expired.
+
+    A token whose JWT ``exp`` cannot be read is assumed usable — presence is then
+    the only signal available, and the capture-time login-page detection is the
+    authoritative backstop.
+
+    Args:
+        token: The raw auth token.
+
+    Returns:
+        Whether the token should be trusted for a capture attempt.
+    """
+    if not token:
+        return False
+    expiry = _jwt_expiry(token)
+    if expiry is None:
+        return True
+    return expiry > datetime.now(UTC).timestamp() + _TOKEN_EXPIRY_MARGIN_SEC
+
 
 @dataclass
 class StoryblokSessionSeed:
@@ -65,6 +119,11 @@ class StoryblokSessionSeed:
         """True when the auth token is present (necessary, not sufficient — it may be expired)."""
         return bool(self.local_storage.get("token"))
 
+    @property
+    def is_valid(self) -> bool:
+        """True when the token is present AND not expired (by its JWT ``exp`` claim)."""
+        return _token_is_fresh(self.local_storage.get("token", ""))
+
 
 class StoryblokSessionService:
     """Read reusable Storyblok owner sessions from the desktop and track their state."""
@@ -82,9 +141,15 @@ class StoryblokSessionService:
         """
         for profile in self._firefox_profiles_with_storyblok():
             seed = self._read_firefox_seed(profile)
-            if seed and seed.has_token:
-                logger.info("Storyblok machine session found (source=%s)", seed.source)
-                return seed
+            if not seed or not seed.has_token:
+                continue
+            # A present-but-expired token used to read as "ready" and then die on
+            # Storyblok's login page mid-capture: only accept a still-fresh token.
+            if not seed.is_valid:
+                logger.info("Storyblok machine token found but expired (source=%s) — needs reconnect", seed.source)
+                continue
+            logger.info("Storyblok machine session found (source=%s)", seed.source)
+            return seed
         return None
 
     def _firefox_profiles_with_storyblok(self) -> list[Path]:

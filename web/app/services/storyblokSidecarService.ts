@@ -24,8 +24,14 @@ export type StoryblokSessionInfo = {
   loginWindowOpen: boolean
 }
 
-/** Outcome of preparing a site's video background before generation. */
-export type BackgroundPreparation = 'uploaded' | 'skipped' | 'unavailable'
+/**
+ * Outcome of preparing a site's video background before generation.
+ * - `uploaded`: the editor background was produced and stored.
+ * - `needs_login`: the Storyblok session is expired/absent — the caller must prompt a reconnect.
+ * - `skipped`: no editor sequence this time (transient), montage proceeds site-only.
+ * - `unavailable`: not the desktop shell — the web build uses the server-side fallback.
+ */
+export type BackgroundPreparation = 'uploaded' | 'needs_login' | 'skipped' | 'unavailable'
 
 const UNKNOWN_SESSION: StoryblokSessionInfo = { state: 'unknown', source: null, loginWindowOpen: false }
 
@@ -99,8 +105,16 @@ export class StoryblokSidecarService {
       return 'skipped'
     }
 
-    // 409 = no Storyblok session yet: compose the video without the editor sequence.
-    if (response.status === 409) return 'skipped'
+    // 409 = no usable Storyblok session. reason=needs_login means the session is
+    // expired/absent → the caller prompts a reconnect (never a silent VPS fallback);
+    // any other 409 is a transient skip (montage proceeds site-only).
+    if (response.status === 409) {
+      const reason: string | null = await response
+        .json()
+        .then((body: { reason?: string }): string | null => body?.reason ?? null)
+        .catch((): null => null)
+      return reason === 'needs_login' ? 'needs_login' : 'skipped'
+    }
     // Any other failure is surfaced so the cause (session, capture, upload) is visible.
     if (!response.ok) throw new Error(await StoryblokSidecarService.readSidecarError(response))
 

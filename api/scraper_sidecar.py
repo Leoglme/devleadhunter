@@ -377,7 +377,11 @@ async def storyblok_background_clip(request: StoryblokBackgroundClipRequest) -> 
         )
     except StoryblokEditorClipError as exc:
         shutil.rmtree(work_dir, ignore_errors=True)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        message = str(exc)
+        # A session that expired mid-capture is a reconnect prompt, not a hard error.
+        if message.startswith("needs_login:"):
+            return JSONResponse({"skipped": True, "reason": "needs_login"}, status_code=status.HTTP_409_CONFLICT)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from exc
 
     return FileResponse(
         output_path,

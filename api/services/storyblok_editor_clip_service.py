@@ -361,10 +361,19 @@ class StoryblokEditorClipService:
 
     @staticmethod
     def _open_editor(page, editor_url: str) -> bool:
-        """Load the Visual Editor and wait until the field panel + preview are up."""
+        """Load the Visual Editor and wait until the field panel + preview are up.
+
+        Raises:
+            StoryblokEditorClipError: prefixed ``needs_login:`` when Storyblok bounces
+                us to its sign-in page (the session is expired/absent) — surfaced fast
+                and distinctly so the caller prompts a reconnect instead of retrying.
+        """
         page.goto(editor_url, wait_until="domcontentloaded")
         for _ in range(10):
             page.wait_for_timeout(2500)
+            url = (page.url or "").lower()
+            if "sign-in" in url or "/login" in url or page.locator("input[type=password]").count() > 0:
+                raise StoryblokEditorClipError("needs_login: session Storyblok expirée ou absente — reconnecte-toi.")
             if page.locator("iframe").count() and page.locator("input").count():
                 page.wait_for_timeout(2200)
                 return True
