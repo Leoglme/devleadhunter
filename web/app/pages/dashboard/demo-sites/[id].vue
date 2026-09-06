@@ -804,15 +804,13 @@ async function handleGenerateVideo(): Promise<void> {
   generatingVideo.value = true
   try {
     // On the desktop, first render the background with the Storyblok editor
-    // sequence (needs the local session); best-effort — the montage falls back
-    // to a site-only capture when it is skipped or unavailable.
+    // sequence (needs the local session). When the session is expired/absent we
+    // stop and open the reconnect window rather than falling back to the server
+    // (a server capture has no editor footage and can strain the VPS).
     videoPrepStatus.value = 'Enregistrement du site + de la séquence Storyblok (~1-2 min, une fenêtre peut s’ouvrir)…'
+    let prepared: Awaited<ReturnType<typeof StoryblokSidecarService.prepareVideoBackground>> = 'skipped'
     try {
-      const prepared: Awaited<ReturnType<typeof StoryblokSidecarService.prepareVideoBackground>> =
-        await StoryblokSidecarService.prepareVideoBackground(demoSiteId)
-      if (prepared === 'uploaded') {
-        toast.success('Séquence Storyblok prête, montage en cours…')
-      }
+      prepared = await StoryblokSidecarService.prepareVideoBackground(demoSiteId)
     } catch (backgroundError) {
       toast.error(
         backgroundError instanceof Error
@@ -822,6 +820,20 @@ async function handleGenerateVideo(): Promise<void> {
     } finally {
       videoPrepStatus.value = ''
     }
+
+    if (prepared === 'needs_login') {
+      toast.error(
+        'Session Storyblok expirée — une fenêtre de connexion va s’ouvrir. Reconnecte-toi puis relance la génération.',
+      )
+      await StoryblokSidecarService.openLogin()
+      return
+    }
+    if (prepared === 'uploaded') {
+      toast.success('Séquence Storyblok prête, montage en cours…')
+    }
+
+    // 'uploaded' → editor background ready ; 'skipped'/'unavailable' (web) → the
+    // server montage falls back to a site-only capture (memory-guarded server-side).
     site.value = await DemoSiteService.generateDemoSiteVideo(demoSiteId)
     startVideoPolling()
     toast.success('Génération de la vidéo lancée (montage en tâche de fond)')
