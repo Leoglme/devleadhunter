@@ -69,7 +69,60 @@
             ></textarea>
           </div>
 
-          <div v-if="!isEditing" class="space-y-3">
+          <div v-if="!isEditing">
+            <label class="text-muted mb-1.5 block text-xs font-medium">Canal d'envoi</label>
+            <div
+              class="inline-flex rounded-full border border-[var(--app-line)] bg-[var(--app-surface-2)] p-0.5"
+              role="group"
+              aria-label="Canal d'envoi"
+            >
+              <button
+                type="button"
+                class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
+                :class="
+                  form.channel === 'email'
+                    ? 'bg-[var(--app-ink)] text-[var(--app-bg)]'
+                    : 'text-[var(--app-ink-soft)] hover:text-[var(--app-ink)]'
+                "
+                :aria-pressed="form.channel === 'email'"
+                @click="form.channel = 'email'"
+              >
+                <UIcon name="i-lucide-mail" class="h-3.5 w-3.5" />
+                Email
+              </button>
+              <button
+                type="button"
+                class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
+                :class="
+                  form.channel === 'sms'
+                    ? 'bg-[var(--app-ink)] text-[var(--app-bg)]'
+                    : 'text-[var(--app-ink-soft)] hover:text-[var(--app-ink)]'
+                "
+                :aria-pressed="form.channel === 'sms'"
+                @click="form.channel = 'sms'"
+              >
+                <UIcon name="i-lucide-message-square-text" class="h-3.5 w-3.5" />
+                SMS
+              </button>
+            </div>
+          </div>
+
+          <div
+            v-if="!isEditing && form.channel === 'sms'"
+            class="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface-2)] p-3"
+          >
+            <p class="flex items-center gap-1.5 text-xs font-medium text-[var(--app-ink)]">
+              <UIcon name="i-lucide-message-square-text" class="h-3.5 w-3.5 text-[var(--app-accent)]" />
+              Campagne SMS
+            </p>
+            <p class="text-muted mt-1.5 text-[11px] leading-relaxed">
+              Un SMS court part vers chaque prospect mobile avec le lien de son site démo. Pas de modèle ni d'A/B : le
+              message et la mention « STOP » sont générés automatiquement. L'expéditeur se règle dans Paramètres →
+              Relance SMS.
+            </p>
+          </div>
+
+          <div v-if="!isEditing && form.channel === 'email'" class="space-y-3">
             <p class="text-muted text-[11px] font-medium tracking-wide uppercase">Modèles d'email</p>
 
             <div>
@@ -191,6 +244,7 @@ const pendingTemplateSlot: Ref<'a' | 'b' | null> = ref(null)
 const form: Ref<CampaignForm> = ref({
   name: '',
   description: '',
+  channel: 'email',
   templateIdA: 0,
   templateIdB: 0,
 })
@@ -254,14 +308,17 @@ async function handleSubmit(): Promise<void> {
       emit('saved')
       return
     }
+    const isSms: boolean = form.value.channel === 'sms'
     await campaignsStore.createCampaign({
       name: form.value.name.trim(),
       description: form.value.description.trim() || undefined,
+      channel: form.value.channel,
       prospect_ids: [],
-      template_id: form.value.templateIdA || undefined,
-      ab_template_id_b: form.value.templateIdB || undefined,
+      // SMS campaigns carry no email template — the body is a cold SMS with the demo link.
+      template_id: isSms ? undefined : form.value.templateIdA || undefined,
+      ab_template_id_b: isSms ? undefined : form.value.templateIdB || undefined,
     })
-    toast.success('Campagne créée avec succès')
+    toast.success(isSms ? 'Campagne SMS créée' : 'Campagne créée avec succès')
     emit('close')
   } catch {
     toast.error(isEditing.value ? 'Erreur lors de la mise à jour' : 'Erreur lors de la création de la campagne')
@@ -282,6 +339,7 @@ watch(
     form.value = {
       name: props.campaign?.name ?? '',
       description: props.campaign?.description ?? '',
+      channel: props.campaign?.channel ?? 'email',
       templateIdA: 0,
       templateIdB: 0,
     }

@@ -33,6 +33,17 @@
               >
                 <UIcon name="i-lucide-flask-conical" class="h-3 w-3" /> A/B
               </span>
+              <span
+                class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                :class="
+                  isSms
+                    ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent-ink)]'
+                    : 'bg-[var(--app-blue-soft)] text-[var(--app-blue)]'
+                "
+              >
+                <UIcon :name="isSms ? 'i-lucide-message-square-text' : 'i-lucide-mail'" class="h-3 w-3" />
+                {{ isSms ? 'SMS' : 'Email' }}
+              </span>
             </div>
             <p v-if="campaign.description" class="text-muted mt-0.5 max-w-xl truncate text-sm">
               {{ campaign.description }}
@@ -51,7 +62,7 @@
             v-if="campaign.status === 'draft' || campaign.status === 'paused'"
             :disabled="!canLaunch"
             class="btn-primary disabled:cursor-not-allowed disabled:opacity-40"
-            :title="canLaunch ? '' : 'Sélectionnez un template J1 dans la configuration'"
+            :title="canLaunch ? '' : launchDisabledReason"
             @click="handleLaunch"
           >
             <UIcon name="i-lucide-rocket" class="mr-1.5 h-4 w-4" />
@@ -82,7 +93,11 @@
         </div>
       </div>
 
-      <div v-if="stats" class="grid grid-cols-2 gap-3 @xl:grid-cols-4 @5xl:grid-cols-7">
+      <div
+        v-if="metricCards.length"
+        class="grid grid-cols-2 gap-3 @xl:grid-cols-4"
+        :class="{ '@5xl:grid-cols-7': !isSms }"
+      >
         <div
           v-for="m in metricCards"
           :key="m.label"
@@ -99,7 +114,7 @@
       <div class="border-b border-[var(--app-line)]">
         <nav class="flex gap-1">
           <button
-            v-for="tab in TABS"
+            v-for="tab in visibleTabs"
             :key="tab.key"
             :class="[
               '-mb-px flex items-center gap-2 border-b-2 px-3 pt-1 pb-2.5 text-sm font-medium transition-colors',
@@ -208,7 +223,40 @@
           </UiCollapsibleCard>
         </section>
 
-        <section class="rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-5">
+        <section v-if="isSms" class="rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-5">
+          <div class="mb-4 flex items-center gap-2">
+            <UIcon name="i-lucide-message-square-text" class="h-4 w-4 text-[var(--app-accent-ink)]" />
+            <h3 class="text-sm font-semibold text-[var(--app-ink)]">Message SMS</h3>
+          </div>
+
+          <div
+            v-if="!smsReady"
+            class="mb-3 flex items-start gap-2 rounded-lg border border-[var(--app-red)]/20 bg-[var(--app-red-soft)] px-3 py-2"
+          >
+            <UIcon name="i-lucide-triangle-alert" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--app-red)]" />
+            <p class="text-xs text-[var(--app-ink)]">
+              <span class="font-medium">Expéditeur SMS requis.</span>
+              Renseignez un nom d'expéditeur dans
+              <NuxtLink to="/dashboard/settings/sms" class="font-medium underline">Paramètres → Relance SMS</NuxtLink>
+              avant de lancer.
+            </p>
+          </div>
+          <div v-else class="mb-3 flex items-center gap-2 text-xs text-[var(--app-ink-soft)]">
+            <UIcon name="i-lucide-circle-check" class="h-3.5 w-3.5 text-[var(--app-green)]" />
+            Expéditeur : <span class="font-medium text-[var(--app-ink)]">{{ smsConfig?.sender }}</span>
+          </div>
+
+          <p class="text-muted mb-1.5 text-xs font-medium">Aperçu du message</p>
+          <div class="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface-2)] p-3">
+            <p class="text-sm leading-relaxed whitespace-pre-line text-[var(--app-ink)]">{{ smsPreview }}</p>
+          </div>
+          <p class="text-muted mt-2 text-[11px] leading-relaxed">
+            Généré automatiquement pour chaque prospect (salutation, nom de l'entreprise, lien de sa démo, votre
+            signature et la mention « STOP »). Un seul SMS par prospect, sans modèle ni A/B ni relance.
+          </p>
+        </section>
+
+        <section v-if="!isSms" class="rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-5">
           <div class="mb-4 flex items-center justify-between">
             <div class="flex items-center gap-2">
               <UIcon name="i-lucide-mail" class="h-4 w-4 text-[var(--app-green)]" />
@@ -278,7 +326,7 @@
           </div>
         </section>
 
-        <section class="rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-5">
+        <section v-if="!isSms" class="rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] p-5">
           <div class="mb-4 flex items-center justify-between">
             <div class="flex items-center gap-2">
               <UIcon name="i-lucide-reply" class="h-4 w-4 text-[var(--app-accent)]" />
@@ -554,9 +602,8 @@
 
       <div v-if="activeTab === 'queue'" class="space-y-4">
         <p class="text-muted text-sm">
-          <span class="font-semibold text-[var(--app-accent-ink)]">{{ queueData?.pending_count ?? 0 }}</span> email{{
-            (queueData?.pending_count ?? 0) !== 1 ? 's' : ''
-          }}
+          <span class="font-semibold text-[var(--app-accent-ink)]">{{ queueData?.pending_count ?? 0 }}</span>
+          {{ isSms ? 'SMS' : (queueData?.pending_count ?? 0) !== 1 ? 'emails' : 'email' }}
           en attente
         </p>
 
@@ -670,7 +717,7 @@
     <UiConfirmModal
       ref="cancelQueueModal"
       title="Annuler l'envoi"
-      message="Cet email ne sera pas envoyé. Vous pourrez le renvoyer manuellement plus tard depuis la file d'attente."
+      :message="`Ce ${isSms ? 'SMS' : 'email'} ne sera pas envoyé. Vous pourrez le renvoyer manuellement plus tard depuis la file d'attente.`"
       confirm-text="Ne pas envoyer"
       cancel-text="Retour"
       @confirm="handleCancelQueueItem"
@@ -679,7 +726,7 @@
     <UiConfirmModal
       ref="resendQueueModal"
       title="Renvoyer l'email"
-      message="Cet email sera renvoyé dans la minute qui suit."
+      :message="`Ce ${isSms ? 'SMS' : 'email'} sera renvoyé dans la minute qui suit.`"
       confirm-text="Renvoyer"
       cancel-text="Retour"
       confirm-button-variant="primary"
@@ -714,6 +761,7 @@ import { SendPolicyService } from '~/services/sendPolicyService'
 import { formatSendPolicySummary } from '~/utils/sendPolicy'
 import type { SendingIdentityResponse } from '~/services/settingsService'
 import { SettingsService } from '~/services/settingsService'
+import { SmsService, type SmsConfig } from '~/services/smsService'
 
 definePageMeta({ layout: 'dashboard', middleware: 'auth' })
 
@@ -783,6 +831,8 @@ const cancelQueueModal: Ref<{ open: () => void } | null> = ref(null)
 const resendQueueModal: Ref<{ open: () => void } | null> = ref(null)
 const isRefreshing: Ref<boolean> = ref(false)
 const autoRefreshTimer: Ref<ReturnType<typeof setInterval> | null> = ref(null)
+/** SMS sender config — loaded only for SMS campaigns, drives the launch precondition + config panel. */
+const smsConfig: Ref<SmsConfig | null> = ref(null)
 
 const settingsForm: Ref<{
   template_id: number
@@ -815,6 +865,40 @@ const sendPolicySummary: ComputedRef<string> = computed((): string => formatSend
 const drawerStack: ReturnType<typeof useDrawerStackStore> = useDrawerStackStore()
 
 const campaignId: ComputedRef<number> = computed((): number => Number(route.params.id))
+
+/** True for an SMS-channel campaign — swaps the email-only UI (template/A-B/video/follow-ups/stats) for SMS. */
+const isSms: ComputedRef<boolean> = computed((): boolean => campaign.value?.channel === 'sms')
+
+/** SMS campaigns can launch only once a sender is configured and the provider is ready. */
+const smsReady: ComputedRef<boolean> = computed(
+  (): boolean => !!smsConfig.value?.sender && !!smsConfig.value?.provider_ready,
+)
+
+/** Example of the cold SMS body sent to each prospect (mirrors the backend `compose_cold_body`). */
+const smsPreview: ComputedRef<string> = computed((): string => {
+  const sender: string = smsConfig.value?.sender || '[expéditeur]'
+  const example: string = campaign.value?.prospects?.[0]?.name || 'votre entreprise'
+  return `Bonjour, j'ai realise un apercu de site web pour ${example} : demo.dibodev.fr/… — ${sender}. STOP au 36180`
+})
+
+/** Send progress for an SMS campaign, counted from the queue (no email stats apply). */
+const smsQueueCounts: ComputedRef<{ sent: number; pending: number; failed: number }> = computed(() => {
+  const items: CampaignQueueItem[] = queueData.value?.items ?? []
+  let sent: number = 0
+  let pending: number = 0
+  let failed: number = 0
+  for (const item of items) {
+    if (item.status === 'sent') sent += 1
+    else if (item.status === 'pending' || item.status === 'sending') pending += 1
+    else if (item.status === 'failed' || item.status === 'skipped') failed += 1
+  }
+  return { sent, pending, failed }
+})
+
+/** Tabs shown for this campaign — the A/B tab is email-only. */
+const visibleTabs: ComputedRef<{ key: string; label: string; icon: string }[]> = computed(() =>
+  isSms.value ? TABS.filter((tab: { key: string; label: string; icon: string }): boolean => tab.key !== 'ab') : TABS,
+)
 
 /** Campaign prospects enriched with full list data when available. */
 const campaignProspectRows: ComputedRef<Prospect[]> = computed((): Prospect[] => {
@@ -850,13 +934,37 @@ const campaignAbVariants: ComputedRef<Record<number, string | null | undefined>>
   },
 )
 
-const canLaunch: ComputedRef<boolean> = computed((): boolean => settingsForm.value.template_id > 0)
+const canLaunch: ComputedRef<boolean> = computed((): boolean =>
+  isSms.value ? smsReady.value : settingsForm.value.template_id > 0,
+)
+
+/** Reason the launch button is disabled, shown as its tooltip (channel-aware). */
+const launchDisabledReason: ComputedRef<string> = computed((): string =>
+  isSms.value
+    ? 'Configurez un expéditeur SMS dans Paramètres → Relance SMS'
+    : 'Sélectionnez un template J1 dans la configuration',
+)
 
 const isCampaignActive: ComputedRef<boolean> = computed((): boolean => campaign.value?.status === 'active')
 
 /** Metric cards for the stats strip. */
 const metricCards: ComputedRef<Array<{ label: string; value: number | string; icon: string; color: string }>> =
   computed(() => {
+    // SMS has no opens/clicks/replies: report send progress from the queue instead.
+    if (isSms.value) {
+      const c: { sent: number; pending: number; failed: number } = smsQueueCounts.value
+      return [
+        {
+          label: 'Prospects',
+          value: campaign.value?.prospects_count ?? 0,
+          icon: 'i-lucide-users',
+          color: 'text-[var(--app-ink)]',
+        },
+        { label: 'Envoyés', value: c.sent, icon: 'i-lucide-send', color: 'text-[var(--app-green)]' },
+        { label: 'En attente', value: c.pending, icon: 'i-lucide-clock', color: 'text-[var(--app-accent-ink)]' },
+        { label: 'Échecs', value: c.failed, icon: 'i-lucide-circle-x', color: 'text-[var(--app-red)]' },
+      ]
+    }
     const s: CampaignStats | null = stats.value
     if (!s) return []
     return [
@@ -971,6 +1079,10 @@ async function loadAll(): Promise<void> {
     templates.value = Array.isArray(tpls) ? tpls : []
     sendPolicy.value = await SendPolicyService.getSendPolicy().catch((): null => null)
     syncSettingsForm(c)
+    if (c.channel === 'sms') {
+      smsConfig.value = await SmsService.getConfig().catch((): null => null)
+      if (activeTab.value === 'ab') activeTab.value = 'config'
+    }
   } catch {
     toast.error('Campagne introuvable')
     router.push('/dashboard/campaigns')
@@ -1129,7 +1241,7 @@ async function handleLaunch(): Promise<void> {
 async function handlePause(): Promise<void> {
   try {
     const result: { success: boolean; cancelled: number } = await CampaignService.pause(campaignId.value)
-    toast.success(`Campagne en pause — ${result.cancelled} email(s) annulé(s)`)
+    toast.success(`Campagne en pause — ${result.cancelled} ${isSms.value ? 'SMS' : 'email(s)'} annulé(s)`)
     await loadAll()
   } catch {
     toast.error('Erreur lors de la mise en pause')
@@ -1142,7 +1254,7 @@ async function handlePause(): Promise<void> {
 async function handleResume(): Promise<void> {
   try {
     const result: { success: boolean; enqueued: number } = await CampaignService.resume(campaignId.value)
-    toast.success(`Campagne reprise — ${result.enqueued} email(s) planifié(s)`)
+    toast.success(`Campagne reprise — ${result.enqueued} ${isSms.value ? 'SMS' : 'email(s)'} planifié(s)`)
     await loadAll()
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : 'Erreur lors de la reprise')

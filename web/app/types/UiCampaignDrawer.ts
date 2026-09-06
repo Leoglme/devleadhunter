@@ -1,5 +1,5 @@
 import type { CampaignFormDrawerMode } from '~/types/DrawerStack'
-import type { CampaignDetailResponse } from '~/services/campaignService'
+import type { CampaignChannel, CampaignDetailResponse } from '~/services/campaignService'
 import type { UiDrawerProps } from '~/types/UiDrawer'
 
 export type UiCampaignDrawerProps = UiDrawerProps & {
@@ -7,10 +7,11 @@ export type UiCampaignDrawerProps = UiDrawerProps & {
   campaign?: CampaignDetailResponse | null
 }
 
-/** Local shape of the campaign form; the A/B templates are only asked on creation. */
+/** Local shape of the campaign form; the channel + A/B templates are only asked on creation. */
 export type CampaignForm = {
   name: string
   description: string
+  channel: CampaignChannel
   templateIdA: number
   templateIdB: number
 }
