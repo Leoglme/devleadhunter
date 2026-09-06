@@ -35,7 +35,9 @@ logger = logging.getLogger(__name__)
 # calibrated), then the whole background is scaled to the pipeline size.
 _EDIT_W, _EDIT_H = 1600, 900
 
-_DEMO_ACCROCHE = "Barbier de quartier — coupe, barbe et rasage à l'ancienne."
+# Neutral fallback only: the real, trade-aware phrase is passed in per site (the API
+# sends the template's default subtitle), so a landscaper never gets a barber line.
+_DEMO_ACCROCHE = "Votre activité, présentée comme il se doit."
 
 # A visible fake cursor injected into the editor page (Playwright records no OS
 # cursor). We drive its position ourselves, so it glides where we click.
@@ -122,6 +124,7 @@ class StoryblokEditorClipService:
         output_path: Path,
         seed: StoryblokSessionSeed | None = None,
         user_data_dir: str | None = None,
+        accroche: str = "",
         executable_path: str | None = None,
         site_seconds: float = 14.0,
         hold_seconds: float = 1.0,
@@ -148,7 +151,7 @@ class StoryblokEditorClipService:
         try:
             site_clip = self._render_site_segment(demo_url, site_seconds, hold_seconds, fps, work_dir, executable_path)
             editor_clip = self._record_editor_segment(
-                space_id, story_id, seed, user_data_dir, fps, work_dir, executable_path
+                space_id, story_id, seed, user_data_dir, fps, work_dir, executable_path, accroche
             )
             return self._concat(site_clip, editor_clip, output_path, out_width, out_height, fps, total_seconds)
         finally:
@@ -233,6 +236,7 @@ class StoryblokEditorClipService:
         fps: int,
         work_dir: Path,
         executable_path: str | None = None,
+        accroche: str = "",
     ) -> Path:
         """Capture the authenticated editor edit as a frame sequence (no Playwright video)."""
         from playwright.sync_api import sync_playwright
@@ -266,7 +270,7 @@ class StoryblokEditorClipService:
                 page.evaluate(_CURSOR_INIT)
                 # Capture starts only now → the loading screen is never in the clip.
                 capturer = _FrameCapturer(page, frames_dir, fps)
-                self._drive_edit_and_revert(page, capturer)
+                self._drive_edit_and_revert(page, capturer, accroche)
 
                 context.close()
                 if browser is not None:
@@ -293,8 +297,9 @@ class StoryblokEditorClipService:
         )
         return out
 
-    def _drive_edit_and_revert(self, page, capturer: _FrameCapturer) -> None:
+    def _drive_edit_and_revert(self, page, capturer: _FrameCapturer, accroche: str = "") -> None:
         """Click-to-edit the hero text + photo (with a visible cursor), capturing frames, then revert."""
+        new_accroche = accroche.strip() or _DEMO_ACCROCHE
         cursor = _Cursor(page, capturer)
         capturer.hold(700)
         frame = self._preview_frame(page)
@@ -313,7 +318,7 @@ class StoryblokEditorClipService:
         accroche.press("Control+a")
         accroche.press("Delete")
         capturer.shot()
-        for index, char in enumerate(_DEMO_ACCROCHE):
+        for index, char in enumerate(new_accroche):
             accroche.type(char, delay=3)
             if index % 3 == 0:
                 capturer.shot()

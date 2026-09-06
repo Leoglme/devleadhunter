@@ -6,7 +6,13 @@ import base64
 import json
 import time
 
-from services.storyblok_session_service import StoryblokSessionSeed, _token_is_fresh
+import pytest
+
+from services.storyblok_session_service import (
+    StoryblokSessionSeed,
+    StoryblokSessionService,
+    _token_is_fresh,
+)
 
 
 def _jwt(exp_offset_seconds: int) -> str:
@@ -42,3 +48,32 @@ def test_seed_is_valid_mirrors_token_freshness() -> None:
     assert StoryblokSessionSeed(local_storage={"token": _jwt(3600)}).is_valid is True
     assert StoryblokSessionSeed(local_storage={"token": _jwt(-10)}).is_valid is False
     assert StoryblokSessionSeed(local_storage={}).is_valid is False
+
+
+def test_capture_source_prefers_dedicated_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = StoryblokSessionService()
+    monkeypatch.setattr(service, "read_persisted_state", lambda: {"logged_in": True})
+    monkeypatch.setattr(
+        service, "resolve_machine_seed", lambda: StoryblokSessionSeed(local_storage={"token": _jwt(3600)})
+    )
+    seed, user_data_dir = service.resolve_capture_source()
+    assert seed is None and user_data_dir is not None  # the in-app account wins
+
+
+def test_capture_source_falls_back_to_machine_seed(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = StoryblokSessionService()
+    fresh = StoryblokSessionSeed(local_storage={"token": _jwt(3600)})
+    monkeypatch.setattr(service, "read_persisted_state", lambda: None)
+    monkeypatch.setattr(service, "resolve_machine_seed", lambda: fresh)
+    seed, user_data_dir = service.resolve_capture_source()
+    assert seed is fresh and user_data_dir is None
+
+
+def test_capture_source_ignores_machine_seed_after_logout(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = StoryblokSessionService()
+    monkeypatch.setattr(service, "read_persisted_state", lambda: {"logged_in": False, "ignore_machine_seed": True})
+    monkeypatch.setattr(
+        service, "resolve_machine_seed", lambda: StoryblokSessionSeed(local_storage={"token": _jwt(3600)})
+    )
+    seed, user_data_dir = service.resolve_capture_source()
+    assert seed is None and user_data_dir is None  # explicit logout → needs a fresh in-app login

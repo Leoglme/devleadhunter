@@ -79,6 +79,24 @@ export class StoryblokSidecarService {
   }
 
   /**
+   * Forget the Storyblok session (wrong account?) so the user can reconnect.
+   * @returns True when the session was cleared.
+   */
+  static async logout(): Promise<boolean> {
+    const info: Awaited<ReturnType<typeof getScraperSidecarInfo>> = await getScraperSidecarInfo()
+    if (!info) return false
+    try {
+      const response: Response = await fetch(`http://127.0.0.1:${info.port}/storyblok/logout`, {
+        method: 'POST',
+        headers: { 'X-Sidecar-Token': info.token },
+      })
+      return response.ok
+    } catch {
+      return false
+    }
+  }
+
+  /**
    * Produce a site's video background on the sidecar and upload it to the API.
    *
    * Best-effort: returns `skipped` when there is no Storyblok session (the montage
