@@ -1,0 +1,90 @@
+name: 🚑 Recover API (restart + reset stuck video status)
+
+# Manual recovery for the case where a demo-video generation (headless Chromium +
+# ffmpeg) blows past the service MemoryMax and the OOM killer takes the API down,
+# leaving demo_sites stuck in video_status='generating' (the failing status write
+# is lost when MySQL connections reset during the OOM). This restarts the service
+# cleanly (killing any lingering ffmpeg/Chromium in the cgroup) and clears the
+# stuck rows so the dashboard stops polling forever.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔁 Restart service and clear stuck video generations (SSH)
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            TARGET_DIR="/var/www/api.devleadhunter.dibodev.fr/html"
+            SERVICE_NAME="devleadhunter-api.service"
+
+            echo "===== memory before ====="
+            free -m || true
+
+            echo "===== stop service (kills cgroup children) ====="
+            sudo systemctl stop "$SERVICE_NAME" || true
+
+            echo "===== kill any lingering media processes ====="
+            sudo pkill -9 -f ffmpeg || true
+            sudo pkill -9 -f 'ms-playwright' || true
+            sudo pkill -9 -f 'chrome_crashpad' || true
+            sudo pkill -9 -f 'headless_shell' || true
+
+            echo "===== start service ====="
+            sudo systemctl start "$SERVICE_NAME"
+
+            echo "===== wait for local health ====="
+            for attempt in $(seq 1 12); do
+              code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8005/docs || true)
+              if [ "$code" = "200" ]; then
+                echo "API up (HTTP $code) after ${attempt} attempt(s)."
+                break
+              fi
+              sleep 5
+            done
+
+            echo "===== reset demo_sites stuck in generating ====="
+            cd "$TARGET_DIR/api"
+            ../.venv/bin/python - <<'PY'
+            from sqlalchemy import create_engine, text
+
+            env = {}
+            with open(".env", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, value = line.split("=", 1)
+                    env[key] = value
+
+            url = env["DATABASE_URL"]
+            if url.startswith("mysql://"):
+                url = "mysql+pymysql://" + url[len("mysql://") :]
+
+            engine = create_engine(url)
+            with engine.begin() as connection:
+                stuck = connection.execute(
+                    text("SELECT id, slug FROM demo_sites WHERE video_status = 'generating'")
+                ).fetchall()
+                for row in stuck:
+                    print(f"  stuck: #{row[0]} {row[1]}")
+                result = connection.execute(
+                    text(
+                        "UPDATE demo_sites SET video_status = 'failed', "
+                        "video_error = 'Interrompu par un OOM du serveur — relancez la génération' "
+                        "WHERE video_status = 'generating'"
+                    )
+                )
+                print(f"rows reset to failed: {result.rowcount}")
+            PY
+
+            echo "===== memory after ====="
+            free -m || true
