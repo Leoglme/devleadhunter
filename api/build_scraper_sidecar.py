@@ -8,6 +8,7 @@ Run from `api/`:  ``python build_scraper_sidecar.py``
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -71,6 +72,10 @@ def main() -> None:
         # must be bundled (the browser itself is the sidecar's provisioned Chrome).
         "--collect-all",
         "playwright",
+        # Pillow draws the greeting pill + thumbnail during the desktop montage; its
+        # plugins load lazily, so collect them explicitly or the frozen build misses them.
+        "--collect-all",
+        "PIL",
         "--distpath",
         str(API_DIR / "dist"),
         "--workpath",
@@ -79,6 +84,18 @@ def main() -> None:
         str(API_DIR),
         str(API_DIR / "scraper_sidecar.py"),
     ]
+
+    # Bundle a static ffmpeg so desktop video generation is plug-and-play (a user never
+    # installs it). The workflow downloads it and points FFMPEG_BUNDLE_PATH here; it lands
+    # at the frozen root (sys._MEIPASS/ffmpeg.exe), which the sidecar resolves at runtime.
+    ffmpeg_bundle = os.environ.get("FFMPEG_BUNDLE_PATH", "").strip()
+    if ffmpeg_bundle and Path(ffmpeg_bundle).is_file():
+        separator = ";" if sys.platform == "win32" else ":"
+        command[-1:-1] = ["--add-binary", f"{ffmpeg_bundle}{separator}."]
+        print(f"Bundling ffmpeg: {ffmpeg_bundle}")
+    else:
+        print("FFMPEG_BUNDLE_PATH unset/missing — sidecar relies on PATH ffmpeg (not plug-and-play).")
+
     subprocess.run(command, check=True, cwd=API_DIR)
 
     built = API_DIR / "dist" / f"{BINARY_STEM}{suffix}"

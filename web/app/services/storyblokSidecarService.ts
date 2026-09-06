@@ -33,6 +33,21 @@ export type StoryblokSessionInfo = {
  */
 export type BackgroundPreparation = 'uploaded' | 'needs_login' | 'skipped' | 'unavailable'
 
+/**
+ * Outcome of a full desktop video build.
+ * - `done`: the whole video was rendered locally and stored.
+ * - `needs_login`: the Storyblok session is expired/absent — prompt a reconnect.
+ * - `unavailable`: not the desktop shell — the caller uses the server-side path.
+ * - `failed`: something went wrong locally — the caller falls back to the server.
+ */
+export type FullVideoBuildStatus = 'done' | 'needs_login' | 'unavailable' | 'failed'
+
+/** Result of a full desktop video build, with a message when it failed. */
+export type FullVideoBuildResult = {
+  status: FullVideoBuildStatus
+  message?: string
+}
+
 const UNKNOWN_SESSION: StoryblokSessionInfo = { state: 'unknown', source: null, loginWindowOpen: false }
 
 export class StoryblokSidecarService {
@@ -94,6 +109,64 @@ export class StoryblokSidecarService {
     } catch {
       return false
     }
+  }
+
+  /**
+   * Build the COMPLETE prospection video on the desktop (capture + montage).
+   *
+   * Fetches the context + presenter clip, has the sidecar render everything with its
+   * bundled ffmpeg, then uploads the finished video — the VPS is never involved.
+   * Returns `unavailable` off the desktop, `needs_login` when Storyblok is expired,
+   * `failed` (with a message) on any local error so the caller can fall back.
+   * @param demoSiteId - The demo site to generate.
+   * @returns The build outcome.
+   */
+  static async buildFullVideo(demoSiteId: number): Promise<FullVideoBuildResult> {
+    const info: Awaited<ReturnType<typeof getScraperSidecarInfo>> = await getScraperSidecarInfo()
+    if (!info) return { status: 'unavailable' }
+
+    let context: Awaited<ReturnType<typeof DemoSiteService.getVideoBackgroundContext>>
+    let presenter: Blob
+    try {
+      context = await DemoSiteService.getVideoBackgroundContext(demoSiteId)
+      presenter = await DemoSiteService.fetchPresenterVideoFile()
+    } catch (error) {
+      return { status: 'failed', message: error instanceof Error ? error.message : 'Contexte vidéo indisponible.' }
+    }
+
+    const formData: FormData = new FormData()
+    formData.append('payload', JSON.stringify(context))
+    formData.append('presenter', presenter, 'presenter.mp4')
+
+    let response: Response
+    try {
+      response = await fetch(`http://127.0.0.1:${info.port}/video/build-full`, {
+        method: 'POST',
+        headers: { 'X-Sidecar-Token': info.token },
+        body: formData,
+      })
+    } catch {
+      return { status: 'failed', message: 'Le générateur local ne répond pas.' }
+    }
+
+    if (response.status === 409) {
+      const reason: string | null = await response
+        .json()
+        .then((body: { reason?: string }): string | null => body?.reason ?? null)
+        .catch((): null => null)
+      return { status: reason === 'needs_login' ? 'needs_login' : 'failed' }
+    }
+    if (!response.ok) {
+      return { status: 'failed', message: await StoryblokSidecarService.readSidecarError(response) }
+    }
+
+    try {
+      const bundle: Blob = await response.blob()
+      await DemoSiteService.uploadFinalVideo(demoSiteId, bundle)
+    } catch (error) {
+      return { status: 'failed', message: error instanceof Error ? error.message : 'Envoi de la vidéo échoué.' }
+    }
+    return { status: 'done' }
   }
 
   /**
