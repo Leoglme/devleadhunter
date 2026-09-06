@@ -112,6 +112,7 @@ export function extensionForRecorderMimeType(mimeType: string): string {
  */
 export function useWebcamRecorder(): {
   stream: Ref<MediaStream | null>
+  isMirrored: Ref<boolean>
   isReady: Ref<boolean>
   isRequesting: Ref<boolean>
   isRecording: Ref<boolean>
@@ -131,6 +132,10 @@ export function useWebcamRecorder(): {
   stopEverything: () => void
 } {
   const stream: Ref<MediaStream | null> = ref(null)
+  // Sens de l'image. false = sens naturel (ce que voient les prospects, et ce que
+  // capture la caméra) ; true = miroir, cuit dans l'enregistrement via un canvas
+  // pour que la vidéo finale corresponde à l'aperçu.
+  const isMirrored: Ref<boolean> = ref(false)
   const isReady: Ref<boolean> = ref(false)
   const isRequesting: Ref<boolean> = ref(false)
   const isRecording: Ref<boolean> = ref(false)
@@ -150,6 +155,11 @@ export function useWebcamRecorder(): {
   let levelFrame: number | null = null
   let timerHandle: ReturnType<typeof setInterval> | null = null
   let startedAt: number = 0
+
+  // Mirror pipeline — only alive while a mirrored take is recording.
+  let mirrorVideo: HTMLVideoElement | null = null
+  let mirrorFrame: number | null = null
+  let mirrorStream: MediaStream | null = null
 
   /**
    * Whether this browser can record at all.
@@ -327,6 +337,68 @@ export function useWebcamRecorder(): {
   }
 
   /**
+   * Tear down the mirror render loop and its canvas track.
+   *
+   * The audio track is shared with the live stream (added to the mirrored
+   * stream by reference), so it is left running for the meter and the next
+   * take — only the canvas-generated video track is stopped here.
+   */
+  function teardownMirrorPipeline(): void {
+    if (mirrorFrame !== null) {
+      cancelAnimationFrame(mirrorFrame)
+      mirrorFrame = null
+    }
+    mirrorStream?.getVideoTracks().forEach((track: MediaStreamTrack): void => {
+      track.stop()
+    })
+    mirrorStream = null
+    if (mirrorVideo) {
+      mirrorVideo.srcObject = null
+      mirrorVideo = null
+    }
+  }
+
+  /**
+   * Build a horizontally-flipped copy of the source stream by rendering every
+   * frame through a canvas. A camera track cannot be mirrored in place, so a
+   * baked flip is the only way the recorded pixels match a mirrored preview.
+   *
+   * @param source - The live camera + microphone stream.
+   * @returns A stream carrying the flipped video and the original audio, or null when unavailable.
+   */
+  function buildMirroredStream(source: MediaStream): MediaStream | null {
+    if (typeof document === 'undefined' || source.getVideoTracks().length === 0) return null
+    const canvas: HTMLCanvasElement = document.createElement('canvas')
+    canvas.width = CAPTURE_WIDTH
+    canvas.height = CAPTURE_HEIGHT
+    const context: CanvasRenderingContext2D | null = canvas.getContext('2d')
+    if (!context) return null
+
+    const video: HTMLVideoElement = document.createElement('video')
+    video.srcObject = source
+    video.muted = true
+    video.playsInline = true
+    void video.play().catch((): void => undefined)
+
+    const paint: () => void = (): void => {
+      // Flip on the X axis: x' = width - x, so the right of the frame becomes the left.
+      context.setTransform(-1, 0, 0, 1, canvas.width, 0)
+      context.drawImage(video, 0, 0, canvas.width, canvas.height)
+      mirrorFrame = requestAnimationFrame(paint)
+    }
+    mirrorFrame = requestAnimationFrame(paint)
+
+    const flipped: MediaStream = canvas.captureStream(30)
+    source.getAudioTracks().forEach((track: MediaStreamTrack): void => {
+      flipped.addTrack(track)
+    })
+
+    mirrorVideo = video
+    mirrorStream = flipped
+    return flipped
+  }
+
+  /**
    * Start recording the live stream.
    * @returns True when the recorder actually started.
    */
@@ -334,14 +406,20 @@ export function useWebcamRecorder(): {
     const source: MediaStream | null = stream.value
     if (!source || isRecording.value) return false
 
+    // A mirrored take records the canvas-flipped copy; otherwise the raw camera
+    // stream. Fall back to the raw stream if the mirror pipeline cannot start.
+    teardownMirrorPipeline()
+    const recorded: MediaStream = isMirrored.value ? (buildMirroredStream(source) ?? source) : source
+
     const mimeType: string = resolveRecorderMimeType()
     try {
-      recorder = new MediaRecorder(source, {
+      recorder = new MediaRecorder(recorded, {
         ...(mimeType ? { mimeType } : {}),
         videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
       })
     } catch (err: unknown) {
       error.value = describeMediaError(err)
+      teardownMirrorPipeline()
       return false
     }
 
@@ -380,6 +458,7 @@ export function useWebcamRecorder(): {
         chunks = []
         recorder = null
         isRecording.value = false
+        teardownMirrorPipeline()
         elapsedSeconds.value = durationSeconds
         resolve({
           blob,
@@ -412,6 +491,7 @@ export function useWebcamRecorder(): {
     recorder = null
     chunks = []
     isRecording.value = false
+    teardownMirrorPipeline()
     if (timerHandle !== null) {
       clearInterval(timerHandle)
       timerHandle = null
@@ -425,6 +505,7 @@ export function useWebcamRecorder(): {
 
   return {
     stream,
+    isMirrored,
     isReady,
     isRequesting,
     isRecording,
