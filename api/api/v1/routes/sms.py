@@ -52,7 +52,7 @@ from services.sms.dlr import (
 from services.sms.gsm_segments import segment_count
 from services.sms.mo import mo_is_stop, mo_origin_message_id, mo_ref_client, mo_sender_number
 from services.sms.phone_normalizer import to_e164_fr
-from services.sms.templates import find_sms_template, list_sms_templates
+from services.sms.templates import DEFAULT_FIRST_CONTACT_KEY, find_sms_template, list_sms_templates
 from services.sms_config_service import sms_config_service
 from services.sms_relance_service import sms_relance_service
 from services.sms_service import sms_service
@@ -233,6 +233,7 @@ async def list_templates(
             category=template.category.value,
             body=template.body,
             variables=template.variables,
+            is_default=template.key == DEFAULT_FIRST_CONTACT_KEY,
         )
         for template in list_sms_templates(category)
     ]

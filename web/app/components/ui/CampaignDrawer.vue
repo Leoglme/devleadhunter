@@ -116,9 +116,9 @@
               Campagne SMS
             </p>
             <p class="text-muted mt-1.5 text-[11px] leading-relaxed">
-              Un SMS court part vers chaque prospect mobile avec le lien de son site démo. Pas de modèle ni d'A/B : le
-              message et la mention « STOP » sont générés automatiquement. L'expéditeur se règle dans Paramètres →
-              Relance SMS.
+              Le modèle « Direct » de la bibliothèque SMS part vers chaque prospect mobile avec le lien de son site
+              démo. Pas d'A/B : le message et la mention « STOP » sont rendus automatiquement. L'expéditeur se règle
+              dans Paramètres → Relance SMS.
             </p>
           </div>
 

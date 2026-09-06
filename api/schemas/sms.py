@@ -57,6 +57,7 @@ class SmsTemplateResponse(BaseModel):
     category: str
     body: str
     variables: list[str]
+    is_default: bool = Field(default=False, description="Template the automated first contact sends")
 
 
 class SmsTemplatePreviewResponse(BaseModel):

@@ -97,6 +97,7 @@ export type SmsTemplate = {
   category: SmsTemplateCategory
   body: string
   variables: string[]
+  is_default: boolean
 }
 
 /** A library template rendered for one prospect (STOP mention excluded, appended at send). */

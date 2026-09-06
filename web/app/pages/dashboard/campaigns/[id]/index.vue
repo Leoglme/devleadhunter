@@ -251,8 +251,9 @@
             <p class="text-sm leading-relaxed whitespace-pre-line text-[var(--app-ink)]">{{ smsPreview }}</p>
           </div>
           <p class="text-muted mt-2 text-[11px] leading-relaxed">
-            Généré automatiquement pour chaque prospect (salutation, nom de l'entreprise, lien de sa démo, votre
-            signature et la mention « STOP »). Un seul SMS par prospect, sans modèle ni A/B ni relance.
+            Modèle « {{ smsTemplate?.name ?? 'Direct' }} » de la bibliothèque SMS, rendu pour chaque prospect
+            (salutation, nom de l'entreprise, lien de sa démo, votre prénom et la mention « STOP »). Un seul SMS par
+            prospect, sans A/B ni relance.
           </p>
         </section>
 
@@ -736,7 +737,7 @@
 </template>
 
 <script lang="ts" setup>
-import type { UseToastReturn } from '~/types/Composables'
+import type { UseAuthReturn, UseToastReturn } from '~/types/Composables'
 import type { TemplateOption } from '~/types/CampaignDetailPage'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { ComputedRef, Ref } from 'vue'
@@ -761,13 +762,15 @@ import { SendPolicyService } from '~/services/sendPolicyService'
 import { formatSendPolicySummary } from '~/utils/sendPolicy'
 import type { SendingIdentityResponse } from '~/services/settingsService'
 import { SettingsService } from '~/services/settingsService'
-import { SmsService, type SmsConfig } from '~/services/smsService'
+import { SmsService, type SmsConfig, type SmsTemplate, type SmsTemplatePreview } from '~/services/smsService'
+import { SmsVariables } from '~/utils/smsVariables'
 
 definePageMeta({ layout: 'dashboard', middleware: 'auth' })
 
 const router: ReturnType<typeof useRouter> = useRouter()
 const route: ReturnType<typeof useRoute> = useRoute()
 const toast: UseToastReturn = useToast()
+const { user }: UseAuthReturn = useAuth()
 
 const TABS: { key: string; label: string; icon: string }[] = [
   { key: 'config', label: 'Configuration', icon: 'i-lucide-settings-2' },
@@ -834,6 +837,12 @@ const autoRefreshTimer: Ref<ReturnType<typeof setInterval> | null> = ref(null)
 /** SMS sender config — loaded only for SMS campaigns, drives the launch precondition + config panel. */
 const smsConfig: Ref<SmsConfig | null> = ref(null)
 
+/** Default first-contact template of the SMS library, the one an SMS campaign sends. */
+const smsTemplate: Ref<SmsTemplate | null> = ref(null)
+
+/** The SMS rendered for the campaign's first prospect, when his demo allows it. */
+const smsRenderedPreview: Ref<string> = ref('')
+
 const settingsForm: Ref<{
   template_id: number
   ab_template_id_b: number
@@ -874,11 +883,12 @@ const smsReady: ComputedRef<boolean> = computed(
   (): boolean => !!smsConfig.value?.sender && !!smsConfig.value?.provider_ready,
 )
 
-/** Example of the cold SMS body sent to each prospect (mirrors the backend `compose_cold_body`). */
+/** The real SMS of the first prospect when rendered, else the template with sample values. */
 const smsPreview: ComputedRef<string> = computed((): string => {
-  const sender: string = smsConfig.value?.sender || '[expéditeur]'
-  const example: string = campaign.value?.prospects?.[0]?.name || 'votre entreprise'
-  return `Bonjour, j'ai realise un apercu de site web pour ${example} : demo.dibodev.fr/… — ${sender}. STOP au 36180`
+  const body: string = smsRenderedPreview.value
+    ? smsRenderedPreview.value
+    : SmsVariables.renderWithSampleValues(smsTemplate.value?.body ?? '', SmsVariables.firstNameOf(user.value?.name))
+  return body ? `${body} STOP au 36180` : ''
 })
 
 /** Send progress for an SMS campaign, counted from the queue (no email stats apply). */
@@ -1054,6 +1064,25 @@ function isWinner(v: CampaignVariantStats): boolean {
 }
 
 /**
+ * Load the template an SMS campaign sends and render it for the campaign's first prospect.
+ * @param detail - The campaign detail; its first prospect gives the real example.
+ * @returns A promise that resolves once the preview is set.
+ */
+async function loadSmsPreview(detail: CampaignDetailResponse): Promise<void> {
+  const templates: SmsTemplate[] = await SmsService.listTemplates('first_contact').catch((): SmsTemplate[] => [])
+  smsTemplate.value = templates.find((template: SmsTemplate): boolean => template.is_default) ?? templates[0] ?? null
+  smsRenderedPreview.value = ''
+  const firstProspectId: number | undefined = detail.prospects[0]?.id
+  if (!smsTemplate.value || firstProspectId === undefined) return
+  try {
+    const preview: SmsTemplatePreview = await SmsService.previewTemplate(smsTemplate.value.key, firstProspectId)
+    smsRenderedPreview.value = preview.body
+  } catch {
+    // No demo for that prospect yet: the sample rendering stands in.
+  }
+}
+
+/**
  * Load campaign, stats, queue, prospects and templates in parallel.
  */
 async function loadAll(): Promise<void> {
@@ -1081,6 +1110,7 @@ async function loadAll(): Promise<void> {
     syncSettingsForm(c)
     if (c.channel === 'sms') {
       smsConfig.value = await SmsService.getConfig().catch((): null => null)
+      await loadSmsPreview(c)
       if (activeTab.value === 'ab') activeTab.value = 'config'
     }
   } catch {
