@@ -43,6 +43,7 @@ from enums.demo_site_status import DemoSiteStatus
 from enums.demo_video_status import DemoVideoStatus
 from models.demo_site import DemoSite
 from models.presenter_video import PresenterVideo
+from services import video_montage
 from services.r2_storage_service import r2_storage
 
 logger = logging.getLogger(__name__)
@@ -53,19 +54,6 @@ _generation_semaphore = asyncio.Semaphore(1)
 
 # Durée minimale du segment « site qui défile » pour que la capture ait un sens.
 _MIN_SCROLL_SECONDS = 6.0
-
-# Canvas de sortie (16:9, léger pour un email → une page player).
-_WIDTH = 1280
-_HEIGHT = 720
-_FPS = 30
-
-# Pastille webcam (picture-in-picture) pendant le segment site.
-_PIP_SIZE = 260
-_PIP_MARGIN = 24
-
-# ffmpeg est plafonné en threads : sur le petit VPS de secours, laisser x264
-# prendre tous les cœurs fait grimper la mémoire et étrangle l'API (1 worker).
-_FFMPEG_THREADS = "2"
 
 # Garde-fou mémoire du fallback serveur : capturer le site en headless (Chromium)
 # puis monter avec ffmpeg dépasse facilement le plafond du service sur un VPS chargé.
@@ -95,14 +83,6 @@ def _available_memory_mb() -> float | None:
     except (OSError, ValueError):
         return None
     return None
-
-
-_FONT_CANDIDATES: tuple[str, ...] = (
-    "C:/Windows/Fonts/seguisb.ttf",  # Segoe UI Semibold
-    "C:/Windows/Fonts/segoeui.ttf",
-    "C:/Windows/Fonts/arialbd.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-)
 
 
 def video_object_key(slug: str) -> str:
@@ -393,24 +373,28 @@ class DemoVideoService:
                 capture_path, scroll_offset, screenshot_path = await self._capture_site(
                     site.demo_url or "", scroll_seconds, work_dir
                 )
-            greeting_path = self._build_greeting_overlay(first_name, work_dir)
-            mask_path = self._build_circle_mask(work_dir)
-
             output_path = work_dir / "output.mp4"
             thumbnail_path = work_dir / "thumbnail.jpg"
             # The montage runs on the VPS even in the desktop path — never let it OOM the box.
             self._guard_montage_memory()
-            await self._compose(
-                presenter=presenter,
-                presenter_path=presenter_path,
-                capture_path=capture_path,
-                scroll_offset=scroll_offset,
-                scroll_seconds=scroll_seconds,
-                greeting_path=greeting_path,
-                mask_path=mask_path,
-                output_path=output_path,
-            )
-            self._build_thumbnail(screenshot_path, first_name, thumbnail_path)
+            try:
+                await asyncio.to_thread(
+                    video_montage.compose_final,
+                    ffmpeg_path=settings.ffmpeg_path,
+                    presenter_duration=presenter.duration_seconds,
+                    presenter_intro=presenter.intro_seconds,
+                    presenter_outro=presenter.outro_seconds,
+                    presenter_path=presenter_path,
+                    capture_path=capture_path,
+                    scroll_offset=scroll_offset,
+                    scroll_seconds=scroll_seconds,
+                    first_name=first_name,
+                    screenshot_path=screenshot_path,
+                    output_video=output_path,
+                    output_thumbnail=thumbnail_path,
+                )
+            except video_montage.VideoMontageError as exc:
+                raise DemoVideoGenerationError(str(exc)) from exc
 
             # Publication sur R2 : c'est Cloudflare qui sert, plus le VPS.
             await r2_storage.upload_file_async(output_path, video_object_key(site.slug), "video/mp4")
@@ -509,7 +493,7 @@ class DemoVideoService:
                 "-loglevel",
                 "error",
                 "-threads",
-                _FFMPEG_THREADS,
+                video_montage.FFMPEG_THREADS,
                 "-i",
                 str(video_path),
                 "-frames:v",
@@ -547,9 +531,9 @@ class DemoVideoService:
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch(headless=True)
                 context = browser.new_context(
-                    viewport={"width": _WIDTH, "height": _HEIGHT},
+                    viewport={"width": video_montage.WIDTH, "height": video_montage.HEIGHT},
                     record_video_dir=str(work_dir),
-                    record_video_size={"width": _WIDTH, "height": _HEIGHT},
+                    record_video_size={"width": video_montage.WIDTH, "height": video_montage.HEIGHT},
                 )
                 page = context.new_page()
                 recording_start = time.monotonic()
@@ -623,248 +607,6 @@ class DemoVideoService:
         if not capture_path.is_file():
             raise DemoVideoGenerationError("Fichier de capture introuvable après l'enregistrement.")
         return capture_path, scroll_offset, screenshot_path
-
-    def _load_font(self, size: int):
-        """Load a bold-ish system font, falling back to Pillow's default."""
-        from PIL import ImageFont
-
-        for candidate in _FONT_CANDIDATES:
-            try:
-                return ImageFont.truetype(candidate, size)
-            except OSError:
-                continue
-        return ImageFont.load_default(size=size)
-
-    def _build_greeting_overlay(self, first_name: str | None, work_dir: Path) -> Path:
-        """
-        Render the transparent intro overlay: « Bonjour {Prénom} » in a pill.
-
-        Text, not cloned voice — the personal touch is visual (same rule as
-        the {salutation} email variable: a safe greeting, never a wrong name).
-        """
-        from PIL import Image, ImageDraw
-
-        text = f"Bonjour {first_name} !" if first_name else "Bonjour !"
-        font = self._load_font(54)
-
-        image = Image.new("RGBA", (_WIDTH, _HEIGHT), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(image)
-        text_box = draw.textbbox((0, 0), text, font=font)
-        text_w = text_box[2] - text_box[0]
-        text_h = text_box[3] - text_box[1]
-
-        pad_x, pad_y = 44, 24
-        pill_w = text_w + pad_x * 2
-        pill_h = text_h + pad_y * 2
-        x0 = (_WIDTH - pill_w) // 2
-        y0 = _HEIGHT - pill_h - 64
-        draw.rounded_rectangle(
-            (x0, y0, x0 + pill_w, y0 + pill_h),
-            radius=pill_h // 2,
-            fill=(255, 255, 255, 235),
-        )
-        draw.text(
-            (x0 + pad_x - text_box[0], y0 + pad_y - text_box[1]),
-            text,
-            font=font,
-            fill=(17, 17, 17, 255),
-        )
-
-        path = work_dir / "greeting.png"
-        image.save(path)
-        return path
-
-    def _build_circle_mask(self, work_dir: Path) -> Path:
-        """White circle on black, used to round the webcam PiP bubble."""
-        from PIL import Image, ImageDraw
-
-        mask = Image.new("L", (_PIP_SIZE, _PIP_SIZE), 0)
-        draw = ImageDraw.Draw(mask)
-        draw.ellipse((0, 0, _PIP_SIZE - 1, _PIP_SIZE - 1), fill=255)
-        path = work_dir / "pip-mask.png"
-        mask.save(path)
-        return path
-
-    def _build_thumbnail(self, screenshot_path: Path, first_name: str | None, output_path: Path) -> None:
-        """
-        Build the personalised email thumbnail: site screenshot, slight
-        darkening, centered play button, « Bonjour {Prénom} » pill.
-
-        The thumbnail is THE click lever in the inbox — it must read as a
-        video (play button) and as personal (his site + his first name).
-        """
-        from PIL import Image, ImageDraw, ImageEnhance
-
-        # 1280x720 (= the video canvas) so the poster stays sharp full-screen on the player.
-        thumb_w, thumb_h = 1280, 720
-        image = Image.open(screenshot_path).convert("RGB").resize((thumb_w, thumb_h))
-        image = ImageEnhance.Brightness(image).enhance(0.82)
-
-        overlay = Image.new("RGBA", (thumb_w, thumb_h), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
-
-        # Bouton play central (cercle blanc, triangle sombre).
-        radius = 92
-        cx, cy = thumb_w // 2, thumb_h // 2
-        draw.ellipse(
-            (cx - radius, cy - radius, cx + radius, cy + radius),
-            fill=(255, 255, 255, 235),
-        )
-        tri = 40
-        draw.polygon(
-            [(cx - tri // 2 + 6, cy - tri), (cx - tri // 2 + 6, cy + tri), (cx + tri + 6 - tri // 2, cy)],
-            fill=(17, 17, 17, 255),
-        )
-
-        # Pill de salutation en haut à gauche.
-        text = f"Bonjour {first_name} — votre site en vidéo" if first_name else "Votre site en vidéo"
-        font = self._load_font(44)
-        text_box = draw.textbbox((0, 0), text, font=font)
-        text_w = text_box[2] - text_box[0]
-        text_h = text_box[3] - text_box[1]
-        pad_x, pad_y = 32, 20
-        x0, y0 = 32, 32
-        draw.rounded_rectangle(
-            (x0, y0, x0 + text_w + pad_x * 2, y0 + text_h + pad_y * 2),
-            radius=(text_h + pad_y * 2) // 2,
-            fill=(255, 255, 255, 235),
-        )
-        draw.text(
-            (x0 + pad_x - text_box[0], y0 + pad_y - text_box[1]),
-            text,
-            font=font,
-            fill=(17, 17, 17, 255),
-        )
-
-        composed = Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        composed.save(output_path, format="JPEG", quality=85)
-
-    async def _compose(
-        self,
-        *,
-        presenter: PresenterVideo,
-        presenter_path: Path,
-        capture_path: Path,
-        scroll_offset: float,
-        scroll_seconds: float,
-        greeting_path: Path,
-        mask_path: Path,
-        output_path: Path,
-    ) -> None:
-        """
-        Single-pass ffmpeg composition.
-
-        Base = presenter clip (full canvas, carries the audio). The site
-        capture covers it between intro and D-outro, with the webcam shrunk
-        to a circular PiP bubble; the greeting pill fades in/out during the
-        intro.
-
-        Raises:
-            DemoVideoGenerationError: when ffmpeg fails.
-        """
-        duration = presenter.duration_seconds
-        intro = presenter.intro_seconds
-        site_end = duration - presenter.outro_seconds
-        fade_out_start = max(intro - 0.5, 0.4)
-
-        # NB filtergraph : à l'intérieur de quotes simples, PAS d'échappement —
-        # les virgules de between()/min() y sont littérales et valides.
-        filter_complex = (
-            f"[0:v]scale={_WIDTH}:{_HEIGHT}:force_original_aspect_ratio=increase,"
-            f"crop={_WIDTH}:{_HEIGHT},setsar=1,fps={_FPS},split=2[pres_full][pip_src];"
-            f"[1:v]scale={_WIDTH}:{_HEIGHT}:force_original_aspect_ratio=increase,"
-            f"crop={_WIDTH}:{_HEIGHT},setsar=1,fps={_FPS},setpts=PTS+{intro:.3f}/TB[site];"
-            f"[pip_src]crop='min(iw,ih)':'min(iw,ih)',scale={_PIP_SIZE}:{_PIP_SIZE},format=rgba[pip_sq];"
-            f"[3:v]format=gray[pip_mask];"
-            f"[pip_sq][pip_mask]alphamerge[pip];"
-            f"[pres_full][site]overlay=0:0:eof_action=pass:"
-            f"enable='between(t,{intro:.3f},{site_end:.3f})'[with_site];"
-            f"[with_site][pip]overlay={_PIP_MARGIN}:H-h-{_PIP_MARGIN}:eof_action=pass:"
-            f"enable='between(t,{intro:.3f},{site_end:.3f})'[with_pip];"
-            f"[2:v]format=rgba,fade=in:st=0.3:d=0.4:alpha=1,"
-            f"fade=out:st={fade_out_start:.3f}:d=0.5:alpha=1[greeting];"
-            f"[with_pip][greeting]overlay=0:0:eof_action=pass:"
-            f"enable='between(t,0,{intro:.3f})'[vout]"
-        )
-
-        command = [
-            settings.ffmpeg_path,
-            "-y",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-threads",
-            _FFMPEG_THREADS,
-            "-i",
-            str(presenter_path),
-            "-ss",
-            f"{max(scroll_offset, 0):.3f}",
-            "-t",
-            f"{scroll_seconds + 0.5:.3f}",
-            "-i",
-            str(capture_path),
-            "-loop",
-            "1",
-            "-t",
-            f"{intro + 1:.3f}",
-            "-i",
-            str(greeting_path),
-            "-loop",
-            "1",
-            "-t",
-            f"{duration:.3f}",
-            "-i",
-            str(mask_path),
-            "-filter_complex",
-            filter_complex,
-            "-map",
-            "[vout]",
-            "-map",
-            "0:a?",
-            "-t",
-            f"{duration:.3f}",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "22",
-            "-pix_fmt",
-            "yuv420p",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "128k",
-            "-ar",
-            "44100",
-            "-movflags",
-            "+faststart",
-            str(output_path),
-        ]
-
-        # ffmpeg via subprocess.run dans un thread — jamais asyncio subprocess
-        # (NotImplementedError sur le SelectorEventLoop du worker uvicorn Windows).
-        try:
-            result = await asyncio.to_thread(
-                subprocess.run,
-                command,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                timeout=600,
-            )
-        except FileNotFoundError as exc:
-            raise DemoVideoGenerationError(
-                f"ffmpeg introuvable ({settings.ffmpeg_path}). Installez-le ou configurez FFMPEG_PATH."
-            ) from exc
-        except subprocess.TimeoutExpired as exc:
-            raise DemoVideoGenerationError("Montage ffmpeg trop long (timeout 10 min).") from exc
-
-        if result.returncode != 0:
-            detail = result.stderr.decode("utf-8", errors="replace").strip()[-500:]
-            raise DemoVideoGenerationError(f"Échec du montage ffmpeg : {detail}")
-        if not output_path.is_file() or output_path.stat().st_size == 0:
-            raise DemoVideoGenerationError("Le montage ffmpeg n'a produit aucun fichier.")
 
 
 demo_video_service = DemoVideoService()

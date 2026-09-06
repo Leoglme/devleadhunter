@@ -8,6 +8,14 @@ export type DemoSiteVideoBackgroundContext = {
   demo_url: string
   space_id: string
   story_id: string
+  /** Trade-aware hero line typed in the editor demo (empty falls back to a neutral default). */
+  accroche: string
+  /** Resolved decision-maker first name for the greeting, or null. */
+  first_name: string | null
+  /** Presenter clip timing, so the desktop montage places the site/webcam segments. */
+  presenter_duration: number
+  presenter_intro: number
+  presenter_outro: number
   site_seconds: number
   hold_seconds: number
   total_seconds: number
@@ -337,6 +345,61 @@ export class DemoSiteService {
       }
       throw new Error(errorMessage)
     }
+  }
+
+  /**
+   * Fetch the user's presenter clip as a blob, to hand to the desktop montage.
+   *
+   * The clip is stored on R2 and streamed by an authed endpoint; the sidecar has
+   * no auth, so the app fetches it and forwards the bytes.
+   * @returns The presenter mp4 blob.
+   * @throws When no presenter clip is available.
+   */
+  static async fetchPresenterVideoFile(): Promise<Blob> {
+    const userStore: ReturnType<typeof useUserStore> = useUserStore()
+    const config: ReturnType<typeof useRuntimeConfig> = useRuntimeConfig()
+    const response: Response = await fetch(`${config.public.apiBase}/api/v1/settings/presenter-video/file`, {
+      headers: userStore.token ? { Authorization: `Bearer ${userStore.token}` } : {},
+    })
+    if (!response.ok) {
+      throw new Error("Clip de présentation introuvable — enregistrez-le d'abord dans les Paramètres.")
+    }
+    return response.blob()
+  }
+
+  /**
+   * Upload a desktop-produced FINAL video bundle (zip: video.mp4 + thumbnail.jpg).
+   *
+   * The sidecar does the whole montage locally; the API just stores it and marks
+   * the site ready. Multipart, so it bypasses the JSON api client.
+   * @param demoSiteId - Id of the demo site.
+   * @param bundle - The zip produced by the sidecar.
+   * @returns The updated demo site.
+   * @throws When the upload fails (message from the API when available).
+   */
+  static async uploadFinalVideo(demoSiteId: number, bundle: Blob): Promise<DemoSite> {
+    const userStore: ReturnType<typeof useUserStore> = useUserStore()
+    const config: ReturnType<typeof useRuntimeConfig> = useRuntimeConfig()
+    const formData: FormData = new FormData()
+    formData.append('file', bundle, `${demoSiteId}-video.zip`)
+    const response: Response = await fetch(`${config.public.apiBase}${BASE_URL}/${demoSiteId}/video-final`, {
+      method: 'POST',
+      headers: userStore.token ? { Authorization: `Bearer ${userStore.token}` } : {},
+      body: formData,
+    })
+    if (!response.ok) {
+      const errorText: string = await response.text().catch(() => '')
+      let errorMessage: string = `Envoi de la vidéo échoué : ${response.statusText}`
+      if (errorText) {
+        try {
+          errorMessage = (JSON.parse(errorText).detail as string) || errorMessage
+        } catch {
+          errorMessage = errorText
+        }
+      }
+      throw new Error(errorMessage)
+    }
+    return (await response.json()) as DemoSite
   }
 
   /**

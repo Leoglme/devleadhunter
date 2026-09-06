@@ -3,6 +3,8 @@
 import logging
 import shutil
 import tempfile
+import zipfile
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -38,8 +40,11 @@ from services.demo_video_service import (
     has_ready_video,
     public_thumbnail_url,
     public_video_file_url,
+    thumbnail_object_key,
+    video_object_key,
     video_page_url,
 )
+from services.email_variables import EmailVariables
 from services.presenter_video_service import presenter_video_service
 from services.r2_storage_service import r2_storage
 from services.site_export_service import site_export_service
@@ -525,12 +530,22 @@ async def get_demo_site_video_background_context(
     # Trade-aware hero line typed in the editor demo, so a landscaper site never shows
     # a barber phrase (the previous hardcoded one). Falls back inside the sidecar.
     accroche = default_subtitle(site.template_id, site.city or "votre région")
+    # First name + presenter durations let the sidecar do the FULL montage locally
+    # (greeting « Bonjour {prénom} », webcam PiP timing) — no VPS round-trip.
+    first_name: str | None = None
+    if site.prospect_id:
+        resolved_first, _last, _gender = EmailVariables.resolved_contact(db, site.prospect_id)
+        first_name = resolved_first or None
     return {
         "slug": site.slug,
         "demo_url": site.demo_url,
         "space_id": str(site.storyblok_space_id),
         "story_id": str(story_id),
         "accroche": accroche,
+        "first_name": first_name,
+        "presenter_duration": presenter.duration_seconds,
+        "presenter_intro": presenter.intro_seconds,
+        "presenter_outro": presenter.outro_seconds,
         "site_seconds": round(site_seconds, 2),
         "hold_seconds": 1.0,
         "total_seconds": round(total_seconds, 2),
@@ -559,6 +574,53 @@ async def upload_demo_site_video_background(
         await r2_storage.upload_file_async(temp_path, r2_storage.website_background_key(site.slug), "video/mp4")
     finally:
         temp_path.unlink(missing_ok=True)
+    return _serialize_demo_site(site)
+
+
+@router.post("/{demo_site_id}/video-final", response_model=DemoSiteResponse)
+async def upload_demo_site_video_final(
+    demo_site_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> DemoSiteResponse:
+    """
+    Store a desktop-produced FINAL prospection video and mark the site ready.
+
+    The desktop sidecar does the whole montage locally and returns a zip
+    (``video.mp4`` + ``thumbnail.jpg``); here we just push both to R2 and flip the
+    status — the VPS never touches ffmpeg for a desktop-generated video.
+    """
+    site = demo_site_service.get_for_user(db, current_user.id, demo_site_id)
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo site not found")
+
+    work_dir = Path(tempfile.mkdtemp(prefix=f"video-final-{site.slug}-"))
+    try:
+        zip_path = work_dir / "bundle.zip"
+        with zip_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        video_path = work_dir / "video.mp4"
+        thumbnail_path = work_dir / "thumbnail.jpg"
+        try:
+            with zipfile.ZipFile(zip_path) as archive:
+                video_path.write_bytes(archive.read("video.mp4"))
+                thumbnail_path.write_bytes(archive.read("thumbnail.jpg"))
+        except (zipfile.BadZipFile, KeyError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Archive vidéo invalide (video.mp4 + thumbnail.jpg attendus).",
+            ) from exc
+
+        await r2_storage.upload_file_async(video_path, video_object_key(site.slug), "video/mp4")
+        await r2_storage.upload_file_async(thumbnail_path, thumbnail_object_key(site.slug), "image/jpeg")
+        site.video_status = DemoVideoStatus.READY.value
+        site.video_error = None
+        site.video_generated_at = datetime.now(UTC)
+        db.commit()
+        db.refresh(site)
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
     return _serialize_demo_site(site)
 
 

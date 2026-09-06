@@ -24,7 +24,7 @@ import shutil
 import sys
 
 import uvicorn
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -42,6 +42,27 @@ from scrappers.google_scraper import close_maps_suggestion_session
 from services.prospect_enrichment_service import prospect_enrichment_service
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_bundled_ffmpeg() -> str:
+    """
+    Path to ffmpeg: the copy bundled in the frozen sidecar, else FFMPEG_PATH / PATH.
+
+    Keeps desktop video generation plug-and-play — a user never installs ffmpeg.
+    """
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        name = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
+        candidate = os.path.join(meipass, name)
+        if os.path.isfile(candidate):
+            return candidate
+    return os.environ.get("FFMPEG_PATH") or "ffmpeg"
+
+
+# Resolve ffmpeg once, before any service reads FFMPEG_PATH (the Storyblok editor clip
+# service and the montage both honour it), so the bundled binary is used when frozen.
+_FFMPEG_PATH = _resolve_bundled_ffmpeg()
+os.environ["FFMPEG_PATH"] = _FFMPEG_PATH
 
 
 class SidecarEnrichmentRequest(BaseModel):
@@ -399,6 +420,101 @@ async def storyblok_background_clip(request: StoryblokBackgroundClipRequest) -> 
         output_path,
         media_type="video/mp4",
         filename=f"{request.slug}-background.mp4",
+        background=BackgroundTask(shutil.rmtree, work_dir, ignore_errors=True),
+    )
+
+
+@app.post("/video/build-full", dependencies=[Depends(require_sidecar_token)])
+async def video_build_full(payload: str = Form(...), presenter: UploadFile = File(...)) -> object:
+    """
+    Produce the COMPLETE prospection video on the desktop (capture + montage).
+
+    Captures the background (site scroll + Storyblok editor) with the owner's session,
+    then montages it with the uploaded presenter clip (webcam PiP, greeting, thumbnail)
+    using the bundled ffmpeg — the VPS is never involved. Returns a zip
+    (``video.mp4`` + ``thumbnail.jpg``); ``409 {reason: needs_login}`` when the Storyblok
+    session is missing so the caller prompts a reconnect.
+    """
+    import json
+    import tempfile
+    import zipfile
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse, JSONResponse
+    from starlette.background import BackgroundTask
+
+    from services import video_montage
+    from services.storyblok_editor_clip_service import StoryblokEditorClipError, storyblok_editor_clip_service
+    from services.storyblok_session_service import storyblok_session_service
+
+    data = json.loads(payload)
+    seed, user_data_dir = storyblok_session_service.resolve_capture_source()
+    if seed is None and user_data_dir is None:
+        return JSONResponse({"skipped": True, "reason": "needs_login"}, status_code=status.HTTP_409_CONFLICT)
+
+    slug = str(data["slug"])
+    total_seconds = float(data["total_seconds"])
+    work_dir = Path(tempfile.mkdtemp(prefix=f"video-full-{slug}-"))
+    background_path = work_dir / "background.mp4"
+    presenter_path = work_dir / "presenter.mp4"
+    screenshot_path = work_dir / "top.png"
+    output_video = work_dir / "video.mp4"
+    output_thumb = work_dir / "thumbnail.jpg"
+    bundle_path = work_dir / f"{slug}-video.zip"
+    try:
+        with open(presenter_path, "wb") as buffer:
+            shutil.copyfileobj(presenter.file, buffer)
+
+        await asyncio.to_thread(
+            storyblok_editor_clip_service.build_background,
+            demo_url=data["demo_url"],
+            space_id=data["space_id"],
+            story_id=data["story_id"],
+            output_path=background_path,
+            seed=seed,
+            user_data_dir=user_data_dir,
+            accroche=data.get("accroche", ""),
+            executable_path=_chrome_path or find_installed_chrome(),
+            site_seconds=float(data.get("site_seconds", 14.0)),
+            hold_seconds=float(data.get("hold_seconds", 1.0)),
+            total_seconds=total_seconds,
+            out_width=int(data.get("out_width", 1280)),
+            out_height=int(data.get("out_height", 720)),
+            fps=int(data.get("fps", 30)),
+        )
+        await asyncio.to_thread(video_montage.extract_first_frame, _FFMPEG_PATH, background_path, screenshot_path)
+        await asyncio.to_thread(
+            video_montage.compose_final,
+            ffmpeg_path=_FFMPEG_PATH,
+            presenter_duration=float(data["presenter_duration"]),
+            presenter_intro=float(data["presenter_intro"]),
+            presenter_outro=float(data["presenter_outro"]),
+            presenter_path=presenter_path,
+            capture_path=background_path,
+            scroll_offset=0.0,
+            scroll_seconds=total_seconds,
+            first_name=data.get("first_name") or None,
+            screenshot_path=screenshot_path,
+            output_video=output_video,
+            output_thumbnail=output_thumb,
+        )
+        with zipfile.ZipFile(bundle_path, "w", zipfile.ZIP_STORED) as archive:
+            archive.write(output_video, "video.mp4")
+            archive.write(output_thumb, "thumbnail.jpg")
+    except StoryblokEditorClipError as exc:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        message = str(exc)
+        if message.startswith("needs_login:"):
+            return JSONResponse({"skipped": True, "reason": "needs_login"}, status_code=status.HTTP_409_CONFLICT)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from exc
+    except video_montage.VideoMontageError as exc:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    return FileResponse(
+        bundle_path,
+        media_type="application/zip",
+        filename=f"{slug}-video.zip",
         background=BackgroundTask(shutil.rmtree, work_dir, ignore_errors=True),
     )
 

@@ -849,38 +849,56 @@ async function waitForStoryblokConnection(): Promise<boolean> {
 }
 
 /**
+ * Try to build the ENTIRE video on the desktop (capture + montage), setting the status text.
+ * @returns The build result (`done` / `needs_login` / `unavailable` / `failed`).
+ */
+async function runDesktopFullBuild(): Promise<Awaited<ReturnType<typeof StoryblokSidecarService.buildFullVideo>>> {
+  videoPrepStatus.value = 'Génération de la vidéo sur votre ordinateur (~2-3 min, une fenêtre peut s’ouvrir)…'
+  try {
+    return await StoryblokSidecarService.buildFullVideo(demoSiteId)
+  } finally {
+    videoPrepStatus.value = ''
+  }
+}
+
+/**
  * Start (or restart) the prospection-video generation.
  */
 async function handleGenerateVideo(): Promise<void> {
   generatingVideo.value = true
   try {
-    // On the desktop, the background (site scroll + Storyblok editor) is captured on
-    // the user's machine — it needs their Storyblok session. If that session expired,
-    // open the sign-in window, wait for the login, then continue automatically; never
-    // fall back to a server capture for a desktop generation.
-    let prepared: Awaited<ReturnType<typeof StoryblokSidecarService.prepareVideoBackground>> =
-      await runStoryblokBackgroundPrep()
+    // Desktop: build the ENTIRE video locally (capture + montage) with the bundled
+    // ffmpeg — the VPS is never involved. If the Storyblok session expired, open the
+    // sign-in window, wait, then retry automatically. Any local failure (or the web
+    // build, which has no sidecar) falls back to the server-side generation.
+    let build: Awaited<ReturnType<typeof StoryblokSidecarService.buildFullVideo>> = await runDesktopFullBuild()
 
-    if (prepared === 'needs_login') {
+    if (build.status === 'needs_login') {
       const connected: boolean = await waitForStoryblokConnection()
       if (!connected) {
         toast.error('Storyblok non reconnecté — génération annulée. Reconnecte-toi puis relance.')
         return
       }
       toast.success('Storyblok reconnecté — reprise de la génération…')
-      prepared = await runStoryblokBackgroundPrep()
-      if (prepared === 'needs_login') {
-        toast.error('Session Storyblok toujours invalide — réessaie dans un instant.')
-        return
-      }
+      build = await runDesktopFullBuild()
     }
 
+    if (build.status === 'done') {
+      site.value = await DemoSiteService.getDemoSite(demoSiteId)
+      toast.success('Vidéo générée sur votre ordinateur ✓')
+      return
+    }
+    if (build.status === 'failed' && build.message) {
+      toast.error(`Génération locale échouée : ${build.message} — bascule sur le serveur.`)
+    }
+
+    // 'unavailable' (web) or 'failed' → server-side generation (memory-guarded). Best-effort
+    // desktop background first so the server montage stays light; else the VPS captures too.
+    const prepared: Awaited<ReturnType<typeof StoryblokSidecarService.prepareVideoBackground>> =
+      await runStoryblokBackgroundPrep()
     if (prepared === 'uploaded') {
       toast.success('Séquence Storyblok prête, montage en cours…')
     }
-
-    // 'uploaded' → editor background ready ; 'skipped'/'unavailable' (web) → the
-    // server montage falls back to a site-only capture (memory-guarded server-side).
     site.value = await DemoSiteService.generateDemoSiteVideo(demoSiteId)
     startVideoPolling()
     toast.success('Génération de la vidéo lancée (montage en tâche de fond)')
