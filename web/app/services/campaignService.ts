@@ -33,6 +33,8 @@ export type CampaignResponse = {
   channel: CampaignChannel
   template_id?: number | null
   ab_template_id_b?: number | null
+  /** SMS campaigns only: chosen first-contact library template key (null = default). */
+  sms_template_key?: string | null
   send_delay_minutes: number
   follow_up_delay_days: number
   behavior_personalized_followups: boolean
@@ -83,6 +85,7 @@ export type CampaignCreatePayload = {
   prospect_ids?: number[]
   template_id?: number
   ab_template_id_b?: number
+  sms_template_key?: string
   send_delay_minutes?: number
   max_emails_per_day?: number | null
 }
@@ -96,6 +99,7 @@ export type CampaignUpdatePayload = {
 export type CampaignSettingsPayload = {
   template_id?: number | null
   ab_template_id_b?: number | null
+  sms_template_key?: string
   disable_ab?: boolean
   send_delay_minutes?: number
   max_emails_per_day?: number | null

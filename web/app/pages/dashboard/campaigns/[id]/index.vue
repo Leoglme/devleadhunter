@@ -246,6 +246,16 @@
             Expéditeur : <span class="font-medium text-[var(--app-ink)]">{{ smsConfig?.sender }}</span>
           </div>
 
+          <div v-if="smsTemplateOptions.length" class="mb-3">
+            <label class="text-muted mb-1.5 block text-xs font-medium">Modèle de message</label>
+            <UiSelectField
+              :model-value="smsTemplate?.key ?? ''"
+              :options="smsTemplateOptions"
+              placeholder="Choisir un modèle…"
+              @update:model-value="onChangeSmsTemplate"
+            />
+          </div>
+
           <p class="text-muted mb-1.5 text-xs font-medium">Aperçu du message</p>
           <div class="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface-2)] p-3">
             <p class="text-sm leading-relaxed whitespace-pre-line text-[var(--app-ink)]">{{ smsPreview }}</p>
@@ -764,6 +774,7 @@ import type { SendingIdentityResponse } from '~/services/settingsService'
 import { SettingsService } from '~/services/settingsService'
 import { SmsService, type SmsConfig, type SmsTemplate, type SmsTemplatePreview } from '~/services/smsService'
 import { SmsVariables } from '~/utils/smsVariables'
+import type { SelectFieldOption } from '~/types/SelectField'
 
 definePageMeta({ layout: 'dashboard', middleware: 'auth' })
 
@@ -837,7 +848,10 @@ const autoRefreshTimer: Ref<ReturnType<typeof setInterval> | null> = ref(null)
 /** SMS sender config — loaded only for SMS campaigns, drives the launch precondition + config panel. */
 const smsConfig: Ref<SmsConfig | null> = ref(null)
 
-/** Default first-contact template of the SMS library, the one an SMS campaign sends. */
+/** First-contact templates of the SMS library, offered in the campaign's template picker. */
+const smsTemplates: Ref<SmsTemplate[]> = ref([])
+
+/** The first-contact template this SMS campaign sends (chosen key, else the library default). */
 const smsTemplate: Ref<SmsTemplate | null> = ref(null)
 
 /** The SMS rendered for the campaign's first prospect, when his demo allows it. */
@@ -881,6 +895,16 @@ const isSms: ComputedRef<boolean> = computed((): boolean => campaign.value?.chan
 /** SMS campaigns can launch only once a sender is configured and the provider is ready. */
 const smsReady: ComputedRef<boolean> = computed(
   (): boolean => !!smsConfig.value?.sender && !!smsConfig.value?.provider_ready,
+)
+
+/** Options for the SMS template picker (first-contact library). */
+const smsTemplateOptions: ComputedRef<SelectFieldOption<string>[]> = computed((): SelectFieldOption<string>[] =>
+  smsTemplates.value.map(
+    (template: SmsTemplate): SelectFieldOption<string> => ({
+      value: template.key,
+      label: template.name,
+    }),
+  ),
 )
 
 /** The real SMS of the first prospect when rendered, else the template with sample values. */
@@ -1069,16 +1093,48 @@ function isWinner(v: CampaignVariantStats): boolean {
  * @returns A promise that resolves once the preview is set.
  */
 async function loadSmsPreview(detail: CampaignDetailResponse): Promise<void> {
-  const templates: SmsTemplate[] = await SmsService.listTemplates('first_contact').catch((): SmsTemplate[] => [])
-  smsTemplate.value = templates.find((template: SmsTemplate): boolean => template.is_default) ?? templates[0] ?? null
+  smsTemplates.value = await SmsService.listTemplates('first_contact').catch((): SmsTemplate[] => [])
+  const fallback: SmsTemplate | null =
+    smsTemplates.value.find((template: SmsTemplate): boolean => template.is_default) ?? smsTemplates.value[0] ?? null
+  // Honour the campaign's chosen template; fall back to the library default.
+  smsTemplate.value = detail.sms_template_key
+    ? (smsTemplates.value.find((template: SmsTemplate): boolean => template.key === detail.sms_template_key) ??
+      fallback)
+    : fallback
+  await renderSmsPreview(detail.prospects[0]?.id)
+}
+
+/**
+ * Render the selected SMS template for a given prospect (real preview), else keep the sample rendering.
+ * @param prospectId - The prospect whose demo personalises the preview.
+ * @returns A promise resolved once the preview is set.
+ */
+async function renderSmsPreview(prospectId: number | undefined): Promise<void> {
   smsRenderedPreview.value = ''
-  const firstProspectId: number | undefined = detail.prospects[0]?.id
-  if (!smsTemplate.value || firstProspectId === undefined) return
+  if (!smsTemplate.value || prospectId === undefined) return
   try {
-    const preview: SmsTemplatePreview = await SmsService.previewTemplate(smsTemplate.value.key, firstProspectId)
+    const preview: SmsTemplatePreview = await SmsService.previewTemplate(smsTemplate.value.key, prospectId)
     smsRenderedPreview.value = preview.body
   } catch {
     // No demo for that prospect yet: the sample rendering stands in.
+  }
+}
+
+/**
+ * Change the SMS template of the campaign, re-render the preview and persist the choice.
+ * @param key - The chosen library template key.
+ * @returns A promise resolved once the choice is saved.
+ */
+async function onChangeSmsTemplate(key: string): Promise<void> {
+  const template: SmsTemplate | undefined = smsTemplates.value.find((t: SmsTemplate): boolean => t.key === key)
+  if (!template) return
+  smsTemplate.value = template
+  await renderSmsPreview(campaign.value?.prospects?.[0]?.id)
+  try {
+    campaign.value = await CampaignService.updateSettings(campaignId.value, { sms_template_key: key })
+    toast.success('Modèle SMS enregistré')
+  } catch {
+    toast.error("Erreur lors de l'enregistrement du modèle")
   }
 }
 

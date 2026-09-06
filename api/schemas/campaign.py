@@ -57,6 +57,8 @@ class CampaignCreate(CampaignBase):
     # Optional initial configuration (can be set later via PATCH /settings)
     template_id: int | None = None
     ab_template_id_b: int | None = None
+    # SMS campaigns only: chosen first-contact library template key (None = default).
+    sms_template_key: str | None = None
     send_delay_minutes: int = Field(20, ge=1, le=1440)
     # None = no per-campaign daily limit (global SendPolicy cap only).
     max_emails_per_day: int | None = Field(None, ge=1, le=1000)
@@ -75,6 +77,8 @@ class CampaignSettingsUpdate(BaseModel):
 
     template_id: int | None = None
     ab_template_id_b: int | None = None
+    # SMS campaigns only: change the rendered first-contact library template.
+    sms_template_key: str | None = None
     # Explicit flag to disable A/B (since None means "unchanged")
     disable_ab: bool = False
     send_delay_minutes: int | None = Field(None, ge=1, le=1440)
@@ -161,6 +165,7 @@ class CampaignResponse(CampaignBase):
     user_id: int
     template_id: int | None = None
     ab_template_id_b: int | None = None
+    sms_template_key: str | None = None
     send_delay_minutes: int = 20
     follow_up_delay_days: int = 5
     behavior_personalized_followups: bool = False

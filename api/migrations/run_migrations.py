@@ -122,6 +122,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("add_campaign_channel", "migrations.add_campaign_channel"),
     ("add_campaign_prospect_position", "migrations.add_campaign_prospect_position"),
     ("nullable_queue_template_id", "migrations.nullable_queue_template_id"),
+    ("add_campaign_sms_template_key", "migrations.add_campaign_sms_template_key"),
 ]
 
 # Modules of this package that are not migrations and must not be registered.

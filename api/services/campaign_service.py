@@ -50,6 +50,7 @@ class CampaignService:
             description=campaign_data.description,
             status=campaign_data.status or CampaignStatus.DRAFT.value,
             channel=campaign_data.channel,
+            sms_template_key=campaign_data.sms_template_key,
             template_id=campaign_data.template_id,
             ab_template_id_b=campaign_data.ab_template_id_b,
             send_delay_minutes=campaign_data.send_delay_minutes,
