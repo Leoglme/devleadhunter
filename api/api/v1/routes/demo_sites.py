@@ -45,6 +45,7 @@ from services.r2_storage_service import r2_storage
 from services.site_export_service import site_export_service
 from services.sms.phone_normalizer import is_mobile_fr
 from services.storyblok_service import storyblok_service
+from services.templates.registry import default_subtitle
 
 logger = logging.getLogger(__name__)
 
@@ -521,11 +522,15 @@ async def get_demo_site_video_background_context(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Home story Storyblok introuvable.")
 
     site_seconds = max(_MIN_SITE_SCROLL_SECONDS, total_seconds - _EDITOR_SEQUENCE_BUDGET_SECONDS)
+    # Trade-aware hero line typed in the editor demo, so a landscaper site never shows
+    # a barber phrase (the previous hardcoded one). Falls back inside the sidecar.
+    accroche = default_subtitle(site.template_id, site.city or "votre région")
     return {
         "slug": site.slug,
         "demo_url": site.demo_url,
         "space_id": str(site.storyblok_space_id),
         "story_id": str(story_id),
+        "accroche": accroche,
         "site_seconds": round(site_seconds, 2),
         "hold_seconds": 1.0,
         "total_seconds": round(total_seconds, 2),

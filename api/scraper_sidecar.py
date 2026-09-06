@@ -63,6 +63,9 @@ class StoryblokBackgroundClipRequest(BaseModel):
     demo_url: str
     space_id: str
     story_id: str
+    # Trade-aware hero line typed in the editor demo (e.g. a landscaper phrase for a
+    # landscaper site); empty falls back to a neutral default in the clip service.
+    accroche: str = ""
     site_seconds: float = 14.0
     hold_seconds: float = 1.0
     total_seconds: float | None = None
@@ -329,6 +332,17 @@ async def storyblok_close_login() -> dict[str, bool]:
     return {"closed": True}
 
 
+@app.post("/storyblok/logout", dependencies=[Depends(require_sidecar_token)])
+async def storyblok_logout() -> dict[str, bool]:
+    """Forget the Storyblok session (wrong account?) so the user can reconnect."""
+    from services.storyblok_login_helper import storyblok_login_helper
+    from services.storyblok_session_service import storyblok_session_service
+
+    await storyblok_login_helper.close()
+    storyblok_session_service.logout()
+    return {"logged_out": True}
+
+
 @app.post("/storyblok/background-clip", dependencies=[Depends(require_sidecar_token)])
 async def storyblok_background_clip(request: StoryblokBackgroundClipRequest) -> object:
     """
@@ -347,14 +361,11 @@ async def storyblok_background_clip(request: StoryblokBackgroundClipRequest) -> 
     from services.storyblok_editor_clip_service import StoryblokEditorClipError, storyblok_editor_clip_service
     from services.storyblok_session_service import storyblok_session_service
 
-    seed = storyblok_session_service.resolve_machine_seed()
-    user_data_dir: str | None = None
-    if seed is None:
-        persisted = storyblok_session_service.read_persisted_state()
-        if persisted and persisted.get("logged_in"):
-            user_data_dir = str(storyblok_session_service.dedicated_profile_dir)
-        else:
-            return JSONResponse({"skipped": True, "reason": "needs_login"}, status_code=status.HTTP_409_CONFLICT)
+    # Dedicated in-app profile wins; machine (Firefox) seed is the fallback, skipped
+    # after an explicit logout — so the user really chooses the account.
+    seed, user_data_dir = storyblok_session_service.resolve_capture_source()
+    if seed is None and user_data_dir is None:
+        return JSONResponse({"skipped": True, "reason": "needs_login"}, status_code=status.HTTP_409_CONFLICT)
 
     work_dir = Path(tempfile.mkdtemp(prefix=f"sb-bg-{request.slug}-"))
     output_path = work_dir / "background.mp4"
@@ -367,6 +378,7 @@ async def storyblok_background_clip(request: StoryblokBackgroundClipRequest) -> 
             output_path=output_path,
             seed=seed,
             user_data_dir=user_data_dir,
+            accroche=request.accroche,
             executable_path=_chrome_path or find_installed_chrome(),
             site_seconds=request.site_seconds,
             hold_seconds=request.hold_seconds,

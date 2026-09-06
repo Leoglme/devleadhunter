@@ -156,12 +156,13 @@ class StoryblokLoginHelper:
             authed = await self._probe_authenticated()
             state: StoryblokSessionState = "ready" if authed else "busy"
             return {"state": state, "source": "dedicated-profile", "login_window_open": True}
-        seed = storyblok_session_service.resolve_machine_seed()
+        # Same precedence as a real capture: the in-app profile wins, the machine
+        # browser session is a fallback (skipped after an explicit logout).
+        seed, user_data_dir = storyblok_session_service.resolve_capture_source()
+        if user_data_dir is not None:
+            return {"state": "ready", "source": "dedicated-profile", "login_window_open": False}
         if seed is not None:
             return {"state": "ready", "source": seed.source, "login_window_open": False}
-        persisted = storyblok_session_service.read_persisted_state()
-        if persisted and persisted.get("logged_in"):
-            return {"state": "ready", "source": "dedicated-profile", "login_window_open": False}
         return {"state": "needs_login", "source": None, "login_window_open": False}
 
 

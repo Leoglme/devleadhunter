@@ -25,6 +25,15 @@
       >
         {{ connecting ? 'Fenêtre ouverte…' : 'Se connecter à Storyblok' }}
       </button>
+      <button
+        v-if="session.state === 'ready'"
+        type="button"
+        class="btn-secondary text-xs text-[var(--app-red)]"
+        :disabled="disconnecting"
+        @click="handleDisconnect"
+      >
+        {{ disconnecting ? 'Déconnexion…' : 'Déconnecter' }}
+      </button>
       <button type="button" class="btn-secondary text-xs" :disabled="loading" @click="loadState">
         {{ loading ? 'Vérification…' : 'Actualiser' }}
       </button>
@@ -45,6 +54,7 @@ const session: Ref<StoryblokSessionInfo> = ref<StoryblokSessionInfo>({
 })
 const loading: Ref<boolean> = ref<boolean>(false)
 const connecting: Ref<boolean> = ref<boolean>(false)
+const disconnecting: Ref<boolean> = ref<boolean>(false)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const isDesktop: ComputedRef<boolean> = computed((): boolean => session.value.state !== 'unknown')
@@ -93,6 +103,20 @@ async function handleConnect(): Promise<void> {
     await loadState()
     if (session.value.state === 'ready') stopPolling()
   }, 3000)
+}
+
+/**
+ * Forget the current Storyblok session so the user can reconnect with another account.
+ * @returns {Promise<void>}
+ */
+async function handleDisconnect(): Promise<void> {
+  disconnecting.value = true
+  try {
+    await StoryblokSidecarService.logout()
+    await loadState()
+  } finally {
+    disconnecting.value = false
+  }
 }
 
 /**

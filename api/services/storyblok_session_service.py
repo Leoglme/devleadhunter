@@ -259,12 +259,23 @@ class StoryblokSessionService:
             return None
         return data if isinstance(data, dict) else None
 
-    def write_persisted_state(self, *, logged_in: bool, email: str | None = None) -> None:
-        """Persist the dedicated-profile login state next to the profile (best-effort)."""
+    def write_persisted_state(
+        self, *, logged_in: bool, email: str | None = None, ignore_machine_seed: bool = False
+    ) -> None:
+        """
+        Persist the dedicated-profile login state next to the profile (best-effort).
+
+        Args:
+            logged_in: Whether the dedicated profile now holds a signed-in session.
+            email: Optional account email, for display.
+            ignore_machine_seed: When True, the machine browser (Firefox) session must
+                not be silently reused — set on an explicit logout, cleared on sign-in.
+        """
         path = self._dedicated_profile_dir / _SESSION_STATE_FILE
         payload = {
             "logged_in": logged_in,
             "email": email,
+            "ignore_machine_seed": ignore_machine_seed,
             "last_seen": datetime.now(UTC).isoformat(),
         }
         try:
@@ -273,21 +284,62 @@ class StoryblokSessionService:
         except OSError as exc:
             logger.warning("write_persisted_state: %s", exc)
 
+    def logout(self) -> None:
+        """
+        Forget the Storyblok session so the user can reconnect with another account.
+
+        Wipes the dedicated profile (its cookies/localStorage) and records that the
+        machine browser (Firefox) session must NOT be silently reused — otherwise a
+        wrong account still signed in there would come straight back. The next in-app
+        sign-in clears that flag and takes precedence again.
+        """
+        profile = self._dedicated_profile_dir
+        if profile.is_dir():
+            for entry in profile.iterdir():
+                if entry.name == _SESSION_STATE_FILE:
+                    continue
+                try:
+                    if entry.is_dir():
+                        shutil.rmtree(entry, ignore_errors=True)
+                    else:
+                        entry.unlink(missing_ok=True)
+                except OSError as exc:
+                    logger.debug("logout profile wipe (%s): %s", entry.name, exc)
+        self.write_persisted_state(logged_in=False, ignore_machine_seed=True)
+
+    def resolve_capture_source(self) -> tuple[StoryblokSessionSeed | None, str | None]:
+        """
+        Pick the session a capture should use, or ``(None, None)`` when a login is needed.
+
+        The in-app dedicated profile wins (so signing in there chooses the account);
+        the machine browser session is only a convenience fallback, and it is skipped
+        after an explicit logout so a wrong account left in the browser is never reused.
+
+        Returns:
+            ``(seed, None)`` to inject a machine seed, ``(None, user_data_dir)`` to use
+            the dedicated profile, or ``(None, None)`` when neither is available.
+        """
+        persisted = self.read_persisted_state()
+        if persisted and persisted.get("logged_in"):
+            return None, str(self._dedicated_profile_dir)
+        if not (persisted and persisted.get("ignore_machine_seed")):
+            seed = self.resolve_machine_seed()
+            if seed is not None:
+                return seed, None
+        return None, None
+
     # ── State summary for the UI ─────────────────────────────────────────────
 
     def state(self) -> StoryblokSessionState:
         """Best-effort connection state without launching a browser.
 
-        ``ready`` when a machine session token is present OR the dedicated profile
-        last recorded a login; ``needs_login`` otherwise. A live probe (which can
-        also return ``busy``) is done by the clip service when it actually runs.
+        ``ready`` when a usable capture source exists (dedicated profile login, or a
+        fresh machine token that has not been explicitly disconnected); ``needs_login``
+        otherwise. A live probe (which can also return ``busy``) is done by the login
+        helper when a window is open.
         """
-        if self.resolve_machine_seed() is not None:
-            return "ready"
-        persisted = self.read_persisted_state()
-        if persisted and persisted.get("logged_in"):
-            return "ready"
-        return "needs_login"
+        seed, user_data_dir = self.resolve_capture_source()
+        return "ready" if (seed is not None or user_data_dir is not None) else "needs_login"
 
 
 storyblok_session_service = StoryblokSessionService()
