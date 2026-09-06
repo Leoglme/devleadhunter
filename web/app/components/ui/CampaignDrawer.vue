@@ -107,18 +107,20 @@
             </div>
           </div>
 
-          <div
-            v-if="!isEditing && form.channel === 'sms'"
-            class="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface-2)] p-3"
-          >
-            <p class="flex items-center gap-1.5 text-xs font-medium text-[var(--app-ink)]">
-              <UIcon name="i-lucide-message-square-text" class="h-3.5 w-3.5 text-[var(--app-accent)]" />
-              Campagne SMS
-            </p>
-            <p class="text-muted mt-1.5 text-[11px] leading-relaxed">
-              Le modèle « Direct » de la bibliothèque SMS part vers chaque prospect mobile avec le lien de son site
-              démo. Pas d'A/B : le message et la mention « STOP » sont rendus automatiquement. L'expéditeur se règle
-              dans Paramètres → Relance SMS.
+          <div v-if="!isEditing && form.channel === 'sms'" class="space-y-3">
+            <div>
+              <label class="text-muted mb-1.5 block text-xs font-medium">Modèle de message SMS</label>
+              <UiSelectField
+                :model-value="form.smsTemplateKey"
+                :options="smsTemplateOptions"
+                placeholder="Choisir un modèle…"
+                @update:model-value="form.smsTemplateKey = $event"
+              />
+            </div>
+            <p class="text-muted text-[11px] leading-relaxed">
+              Le modèle choisi part vers chaque prospect mobile avec le lien de son site démo. Pas d'A/B : le message et
+              la mention « STOP » sont rendus automatiquement (tu peux le changer ensuite sur la campagne). L'expéditeur
+              se règle dans Paramètres → Relance SMS.
             </p>
           </div>
 
@@ -189,11 +191,13 @@ import { computed, ref, watch } from 'vue'
 import type { EmailTemplate } from '~/types'
 import type { CampaignDetailResponse } from '~/services/campaignService'
 import type { CampaignFormDrawerMode } from '~/types/DrawerStack'
+import type { SelectFieldOption } from '~/types/SelectField'
 import { useCampaignsStore } from '~/stores/campaigns'
 import { useDrawerStackStore } from '~/stores/drawerStack'
 import { useToast } from '~/composables/useToast'
 import { CampaignService } from '~/services/campaignService'
 import { EmailTemplatesService } from '~/services/emailTemplatesService'
+import { SmsService, type SmsTemplate } from '~/services/smsService'
 
 /** Drawer to create an email campaign, or rename an existing one. */
 const props: UiCampaignDrawerProps = defineProps({
@@ -237,6 +241,19 @@ const isLoadingTemplates: Ref<boolean> = ref(false)
 /** Available email templates for the select fields. */
 const templates: Ref<EmailTemplate[]> = ref([])
 
+/** First-contact SMS library templates, for the SMS-channel picker. */
+const smsTemplates: Ref<SmsTemplate[]> = ref([])
+
+/** Options for the SMS template picker. */
+const smsTemplateOptions: ComputedRef<SelectFieldOption<string>[]> = computed((): SelectFieldOption<string>[] =>
+  smsTemplates.value.map(
+    (template: SmsTemplate): SelectFieldOption<string> => ({
+      value: template.key,
+      label: template.name,
+    }),
+  ),
+)
+
 /** Which template slot triggered the last "Créer un modèle" click. */
 const pendingTemplateSlot: Ref<'a' | 'b' | null> = ref(null)
 
@@ -247,6 +264,7 @@ const form: Ref<CampaignForm> = ref({
   channel: 'email',
   templateIdA: 0,
   templateIdB: 0,
+  smsTemplateKey: '',
 })
 
 /**
@@ -268,6 +286,19 @@ async function loadTemplates(): Promise<void> {
     // Non-critical — the selects will remain empty.
   } finally {
     isLoadingTemplates.value = false
+  }
+}
+
+/**
+ * Load the first-contact SMS library templates and preselect the default when none is chosen.
+ * @returns A promise resolved once the SMS templates are loaded.
+ */
+async function loadSmsTemplates(): Promise<void> {
+  smsTemplates.value = await SmsService.listTemplates('first_contact').catch((): SmsTemplate[] => [])
+  if (!form.value.smsTemplateKey) {
+    const preselected: SmsTemplate | undefined =
+      smsTemplates.value.find((template: SmsTemplate): boolean => template.is_default) ?? smsTemplates.value[0]
+    if (preselected) form.value.smsTemplateKey = preselected.key
   }
 }
 
@@ -314,9 +345,10 @@ async function handleSubmit(): Promise<void> {
       description: form.value.description.trim() || undefined,
       channel: form.value.channel,
       prospect_ids: [],
-      // SMS campaigns carry no email template — the body is a cold SMS with the demo link.
+      // SMS campaigns carry no email template — they render a first-contact SMS library template.
       template_id: isSms ? undefined : form.value.templateIdA || undefined,
       ab_template_id_b: isSms ? undefined : form.value.templateIdB || undefined,
+      sms_template_key: isSms ? form.value.smsTemplateKey || undefined : undefined,
     })
     toast.success(isSms ? 'Campagne SMS créée' : 'Campagne créée avec succès')
     emit('close')
@@ -342,9 +374,13 @@ watch(
       channel: props.campaign?.channel ?? 'email',
       templateIdA: 0,
       templateIdB: 0,
+      smsTemplateKey: props.campaign?.sms_template_key ?? '',
     }
     pendingTemplateSlot.value = null
-    if (!isEditing.value) void loadTemplates()
+    if (!isEditing.value) {
+      void loadTemplates()
+      void loadSmsTemplates()
+    }
   },
 )
 

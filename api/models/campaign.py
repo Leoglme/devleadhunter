@@ -73,6 +73,9 @@ class Campaign(Base):
     # Send channel: "email" (default, email templates via Resend) or "sms" (cold SMS via smsmode).
     # SMS campaigns reuse the exact same queue + SendPolicy scheduling; only enqueue/dispatch branch.
     channel: Mapped[str] = mapped_column(String(10), default="email", nullable=False)
+    # SMS campaigns only: the first-contact library template rendered at send time. NULL = the default
+    # first-contact template. (Email campaigns use ``template_id``/``ab_template_id_b`` instead.)
+    sms_template_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Campaign configuration — stored here so the detail page can edit anytime.
     template_id: Mapped[int | None] = mapped_column(
         ForeignKey("email_templates.id", ondelete="SET NULL"), nullable=True

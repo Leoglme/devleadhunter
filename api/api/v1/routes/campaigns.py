@@ -111,6 +111,7 @@ def _detail_response(db: Session, campaign) -> CampaignDetailResponse:
         description=campaign.description,
         status=campaign.status,
         channel=campaign.channel,
+        sms_template_key=campaign.sms_template_key,
         template_id=campaign.template_id,
         ab_template_id_b=campaign.ab_template_id_b,
         send_delay_minutes=campaign.send_delay_minutes,
@@ -192,6 +193,7 @@ async def list_campaigns(
                 description=c.description,
                 status=c.status,
                 channel=c.channel,
+                sms_template_key=c.sms_template_key,
                 template_id=c.template_id,
                 ab_template_id_b=c.ab_template_id_b,
                 send_delay_minutes=c.send_delay_minutes,
@@ -292,6 +294,8 @@ async def update_campaign_settings(
 
     if settings.template_id is not None:
         campaign.template_id = settings.template_id
+    if settings.sms_template_key is not None:
+        campaign.sms_template_key = settings.sms_template_key
     if settings.disable_ab:
         campaign.ab_template_id_b = None
     elif settings.ab_template_id_b is not None:

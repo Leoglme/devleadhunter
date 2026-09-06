@@ -7,13 +7,15 @@ export type UiCampaignDrawerProps = UiDrawerProps & {
   campaign?: CampaignDetailResponse | null
 }
 
-/** Local shape of the campaign form; the channel + A/B templates are only asked on creation. */
+/** Local shape of the campaign form; the channel + templates are only asked on creation. */
 export type CampaignForm = {
   name: string
   description: string
   channel: CampaignChannel
   templateIdA: number
   templateIdB: number
+  /** SMS campaigns only: chosen first-contact library template key ('' = library default). */
+  smsTemplateKey: string
 }
 
 export type UiCampaignDrawerEmits = {

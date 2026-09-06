@@ -418,6 +418,10 @@ class CampaignQueueService:
             return
 
         demo_url: str = sms_tracked_link(demo_site_service.demo_url_for_slug(site.slug))
+        # Only the "video" template needs it; harmless (rendered as nothing) for the others.
+        from services.demo_video_service import has_ready_video, video_page_url
+
+        video_url: str = sms_tracked_link(video_page_url(site.slug)) if has_ready_video(site) else ""
         outcome = await sms_service.send_to_prospect(
             self.db,
             user_id=campaign.user_id,
@@ -425,6 +429,8 @@ class CampaignQueueService:
             config=config,
             demo_url=demo_url,
             cold=True,
+            template_key=campaign.sms_template_key or None,
+            video_url=video_url,
         )
         if outcome.sent:
             item.status = _STATUS_SENT
