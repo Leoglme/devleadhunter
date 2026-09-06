@@ -48,6 +48,21 @@ export type FullVideoBuildResult = {
   message?: string
 }
 
+/** Timing overrides a preview build applies, straight from the unsaved settings form. */
+export type PreviewTimingOverrides = {
+  presenter_intro: number
+  presenter_outro: number
+  site_seconds: number
+  total_seconds: number
+}
+
+/** Result of a preview build: the rendered mp4 when it worked, nothing published. */
+export type PreviewVideoResult = {
+  status: FullVideoBuildStatus
+  video?: Blob
+  message?: string
+}
+
 const UNKNOWN_SESSION: StoryblokSessionInfo = { state: 'unknown', source: null, loginWindowOpen: false }
 
 export class StoryblokSidecarService {
@@ -122,6 +137,52 @@ export class StoryblokSidecarService {
    * @returns The build outcome.
    */
   static async buildFullVideo(demoSiteId: number): Promise<FullVideoBuildResult> {
+    const build: { status: FullVideoBuildStatus; response?: Response; message?: string } =
+      await StoryblokSidecarService.requestFullBuild(demoSiteId, {})
+    if (build.status !== 'done' || !build.response) {
+      return { status: build.status, message: build.message }
+    }
+    try {
+      const bundle: Blob = await build.response.blob()
+      await DemoSiteService.uploadFinalVideo(demoSiteId, bundle)
+    } catch (error) {
+      return { status: 'failed', message: error instanceof Error ? error.message : 'Envoi de la vidéo échoué.' }
+    }
+    return { status: 'done' }
+  }
+
+  /**
+   * Render a CALIBRATION preview of the video on the desktop, publishing nothing.
+   *
+   * Same local pipeline as a real generation, but the given (possibly unsaved)
+   * timings override the stored settings and the mp4 comes straight back to be
+   * played inline — the site's real video is untouched.
+   * @param demoSiteId - The demo site used as the example.
+   * @param overrides - Timings from the settings form.
+   * @returns The rendered mp4, or why it could not be produced.
+   */
+  static async buildPreviewVideo(demoSiteId: number, overrides: PreviewTimingOverrides): Promise<PreviewVideoResult> {
+    const build: { status: FullVideoBuildStatus; response?: Response; message?: string } =
+      await StoryblokSidecarService.requestFullBuild(demoSiteId, { ...overrides, preview: true })
+    if (build.status !== 'done' || !build.response) {
+      return { status: build.status, message: build.message }
+    }
+    return { status: 'done', video: await build.response.blob() }
+  }
+
+  /**
+   * Run the sidecar's full desktop build (capture + montage) for a site.
+   *
+   * Shared by the real generation and the calibration preview; ``payloadExtras``
+   * is merged over the API context (e.g. timing overrides, the preview flag).
+   * @param demoSiteId - The demo site to render.
+   * @param payloadExtras - Fields merged over the context before sending.
+   * @returns The raw successful response, or the failure status.
+   */
+  private static async requestFullBuild(
+    demoSiteId: number,
+    payloadExtras: Record<string, unknown>,
+  ): Promise<{ status: FullVideoBuildStatus; response?: Response; message?: string }> {
     const info: Awaited<ReturnType<typeof getScraperSidecarInfo>> = await getScraperSidecarInfo()
     if (!info) return { status: 'unavailable' }
 
@@ -135,7 +196,7 @@ export class StoryblokSidecarService {
     }
 
     const formData: FormData = new FormData()
-    formData.append('payload', JSON.stringify(context))
+    formData.append('payload', JSON.stringify({ ...context, ...payloadExtras }))
     formData.append('presenter', presenter, 'presenter.mp4')
 
     let response: Response
@@ -159,14 +220,7 @@ export class StoryblokSidecarService {
     if (!response.ok) {
       return { status: 'failed', message: await StoryblokSidecarService.readSidecarError(response) }
     }
-
-    try {
-      const bundle: Blob = await response.blob()
-      await DemoSiteService.uploadFinalVideo(demoSiteId, bundle)
-    } catch (error) {
-      return { status: 'failed', message: error instanceof Error ? error.message : 'Envoi de la vidéo échoué.' }
-    }
-    return { status: 'done' }
+    return { status: 'done', response }
   }
 
   /**

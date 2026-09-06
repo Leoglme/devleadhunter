@@ -498,9 +498,12 @@ async def video_build_full(payload: str = Form(...), presenter: UploadFile = Fil
             output_video=output_video,
             output_thumbnail=output_thumb,
         )
-        with zipfile.ZipFile(bundle_path, "w", zipfile.ZIP_STORED) as archive:
-            archive.write(output_video, "video.mp4")
-            archive.write(output_thumb, "thumbnail.jpg")
+        # preview=true → the caller only wants to WATCH the result (timing calibration):
+        # return the mp4 alone, nothing gets uploaded or published.
+        if not bool(data.get("preview")):
+            with zipfile.ZipFile(bundle_path, "w", zipfile.ZIP_STORED) as archive:
+                archive.write(output_video, "video.mp4")
+                archive.write(output_thumb, "thumbnail.jpg")
     except StoryblokEditorClipError as exc:
         shutil.rmtree(work_dir, ignore_errors=True)
         message = str(exc)
@@ -511,6 +514,13 @@ async def video_build_full(payload: str = Form(...), presenter: UploadFile = Fil
         shutil.rmtree(work_dir, ignore_errors=True)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    if bool(data.get("preview")):
+        return FileResponse(
+            output_video,
+            media_type="video/mp4",
+            filename=f"{slug}-preview.mp4",
+            background=BackgroundTask(shutil.rmtree, work_dir, ignore_errors=True),
+        )
     return FileResponse(
         bundle_path,
         media_type="application/zip",

@@ -197,10 +197,13 @@ class PresenterVideoResponse(BaseModel):
 
 
 class PresenterVideoSettingsUpdate(BaseModel):
-    """Payload to adjust the intro/outro segments + auto-generation toggle."""
+    """Payload to adjust the segment cuts + auto-generation toggle."""
 
     intro_seconds: float = Field(..., ge=0, le=30)
     outro_seconds: float = Field(..., ge=0, le=30)
+    # Length of the site-scroll part inside the middle; the Storyblok editor
+    # sequence gets the remainder. None keeps the automatic split.
+    site_seconds: float | None = Field(default=None, ge=0, le=120)
     auto_generate: bool = True
 
 
@@ -215,6 +218,7 @@ def _serialize_presenter(record: PresenterVideo | None) -> dict[str, Any]:
         "duration_seconds": record.duration_seconds,
         "intro_seconds": record.intro_seconds,
         "outro_seconds": record.outro_seconds,
+        "site_seconds": record.site_seconds,
         "auto_generate": record.auto_generate,
         "source": record.source or "upload",
         "updated_at": timestamp.isoformat() if timestamp else None,
@@ -281,7 +285,12 @@ async def update_presenter_video_settings(
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aucun clip de présentation.")
     record = presenter_video_service.update_settings(
-        db, record, payload.intro_seconds, payload.outro_seconds, payload.auto_generate
+        db,
+        record,
+        payload.intro_seconds,
+        payload.outro_seconds,
+        payload.auto_generate,
+        site_seconds=payload.site_seconds,
     )
     return _serialize_presenter(record)
 

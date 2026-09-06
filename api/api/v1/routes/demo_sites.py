@@ -526,7 +526,13 @@ async def get_demo_site_video_background_context(
     if story_id is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Home story Storyblok introuvable.")
 
-    site_seconds = max(_MIN_SITE_SCROLL_SECONDS, total_seconds - _EDITOR_SEQUENCE_BUDGET_SECONDS)
+    # User-chosen split when set (Paramètres → Vidéo : « Partie site ») so the speech
+    # timing matches; otherwise the historical automatic split (editor budget carved
+    # out of the middle). Clamped so both parts stay inside the middle segment.
+    if presenter.site_seconds is not None:
+        site_seconds = min(max(presenter.site_seconds, _MIN_SITE_SCROLL_SECONDS), total_seconds)
+    else:
+        site_seconds = max(_MIN_SITE_SCROLL_SECONDS, total_seconds - _EDITOR_SEQUENCE_BUDGET_SECONDS)
     # Trade-aware hero line typed in the editor demo, so a landscaper site never shows
     # a barber phrase (the previous hardcoded one). Falls back inside the sidecar.
     accroche = default_subtitle(site.template_id, site.city or "votre région")
