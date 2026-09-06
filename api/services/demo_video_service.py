@@ -73,6 +73,11 @@ _FFMPEG_THREADS = "2"
 # laisser l'OOM killer emporter toute l'API.
 _MIN_FREE_MEMORY_MB_FOR_CAPTURE = 1200.0
 
+# The ffmpeg montage is lighter than a headless capture, but it still OOM-killed the
+# whole API on a starved box. Refuse it (fail clean) below this floor — this covers
+# the desktop path too, where the montage is the only server-side step.
+_MIN_FREE_MEMORY_MB_FOR_MONTAGE = 500.0
+
 
 def _available_memory_mb() -> float | None:
     """
@@ -393,6 +398,8 @@ class DemoVideoService:
 
             output_path = work_dir / "output.mp4"
             thumbnail_path = work_dir / "thumbnail.jpg"
+            # The montage runs on the VPS even in the desktop path — never let it OOM the box.
+            self._guard_montage_memory()
             await self._compose(
                 presenter=presenter,
                 presenter_path=presenter_path,
@@ -429,6 +436,25 @@ class DemoVideoService:
             raise DemoVideoGenerationError(
                 f"Serveur momentanément trop chargé pour générer la vidéo ici ({available:.0f} Mo libres). "
                 "Générez-la depuis l'application desktop, ou réessayez plus tard."
+            )
+
+    @staticmethod
+    def _guard_montage_memory() -> None:
+        """
+        Refuse the ffmpeg montage when the box is low on memory.
+
+        The montage runs on the VPS even when the (heavy) capture happened on the
+        desktop, and it OOM-killed the whole single-worker API on a starved box.
+        Failing cleanly is always better than taking the box down.
+
+        Raises:
+            DemoVideoGenerationError: when available memory is below the montage floor.
+        """
+        available = _available_memory_mb()
+        if available is not None and available < _MIN_FREE_MEMORY_MB_FOR_MONTAGE:
+            raise DemoVideoGenerationError(
+                f"Serveur momentanément trop chargé pour assembler la vidéo ({available:.0f} Mo libres). "
+                "Réessayez dans quelques minutes."
             )
 
     async def _capture_site(self, url: str, scroll_seconds: float, work_dir: Path) -> tuple[Path, float, Path]:
