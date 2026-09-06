@@ -7,6 +7,9 @@ import type { CampaignFollowUp, CampaignVariantStats } from '~/types'
 
 export type CampaignStatus = 'draft' | 'active' | 'completed' | 'paused' | 'cancelled'
 
+/** Send channel of a campaign. "email" uses templates/Resend; "sms" sends a cold SMS with the demo link. */
+export type CampaignChannel = 'email' | 'sms'
+
 export type QueueItemStatus = 'pending' | 'sending' | 'sent' | 'skipped' | 'failed'
 
 export type CampaignProspect = {
@@ -27,6 +30,7 @@ export type CampaignResponse = {
   name: string
   description?: string | null
   status: CampaignStatus
+  channel: CampaignChannel
   template_id?: number | null
   ab_template_id_b?: number | null
   send_delay_minutes: number
@@ -75,6 +79,7 @@ export type CampaignCreatePayload = {
   name: string
   description?: string
   status?: CampaignStatus
+  channel?: CampaignChannel
   prospect_ids?: number[]
   template_id?: number
   ab_template_id_b?: number

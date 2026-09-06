@@ -213,6 +213,12 @@
                 >
                   <UIcon name="i-lucide-flask-conical" class="h-2.5 w-2.5" /> A/B
                 </span>
+                <span
+                  v-if="campaign.channel === 'sms'"
+                  class="inline-flex shrink-0 items-center gap-1 rounded-full bg-[var(--app-accent-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--app-accent-ink)]"
+                >
+                  <UIcon name="i-lucide-message-square-text" class="h-2.5 w-2.5" /> SMS
+                </span>
               </div>
               <div class="flex shrink-0 items-center gap-1.5">
                 <span :class="['app-badge shrink-0', STATUS_STYLE[campaign.status] ?? '']">
@@ -290,7 +296,7 @@
               Prochain envoi · {{ formatNextSend(campaign.next_send_at) }}
             </span>
 
-            <div class="grid grid-cols-3 gap-3 rounded-lg bg-[var(--app-bg)] p-3">
+            <div v-if="campaign.channel !== 'sms'" class="grid grid-cols-3 gap-3 rounded-lg bg-[var(--app-bg)] p-3">
               <div>
                 <p class="font-label text-[9px] text-[var(--app-faint)] uppercase">Envoyés</p>
                 <p class="mt-0.5 text-lg font-bold text-[var(--app-ink)] tabular-nums">
@@ -321,6 +327,19 @@
                   ></div>
                 </div>
               </div>
+            </div>
+
+            <div v-else class="rounded-lg bg-[var(--app-bg)] p-3">
+              <div class="flex items-center gap-2">
+                <UIcon name="i-lucide-message-square-text" class="h-3.5 w-3.5 text-[var(--app-accent-ink)]" />
+                <p class="font-label text-[9px] text-[var(--app-faint)] uppercase">Campagne SMS</p>
+              </div>
+              <p class="mt-0.5 text-lg font-bold text-[var(--app-ink)] tabular-nums">
+                {{ campaign.prospects_count }}
+                <span class="text-xs font-medium text-[var(--app-ink-soft)]">
+                  prospect{{ campaign.prospects_count !== 1 ? 's' : '' }}
+                </span>
+              </p>
             </div>
 
             <div class="flex items-center justify-between border-t border-[var(--app-line-soft)] pt-3">
