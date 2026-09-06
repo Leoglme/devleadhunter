@@ -78,3 +78,15 @@ def test_capture_memory_guard_allows_when_unknown(monkeypatch: pytest.MonkeyPatc
     # None = /proc/meminfo unreadable (e.g. non-Linux) → never block generation.
     monkeypatch.setattr(demo_video_module, "_available_memory_mb", lambda: None)
     DemoVideoService._guard_capture_memory()  # must not raise
+
+
+def test_montage_memory_guard_refuses_when_low(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(demo_video_module, "_available_memory_mb", lambda: 300.0)
+    with pytest.raises(DemoVideoGenerationError):
+        DemoVideoService._guard_montage_memory()
+
+
+def test_montage_memory_guard_allows_with_headroom(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Lower floor than capture: 700 Mo is enough to montage but not to capture.
+    monkeypatch.setattr(demo_video_module, "_available_memory_mb", lambda: 700.0)
+    DemoVideoService._guard_montage_memory()  # must not raise
