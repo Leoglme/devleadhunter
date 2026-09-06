@@ -28,6 +28,9 @@ class PresenterVideo(Base):
     # the prospect's site scrolls in between with the webcam as a small bubble.
     intro_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=4.0)
     outro_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=5.0)
+    # User-chosen length of the site-scroll part inside the middle segment; the
+    # Storyblok editor sequence gets the remainder. NULL = automatic split.
+    site_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Génère automatiquement la vidéo de prospection à chaque site créé.
     auto_generate: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # « upload » (fichier importé, découpage saisi à la main) ou « recorded »

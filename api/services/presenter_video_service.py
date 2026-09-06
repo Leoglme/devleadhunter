@@ -673,10 +673,22 @@ class PresenterVideoService:
         intro_seconds: float,
         outro_seconds: float,
         auto_generate: bool,
+        *,
+        site_seconds: float | None = None,
     ) -> PresenterVideo:
-        """Update the intro/outro segments + auto-generation toggle of an existing clip."""
+        """Update the segment cuts + auto-generation toggle of an existing clip.
+
+        ``site_seconds`` is the user-chosen length of the site-scroll part inside the
+        middle segment (the Storyblok sequence gets the remainder); None restores the
+        automatic split. It is clamped to the middle so the timeline stays coherent.
+        """
         record.intro_seconds = self._clamp_segment(intro_seconds, record.duration_seconds)
         record.outro_seconds = self._clamp_segment(outro_seconds, record.duration_seconds)
+        if site_seconds is None:
+            record.site_seconds = None
+        else:
+            middle = max(0.0, record.duration_seconds - record.intro_seconds - record.outro_seconds)
+            record.site_seconds = round(min(max(site_seconds, 0.0), middle), 2)
         record.auto_generate = auto_generate
         db.commit()
         db.refresh(record)

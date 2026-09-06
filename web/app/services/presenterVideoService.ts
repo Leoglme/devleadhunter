@@ -18,6 +18,8 @@ export type PresenterVideo = {
   duration_seconds?: number
   intro_seconds?: number
   outro_seconds?: number
+  /** User-chosen length of the site-scroll part; null = automatic split. */
+  site_seconds?: number | null
   auto_generate?: boolean
   source?: PresenterVideoSource
   updated_at?: string | null
@@ -161,19 +163,22 @@ export class PresenterVideoService {
   }
 
   /**
-   * Adjust the intro/outro segments + auto-generation toggle of the existing clip.
+   * Adjust the segment cuts + auto-generation toggle of the existing clip.
    * @param introSeconds - Full-screen webcam seconds at the start.
    * @param outroSeconds - Full-screen webcam seconds at the end.
    * @param autoGenerate - Auto-generate the video for every new demo site.
+   * @param siteSeconds - Length of the site-scroll part (Storyblok gets the rest); null = automatic split.
    */
   static async updatePresenterVideoSettings(
     introSeconds: number,
     outroSeconds: number,
     autoGenerate: boolean,
+    siteSeconds: number | null = null,
   ): Promise<PresenterVideo> {
     return ApiClient.patch<PresenterVideo>(BASE_URL, {
       intro_seconds: introSeconds,
       outro_seconds: outroSeconds,
+      site_seconds: siteSeconds,
       auto_generate: autoGenerate,
     })
   }

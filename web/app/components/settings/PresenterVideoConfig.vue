@@ -133,67 +133,147 @@
           </div>
           <UiSwitch id="video-auto-generate" v-model="autoGenerate" />
         </div>
-        <div
-          v-if="info?.has_video && isRecordedClip"
-          class="flex items-start gap-3 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-3.5"
+        <section
+          v-if="info?.has_video"
+          class="space-y-5 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-4"
         >
-          <UIcon name="i-lucide-scissors" class="mt-0.5 h-4 w-4 shrink-0 text-[var(--app-ink)]" />
-          <div class="min-w-0">
-            <p class="text-sm font-semibold text-[var(--app-ink)]">Découpage automatique</p>
-            <p class="text-muted mt-0.5 text-xs leading-relaxed">
-              Clip filmé dans l'application : chaque prise est un segment, donc les coupes sont exactes — intro
-              {{ formatSegment(introSeconds) }}, site
-              <template v-if="siteSegmentSeconds !== null">{{ siteSegmentSeconds }} s</template>
-              <template v-else>—</template>
-              , outro {{ formatSegment(outroSeconds) }}. Rien à régler.
-            </p>
+          <div class="flex items-start gap-3">
+            <UIcon name="i-lucide-scissors" class="mt-0.5 h-4 w-4 shrink-0 text-[var(--app-ink)]" />
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-[var(--app-ink)]">Déroulé de la vidéo</p>
+              <p class="text-muted mt-0.5 text-xs leading-relaxed">
+                Webcam plein écran, puis le site qui défile, puis l'éditeur Storyblok, puis votre appel à l'action.
+                Réglez chaque partie pour coller à votre speech.
+              </p>
+            </div>
           </div>
-        </div>
-        <UiCollapsibleCard
-          v-if="info?.has_video && !isRecordedClip"
-          icon="i-lucide-scissors"
-          title="Découpage de la vidéo"
-          suffix="facultatif"
-        >
-          <div class="space-y-4 px-4 py-4">
-            <p class="text-muted text-xs leading-relaxed">
-              Webcam plein écran au début (« Bonjour {Prénom} ») et à la fin (votre appel à l'action) ; entre les deux,
-              le site du prospect défile avec votre webcam en pastille.
-            </p>
-            <div class="grid max-w-xs grid-cols-2 gap-3">
-              <div>
-                <label class="text-muted mb-1.5 block text-xs font-medium" for="video-intro">Intro (s)</label>
-                <input
-                  id="video-intro"
-                  v-model.number="introSeconds"
-                  type="number"
-                  min="0"
-                  max="30"
-                  step="0.5"
-                  class="input-field"
-                  placeholder="5"
-                />
-              </div>
-              <div>
-                <label class="text-muted mb-1.5 block text-xs font-medium" for="video-outro">Outro (s)</label>
-                <input
-                  id="video-outro"
-                  v-model.number="outroSeconds"
-                  type="number"
-                  min="0"
-                  max="30"
-                  step="0.5"
-                  class="input-field"
-                  placeholder="8"
-                />
+
+          <div>
+            <div
+              class="flex h-9 w-full overflow-hidden rounded-lg border border-[var(--app-line)]"
+              role="img"
+              :aria-label="timelineAriaLabel"
+            >
+              <div
+                v-for="segment in timelineSegments"
+                :key="segment.key"
+                :class="['flex min-w-0 items-center justify-center', segment.tone]"
+                :style="{ width: segment.width }"
+              >
+                <span class="truncate px-1.5 text-[10px] font-semibold">{{ segment.shortLabel }}</span>
               </div>
             </div>
-            <p v-if="siteSegmentSeconds !== null" class="text-muted text-xs">
-              Site du prospect à l'écran :
-              <span class="font-medium text-[var(--app-ink)]">{{ siteSegmentSeconds }} s</span>
-            </p>
+            <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--app-ink-soft)]">
+              <span
+                v-for="segment in timelineSegments"
+                :key="`legend-${segment.key}`"
+                class="inline-flex items-center gap-1.5"
+              >
+                <span
+                  :class="['h-2.5 w-2.5 shrink-0 rounded-sm border border-[var(--app-line)]', segment.tone]"
+                  aria-hidden="true"
+                />
+                {{ segment.label }} · {{ formatSegment(segment.seconds) }}
+              </span>
+            </div>
           </div>
-        </UiCollapsibleCard>
+
+          <div :class="['grid gap-3', isRecordedClip ? 'max-w-xs grid-cols-1' : 'max-w-md grid-cols-3']">
+            <div v-if="!isRecordedClip">
+              <label class="text-muted mb-1.5 block text-xs font-medium" for="video-intro">Intro (s)</label>
+              <input
+                id="video-intro"
+                v-model.number="introSeconds"
+                type="number"
+                min="0"
+                max="30"
+                step="0.5"
+                class="input-field"
+                placeholder="5"
+              />
+            </div>
+            <div>
+              <label class="text-muted mb-1.5 block text-xs font-medium" for="video-site">Partie site (s)</label>
+              <input
+                id="video-site"
+                v-model.number="siteScrollSeconds"
+                type="number"
+                min="0"
+                :max="Math.round(middleSeconds)"
+                step="0.5"
+                class="input-field"
+                placeholder="12"
+              />
+            </div>
+            <div v-if="!isRecordedClip">
+              <label class="text-muted mb-1.5 block text-xs font-medium" for="video-outro">Outro (s)</label>
+              <input
+                id="video-outro"
+                v-model.number="outroSeconds"
+                type="number"
+                min="0"
+                max="30"
+                step="0.5"
+                class="input-field"
+                placeholder="8"
+              />
+            </div>
+          </div>
+          <p v-if="isRecordedClip" class="text-muted text-xs leading-relaxed">
+            Intro ({{ formatSegment(introSeconds) }}) et outro ({{ formatSegment(outroSeconds) }}) sont mesurées sur vos
+            prises — seule la répartition site / Storyblok se règle.
+          </p>
+          <p class="text-muted text-xs leading-relaxed">
+            Partie Storyblok :
+            <span class="font-medium text-[var(--app-ink)]">{{ formatSegment(storyblokSegmentSeconds) }}</span>
+            (le reste du milieu). Plus la partie site est longue, plus le défilement est lent.
+          </p>
+          <UiCallout v-if="isStoryblokSegmentShort" variant="warning">
+            Moins de {{ STORYBLOK_COMFORT_SECONDS }} s pour la séquence Storyblok : la démonstration d'édition sera
+            coupée avant la fin. Raccourcissez la partie site si vous voulez la montrer en entier.
+          </UiCallout>
+
+          <div v-if="isDesktopApp" class="space-y-3 border-t border-[var(--app-line)] pt-4">
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-[var(--app-ink)]">Aperçu de calibration</p>
+              <p class="text-muted mt-0.5 text-xs leading-relaxed">
+                Générez un exemple complet avec l'un de vos sites, en local, avec les réglages ci-dessus — rien n'est
+                publié, la vidéo réelle du site n'est pas touchée.
+              </p>
+            </div>
+            <div class="flex flex-wrap items-end gap-3">
+              <div class="min-w-56 flex-1">
+                <label class="text-muted mb-1.5 block text-xs font-medium">Site d'exemple</label>
+                <UiSelectField
+                  v-model="previewSiteId"
+                  :options="previewSiteOptions"
+                  placeholder="Choisir un site démo"
+                />
+              </div>
+              <button
+                type="button"
+                class="app-btn-secondary"
+                :disabled="isBuildingPreview || !previewSiteId"
+                @click="handleGeneratePreview"
+              >
+                <UIcon
+                  :name="isBuildingPreview ? 'i-lucide-loader-circle' : 'i-lucide-play'"
+                  :class="['h-3.5 w-3.5', isBuildingPreview && 'animate-spin']"
+                />
+                {{ isBuildingPreview ? 'Génération en cours (~2-3 min)…' : 'Générer un aperçu' }}
+              </button>
+            </div>
+            <video
+              v-if="previewVideoUrl"
+              :key="previewVideoUrl"
+              :src="previewVideoUrl"
+              controls
+              preload="none"
+              playsinline
+              class="aspect-video w-full rounded-xl border border-[var(--app-line)] bg-black"
+            />
+          </div>
+        </section>
 
         <UiCollapsibleCard
           v-if="captureMode !== 'record'"
@@ -284,13 +364,23 @@
 
 <script lang="ts" setup>
 import type { UseAuthReturn, UseToastReturn } from '~/types/Composables'
-import type { PresenterVideoCaptureMode, PresenterVideoConfigEmits } from '~/types/PresenterVideoConfig'
+import type {
+  PresenterVideoCaptureMode,
+  PresenterVideoConfigEmits,
+  PresenterVideoTimelineSegment,
+} from '~/types/PresenterVideoConfig'
 import type { ComputedRef, EmitFn, Ref } from 'vue'
 import type { PresenterVideo } from '~/services/presenterVideoService'
+import type { DemoSite, DemoSiteListResponse } from '~/services/demoSiteService'
+import type { PreviewVideoResult } from '~/services/storyblokSidecarService'
+import type { SelectFieldOption } from '~/types/SelectField'
 import type { ProspectionScriptSegment } from '~/composables/useProspectionScript'
 import type { UseVideoCompressionReturn, VideoCompressionResult } from '~/composables/useVideoCompression'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { PresenterVideoService } from '~/services/presenterVideoService'
+import { DemoSiteService } from '~/services/demoSiteService'
+import { StoryblokSidecarService } from '~/services/storyblokSidecarService'
+import { getScraperSidecarInfo } from '~/services/scraperSidecarService'
 import { buildDefaultScript } from '~/composables/useProspectionScript'
 import { PRESENTER_VIDEO_MAX_BYTES, useVideoCompression } from '~/composables/useVideoCompression'
 import { useToast } from '~/composables/useToast'
@@ -328,6 +418,15 @@ const CAPTURE_OPTIONS: Array<{
 /** Short recording tips rendered as pills. */
 const RECORDING_TIPS: string[] = ['1080p suffit', 'Lumière face à vous', 'Regardez l’objectif']
 
+/** Mirror of the server's automatic split: Storyblok budget carved out of the middle. */
+const AUTO_STORYBLOK_SECONDS: number = 17
+
+/** Mirror of the server's floor for the site-scroll part. */
+const MIN_SITE_SCROLL_SECONDS: number = 6
+
+/** Under this, the scripted Storyblok edit demo gets visibly cut. */
+const STORYBLOK_COMFORT_SECONDS: number = 10
+
 const toast: UseToastReturn = useToast()
 const { user }: UseAuthReturn = useAuth()
 const { isCompressing, compressionProgress, compressPresenterClip }: UseVideoCompressionReturn = useVideoCompression()
@@ -344,8 +443,20 @@ const fileInputRef: Ref<HTMLInputElement | null> = ref(null)
 const deleteModalRef: Ref<{ open: () => void } | null> = ref(null)
 const introSeconds: Ref<number> = ref(4)
 const outroSeconds: Ref<number> = ref(5)
+const siteScrollSeconds: Ref<number> = ref(12)
 const autoGenerate: Ref<boolean> = ref(true)
 const captureMode: Ref<PresenterVideoCaptureMode | null> = ref(null)
+
+/** Whether the app runs in the desktop shell (the calibration preview needs the sidecar). */
+const isDesktopApp: Ref<boolean> = ref(false)
+
+/** Demo site used as the calibration example, as a select value. */
+const previewSiteId: Ref<string> = ref('')
+const previewSiteOptions: Ref<SelectFieldOption[]> = ref([])
+const isBuildingPreview: Ref<boolean> = ref(false)
+
+/** Object URL of the locally rendered calibration example. */
+const previewVideoUrl: Ref<string | null> = ref(null)
 
 /** Playable preview of the clip just picked, before it is sent. */
 const pickedClipPreviewUrl: Ref<string | null> = ref(null)
@@ -417,11 +528,70 @@ function startClipReplacement(): void {
   isReplacingClip.value = true
 }
 
-/** Seconds left for the site-scroll segment (duration - intro - outro). */
-const siteSegmentSeconds: ComputedRef<number | null> = computed((): number | null => {
-  if (!info.value?.has_video || !info.value.duration_seconds) return null
-  return Math.max(0, Math.round(info.value.duration_seconds - introSeconds.value - outroSeconds.value))
+/** Seconds between intro and outro — shared by the site scroll and the Storyblok sequence. */
+const middleSeconds: ComputedRef<number> = computed((): number => {
+  const duration: number = info.value?.duration_seconds ?? 0
+  return Math.max(0, duration - introSeconds.value - outroSeconds.value)
 })
+
+/** Seconds left for the Storyblok editor sequence (the middle minus the site part). */
+const storyblokSegmentSeconds: ComputedRef<number> = computed((): number =>
+  Math.max(0, middleSeconds.value - siteScrollSeconds.value),
+)
+
+/** Whether the Storyblok demo will be visibly cut with the current split. */
+const isStoryblokSegmentShort: ComputedRef<boolean> = computed(
+  (): boolean => Boolean(info.value?.has_video) && storyblokSegmentSeconds.value < STORYBLOK_COMFORT_SECONDS,
+)
+
+/** The four parts of the timeline bar, widths proportional to their durations. */
+const timelineSegments: ComputedRef<PresenterVideoTimelineSegment[]> = computed((): PresenterVideoTimelineSegment[] => {
+  const duration: number = info.value?.duration_seconds ?? 0
+  if (duration <= 0) return []
+  const parts: Array<Omit<PresenterVideoTimelineSegment, 'width'>> = [
+    {
+      key: 'intro',
+      label: 'Intro webcam',
+      shortLabel: 'Intro',
+      seconds: introSeconds.value,
+      tone: 'bg-[var(--app-surface-2)] text-[var(--app-ink-soft)]',
+    },
+    {
+      key: 'site',
+      label: 'Site qui défile',
+      shortLabel: 'Site',
+      seconds: Math.min(siteScrollSeconds.value, middleSeconds.value),
+      tone: 'bg-[var(--app-ink)] text-[var(--app-bg)]',
+    },
+    {
+      key: 'storyblok',
+      label: 'Éditeur Storyblok',
+      shortLabel: 'Storyblok',
+      seconds: storyblokSegmentSeconds.value,
+      tone: 'bg-[var(--app-ink-soft)] text-[var(--app-bg)]',
+    },
+    {
+      key: 'outro',
+      label: 'Outro webcam',
+      shortLabel: 'Outro',
+      seconds: outroSeconds.value,
+      tone: 'bg-[var(--app-surface-2)] text-[var(--app-ink-soft)]',
+    },
+  ]
+  return parts.map(
+    (part: Omit<PresenterVideoTimelineSegment, 'width'>): PresenterVideoTimelineSegment => ({
+      ...part,
+      width: `${Math.max(2, (part.seconds / duration) * 100)}%`,
+    }),
+  )
+})
+
+/** Spoken description of the timeline for assistive tech. */
+const timelineAriaLabel: ComputedRef<string> = computed((): string =>
+  timelineSegments.value
+    .map((segment: PresenterVideoTimelineSegment): string => `${segment.label} ${formatSegment(segment.seconds)}`)
+    .join(', '),
+)
 
 /**
  * Release the current preview object URL (avoids leaking blobs).
@@ -441,7 +611,21 @@ function applyInfo(payload: PresenterVideo): void {
   info.value = payload
   introSeconds.value = payload.intro_seconds ?? 4
   outroSeconds.value = payload.outro_seconds ?? 5
+  siteScrollSeconds.value = payload.site_seconds ?? autoSiteSeconds(payload)
   autoGenerate.value = payload.auto_generate ?? true
+}
+
+/**
+ * Effective site-scroll seconds before a custom split is saved (server's automatic split).
+ * @param payload - Clip metadata.
+ * @returns The middle minus the Storyblok budget, floored like the server does.
+ */
+function autoSiteSeconds(payload: PresenterVideo): number {
+  const middle: number = Math.max(
+    0,
+    (payload.duration_seconds ?? 0) - (payload.intro_seconds ?? 4) - (payload.outro_seconds ?? 5),
+  )
+  return Math.max(MIN_SITE_SCROLL_SECONDS, Math.round((middle - AUTO_STORYBLOK_SECONDS) * 2) / 2)
 }
 
 /**
@@ -619,7 +803,7 @@ async function handleUpload(): Promise<void> {
 }
 
 /**
- * Persist the intro/outro segments + auto-generation toggle.
+ * Persist the segment cuts + auto-generation toggle.
  */
 async function handleSaveSettings(): Promise<void> {
   isSavingSettings.value = true
@@ -629,6 +813,7 @@ async function handleSaveSettings(): Promise<void> {
         introSeconds.value,
         outroSeconds.value,
         autoGenerate.value,
+        siteScrollSeconds.value,
       ),
     )
     toast.success('Réglages enregistrés')
@@ -636,6 +821,65 @@ async function handleSaveSettings(): Promise<void> {
     toast.error(err instanceof Error ? err.message : 'Échec de la mise à jour')
   } finally {
     isSavingSettings.value = false
+  }
+}
+
+/** Load the demo sites usable as calibration examples (those with a public URL). */
+async function loadPreviewSites(): Promise<void> {
+  try {
+    const response: DemoSiteListResponse = await DemoSiteService.listDemoSites()
+    previewSiteOptions.value = response.items
+      .filter((site: DemoSite): boolean => Boolean(site.demo_url))
+      .map((site: DemoSite): SelectFieldOption => ({ value: String(site.id), label: site.business_name }))
+    if (!previewSiteId.value && previewSiteOptions.value.length > 0) {
+      previewSiteId.value = previewSiteOptions.value[0]!.value
+    }
+  } catch {
+    // Pas bloquant : le sélecteur reste vide et le bouton d'aperçu désactivé.
+  }
+}
+
+/** Release the calibration preview's object URL (avoids leaking blobs). */
+function releaseCalibrationPreview(): void {
+  if (previewVideoUrl.value) {
+    URL.revokeObjectURL(previewVideoUrl.value)
+    previewVideoUrl.value = null
+  }
+}
+
+/**
+ * Render a calibration example locally with the CURRENT (possibly unsaved) timings.
+ *
+ * Nothing is published: the sidecar returns the mp4 straight back and it plays inline,
+ * so the split can be adjusted like in a video editor before saving.
+ */
+async function handleGeneratePreview(): Promise<void> {
+  if (!previewSiteId.value) return
+  isBuildingPreview.value = true
+  try {
+    const result: PreviewVideoResult = await StoryblokSidecarService.buildPreviewVideo(Number(previewSiteId.value), {
+      presenter_intro: introSeconds.value,
+      presenter_outro: outroSeconds.value,
+      site_seconds: siteScrollSeconds.value,
+      total_seconds: middleSeconds.value,
+    })
+    if (result.status === 'done' && result.video) {
+      releaseCalibrationPreview()
+      previewVideoUrl.value = URL.createObjectURL(result.video)
+      toast.success('Aperçu prêt — rien n’a été publié')
+      return
+    }
+    if (result.status === 'needs_login') {
+      toast.error('Session Storyblok expirée — reconnectez-vous via la carte « Connexion Storyblok ».')
+      return
+    }
+    if (result.status === 'unavailable') {
+      toast.error("Disponible uniquement dans l'application desktop.")
+      return
+    }
+    toast.error(result.message ?? "Échec de la génération de l'aperçu.")
+  } finally {
+    isBuildingPreview.value = false
   }
 }
 
@@ -673,12 +917,22 @@ watch(
   },
 )
 
+// Shrinking the middle (longer intro/outro) must never leave the site part overflowing it.
+watch(middleSeconds, (middle: number): void => {
+  if (siteScrollSeconds.value > middle) {
+    siteScrollSeconds.value = Math.max(0, Math.round(middle * 2) / 2)
+  }
+})
+
 onMounted(async (): Promise<void> => {
   await loadInfo()
+  isDesktopApp.value = (await getScraperSidecarInfo()) !== null
+  if (isDesktopApp.value) await loadPreviewSites()
 })
 
 onBeforeUnmount((): void => {
   releasePreview()
   releasePickedClipPreview()
+  releaseCalibrationPreview()
 })
 </script>
