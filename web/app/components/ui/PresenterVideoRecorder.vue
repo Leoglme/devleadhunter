@@ -61,7 +61,8 @@
           autoplay
           muted
           playsinline
-          class="aspect-video w-full -scale-x-100 object-cover"
+          class="aspect-video w-full object-cover"
+          :class="{ '-scale-x-100': isMirrored }"
         />
         <video
           v-if="phase === 'review' && pendingTake"
@@ -153,6 +154,22 @@
               une section précise — ce clip sert pour tous vos prospects.
             </p>
           </div>
+        </div>
+
+        <div
+          class="flex items-center justify-between gap-4 rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-3.5"
+        >
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-[var(--app-ink)]">Effet miroir</p>
+            <p class="text-muted text-xs leading-relaxed">
+              {{
+                isMirrored
+                  ? 'Vous vous voyez comme dans un miroir — la vidéo garde ce sens.'
+                  : 'Sens naturel : l’image est celle que verront vos prospects. C’est ainsi que la vidéo sera enregistrée.'
+              }}
+            </p>
+          </div>
+          <UiSwitch id="recorder-mirror" v-model="isMirrored" />
         </div>
 
         <UiCollapsibleCard icon="i-lucide-settings-2" title="Caméra, micro et cadrage" :default-open="!hasHeardSound">
@@ -490,6 +507,14 @@ const selectedMicrophoneId: WritableComputedRef<string> = computed({
   get: (): string => recorder.selectedMicrophoneId.value,
   set: (deviceId: string): void => {
     void onMicrophoneChange(deviceId)
+  },
+})
+
+/** Image orientation, shared by the live preview and the recorded pixels. */
+const isMirrored: WritableComputedRef<boolean> = computed({
+  get: (): boolean => recorder.isMirrored.value,
+  set: (value: boolean): void => {
+    recorder.isMirrored.value = value
   },
 })
 
