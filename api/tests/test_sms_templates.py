@@ -20,8 +20,8 @@ _TYPICAL_VARIABLES: dict[str, str] = {
     "entreprise": "Garage Martin Auto",
     "ville": "Poitiers",
     "metier": "garagiste",
-    "lien_demo": "demo.dibodev.fr/garage-martin-auto?src=sms",
-    "lien_video": "demo.dibodev.fr/v/garage-martin-auto?src=sms",
+    "lien_demo": "demo.dibodev.fr/s/garage-martin-auto",
+    "lien_video": "demo.dibodev.fr/s/v/garage-martin-auto",
     "ancien_site": "garage-martin.fr",
     "prix": "500 €",
     "signature": "Léo",
@@ -75,7 +75,7 @@ class TestRender:
         # A first contact must NOT claim a prior email.
         assert "par email" not in body
         assert "Garage Martin Auto" in body
-        assert "demo.dibodev.fr/garage-martin-auto?src=sms" in body
+        assert "demo.dibodev.fr/s/garage-martin-auto" in body
 
 
 class TestOneSegmentBudget:
@@ -122,8 +122,7 @@ class TestFollowUpLibrary:
 class TestSmsVariables:
     def test_as_sms_link_drops_scheme_and_keeps_query(self) -> None:
         assert (
-            SmsVariables.as_sms_link("https://demo.dibodev.fr/chez-mimon?src=sms")
-            == "demo.dibodev.fr/chez-mimon?src=sms"
+            SmsVariables.as_sms_link("https://demo.dibodev.fr/s/chez-mimon?v=A") == "demo.dibodev.fr/s/chez-mimon?v=A"
         )
         assert SmsVariables.as_sms_link("http://demo.dibodev.fr/x") == "demo.dibodev.fr/x"
         assert SmsVariables.as_sms_link(None) == ""

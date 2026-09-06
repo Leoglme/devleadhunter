@@ -27,7 +27,7 @@ from services.demo_site_service import demo_site_service
 from services.sms.phone_normalizer import is_mobile_fr, to_e164_fr
 from services.sms_config_service import sms_config_service
 from services.sms_service import sms_service
-from services.tracking_links import CHANNEL_SMS, append_query_param
+from services.tracking_links import sms_tracked_link
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +165,7 @@ class SmsRelanceService:
         site = self.demo_for_prospect(db, user_id, prospect.id)
         if site is None:
             return None
-        demo_url = append_query_param(demo_site_service.demo_url_for_slug(site.slug), "src", CHANNEL_SMS)
+        demo_url = sms_tracked_link(demo_site_service.demo_url_for_slug(site.slug))
         return SmsRelanceCandidate(
             prospect=prospect, demo_site=site, demo_url=demo_url, emailed_at=emailed_at, cold=cold
         )

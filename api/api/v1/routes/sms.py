@@ -63,7 +63,7 @@ from services.sms_config_service import sms_config_service
 from services.sms_relance_service import sms_relance_service
 from services.sms_service import sms_service
 from services.sms_variables import SmsVariables
-from services.tracking_links import CHANNEL_SMS, append_query_param
+from services.tracking_links import sms_tracked_link
 
 logger = logging.getLogger(__name__)
 
@@ -286,9 +286,9 @@ async def preview_template(
     demo_url = ""
     video_url = ""
     if site is not None:
-        demo_url = append_query_param(demo_site_service.demo_url_for_slug(site.slug), "src", CHANNEL_SMS)
+        demo_url = sms_tracked_link(demo_site_service.demo_url_for_slug(site.slug))
         if template.uses(SmsVariables.VIDEO_LINK):
-            video_url = append_query_param(video_page_url(site.slug), "src", CHANNEL_SMS)
+            video_url = sms_tracked_link(video_page_url(site.slug))
     variables = SmsVariables.build_for_prospect(
         db,
         user_id=current_user.id,
