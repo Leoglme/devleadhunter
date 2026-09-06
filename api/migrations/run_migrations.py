@@ -113,6 +113,7 @@ MIGRATION_MODULES: list[tuple[str, str]] = [
     ("backfill_activity_from_scraper_diagnostics", "migrations.backfill_activity_from_scraper_diagnostics"),
     ("rebackfill_sms_price_estimate", "migrations.rebackfill_sms_price_estimate"),
     ("add_prospect_do_not_contact", "migrations.add_prospect_do_not_contact"),
+    ("add_sms_config_relance_template", "migrations.add_sms_config_relance_template"),
     # Content rewrites run last, once every schema change is in place.
     ("strip_brands_from_subjects", "migrations.strip_brands_from_subjects"),
     ("reseed_email_template_library", "migrations.reseed_email_template_library"),

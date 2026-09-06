@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from services.sms.smsmode_provider import SmsModeProvider
+from services.sms.templates import DEFAULT_FOLLOW_UP_KEY, find_sms_template
 from services.sms_service import SmsService
 
 
@@ -87,15 +88,16 @@ class TestSmsModeProvider:
 
 
 class TestComposeBody:
-    def test_body_has_link_sender_and_stop(self) -> None:
+    def test_relance_body_recalls_the_email_with_link_signature_and_stop(self) -> None:
         service = SmsService()
-        body = service.compose_body(
-            greeting="Bonjour Marc",
-            business_name="Garage Central",
-            sender="Dibodev",
-            demo_url="demo.dibodev.fr/garage-central",
+        template = find_sms_template(DEFAULT_FOLLOW_UP_KEY)
+        assert template is not None
+        body = service.compose_from_template(
+            template,
+            {"salutation": "Bonjour Marc", "lien_demo": "demo.dibodev.fr/garage-central", "signature": "Léo"},
         )
-        assert "Garage Central" in body
+        assert "email" in body
         assert "demo.dibodev.fr/garage-central" in body
         assert body.endswith("STOP au 36180")
-        assert "Dibodev" in body
+        assert body.count("36180") == 1
+        assert "Léo" in body

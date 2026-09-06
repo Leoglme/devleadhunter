@@ -15,6 +15,7 @@ class SmsConfigResponse(BaseModel):
     cold_sms_enabled: bool = Field(default=False, description="Auto cold-SMS prospects with a mobile but no email")
     auto_relance_enabled: bool = Field(default=False, description="Auto-relance emailed prospects who never reacted")
     auto_relance_after_days: int = Field(default=30, description="Days after the unanswered email before the relance")
+    relance_template_key: str = Field(default="rappel-court", description="Library template the J+30 relance renders")
 
 
 class SmsConfigUpdate(BaseModel):
@@ -29,6 +30,9 @@ class SmsAutomationUpdate(BaseModel):
     cold_sms_enabled: bool = False
     auto_relance_enabled: bool = False
     auto_relance_after_days: int = Field(default=30, ge=7, le=120)
+    relance_template_key: str | None = Field(
+        default=None, max_length=64, description="Library template the J+30 relance renders; omitted = unchanged"
+    )
 
 
 class SmsRelanceCandidateResponse(BaseModel):

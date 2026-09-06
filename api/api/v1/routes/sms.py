@@ -42,6 +42,7 @@ from services.auth_service import get_current_user
 from services.demo_site_service import demo_site_service
 from services.demo_video_service import has_ready_video, video_page_url
 from services.notification_service import notification_service
+from services.pricing_service import PricingService
 from services.sms.dlr import (
     classify_dlr,
     dlr_message_id,
@@ -52,7 +53,12 @@ from services.sms.dlr import (
 from services.sms.gsm_segments import segment_count
 from services.sms.mo import mo_is_stop, mo_origin_message_id, mo_ref_client, mo_sender_number
 from services.sms.phone_normalizer import to_e164_fr
-from services.sms.templates import DEFAULT_FIRST_CONTACT_KEY, find_sms_template, list_sms_templates
+from services.sms.templates import (
+    DEFAULT_FIRST_CONTACT_KEY,
+    DEFAULT_FOLLOW_UP_KEY,
+    find_sms_template,
+    list_sms_templates,
+)
 from services.sms_config_service import sms_config_service
 from services.sms_relance_service import sms_relance_service
 from services.sms_service import sms_service
@@ -79,6 +85,7 @@ def _config_response(config: SmsConfig | None) -> SmsConfigResponse:
         cold_sms_enabled=bool(config.cold_sms_enabled) if config else False,
         auto_relance_enabled=bool(config.auto_relance_enabled) if config else False,
         auto_relance_after_days=config.auto_relance_after_days if config else 30,
+        relance_template_key=config.relance_template_key if config else DEFAULT_FOLLOW_UP_KEY,
     )
 
 
@@ -110,14 +117,18 @@ async def update_sms_automation(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> SmsConfigResponse:
-    """Toggle the current user's SMS automations (cold-SMS + auto-relance)."""
-    config = sms_config_service.set_automation(
-        db,
-        current_user.id,
-        cold_sms_enabled=payload.cold_sms_enabled,
-        auto_relance_enabled=payload.auto_relance_enabled,
-        auto_relance_after_days=payload.auto_relance_after_days,
-    )
+    """Toggle the current user's SMS automations (cold-SMS + auto-relance) and pick the relance template."""
+    try:
+        config = sms_config_service.set_automation(
+            db,
+            current_user.id,
+            cold_sms_enabled=payload.cold_sms_enabled,
+            auto_relance_enabled=payload.auto_relance_enabled,
+            auto_relance_after_days=payload.auto_relance_after_days,
+            relance_template_key=payload.relance_template_key,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return _config_response(config)
 
 
@@ -279,7 +290,12 @@ async def preview_template(
         if template.uses(SmsVariables.VIDEO_LINK):
             video_url = append_query_param(video_page_url(site.slug), "src", CHANNEL_SMS)
     variables = SmsVariables.build_for_prospect(
-        db, user_id=current_user.id, prospect=prospect, demo_url=demo_url, video_url=video_url
+        db,
+        user_id=current_user.id,
+        prospect=prospect,
+        demo_url=demo_url,
+        video_url=video_url,
+        sale_price_cents=PricingService.sale_price_cents(db, current_user.id),
     )
     body = sms_service.render_template_body(template, variables)
     return SmsTemplatePreviewResponse(

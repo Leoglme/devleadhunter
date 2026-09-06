@@ -383,7 +383,6 @@ class CampaignQueueService:
         item is pushed forward and left ``pending`` so the worker retries when the window opens, instead
         of being burned as skipped.
         """
-        from services.decision_maker.greeting import build_greeting
         from services.demo_site_service import demo_site_service
         from services.sms_config_service import sms_config_service
         from services.sms_service import sms_service
@@ -419,15 +418,12 @@ class CampaignQueueService:
             return
 
         demo_url: str = append_query_param(demo_site_service.demo_url_for_slug(site.slug), "src", CHANNEL_SMS)
-        first, last, gender = EmailVariables.resolved_contact(self.db, prospect.id)
-        greeting: str = build_greeting(first, last, gender)
         outcome = await sms_service.send_to_prospect(
             self.db,
             user_id=campaign.user_id,
             prospect=prospect,
             config=config,
             demo_url=demo_url,
-            greeting=greeting,
             cold=True,
         )
         if outcome.sent:

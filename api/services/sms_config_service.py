@@ -6,7 +6,9 @@ import re
 
 from sqlalchemy.orm import Session
 
+from enums.sms_template_category import SmsTemplateCategory
 from models.sms_config import SmsConfig
+from services.sms.templates import find_sms_template
 
 # Alphanumeric sender: letters/digits/spaces, 3–11 chars, at least one letter
 # (French A2P rule; a purely numeric sender is not a valid alphanumeric OADC).
@@ -78,6 +80,7 @@ class SmsConfigService:
         cold_sms_enabled: bool,
         auto_relance_enabled: bool,
         auto_relance_after_days: int,
+        relance_template_key: str | None = None,
     ) -> SmsConfig:
         """Update the user's SMS automation opt-ins (get-or-create the config row).
 
@@ -87,10 +90,18 @@ class SmsConfigService:
             cold_sms_enabled: Cold-SMS prospects who have a mobile but no email.
             auto_relance_enabled: Auto-relance emailed prospects who never reacted.
             auto_relance_after_days: Delay (days) before the auto-relance fires (clamped 7–120).
+            relance_template_key: Library template the J+30 relance renders; ``None`` keeps the current one.
 
         Returns:
             The persisted config.
+
+        Raises:
+            ValueError: When *relance_template_key* is not a follow-up template of the library.
         """
+        if relance_template_key is not None:
+            template = find_sms_template(relance_template_key)
+            if template is None or template.category is not SmsTemplateCategory.FOLLOW_UP:
+                raise ValueError("Modèle de relance inconnu : choisissez un modèle de relance de la bibliothèque.")
         config = self.get(db, user_id)
         if config is None:
             config = SmsConfig(user_id=user_id)
@@ -98,6 +109,8 @@ class SmsConfigService:
         config.cold_sms_enabled = cold_sms_enabled
         config.auto_relance_enabled = auto_relance_enabled
         config.auto_relance_after_days = max(7, min(int(auto_relance_after_days), 120))
+        if relance_template_key is not None:
+            config.relance_template_key = relance_template_key
         db.commit()
         db.refresh(config)
         return config

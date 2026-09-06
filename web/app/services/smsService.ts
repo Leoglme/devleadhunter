@@ -7,6 +7,7 @@ export type SmsConfig = {
   cold_sms_enabled: boolean
   auto_relance_enabled: boolean
   auto_relance_after_days: number
+  relance_template_key: string
 }
 
 /** Payload to update the SMS sender (empty sender disables the channel). */
@@ -19,6 +20,7 @@ export type SmsAutomationUpdate = {
   cold_sms_enabled: boolean
   auto_relance_enabled: boolean
   auto_relance_after_days: number
+  relance_template_key?: string
 }
 
 /** A prospect eligible for an SMS relance. */

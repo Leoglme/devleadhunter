@@ -292,15 +292,18 @@ async function loadConfig(): Promise<void> {
 }
 
 /**
- * Load the first-contact templates offered for a linked prospect.
+ * Load the library templates offered for a linked prospect, labelled by touch.
  * @returns A promise that resolves once the options are set.
  */
 async function loadTemplates(): Promise<void> {
   if (!props.prospect) return
   try {
-    const templates: SmsTemplate[] = await SmsService.listTemplates('first_contact')
+    const templates: SmsTemplate[] = await SmsService.listTemplates()
     templateOptions.value = templates.map(
-      (template: SmsTemplate): SelectFieldOption<string> => ({ value: template.key, label: template.name }),
+      (template: SmsTemplate): SelectFieldOption<string> => ({
+        value: template.key,
+        label: `${template.category === 'first_contact' ? 'Premier contact' : 'Relance'} · ${template.name}`,
+      }),
     )
   } catch {
     templateOptions.value = []

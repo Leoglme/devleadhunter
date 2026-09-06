@@ -24,8 +24,11 @@ from enums.sms_template_category import SmsTemplateCategory
 _VARIABLE_PATTERN: re.Pattern[str] = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 _REPEATED_SPACES: re.Pattern[str] = re.compile(r" {2,}")
 
-# Template used by the automated first contact (cold SMS worker).
+# Template used by the automated first contact (cold SMS worker and SMS campaigns).
 DEFAULT_FIRST_CONTACT_KEY: str = "direct"
+
+# Template a J+30 relance renders until the user picks another one in Paramètres → Relance SMS.
+DEFAULT_FOLLOW_UP_KEY: str = "rappel-court"
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +108,58 @@ SMS_TEMPLATE_LIBRARY: list[SmsTemplate] = [
         name="Refonte",
         category=SmsTemplateCategory.FIRST_CONTACT,
         body="{salutation}, j'ai modernisé le site de {entreprise}, comparez avec l'actuel : {lien_demo} {signature}",
+    ),
+    # ── Relance J+30 (email resté sans réaction) ─────────────────────────────
+    SmsTemplate(
+        key="rappel-court",
+        name="Rappel court",
+        category=SmsTemplateCategory.FOLLOW_UP,
+        body=(
+            "{salutation}, le site envoyé par email est toujours en ligne : {lien_demo} "
+            "Un mot me suffit, oui ou non. {signature}"
+        ),
+    ),
+    SmsTemplate(
+        key="offre-a-vie",
+        name="Offre à vie",
+        category=SmsTemplateCategory.FOLLOW_UP,
+        body=(
+            "{salutation}, votre site envoyé par email : {lien_demo} "
+            "{prix} une fois, sans abonnement, et il est à vous. {signature}"
+        ),
+    ),
+    SmsTemplate(
+        key="autonomie",
+        name="Autonomie - vous gardez la main",
+        category=SmsTemplateCategory.FOLLOW_UP,
+        body=(
+            "{salutation}, le site envoyé par email est en ligne : {lien_demo} "
+            "Vous y changez tout, sans développeur. {signature}"
+        ),
+    ),
+    SmsTemplate(
+        key="urgence-douce",
+        name="Urgence douce",
+        category=SmsTemplateCategory.FOLLOW_UP,
+        body=(
+            "{salutation}, le site envoyé par email ne restera pas en ligne : {lien_demo} "
+            "Un mot et je le garde. {signature}"
+        ),
+    ),
+    SmsTemplate(
+        key="site-en-panne-relance",
+        name="Site en panne - relance",
+        category=SmsTemplateCategory.FOLLOW_UP,
+        body="{salutation}, {ancien_site} est toujours en erreur. Le nouveau, envoyé par email : {lien_demo} {signature}",
+    ),
+    SmsTemplate(
+        key="refonte-relance",
+        name="Refonte - relance",
+        category=SmsTemplateCategory.FOLLOW_UP,
+        body=(
+            "{salutation}, la version modernisée de votre site, envoyée par email, est en ligne : "
+            "{lien_demo} {signature}"
+        ),
     ),
 ]
 

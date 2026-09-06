@@ -23,9 +23,7 @@ from models.demo_site import DemoSite
 from models.email_log import EmailLog
 from models.prospect_db import ProspectDB
 from models.sms_message import SmsMessage
-from services.decision_maker.greeting import build_greeting
 from services.demo_site_service import demo_site_service
-from services.email_variables import EmailVariables
 from services.sms.phone_normalizer import is_mobile_fr, to_e164_fr
 from services.sms_config_service import sms_config_service
 from services.sms_service import sms_service
@@ -202,15 +200,12 @@ class SmsRelanceService:
             return False
         if candidate.demo_site.status == DemoSiteStatus.EXPIRED.value:
             await demo_site_service.revive_demo_site(db, candidate.demo_site)
-        first, last, gender = EmailVariables.resolved_contact(db, candidate.prospect.id)
-        greeting = build_greeting(first, last, gender)
         outcome = await sms_service.send_to_prospect(
             db,
             user_id=user_id,
             prospect=candidate.prospect,
             config=config,
             demo_url=candidate.demo_url,
-            greeting=greeting,
             cold=candidate.cold,
         )
         if outcome.sent:

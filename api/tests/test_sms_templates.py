@@ -4,11 +4,13 @@ from enums.sms_template_category import SmsTemplateCategory
 from services.sms.gsm_segments import is_gsm7, segment_count
 from services.sms.templates import (
     DEFAULT_FIRST_CONTACT_KEY,
+    DEFAULT_FOLLOW_UP_KEY,
     SMS_TEMPLATE_LIBRARY,
     find_sms_template,
     list_sms_templates,
     render_sms_template,
 )
+from services.sms_config_service import SmsConfigService
 from services.sms_service import sms_service
 from services.sms_variables import SmsVariables
 
@@ -82,6 +84,39 @@ class TestOneSegmentBudget:
             body = sms_service.compose_from_template(template, _TYPICAL_VARIABLES)
             assert is_gsm7(body), template.key
             assert segment_count(body) == 1, f"{template.key}: {len(body)} chars"
+
+
+class TestFollowUpLibrary:
+    def test_default_follow_up_template_exists(self) -> None:
+        template = find_sms_template(DEFAULT_FOLLOW_UP_KEY)
+        assert template is not None
+        assert template.category is SmsTemplateCategory.FOLLOW_UP
+
+    def test_every_follow_up_recalls_the_email_and_fits_one_segment(self) -> None:
+        follow_ups = list_sms_templates(SmsTemplateCategory.FOLLOW_UP)
+        assert follow_ups
+        for template in follow_ups:
+            # A J+30 relance says where it comes from: the email sent a month ago.
+            assert "email" in template.body, template.key
+            body = sms_service.compose_from_template(template, _TYPICAL_VARIABLES)
+            assert is_gsm7(body), template.key
+            assert segment_count(body) == 1, f"{template.key}: {len(body)} chars"
+
+    def test_relance_choice_rejects_a_first_contact_or_unknown_key(self) -> None:
+        service = SmsConfigService()
+        for key in (DEFAULT_FIRST_CONTACT_KEY, "nope"):
+            try:
+                service.set_automation(
+                    None,  # type: ignore[arg-type]
+                    1,
+                    cold_sms_enabled=False,
+                    auto_relance_enabled=False,
+                    auto_relance_after_days=30,
+                    relance_template_key=key,
+                )
+            except ValueError:
+                continue
+            raise AssertionError(f"{key} should have been rejected as a relance template")
 
 
 class TestSmsVariables:

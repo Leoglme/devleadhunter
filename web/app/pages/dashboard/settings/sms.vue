@@ -108,6 +108,28 @@
         </button>
       </div>
 
+      <div class="mt-4">
+        <label class="block">
+          <span class="mb-1 block text-xs font-medium text-[var(--app-ink)]">Modèle de relance</span>
+          <UiSelectField
+            :model-value="relanceTemplateKey"
+            :options="relanceTemplateOptions"
+            placeholder="Choisir un modèle…"
+            @update:model-value="onChangeRelanceTemplate"
+          />
+        </label>
+        <p
+          v-if="relanceTemplatePreview"
+          class="mt-2 rounded-lg border border-[var(--app-line)] bg-[var(--app-surface-2)] p-3 text-xs leading-relaxed text-[var(--app-ink)]"
+        >
+          {{ relanceTemplatePreview }}
+        </p>
+        <p class="mt-1 text-[11px] text-[var(--app-ink-soft)]">
+          Rendu pour chaque prospect (salutation, lien de sa démo, votre prénom). Utilisé par « Relancer », « Tout
+          relancer » et la relance automatique. Un seul SMS par prospect.
+        </p>
+      </div>
+
       <div v-if="isLoadingCandidates" class="mt-4 flex justify-center py-6">
         <UIcon name="i-lucide-loader-circle" class="h-5 w-5 animate-spin text-[var(--app-ink-soft)]" />
       </div>
@@ -145,12 +167,14 @@
 </template>
 
 <script lang="ts" setup>
-import type { UseToastReturn } from '~/types/Composables'
+import type { UseAuthReturn, UseToastReturn } from '~/types/Composables'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, onMounted, ref } from 'vue'
 import type { SmsCandidateRow } from '~/types/SmsSettingsPage'
-import type { SmsConfig, SmsRelanceCandidate, SmsSendResult } from '~/services/smsService'
+import type { SelectFieldOption } from '~/types/SelectField'
+import type { SmsConfig, SmsRelanceCandidate, SmsSendResult, SmsTemplate } from '~/services/smsService'
 import { SmsService } from '~/services/smsService'
+import { SmsVariables } from '~/utils/smsVariables'
 import { useToast } from '~/composables/useToast'
 
 definePageMeta({
@@ -159,6 +183,7 @@ definePageMeta({
 })
 
 const toast: UseToastReturn = useToast()
+const { user }: UseAuthReturn = useAuth()
 
 const config: Ref<SmsConfig | null> = ref(null)
 const sender: Ref<string> = ref('')
@@ -167,6 +192,12 @@ const isSaving: Ref<boolean> = ref(false)
 const coldSmsEnabled: Ref<boolean> = ref(false)
 const autoRelanceEnabled: Ref<boolean> = ref(false)
 const autoRelanceAfterDays: Ref<number> = ref(30)
+
+/** Key of the library template the J+30 relance renders. */
+const relanceTemplateKey: Ref<string> = ref('')
+
+/** Follow-up templates of the SMS library. */
+const relanceTemplates: Ref<SmsTemplate[]> = ref([])
 
 const rows: Ref<SmsCandidateRow[]> = ref([])
 const isLoadingCandidates: Ref<boolean> = ref(false)
@@ -178,6 +209,21 @@ const canSend: ComputedRef<boolean> = computed(
 
 /** Live preview of the sender name as it will appear. */
 const senderPreview: ComputedRef<string> = computed((): string => sender.value.trim())
+
+const relanceTemplateOptions: ComputedRef<SelectFieldOption<string>[]> = computed((): SelectFieldOption<string>[] =>
+  relanceTemplates.value.map(
+    (template: SmsTemplate): SelectFieldOption<string> => ({ value: template.key, label: template.name }),
+  ),
+)
+
+/** The chosen relance template with sample values, STOP mention included, as a prospect would read it. */
+const relanceTemplatePreview: ComputedRef<string> = computed((): string => {
+  const template: SmsTemplate | undefined = relanceTemplates.value.find(
+    (candidate: SmsTemplate): boolean => candidate.key === relanceTemplateKey.value,
+  )
+  if (!template) return ''
+  return `${SmsVariables.renderWithSampleValues(template.body, SmsVariables.firstNameOf(user.value?.name))} STOP au 36180`
+})
 
 /**
  * Format an ISO date to a short French date.
@@ -196,18 +242,29 @@ async function loadConfig(): Promise<void> {
     coldSmsEnabled.value = config.value.cold_sms_enabled
     autoRelanceEnabled.value = config.value.auto_relance_enabled
     autoRelanceAfterDays.value = config.value.auto_relance_after_days
+    relanceTemplateKey.value = config.value.relance_template_key
   } catch {
     toast.error('Impossible de charger la configuration SMS')
   }
 }
 
-/** Persist the SMS automation opt-ins. */
+/** Load the follow-up templates of the SMS library. */
+async function loadRelanceTemplates(): Promise<void> {
+  try {
+    relanceTemplates.value = await SmsService.listTemplates('follow_up')
+  } catch {
+    relanceTemplates.value = []
+  }
+}
+
+/** Persist the SMS automation opt-ins and the relance template. */
 async function saveAutomation(): Promise<void> {
   try {
     config.value = await SmsService.updateAutomation({
       cold_sms_enabled: coldSmsEnabled.value,
       auto_relance_enabled: autoRelanceEnabled.value,
       auto_relance_after_days: autoRelanceAfterDays.value,
+      relance_template_key: relanceTemplateKey.value || undefined,
     })
     toast.success('Automatisations enregistrées')
   } catch (err: unknown) {
@@ -230,6 +287,15 @@ async function onToggleAutoRelance(value: boolean): Promise<void> {
  */
 async function onToggleColdSms(value: boolean): Promise<void> {
   coldSmsEnabled.value = value
+  await saveAutomation()
+}
+
+/**
+ * Pick the relance template and persist.
+ * @param key - The chosen template key.
+ */
+async function onChangeRelanceTemplate(key: string): Promise<void> {
+  relanceTemplateKey.value = key
   await saveAutomation()
 }
 
@@ -298,6 +364,7 @@ async function sendAll(): Promise<void> {
 
 onMounted(async (): Promise<void> => {
   await loadConfig()
+  await loadRelanceTemplates()
   await loadCandidates()
 })
 </script>
