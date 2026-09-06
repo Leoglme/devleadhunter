@@ -29,6 +29,8 @@ from services.sms.pricing import estimate_price_cents
 from services.sms.send_window import is_within_window, next_send_slot, now_in_paris
 from services.sms.sms_provider import SmsProvider, SmsSendResult
 from services.sms.smsmode_provider import smsmode_provider
+from services.sms.templates import DEFAULT_FIRST_CONTACT_KEY, SmsTemplate, find_sms_template, render_sms_template
+from services.sms_variables import SmsVariables
 
 logger = logging.getLogger(__name__)
 
@@ -141,22 +143,29 @@ class SmsService:
         )
         return to_gsm7(core + _STOP_MENTION)
 
-    def compose_cold_body(self, *, greeting: str, business_name: str, sender: str, demo_url: str) -> str:
-        """Build a sober cold-SMS body (first contact, no « par email ») with the STOP mention.
-
-        Used for prospects with a mobile but no email, where the SMS IS the first touch.
+    def render_template_body(self, template: SmsTemplate, variables: dict[str, str]) -> str:
+        """Render a library template as the editable text of the composer (STOP mention excluded).
 
         Args:
-            greeting: Safe greeting (``Bonjour`` / ``Bonjour Prénom``).
-            business_name: Prospect's business name.
-            sender: The user's sender id, signed at the end.
-            demo_url: Plain demo URL (no shortener).
+            template: The library template.
+            variables: The prospect's substitution map (see :class:`SmsVariables`).
 
         Returns:
-            The message body.
+            The GSM-7 body, without the STOP mention the send appends.
         """
-        core = f"{greeting}, j'ai realise un apercu de site web pour {business_name} : {demo_url} — {sender}."
-        return to_gsm7(core + _STOP_MENTION)
+        return to_gsm7(render_sms_template(template.body, variables))
+
+    def compose_from_template(self, template: SmsTemplate, variables: dict[str, str]) -> str:
+        """Render a library template into a ready-to-send body, STOP mention included.
+
+        Args:
+            template: The library template.
+            variables: The prospect's substitution map.
+
+        Returns:
+            The full message body.
+        """
+        return self.compose_manual_body(self.render_template_body(template, variables))
 
     async def send_to_prospect(
         self,
@@ -168,17 +177,25 @@ class SmsService:
         demo_url: str,
         greeting: str,
         cold: bool = False,
+        template_key: str | None = None,
+        video_url: str = "",
     ) -> SmsSendOutcome:
         """Send one relance (or cold) SMS to *prospect*, logging the outcome.
+
+        A first contact (``cold``) or an explicit ``template_key`` renders a library
+        template with the prospect's variables; a relance without template keeps the
+        « je vous ai envoyé par email » body.
 
         Args:
             db: Active database session.
             user_id: Sender.
             prospect: Recipient prospect.
             config: The user's SMS config (sender).
-            demo_url: Plain demo URL to push.
-            greeting: Safe greeting for the body.
-            cold: Whether this is a cold first contact (no « par email » wording).
+            demo_url: Full demo URL to push (rendered without scheme by the templates).
+            greeting: Safe greeting for the relance body.
+            cold: Whether this is a cold first contact (default first-contact template).
+            template_key: Library template to render instead of the built-in bodies.
+            video_url: Full URL of the prospect's video page, for the templates that link it.
 
         Returns:
             The send outcome (``sent`` + reason when skipped).
@@ -199,13 +216,24 @@ class SmsService:
         if self.is_suppressed(db, user_id, to_e164):
             return SmsSendOutcome(sent=False, reason="Numéro désinscrit (STOP)")
 
-        compose = self.compose_cold_body if cold else self.compose_body
-        body = compose(
-            greeting=greeting,
-            business_name=prospect.name or "votre entreprise",
-            sender=config.sender,
-            demo_url=demo_url,
-        )
+        if cold or template_key:
+            template = find_sms_template(template_key or DEFAULT_FIRST_CONTACT_KEY)
+            if template is None:
+                return SmsSendOutcome(sent=False, reason="Modèle SMS introuvable")
+            variables = SmsVariables.build_for_prospect(
+                db, user_id=user_id, prospect=prospect, demo_url=demo_url, video_url=video_url
+            )
+            body = self.compose_from_template(template, variables)
+            if segment_count(body) > 1:
+                # Over one segment: dropping the first name is the cheapest cut that keeps the message whole.
+                body = self.compose_from_template(template, {**variables, SmsVariables.SALUTATION: "Bonjour"})
+        else:
+            body = self.compose_body(
+                greeting=greeting,
+                business_name=prospect.name or "votre entreprise",
+                sender=config.sender,
+                demo_url=demo_url,
+            )
         message = SmsMessage(
             user_id=user_id,
             prospect_id=prospect.id,

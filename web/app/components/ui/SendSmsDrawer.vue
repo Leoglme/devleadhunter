@@ -66,6 +66,19 @@
             <input v-model="form.recipient_name" type="text" class="input-field" placeholder="Jean Dupont" />
           </div>
 
+          <div v-if="props.prospect">
+            <label class="text-muted mb-1.5 block text-xs font-medium">Modèle</label>
+            <UiSelectField
+              v-model="selectedTemplateKey"
+              :options="templateOptions"
+              placeholder="Choisir un modèle…"
+              :disabled="isLoadingTemplate"
+            />
+            <p class="text-muted mt-1 text-[11px]">
+              Rempli pour ce prospect avec le lien de sa démo, à retoucher avant l'envoi si besoin.
+            </p>
+          </div>
+
           <div>
             <label class="text-muted mb-1.5 block text-xs font-medium">
               Message <span class="text-[var(--app-red)]">*</span>
@@ -119,7 +132,8 @@ import type { SendSmsForm, UiSendSmsDrawerEmits, UiSendSmsDrawerProps } from '~/
 import type { ComputedRef, EmitFn, PropType, Ref } from 'vue'
 import type { Prospect } from '~/types'
 import type { SendSmsPrefill } from '~/types/DrawerStack'
-import type { SmsConfig, SmsSendResult } from '~/services/smsService'
+import type { SelectFieldOption } from '~/types/SelectField'
+import type { SmsConfig, SmsSendResult, SmsTemplate, SmsTemplatePreview } from '~/services/smsService'
 import { computed, ref, watch } from 'vue'
 import { SmsService } from '~/services/smsService'
 import { useToast } from '~/composables/useToast'
@@ -234,6 +248,15 @@ const form: Ref<SendSmsForm> = ref({
   text: '',
 })
 
+/** Library templates offered for a linked prospect, as select options. */
+const templateOptions: Ref<SelectFieldOption<string>[]> = ref([])
+
+/** Key of the library template the message was filled from (empty = free text). */
+const selectedTemplateKey: Ref<string> = ref('')
+
+/** Whether a template is being rendered for the prospect. */
+const isLoadingTemplate: Ref<boolean> = ref(false)
+
 /**
  * Live character + segment estimate of the full body (message + STOP mention), counted on the
  * GSM-7-normalized text so the preview matches what the API actually sends.
@@ -265,6 +288,41 @@ async function loadConfig(): Promise<void> {
     providerReady.value = config.provider_ready
   } catch {
     providerReady.value = true
+  }
+}
+
+/**
+ * Load the first-contact templates offered for a linked prospect.
+ * @returns A promise that resolves once the options are set.
+ */
+async function loadTemplates(): Promise<void> {
+  if (!props.prospect) return
+  try {
+    const templates: SmsTemplate[] = await SmsService.listTemplates('first_contact')
+    templateOptions.value = templates.map(
+      (template: SmsTemplate): SelectFieldOption<string> => ({ value: template.key, label: template.name }),
+    )
+  } catch {
+    templateOptions.value = []
+  }
+}
+
+/**
+ * Fill the message with a template rendered for the linked prospect (editable afterwards).
+ * @param key - The chosen template key.
+ * @returns A promise that resolves once the message is filled.
+ */
+async function applyTemplate(key: string): Promise<void> {
+  if (!key || !props.prospect) return
+  isLoadingTemplate.value = true
+  try {
+    const preview: SmsTemplatePreview = await SmsService.previewTemplate(key, props.prospect.id)
+    form.value.text = preview.body
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Impossible de préparer ce modèle pour ce prospect')
+    selectedTemplateKey.value = ''
+  } finally {
+    isLoadingTemplate.value = false
   }
 }
 
@@ -309,6 +367,8 @@ watch(
       : `prospect:${props.prospect?.id ?? 'blank'}`
     if (key === lastInitKey.value) return
     lastInitKey.value = key
+    selectedTemplateKey.value = ''
+    templateOptions.value = []
     if (props.prefill) {
       form.value = { ...props.prefill }
       return
@@ -318,9 +378,12 @@ watch(
       recipient_name: props.prospect?.name ?? '',
       text: '',
     }
+    loadTemplates()
   },
   { immediate: true },
 )
+
+watch(selectedTemplateKey, applyTemplate)
 </script>
 
 <style scoped>

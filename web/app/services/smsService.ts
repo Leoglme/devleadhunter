@@ -87,6 +87,25 @@ export type SmsManualSendPayload = {
   recipient_name?: string | null
 }
 
+/** Which touch of the SMS sequence a library template is written for. */
+export type SmsTemplateCategory = 'first_contact' | 'follow_up'
+
+/** One template of the SMS library (defined in the API, one angle per message). */
+export type SmsTemplate = {
+  key: string
+  name: string
+  category: SmsTemplateCategory
+  body: string
+  variables: string[]
+}
+
+/** A library template rendered for one prospect (STOP mention excluded, appended at send). */
+export type SmsTemplatePreview = {
+  key: string
+  body: string
+  segments: number
+}
+
 /** SMS relance channel — sender config, eligible prospects, sending. */
 export class SmsService {
   /**
@@ -166,5 +185,25 @@ export class SmsService {
    */
   static async sendManual(payload: SmsManualSendPayload): Promise<SmsSendResult> {
     return ApiClient.post<SmsSendResult>('/api/v1/sms/send', payload)
+  }
+
+  /**
+   * List the SMS template library, optionally narrowed to one touch.
+   * @param category - First contact or follow-up; omitted = the whole library.
+   * @returns The templates, in library order.
+   */
+  static async listTemplates(category?: SmsTemplateCategory): Promise<SmsTemplate[]> {
+    const query: string = category ? `?category=${category}` : ''
+    return ApiClient.get<SmsTemplate[]>(`/api/v1/sms/templates${query}`)
+  }
+
+  /**
+   * Render a library template for one prospect (his greeting, his business, his demo link).
+   * @param key - The template key.
+   * @param prospectId - The prospect to render for.
+   * @returns The rendered body and the segments it will bill.
+   */
+  static async previewTemplate(key: string, prospectId: number): Promise<SmsTemplatePreview> {
+    return ApiClient.get<SmsTemplatePreview>(`/api/v1/sms/templates/${key}/preview?prospect_id=${prospectId}`)
   }
 }

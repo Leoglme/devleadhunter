@@ -49,6 +49,24 @@ class SmsSendResponse(BaseModel):
     reason: str | None = None
 
 
+class SmsTemplateResponse(BaseModel):
+    """One template of the SMS library."""
+
+    key: str
+    name: str
+    category: str
+    body: str
+    variables: list[str]
+
+
+class SmsTemplatePreviewResponse(BaseModel):
+    """A library template rendered for one prospect (STOP mention excluded, appended at send)."""
+
+    key: str
+    body: str
+    segments: int = Field(description="Segments the SMS will bill once the STOP mention is appended")
+
+
 class SmsManualSendRequest(BaseModel):
     """Payload to send one free-text SMS (manual composer / self-test)."""
 

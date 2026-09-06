@@ -1,0 +1,149 @@
+"""The SMS template library — one angle per message, written to fit one GSM-7 segment.
+
+Mirrors the cold-email library (``seeders/email_template_seeder.py``) at SMS scale: a
+first-contact family for prospects reached by SMS first (a mobile, no email) and a
+follow-up family for prospects who ignored the email. Bodies stay short on purpose —
+the STOP mention (14 chars) and the plain demo link (up to ~45 chars) already eat a
+third of the 160-character budget, so every template says one thing, names the
+business (in the text or through the link's slug), and signs with the sender's first
+name. Trust rules baked in: an action at the first person (« j'ai préparé »), a reason
+taken from the matching email, no imperative (« voici », « cliquez »), no urgency.
+The mandatory STOP mention is appended at send time, never written here.
+
+Variables: {salutation} {entreprise} {ville} {metier} {lien_demo} {lien_video}
+{ancien_site} {prix} {signature}.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+
+from enums.sms_template_category import SmsTemplateCategory
+
+_VARIABLE_PATTERN: re.Pattern[str] = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
+_REPEATED_SPACES: re.Pattern[str] = re.compile(r" {2,}")
+
+# Template used by the automated first contact (cold SMS worker).
+DEFAULT_FIRST_CONTACT_KEY: str = "direct"
+
+
+@dataclass(frozen=True, slots=True)
+class SmsTemplate:
+    """One library template: a stable key, a display name, its touch and its body."""
+
+    key: str
+    name: str
+    category: SmsTemplateCategory
+    body: str
+
+    @property
+    def variables(self) -> list[str]:
+        """Unique variable names used by the body, in order of appearance."""
+        seen: list[str] = []
+        for name in _VARIABLE_PATTERN.findall(self.body):
+            if name not in seen:
+                seen.append(name)
+        return seen
+
+    def uses(self, variable: str) -> bool:
+        """Whether the body references ``{variable}``.
+
+        Args:
+            variable: The variable name, without braces.
+
+        Returns:
+            ``True`` when the body needs that variable to render.
+        """
+        return f"{{{variable}}}" in self.body
+
+
+SMS_TEMPLATE_LIBRARY: list[SmsTemplate] = [
+    # ── Premier contact ──────────────────────────────────────────────────────
+    SmsTemplate(
+        key="direct",
+        name="Direct",
+        category=SmsTemplateCategory.FIRST_CONTACT,
+        body="{salutation}, j'ai préparé un site pour {entreprise}, il est déjà en ligne : {lien_demo} {signature}",
+    ),
+    SmsTemplate(
+        key="visibilite",
+        name="Visibilité - on vous cherche",
+        category=SmsTemplateCategory.FIRST_CONTACT,
+        body="{salutation}, sans site, on ne vous trouve pas. J'ai préparé votre site : {lien_demo} {signature}",
+    ),
+    SmsTemplate(
+        key="credibilite",
+        name="Crédibilité - la première impression",
+        category=SmsTemplateCategory.FIRST_CONTACT,
+        body=(
+            "{salutation}, on vous cherche en ligne avant d'appeler. J'ai préparé votre site : {lien_demo} {signature}"
+        ),
+    ),
+    SmsTemplate(
+        key="bouche-a-oreille",
+        name="Bouche-à-oreille - on vous retrouve",
+        category=SmsTemplateCategory.FIRST_CONTACT,
+        body=(
+            "{salutation}, un site aide vos clients à parler de vous. J'ai préparé votre site : {lien_demo} {signature}"
+        ),
+    ),
+    SmsTemplate(
+        key="video",
+        name="Vidéo - je vous montre",
+        category=SmsTemplateCategory.FIRST_CONTACT,
+        body="{salutation}, j'ai préparé un site pour {entreprise}. En 30 s de vidéo : {lien_video} {signature}",
+    ),
+    SmsTemplate(
+        key="site-en-panne",
+        name="Site en panne",
+        category=SmsTemplateCategory.FIRST_CONTACT,
+        body="{salutation}, {ancien_site} ne répond plus. J'ai préparé votre nouveau site : {lien_demo} {signature}",
+    ),
+    SmsTemplate(
+        key="refonte",
+        name="Refonte",
+        category=SmsTemplateCategory.FIRST_CONTACT,
+        body="{salutation}, j'ai modernisé le site de {entreprise}, comparez avec l'actuel : {lien_demo} {signature}",
+    ),
+]
+
+
+def list_sms_templates(category: SmsTemplateCategory | None = None) -> list[SmsTemplate]:
+    """Return the library, optionally narrowed to one touch.
+
+    Args:
+        category: The touch to keep, or ``None`` for the whole library.
+
+    Returns:
+        The templates, in library order.
+    """
+    if category is None:
+        return list(SMS_TEMPLATE_LIBRARY)
+    return [template for template in SMS_TEMPLATE_LIBRARY if template.category == category]
+
+
+def find_sms_template(key: str) -> SmsTemplate | None:
+    """Return the template registered under *key*, or ``None``.
+
+    Args:
+        key: The template key (e.g. ``direct``).
+
+    Returns:
+        The template, or ``None`` when unknown.
+    """
+    return next((template for template in SMS_TEMPLATE_LIBRARY if template.key == key), None)
+
+
+def render_sms_template(body: str, variables: dict[str, str]) -> str:
+    """Substitute every ``{variable}`` of *body*; an unknown or empty variable renders as nothing.
+
+    Args:
+        body: The template body.
+        variables: The variable name to value map.
+
+    Returns:
+        The rendered text, single-spaced and trimmed.
+    """
+    rendered = _VARIABLE_PATTERN.sub(lambda match: variables.get(match.group(1), ""), body)
+    return _REPEATED_SPACES.sub(" ", rendered).strip()

@@ -17,7 +17,10 @@ from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.database import get_db
+from enums.demo_site_status import DemoSiteStatus
 from enums.sms_status import SmsStatus
+from enums.sms_template_category import SmsTemplateCategory
+from models.prospect_db import ProspectDB
 from models.sms_config import SmsConfig
 from models.sms_message import SmsMessage
 from models.user import User
@@ -32,8 +35,12 @@ from schemas.sms import (
     SmsRelanceCandidateResponse,
     SmsSendResponse,
     SmsStatsResponse,
+    SmsTemplatePreviewResponse,
+    SmsTemplateResponse,
 )
 from services.auth_service import get_current_user
+from services.demo_site_service import demo_site_service
+from services.demo_video_service import has_ready_video, video_page_url
 from services.notification_service import notification_service
 from services.sms.dlr import (
     classify_dlr,
@@ -42,11 +49,15 @@ from services.sms.dlr import (
     dlr_status_detail,
     dlr_status_value,
 )
+from services.sms.gsm_segments import segment_count
 from services.sms.mo import mo_is_stop, mo_origin_message_id, mo_ref_client, mo_sender_number
 from services.sms.phone_normalizer import to_e164_fr
+from services.sms.templates import find_sms_template, list_sms_templates
 from services.sms_config_service import sms_config_service
 from services.sms_relance_service import sms_relance_service
 from services.sms_service import sms_service
+from services.sms_variables import SmsVariables
+from services.tracking_links import CHANNEL_SMS, append_query_param
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +218,72 @@ async def list_messages(
 async def get_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> SmsStatsResponse:
     """Return aggregate counters of the current user's SMS channel."""
     return SmsStatsResponse(**sms_service.stats(db, current_user.id))
+
+
+@router.get("/templates", response_model=list[SmsTemplateResponse])
+async def list_templates(
+    category: SmsTemplateCategory | None = None,
+    current_user: User = Depends(get_current_user),
+) -> list[SmsTemplateResponse]:
+    """Return the SMS template library, optionally narrowed to one touch (first contact / follow-up)."""
+    return [
+        SmsTemplateResponse(
+            key=template.key,
+            name=template.name,
+            category=template.category.value,
+            body=template.body,
+            variables=template.variables,
+        )
+        for template in list_sms_templates(category)
+    ]
+
+
+@router.get("/templates/{key}/preview", response_model=SmsTemplatePreviewResponse)
+async def preview_template(
+    key: str,
+    prospect_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SmsTemplatePreviewResponse:
+    """Render a library template for one prospect — the text the composer starts from."""
+    template = find_sms_template(key)
+    if template is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Modèle SMS introuvable.")
+    prospect = db.query(ProspectDB).filter(ProspectDB.id == prospect_id, ProspectDB.user_id == current_user.id).first()
+    if prospect is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect introuvable.")
+
+    needs_site = template.uses(SmsVariables.DEMO_LINK) or template.uses(SmsVariables.VIDEO_LINK)
+    site = sms_relance_service.demo_for_prospect(db, current_user.id, prospect.id)
+    if needs_site and site is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Ce prospect n'a pas de site démo à envoyer."
+        )
+    if needs_site and site is not None and site.status == DemoSiteStatus.EXPIRED.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La démo de ce prospect est en veille : passez par la relance SMS, qui la réveille.",
+        )
+    if template.uses(SmsVariables.VIDEO_LINK) and (site is None or not has_ready_video(site)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Ce prospect n'a pas de vidéo de prospection générée."
+        )
+    if template.uses(SmsVariables.OLD_WEBSITE) and not prospect.website:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ce prospect n'a pas d'ancien site connu.")
+
+    demo_url = ""
+    video_url = ""
+    if site is not None:
+        demo_url = append_query_param(demo_site_service.demo_url_for_slug(site.slug), "src", CHANNEL_SMS)
+        if template.uses(SmsVariables.VIDEO_LINK):
+            video_url = append_query_param(video_page_url(site.slug), "src", CHANNEL_SMS)
+    variables = SmsVariables.build_for_prospect(
+        db, user_id=current_user.id, prospect=prospect, demo_url=demo_url, video_url=video_url
+    )
+    body = sms_service.render_template_body(template, variables)
+    return SmsTemplatePreviewResponse(
+        key=template.key, body=body, segments=segment_count(sms_service.compose_manual_body(body))
+    )
 
 
 @router.post("/send", response_model=SmsSendResponse)

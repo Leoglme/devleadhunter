@@ -164,7 +164,7 @@ class SmsRelanceService:
         to_e164 = to_e164_fr(prospect.phone)
         if to_e164 and sms_service.is_suppressed(db, user_id, to_e164):
             return None
-        site = self._demo_for_prospect(db, user_id, prospect.id)
+        site = self.demo_for_prospect(db, user_id, prospect.id)
         if site is None:
             return None
         demo_url = append_query_param(demo_site_service.demo_url_for_slug(site.slug), "src", CHANNEL_SMS)
@@ -172,7 +172,7 @@ class SmsRelanceService:
             prospect=prospect, demo_site=site, demo_url=demo_url, emailed_at=emailed_at, cold=cold
         )
 
-    def _demo_for_prospect(self, db: Session, user_id: int, prospect_id: int) -> DemoSite | None:
+    def demo_for_prospect(self, db: Session, user_id: int, prospect_id: int) -> DemoSite | None:
         """The prospect's newest reachable demo (ACTIVE, else dormant EXPIRED), or ``None``."""
         return (
             db.query(DemoSite)
