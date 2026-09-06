@@ -798,36 +798,83 @@ function startVideoPolling(): void {
 }
 
 /**
+ * Run the desktop Storyblok background capture once, surfacing errors as a toast.
+ * @returns What the sidecar did (`uploaded` / `needs_login` / `skipped` / `unavailable`).
+ */
+async function runStoryblokBackgroundPrep(): Promise<
+  Awaited<ReturnType<typeof StoryblokSidecarService.prepareVideoBackground>>
+> {
+  videoPrepStatus.value = 'Enregistrement du site + de la séquence Storyblok (~1-2 min, une fenêtre peut s’ouvrir)…'
+  try {
+    return await StoryblokSidecarService.prepareVideoBackground(demoSiteId)
+  } catch (backgroundError) {
+    toast.error(
+      backgroundError instanceof Error
+        ? `Séquence Storyblok ignorée : ${backgroundError.message}`
+        : 'Séquence Storyblok ignorée.',
+    )
+    return 'skipped'
+  } finally {
+    videoPrepStatus.value = ''
+  }
+}
+
+/**
+ * Open the Storyblok sign-in window and wait until the session is connected.
+ *
+ * The window stays open until the user signs in or closes it themselves; this
+ * resolves true once connected, false if the user closes it or the wait elapses.
+ * @returns Whether Storyblok is connected afterwards.
+ */
+async function waitForStoryblokConnection(): Promise<boolean> {
+  videoPrepStatus.value = 'Connecte-toi dans la fenêtre Storyblok qui vient de s’ouvrir…'
+  const opened: boolean = await StoryblokSidecarService.openLogin()
+  if (!opened) return false
+  // The window stays open until the user acts; give them up to 10 min to sign in.
+  const deadline: number = Date.now() + 10 * 60 * 1000
+  try {
+    while (Date.now() < deadline) {
+      await new Promise<void>((resolve: () => void): void => {
+        window.setTimeout(resolve, 3000)
+      })
+      const info: Awaited<ReturnType<typeof StoryblokSidecarService.getSessionState>> =
+        await StoryblokSidecarService.getSessionState()
+      if (info.state === 'ready') return true
+      if (!info.loginWindowOpen) return false // user closed the window without signing in
+    }
+    return false
+  } finally {
+    videoPrepStatus.value = ''
+  }
+}
+
+/**
  * Start (or restart) the prospection-video generation.
  */
 async function handleGenerateVideo(): Promise<void> {
   generatingVideo.value = true
   try {
-    // On the desktop, first render the background with the Storyblok editor
-    // sequence (needs the local session). When the session is expired/absent we
-    // stop and open the reconnect window rather than falling back to the server
-    // (a server capture has no editor footage and can strain the VPS).
-    videoPrepStatus.value = 'Enregistrement du site + de la séquence Storyblok (~1-2 min, une fenêtre peut s’ouvrir)…'
-    let prepared: Awaited<ReturnType<typeof StoryblokSidecarService.prepareVideoBackground>> = 'skipped'
-    try {
-      prepared = await StoryblokSidecarService.prepareVideoBackground(demoSiteId)
-    } catch (backgroundError) {
-      toast.error(
-        backgroundError instanceof Error
-          ? `Séquence Storyblok ignorée : ${backgroundError.message}`
-          : 'Séquence Storyblok ignorée.',
-      )
-    } finally {
-      videoPrepStatus.value = ''
-    }
+    // On the desktop, the background (site scroll + Storyblok editor) is captured on
+    // the user's machine — it needs their Storyblok session. If that session expired,
+    // open the sign-in window, wait for the login, then continue automatically; never
+    // fall back to a server capture for a desktop generation.
+    let prepared: Awaited<ReturnType<typeof StoryblokSidecarService.prepareVideoBackground>> =
+      await runStoryblokBackgroundPrep()
 
     if (prepared === 'needs_login') {
-      toast.error(
-        'Session Storyblok expirée — une fenêtre de connexion va s’ouvrir. Reconnecte-toi puis relance la génération.',
-      )
-      await StoryblokSidecarService.openLogin()
-      return
+      const connected: boolean = await waitForStoryblokConnection()
+      if (!connected) {
+        toast.error('Storyblok non reconnecté — génération annulée. Reconnecte-toi puis relance.')
+        return
+      }
+      toast.success('Storyblok reconnecté — reprise de la génération…')
+      prepared = await runStoryblokBackgroundPrep()
+      if (prepared === 'needs_login') {
+        toast.error('Session Storyblok toujours invalide — réessaie dans un instant.')
+        return
+      }
     }
+
     if (prepared === 'uploaded') {
       toast.success('Séquence Storyblok prête, montage en cours…')
     }
