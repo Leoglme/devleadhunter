@@ -63,6 +63,35 @@ _FPS = 30
 _PIP_SIZE = 260
 _PIP_MARGIN = 24
 
+# ffmpeg est plafonné en threads : sur le petit VPS de secours, laisser x264
+# prendre tous les cœurs fait grimper la mémoire et étrangle l'API (1 worker).
+_FFMPEG_THREADS = "2"
+
+# Garde-fou mémoire du fallback serveur : capturer le site en headless (Chromium)
+# puis monter avec ffmpeg dépasse facilement le plafond du service sur un VPS chargé.
+# En dessous de ce seuil de mémoire disponible, on refuse proprement plutôt que de
+# laisser l'OOM killer emporter toute l'API.
+_MIN_FREE_MEMORY_MB_FOR_CAPTURE = 1200.0
+
+
+def _available_memory_mb() -> float | None:
+    """
+    Available system memory in MB, read from Linux ``/proc/meminfo``.
+
+    Returns:
+        The available memory in MB, or None when it cannot be read (e.g. on a
+        non-Linux host, where the server-side capture never runs anyway).
+    """
+    try:
+        with open("/proc/meminfo", encoding="ascii") as meminfo:
+            for line in meminfo:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) / 1024
+    except (OSError, ValueError):
+        return None
+    return None
+
+
 _FONT_CANDIDATES: tuple[str, ...] = (
     "C:/Windows/Fonts/seguisb.ttf",  # Segoe UI Semibold
     "C:/Windows/Fonts/segoeui.ttf",
@@ -197,6 +226,33 @@ class DemoVideoService:
             logger.exception("Auto video generation hook failed for slug=%s", site.slug)
             return False
 
+    def reconcile_orphaned(self, db: Session) -> int:
+        """
+        Mark demo sites left mid-generation as failed (called once at startup).
+
+        A generation task lives only in memory, so a process restart — a crash, an
+        OOM kill, a deploy — orphans any site still in ``pending``/``generating``:
+        no task will ever finish it, and :meth:`request_generation` refuses to
+        restart a site in those states, so the dashboard polls it forever.
+
+        Args:
+            db: Active database session.
+
+        Returns:
+            The number of sites reset to ``failed``.
+        """
+        orphaned: list[DemoSite] = (
+            db.query(DemoSite)
+            .filter(DemoSite.video_status.in_([DemoVideoStatus.PENDING.value, DemoVideoStatus.GENERATING.value]))
+            .all()
+        )
+        for site in orphaned:
+            site.video_status = DemoVideoStatus.FAILED.value
+            site.video_error = "Génération interrompue (redémarrage du serveur) — relancez-la."
+        if orphaned:
+            db.commit()
+        return len(orphaned)
+
     def clear_video(self, db: Session, site: DemoSite) -> DemoSite:
         """Delete the generated video files and reset the site's video state."""
         delete_files_for_slug(site.slug)
@@ -325,6 +381,10 @@ class DemoVideoService:
             if background is not None:
                 capture_path, scroll_offset, screenshot_path = background
             else:
+                # No desktop-produced background → server-side headless capture (the
+                # heavy fallback). Refuse it when the box is already low on memory so
+                # a fallback generation can never OOM-kill the whole API.
+                self._guard_capture_memory()
                 capture_path, scroll_offset, screenshot_path = await self._capture_site(
                     site.demo_url or "", scroll_seconds, work_dir
                 )
@@ -350,6 +410,26 @@ class DemoVideoService:
             await r2_storage.upload_file_async(thumbnail_path, thumbnail_object_key(site.slug), "image/jpeg")
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
+
+    @staticmethod
+    def _guard_capture_memory() -> None:
+        """
+        Refuse the server-side headless capture when the box is low on memory.
+
+        This is the fallback path (no desktop background): headless Chromium plus
+        the ffmpeg montage can exceed the service memory cap on a busy VPS, and an
+        OOM kill there takes down the whole single-worker API. Failing cleanly with
+        a clear message is always better than crashing the box.
+
+        Raises:
+            DemoVideoGenerationError: when available memory is below the floor.
+        """
+        available = _available_memory_mb()
+        if available is not None and available < _MIN_FREE_MEMORY_MB_FOR_CAPTURE:
+            raise DemoVideoGenerationError(
+                f"Serveur momentanément trop chargé pour générer la vidéo ici ({available:.0f} Mo libres). "
+                "Générez-la depuis l'application desktop, ou réessayez plus tard."
+            )
 
     async def _capture_site(self, url: str, scroll_seconds: float, work_dir: Path) -> tuple[Path, float, Path]:
         """
@@ -402,6 +482,8 @@ class DemoVideoService:
                 "-hide_banner",
                 "-loglevel",
                 "error",
+                "-threads",
+                _FFMPEG_THREADS,
                 "-i",
                 str(video_path),
                 "-frames:v",
@@ -686,6 +768,8 @@ class DemoVideoService:
             "-hide_banner",
             "-loglevel",
             "error",
+            "-threads",
+            _FFMPEG_THREADS,
             "-i",
             str(presenter_path),
             "-ss",
