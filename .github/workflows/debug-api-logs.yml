@@ -23,3 +23,11 @@ jobs:
             sudo journalctl -u devleadhunter-api.service --since "30 min ago" --no-pager 2>/dev/null | grep -iE "apex re-point|removed apex|DNS re-point|point_to_vercel|domain_provision|recovery|kept in DEPLOYING|devleadhunter|ovh" | tail -60 || true
             echo "===== local port check ====="
             curl -s -o /dev/null -w "localhost:8005 -> %{http_code}\n" http://127.0.0.1:8005/docs || true
+            echo "===== memory ====="
+            free -m || true
+            echo "===== top 15 processes by memory ====="
+            ps -eo pid,ppid,rss,%mem,%cpu,comm,args --sort=-rss 2>/dev/null | head -16 || true
+            echo "===== is MySQL local? ====="
+            (systemctl is-active mysql 2>/dev/null || systemctl is-active mariadb 2>/dev/null || echo "no local mysql/mariadb service") || true
+            echo "===== stray chromium/chrome/ffmpeg? ====="
+            pgrep -af 'chrom|ffmpeg|nodriver|playwright' 2>/dev/null | head -20 || echo "none"
